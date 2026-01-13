@@ -292,10 +292,7 @@ async fn poll_for_jobs(
         };
 
         let (last_block, last_log_index) = if let Some(last) = filtered_logs.last() {
-            (
-                last.block_number.unwrap_or(latest_block),
-                last.log_index,
-            )
+            (last.block_number.unwrap_or(latest_block), last.log_index)
         } else if latest_block == from_block {
             (from_block, from_log_index)
         } else {

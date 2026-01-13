@@ -10,7 +10,7 @@ use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_manager::config::SourceType;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use blueprint_runner::error::ConfigError;
-use cargo_tangle::command::create::{new_blueprint, BlueprintType, TemplateVariables};
+use cargo_tangle::command::create::{BlueprintType, TemplateVariables, new_blueprint};
 use cargo_tangle::command::debug::{self, DebugCommands};
 use cargo_tangle::command::deploy::eigenlayer::deploy_eigenlayer;
 use cargo_tangle::command::deploy::tangle as deploy_tangle;
@@ -1270,7 +1270,8 @@ async fn main() -> Result<()> {
                 json,
             } => {
                 let config = network.client_config(blueprint_id, Some(service_id))?;
-                let keystore = cargo_tangle::command::signer::load_keystore(network.keystore_path())?;
+                let keystore =
+                    cargo_tangle::command::signer::load_keystore(network.keystore_path())?;
                 let mut signing_key =
                     cargo_tangle::command::signer::load_ecdsa_signing_key(&keystore)?;
                 operator::submit_heartbeat(

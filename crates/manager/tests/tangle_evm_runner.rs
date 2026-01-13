@@ -412,10 +412,7 @@ async fn wait_for_job_result(
         .context("timed out waiting for JobResultSubmitted")?
 }
 
-async fn wait_for_job_completion(
-    client: TangleEvmClient,
-    call_id: u64,
-) -> Result<()> {
+async fn wait_for_job_completion(client: TangleEvmClient, call_id: u64) -> Result<()> {
     use tokio::time::sleep;
 
     timeout(JOB_RESULT_TIMEOUT, async {

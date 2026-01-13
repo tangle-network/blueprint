@@ -11,9 +11,9 @@ use crate::{
 use blueprint_core::info;
 use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
 use blueprint_networking::{
+    AllowedKeys,
     service_handle::NetworkServiceHandle,
     test_utils::{TestNode, wait_for_all_handshakes},
-    AllowedKeys,
 };
 use blueprint_std::{collections::HashMap, time::Duration};
 use libp2p::{Multiaddr, multiaddr::Protocol};

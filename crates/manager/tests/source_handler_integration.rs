@@ -7,7 +7,6 @@
 //!
 //! These tests verify the complete fetch → validate → execute pipeline.
 
-use std::process::Command;
 use blueprint_manager::error::Error;
 use blueprint_manager::sdk::utils::get_formatted_os_string;
 use blueprint_manager::sources::BlueprintSourceHandler;
@@ -16,6 +15,7 @@ use blueprint_manager::sources::remote::RemoteBinaryFetcher;
 use blueprint_manager::sources::types::{BlueprintBinary, GithubFetcher, RemoteFetcher};
 use serial_test::serial;
 use sha2::{Digest, Sha256};
+use std::process::Command;
 use tempfile::tempdir;
 
 // =============================================================================

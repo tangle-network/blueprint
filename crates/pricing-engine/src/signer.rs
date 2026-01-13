@@ -184,9 +184,8 @@ fn hash_quote_details(quote_details: &ITangleTypes::QuoteDetails) -> B256 {
             commitment.asset.token,
         )));
 
-        let commitment_hash = keccak256(
-            (commitment_typehash, asset_hash, commitment.exposureBps).abi_encode(),
-        );
+        let commitment_hash =
+            keccak256((commitment_typehash, asset_hash, commitment.exposureBps).abi_encode());
 
         commitment_hashes.extend_from_slice(commitment_hash.as_slice());
     }

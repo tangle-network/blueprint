@@ -742,8 +742,7 @@ impl TangleEvmClient {
             security_requirements,
         } = params;
 
-        let is_native_payment =
-            payment_token == Address::ZERO && payment_amount > U256::ZERO;
+        let is_native_payment = payment_token == Address::ZERO && payment_amount > U256::ZERO;
         let request_id_hint = if !security_requirements.is_empty() {
             let mut call = contract.requestServiceWithSecurity(
                 blueprint_id,
@@ -848,25 +847,18 @@ impl TangleEvmClient {
             ));
         }
 
-        let request_id =
-            match self.extract_request_id(&receipt, blueprint_id).await {
-                Ok(id) => id,
-                Err(err) => {
-                    if let Some(id) = request_id_hint {
-                        return Ok((
-                            transaction_result_from_receipt(&receipt),
-                            id,
-                        ));
-                    }
-                    if let Some(count) = pre_count {
-                        return Ok((
-                            transaction_result_from_receipt(&receipt),
-                            count,
-                        ));
-                    }
-                    return Err(err);
+        let request_id = match self.extract_request_id(&receipt, blueprint_id).await {
+            Ok(id) => id,
+            Err(err) => {
+                if let Some(id) = request_id_hint {
+                    return Ok((transaction_result_from_receipt(&receipt), id));
                 }
-            };
+                if let Some(count) = pre_count {
+                    return Ok((transaction_result_from_receipt(&receipt), count));
+                }
+                return Err(err);
+            }
+        };
 
         Ok((transaction_result_from_receipt(&receipt), request_id))
     }
@@ -1368,14 +1360,11 @@ impl TangleEvmClient {
         if let Some(event) = receipt.decoded_log::<ITangle::ServiceRequested>() {
             return Ok(event.data.requestId);
         }
-        if let Some(event) =
-            receipt.decoded_log::<ITangle::ServiceRequestedWithSecurity>()
-        {
+        if let Some(event) = receipt.decoded_log::<ITangle::ServiceRequestedWithSecurity>() {
             return Ok(event.data.requestId);
         }
 
-        let requested_sig =
-            keccak256("ServiceRequested(uint64,uint64,address)".as_bytes());
+        let requested_sig = keccak256("ServiceRequested(uint64,uint64,address)".as_bytes());
         let requested_with_security_sig = keccak256(
             "ServiceRequestedWithSecurity(uint64,uint64,address,address[],((uint8,address),uint16,uint16)[])"
                 .as_bytes(),
@@ -1404,10 +1393,7 @@ impl TangleEvmClient {
             let filter = Filter::new()
                 .select(block_number)
                 .address(self.tangle_address)
-                .event_signature(vec![
-                    requested_sig,
-                    requested_with_security_sig,
-                ]);
+                .event_signature(vec![requested_sig, requested_with_security_sig]);
             if let Ok(logs) = self.get_logs(&filter).await {
                 for log in logs {
                     let topics = log.topics();
@@ -1433,9 +1419,7 @@ impl TangleEvmClient {
         let start = count.saturating_sub(5);
         for candidate in (start..count).rev() {
             if let Ok(request) = self.get_service_request(candidate).await {
-                if request.blueprintId == blueprint_id
-                    && request.requester == account
-                {
+                if request.blueprintId == blueprint_id && request.requester == account {
                     return Ok(candidate);
                 }
             }

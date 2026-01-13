@@ -184,8 +184,8 @@ mod tests {
 
     use blueprint_core::{debug, info};
     use blueprint_crypto::{KeyType, k256::K256Ecdsa};
-    use blueprint_networking::service_handle::NetworkServiceHandle;
     use blueprint_networking::service::AllowedKeys;
+    use blueprint_networking::service_handle::NetworkServiceHandle;
     use blueprint_networking::test_utils::{TestNode, wait_for_all_handshakes};
     use blueprint_networking_round_based_extension::RoundBasedNetworkAdapter;
     use libp2p::identity;
@@ -306,10 +306,7 @@ mod tests {
         let handle2 = node2.start().await.expect("Failed to start node 1");
         info!("Node 1 started successfully");
 
-        let parties = HashMap::from_iter([
-            (0, handle1.local_peer_id),
-            (1, handle2.local_peer_id),
-        ]);
+        let parties = HashMap::from_iter([(0, handle1.local_peer_id), (1, handle2.local_peer_id)]);
 
         let mut handles = vec![handle1, handle2];
 

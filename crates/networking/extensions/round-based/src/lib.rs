@@ -152,9 +152,7 @@ where
                 message_id: msg_id,
                 round_id: round,
                 sender: this.handle.local_peer_id,
-                recipient: recipient.and_then(|p| {
-                    this.parties.get(&p).copied()
-                }),
+                recipient: recipient.and_then(|p| this.parties.get(&p).copied()),
             },
             payload: serde_json::to_vec(&outgoing.msg).map_err(NetworkError::Serialization)?,
         };

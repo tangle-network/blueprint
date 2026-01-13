@@ -179,9 +179,7 @@ impl KeeperConfig {
     }
 
     /// Create a provider with wallet for sending transactions
-    pub async fn get_provider(
-        &self,
-    ) -> KeeperResult<impl alloy::providers::Provider + Clone> {
+    pub async fn get_provider(&self) -> KeeperResult<impl alloy::providers::Provider + Clone> {
         let signer = self.get_signer()?;
         let wallet = EthereumWallet::from(signer);
 
@@ -193,9 +191,7 @@ impl KeeperConfig {
     }
 
     /// Create a read-only provider (no wallet needed)
-    pub async fn get_read_provider(
-        &self,
-    ) -> KeeperResult<impl alloy::providers::Provider + Clone> {
+    pub async fn get_read_provider(&self) -> KeeperResult<impl alloy::providers::Provider + Clone> {
         ProviderBuilder::new()
             .connect(&self.http_rpc_endpoint)
             .await
@@ -209,10 +205,7 @@ pub trait BackgroundKeeper: Sized {
     const NAME: &'static str;
 
     /// Start the background keeper
-    fn start(
-        config: KeeperConfig,
-        shutdown: broadcast::Receiver<()>,
-    ) -> KeeperHandle;
+    fn start(config: KeeperConfig, shutdown: broadcast::Receiver<()>) -> KeeperHandle;
 
     /// Run a single check iteration
     /// Returns Ok(true) if an action was taken, Ok(false) if no action needed

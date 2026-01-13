@@ -117,9 +117,7 @@ async fn cli_jobs_list_warns_when_blueprint_hashes_missing() -> Result<()> {
     {
         Ok(definition) => definition,
         Err(err) => {
-            eprintln!(
-                "Skipping cli_jobs_list_warns_when_blueprint_hashes_missing: {err}"
-            );
+            eprintln!("Skipping cli_jobs_list_warns_when_blueprint_hashes_missing: {err}");
             return Ok(());
         }
     };
@@ -191,9 +189,7 @@ async fn cli_jobs_show_reports_call_metadata() -> Result<()> {
         .await
         .is_err()
     {
-        eprintln!(
-            "Skipping cli_jobs_show_reports_call_metadata: blueprint definition unavailable"
-        );
+        eprintln!("Skipping cli_jobs_show_reports_call_metadata: blueprint definition unavailable");
         return Ok(());
     }
 

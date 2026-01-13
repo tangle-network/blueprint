@@ -30,12 +30,12 @@ use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_router::Router;
-use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
 use blueprint_tangle_evm_extra::extract::{CallId, ServiceId};
+use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
 use blueprint_tangle_evm_extra::{TangleEvmLayer, TangleEvmProducer};
+use futures_util::StreamExt;
 use futures_util::future::poll_fn;
 use futures_util::pin_mut;
-use futures_util::StreamExt;
 use hex::FromHex;
 use tempfile::TempDir;
 use tokio::sync::oneshot;
@@ -73,7 +73,10 @@ async fn test_multiple_services_process_jobs_independently() -> Result<()> {
 
         // Verify service 0 is active
         let svc = client_0.get_service(service_id_0).await?;
-        ensure!(svc.status == ServiceStatus::Active as u8, "service 0 not active");
+        ensure!(
+            svc.status == ServiceStatus::Active as u8,
+            "service 0 not active"
+        );
 
         // Grant permissions
         grant_caller(&deployment, client_0.account()).await?;
@@ -109,7 +112,12 @@ async fn test_multiple_services_process_jobs_independently() -> Result<()> {
             .context("timeout waiting for runner result")??;
         let result_0 = result_0?;
         let decoded_0: u64 = u64::abi_decode(&result_0)?;
-        ensure!(decoded_0 == input_0 * 2, "expected {} got {}", input_0 * 2, decoded_0);
+        ensure!(
+            decoded_0 == input_0 * 2,
+            "expected {} got {}",
+            input_0 * 2,
+            decoded_0
+        );
 
         // Verify on-chain completion (retry to avoid transient RPC flakiness)
         wait_for_job_completion((*client_0).clone(), submission_0.call_id).await?;
@@ -151,7 +159,10 @@ async fn test_service_queries_return_correct_data() -> Result<()> {
         // Query service details
         let svc = client.get_service(0).await?;
         ensure!(svc.blueprintId == BLUEPRINT_ID, "wrong blueprint id");
-        ensure!(svc.status == ServiceStatus::Active as u8, "service not active");
+        ensure!(
+            svc.status == ServiceStatus::Active as u8,
+            "service not active"
+        );
 
         // Query operators
         let operators = client.get_service_operators(0).await?;
@@ -196,7 +207,10 @@ async fn test_job_submission_requires_caller_permission() -> Result<()> {
 
         // Should fail or require permission
         // (the exact behavior depends on contract config)
-        println!("Job submission without permission result: {:?}", result.is_ok());
+        println!(
+            "Job submission without permission result: {:?}",
+            result.is_ok()
+        );
 
         Ok(())
     })
@@ -356,7 +370,9 @@ async fn create_client(
     .test_mode(true);
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(ks))?;
-    Ok(Arc::new(TangleEvmClient::with_keystore(cfg, keystore).await?))
+    Ok(Arc::new(
+        TangleEvmClient::with_keystore(cfg, keystore).await?,
+    ))
 }
 
 fn seed_key(path: &Path, hex_key: &str) -> Result<()> {
@@ -370,9 +386,15 @@ fn seed_key(path: &Path, hex_key: &str) -> Result<()> {
 async fn grant_caller(d: &SeededTangleEvmTestnet, caller: Address) -> Result<()> {
     let signer = PrivateKeySigner::from_str(OWNER_KEY)?;
     let wallet = EthereumWallet::from(signer);
-    let provider = ProviderBuilder::new().wallet(wallet).connect(d.http_endpoint().as_str()).await?;
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .connect(d.http_endpoint().as_str())
+        .await?;
 
-    let call = addPermittedCallerCall { serviceId: 0, caller };
+    let call = addPermittedCallerCall {
+        serviceId: 0,
+        caller,
+    };
     let tx = TransactionRequest::default()
         .to(d.tangle_contract)
         .input(call.abi_encode().into());

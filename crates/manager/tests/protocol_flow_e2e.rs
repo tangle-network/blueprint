@@ -23,7 +23,7 @@ use blueprint_anvil_testing_utils::{
     SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
 use blueprint_client_tangle_evm::contracts::ITangle::{
-    addPermittedCallerCall, JobSubmitted, JobResultSubmitted,
+    JobResultSubmitted, JobSubmitted, addPermittedCallerCall,
 };
 use blueprint_client_tangle_evm::{
     JobSubmissionResult, ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
@@ -70,7 +70,10 @@ async fn test_job_submitted_event_is_emitted() -> Result<()> {
 
         // Verify event was emitted by checking call_id is valid
         ensure!(submission.call_id < u64::MAX, "call_id should be valid");
-        println!("✓ JobSubmitted event emitted with call_id {}", submission.call_id);
+        println!(
+            "✓ JobSubmitted event emitted with call_id {}",
+            submission.call_id
+        );
 
         Ok(())
     })
@@ -92,13 +95,8 @@ async fn test_job_result_submitted_event_is_emitted() -> Result<()> {
         grant_caller(&deployment, client.account()).await?;
 
         // Submit job
-        let submission = submit_job_with_retry(
-            &client,
-            SERVICE_ID,
-            0,
-            Bytes::from(123u64.abi_encode()),
-        )
-        .await?;
+        let submission =
+            submit_job_with_retry(&client, SERVICE_ID, 0, Bytes::from(123u64.abi_encode())).await?;
 
         // Submit result
         let result_tx = submit_result_with_retry(
@@ -109,7 +107,10 @@ async fn test_job_result_submitted_event_is_emitted() -> Result<()> {
         )
         .await?;
 
-        println!("✓ JobResultSubmitted event emitted in tx {:?}", result_tx.tx_hash);
+        println!(
+            "✓ JobResultSubmitted event emitted in tx {:?}",
+            result_tx.tx_hash
+        );
 
         Ok(())
     })
@@ -260,7 +261,10 @@ async fn test_service_status_is_queryable() -> Result<()> {
         let service = client.get_service(SERVICE_ID).await?;
 
         ensure!(service.blueprintId == BLUEPRINT_ID, "wrong blueprint ID");
-        ensure!(service.status == ServiceStatus::Active as u8, "service should be active");
+        ensure!(
+            service.status == ServiceStatus::Active as u8,
+            "service should be active"
+        );
 
         println!("✓ Service status query works correctly");
         println!("  Blueprint ID: {}", service.blueprintId);
@@ -336,7 +340,11 @@ async fn test_job_call_state_is_queryable() -> Result<()> {
 
         // Submit result
         client
-            .submit_result(SERVICE_ID, submission.call_id, Bytes::from(84u64.abi_encode()))
+            .submit_result(
+                SERVICE_ID,
+                submission.call_id,
+                Bytes::from(84u64.abi_encode()),
+            )
             .await?;
 
         // Query again
@@ -391,7 +399,10 @@ async fn grant_caller(d: &SeededTangleEvmTestnet, caller: Address) -> Result<()>
         .connect(d.http_endpoint().as_str())
         .await?;
 
-    let call = addPermittedCallerCall { serviceId: SERVICE_ID, caller };
+    let call = addPermittedCallerCall {
+        serviceId: SERVICE_ID,
+        caller,
+    };
     let tx = TransactionRequest::default()
         .to(d.tangle_contract)
         .input(call.abi_encode().into());
@@ -418,7 +429,10 @@ async fn submit_job_with_retry(
 ) -> Result<JobSubmissionResult> {
     let mut attempts = 0;
     loop {
-        match client.submit_job(service_id, job_index, inputs.clone()).await {
+        match client
+            .submit_job(service_id, job_index, inputs.clone())
+            .await
+        {
             Ok(submission) => return Ok(submission),
             Err(err) => {
                 attempts += 1;
@@ -441,7 +455,10 @@ async fn submit_result_with_retry(
 ) -> Result<TransactionResult> {
     let mut attempts = 0;
     loop {
-        match client.submit_result(service_id, call_id, output.clone()).await {
+        match client
+            .submit_result(service_id, call_id, output.clone())
+            .await
+        {
             Ok(result) => return Ok(result),
             Err(err) => {
                 attempts += 1;

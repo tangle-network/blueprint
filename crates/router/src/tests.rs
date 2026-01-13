@@ -1,15 +1,15 @@
 extern crate alloc;
 extern crate std;
 
-use alloc::vec;
-use alloc::vec::Vec;
 use crate::Router;
 use crate::test_helpers::setup_log;
+use alloc::vec;
+use alloc::vec::Vec;
 use blueprint_core::error::BoxError;
 use blueprint_core::job::call::JobCall;
 use bytes::Bytes;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use tower::Service;
 
 // =============================================================================
@@ -28,7 +28,10 @@ async fn route_dispatches_to_correct_handler() {
         async { "handled" }
     });
 
-    let result = router.call(JobCall::new(42u32, Bytes::new())).await.unwrap();
+    let result = router
+        .call(JobCall::new(42u32, Bytes::new()))
+        .await
+        .unwrap();
     assert!(result.is_some());
     assert_eq!(call_count.load(Ordering::SeqCst), 1);
 }
@@ -82,10 +85,7 @@ async fn empty_router_returns_none() {
 
     let mut router: Router = Router::new();
 
-    let result = router
-        .call(JobCall::new(1u32, Bytes::new()))
-        .await
-        .unwrap();
+    let result = router.call(JobCall::new(1u32, Bytes::new())).await.unwrap();
 
     assert!(result.is_none());
 }
@@ -101,12 +101,13 @@ async fn fallback_catches_unmatched_job_ids() {
     let fallback_count = Arc::new(AtomicU32::new(0));
     let count_clone = fallback_count.clone();
 
-    let mut router: Router = Router::new()
-        .route(1u32, || async { "specific" })
-        .fallback(move || {
-            count_clone.fetch_add(1, Ordering::SeqCst);
-            async { "fallback" }
-        });
+    let mut router: Router =
+        Router::new()
+            .route(1u32, || async { "specific" })
+            .fallback(move || {
+                count_clone.fetch_add(1, Ordering::SeqCst);
+                async { "fallback" }
+            });
 
     // Known route - fallback NOT called
     router.call(JobCall::new(1u32, Bytes::new())).await.unwrap();
@@ -142,8 +143,16 @@ async fn fallback_replaces_previous_fallback() {
 
     router.call(JobCall::new(1u32, Bytes::new())).await.unwrap();
 
-    assert_eq!(first_fallback.load(Ordering::SeqCst), 0, "First fallback should be replaced");
-    assert_eq!(second_fallback.load(Ordering::SeqCst), 1, "Second fallback should be called");
+    assert_eq!(
+        first_fallback.load(Ordering::SeqCst),
+        0,
+        "First fallback should be replaced"
+    );
+    assert_eq!(
+        second_fallback.load(Ordering::SeqCst),
+        1,
+        "Second fallback should be called"
+    );
 }
 
 // =============================================================================
@@ -167,7 +176,10 @@ async fn always_route_called_for_every_job() {
 
     router.call(JobCall::new(1u32, Bytes::new())).await.unwrap();
     router.call(JobCall::new(2u32, Bytes::new())).await.unwrap();
-    router.call(JobCall::new(999u32, Bytes::new())).await.unwrap(); // Unknown ID
+    router
+        .call(JobCall::new(999u32, Bytes::new()))
+        .await
+        .unwrap(); // Unknown ID
 
     assert_eq!(always_count.load(Ordering::SeqCst), 3);
 }
@@ -222,9 +234,16 @@ async fn always_route_disables_fallback() {
             async { "always" }
         });
 
-    router.call(JobCall::new(999u32, Bytes::new())).await.unwrap();
+    router
+        .call(JobCall::new(999u32, Bytes::new()))
+        .await
+        .unwrap();
 
-    assert_eq!(fallback_count.load(Ordering::SeqCst), 0, "Fallback should not be called when always exists");
+    assert_eq!(
+        fallback_count.load(Ordering::SeqCst),
+        0,
+        "Fallback should not be called when always exists"
+    );
     assert_eq!(always_count.load(Ordering::SeqCst), 1);
 }
 
@@ -318,8 +337,8 @@ async fn with_context_converts_router_type() {
     }
 
     // Router<TestContext> requires context to be provided
-    let router_needing_context: Router<TestContext> = Router::new()
-        .route(1u32, || async { "no context needed for this job" });
+    let router_needing_context: Router<TestContext> =
+        Router::new().route(1u32, || async { "no context needed for this job" });
 
     // Providing context converts Router<TestContext> to Router<()>
     let ctx = TestContext { _value: 42 };
@@ -373,7 +392,10 @@ async fn job_receives_call_body_via_bytes_extractor() {
     });
 
     let input = Bytes::from("test input data");
-    router.call(JobCall::new(1u32, input.clone())).await.unwrap();
+    router
+        .call(JobCall::new(1u32, input.clone()))
+        .await
+        .unwrap();
 
     let captured = received_body.lock().unwrap();
     assert_eq!(&*captured, &input[..]);
@@ -383,11 +405,9 @@ async fn job_receives_call_body_via_bytes_extractor() {
 async fn job_receives_empty_body() {
     setup_log();
 
-    let mut router: Router = Router::new().route(1u32, move |body: Bytes| {
-        async move {
-            assert!(body.is_empty());
-            "empty"
-        }
+    let mut router: Router = Router::new().route(1u32, move |body: Bytes| async move {
+        assert!(body.is_empty());
+        "empty"
     });
 
     router.call(JobCall::new(1u32, Bytes::new())).await.unwrap();
@@ -428,8 +448,14 @@ async fn router_clone_works_independently() {
     let mut router_clone = router.clone();
     let mut original = router;
 
-    original.call(JobCall::new(1u32, Bytes::new())).await.unwrap();
-    router_clone.call(JobCall::new(1u32, Bytes::new())).await.unwrap();
+    original
+        .call(JobCall::new(1u32, Bytes::new()))
+        .await
+        .unwrap();
+    router_clone
+        .call(JobCall::new(1u32, Bytes::new()))
+        .await
+        .unwrap();
 
     assert_eq!(call_count.load(Ordering::SeqCst), 2);
 }
@@ -441,13 +467,12 @@ async fn router_is_always_ready() {
 
     let mut router: Router = Router::new().route(1u32, || async { "job" });
 
-    let ready = poll_fn(|cx| {
-        match Service::<JobCall>::poll_ready(&mut router, cx) {
-            Poll::Ready(Ok(())) => Poll::Ready(true),
-            Poll::Ready(Err(_)) => Poll::Ready(false),
-            Poll::Pending => Poll::Ready(false),
-        }
-    }).await;
+    let ready = poll_fn(|cx| match Service::<JobCall>::poll_ready(&mut router, cx) {
+        Poll::Ready(Ok(())) => Poll::Ready(true),
+        Poll::Ready(Err(_)) => Poll::Ready(false),
+        Poll::Pending => Poll::Ready(false),
+    })
+    .await;
 
     assert!(ready, "Router should always be ready");
 }
@@ -514,12 +539,8 @@ async fn concurrent_job_calls_execute_independently() {
     let mut r2 = router.clone();
 
     // Start slow job first, then fast job
-    let slow = tokio::spawn(async move {
-        r1.call(JobCall::new(1u32, Bytes::new())).await
-    });
-    let fast = tokio::spawn(async move {
-        r2.call(JobCall::new(2u32, Bytes::new())).await
-    });
+    let slow = tokio::spawn(async move { r1.call(JobCall::new(1u32, Bytes::new())).await });
+    let fast = tokio::spawn(async move { r2.call(JobCall::new(2u32, Bytes::new())).await });
 
     let _ = tokio::join!(slow, fast);
 
@@ -549,7 +570,10 @@ async fn large_job_id_works() {
     let large_id = u32::MAX;
     let mut router: Router = Router::new().route(large_id, || async { "max" });
 
-    let result = router.call(JobCall::new(large_id, Bytes::new())).await.unwrap();
+    let result = router
+        .call(JobCall::new(large_id, Bytes::new()))
+        .await
+        .unwrap();
     assert!(result.is_some());
 }
 
@@ -672,13 +696,22 @@ async fn string_job_id_hashes_to_consistent_route() {
     });
 
     // Same string should route to same handler
-    router.call(JobCall::new("my_job", Bytes::new())).await.unwrap();
-    router.call(JobCall::new("my_job", Bytes::new())).await.unwrap();
+    router
+        .call(JobCall::new("my_job", Bytes::new()))
+        .await
+        .unwrap();
+    router
+        .call(JobCall::new("my_job", Bytes::new()))
+        .await
+        .unwrap();
 
     assert_eq!(call_count.load(Ordering::SeqCst), 2);
 
     // Different string should not match
-    let result = router.call(JobCall::new("other_job", Bytes::new())).await.unwrap();
+    let result = router
+        .call(JobCall::new("other_job", Bytes::new()))
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 

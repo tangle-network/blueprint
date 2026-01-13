@@ -189,15 +189,19 @@ fn verify_challenge_bn254_bls(
     signature: &[u8],
     pub_key: &[u8],
 ) -> Result<bool, Error> {
-    use blueprint_crypto::bn254::{ArkBlsBn254Public, ArkBlsBn254Signature};
     use blueprint_crypto::BytesEncoding;
+    use blueprint_crypto::bn254::{ArkBlsBn254Public, ArkBlsBn254Signature};
 
     let public_key = ArkBlsBn254Public::from_bytes(pub_key)
         .map_err(|e| Error::Bn254Bls(format!("Invalid public key: {e:?}")))?;
     let sig = ArkBlsBn254Signature::from_bytes(signature)
         .map_err(|e| Error::Bn254Bls(format!("Invalid signature: {e:?}")))?;
 
-    Ok(blueprint_crypto::bn254::verify(public_key.0, challenge, sig.0))
+    Ok(blueprint_crypto::bn254::verify(
+        public_key.0,
+        challenge,
+        sig.0,
+    ))
 }
 
 #[cfg(test)]

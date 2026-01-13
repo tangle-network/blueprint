@@ -75,13 +75,20 @@ impl LifecycleTestHarness {
         std::fs::create_dir_all(&keystore_path)?;
         seed_operator_key(&keystore_path, OPERATOR1_PRIVATE_KEY)?;
 
-        let operator_client = create_client(&deployment, &keystore_path, BLUEPRINT_ID, Some(SERVICE_ID)).await?;
+        let operator_client =
+            create_client(&deployment, &keystore_path, BLUEPRINT_ID, Some(SERVICE_ID)).await?;
 
         // Create owner client with separate keystore
         let owner_keystore_path = temp.path().join("owner_keystore");
         std::fs::create_dir_all(&owner_keystore_path)?;
         seed_operator_key(&owner_keystore_path, SERVICE_OWNER_PRIVATE_KEY)?;
-        let owner_client = create_client(&deployment, &owner_keystore_path, BLUEPRINT_ID, Some(SERVICE_ID)).await?;
+        let owner_client = create_client(
+            &deployment,
+            &owner_keystore_path,
+            BLUEPRINT_ID,
+            Some(SERVICE_ID),
+        )
+        .await?;
 
         Ok(Self {
             deployment,
@@ -94,7 +101,6 @@ impl LifecycleTestHarness {
     fn operator_account(&self) -> Address {
         self.operator_client.account()
     }
-
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -108,15 +114,24 @@ async fn test_full_service_lifecycle() -> Result<()> {
         let harness = LifecycleTestHarness::new(deployment).await?;
 
         // Step 1: Verify operator is registered (seeded state)
-        let is_registered = harness.operator_client
+        let is_registered = harness
+            .operator_client
             .is_operator_registered(BLUEPRINT_ID, harness.operator_account())
             .await
             .context("failed to check operator registration")?;
-        ensure!(is_registered, "operator should be registered in seeded state");
-        println!("✓ Operator {} is registered for blueprint {}", harness.operator_account(), BLUEPRINT_ID);
+        ensure!(
+            is_registered,
+            "operator should be registered in seeded state"
+        );
+        println!(
+            "✓ Operator {} is registered for blueprint {}",
+            harness.operator_account(),
+            BLUEPRINT_ID
+        );
 
         // Step 2: Verify service is active (seeded state)
-        let service = harness.operator_client
+        let service = harness
+            .operator_client
             .get_service(SERVICE_ID)
             .await
             .context("failed to get service")?;
@@ -127,15 +142,20 @@ async fn test_full_service_lifecycle() -> Result<()> {
         println!("✓ Service {} is active", SERVICE_ID);
 
         // Step 3: Check service operators
-        let operators = harness.operator_client
+        let operators = harness
+            .operator_client
             .get_service_operators(SERVICE_ID)
             .await
             .context("failed to get service operators")?;
         println!("✓ Service has {} operator(s)", operators.len());
-        ensure!(!operators.is_empty(), "service should have at least one operator");
+        ensure!(
+            !operators.is_empty(),
+            "service should have at least one operator"
+        );
 
         // Step 4: Verify operator is in service
-        let is_service_operator = harness.operator_client
+        let is_service_operator = harness
+            .operator_client
             .is_service_operator(SERVICE_ID, harness.operator_account())
             .await
             .context("failed to check service operator")?;
@@ -158,15 +178,22 @@ async fn test_full_service_lifecycle() -> Result<()> {
         std::fs::create_dir_all(&keystore_path)?;
         seed_operator_key(&keystore_path, OPERATOR1_PRIVATE_KEY)?;
 
-        let runner_client = create_client(&harness.deployment, &keystore_path, BLUEPRINT_ID, Some(SERVICE_ID)).await?;
+        let runner_client = create_client(
+            &harness.deployment,
+            &keystore_path,
+            BLUEPRINT_ID,
+            Some(SERVICE_ID),
+        )
+        .await?;
 
         let start_block = runner_client
             .block_number()
             .await
             .unwrap_or_default()
             .saturating_sub(1);
-        let producer = TangleEvmProducer::from_block((*runner_client).clone(), SERVICE_ID, start_block)
-            .with_poll_interval(Duration::from_millis(100));
+        let producer =
+            TangleEvmProducer::from_block((*runner_client).clone(), SERVICE_ID, start_block)
+                .with_poll_interval(Duration::from_millis(100));
         let consumer = TangleEvmConsumer::new((*runner_client).clone());
         let router = Router::new().route(JOB_INDEX, square_job.layer(TangleEvmLayer));
 
@@ -179,7 +206,8 @@ async fn test_full_service_lifecycle() -> Result<()> {
         // Step 7: Submit a job
         let input_value: u64 = 42;
         let encoded_input = Bytes::from(input_value.abi_encode());
-        let submission = harness.owner_client
+        let submission = harness
+            .owner_client
             .submit_job(SERVICE_ID, JOB_INDEX, encoded_input)
             .await
             .context("failed to submit job")?;
@@ -201,8 +229,16 @@ async fn test_full_service_lifecycle() -> Result<()> {
         .await
         .context("timed out waiting for job result")??;
         let result: u64 = u64::abi_decode(&output).context("failed to decode job result")?;
-        ensure!(result == input_value * input_value, "expected {} but got {}", input_value * input_value, result);
-        println!("✓ Received correct job result: {} = {}²", result, input_value);
+        ensure!(
+            result == input_value * input_value,
+            "expected {} but got {}",
+            input_value * input_value,
+            result
+        );
+        println!(
+            "✓ Received correct job result: {} = {}²",
+            result, input_value
+        );
 
         // Step 9: Verify job result on-chain
         wait_for_job_completion((*harness.operator_client).clone(), call_id)
@@ -231,28 +267,32 @@ async fn test_operator_status_queries() -> Result<()> {
         let harness = LifecycleTestHarness::new(deployment).await?;
 
         // Test operator active status
-        let is_active = harness.operator_client
+        let is_active = harness
+            .operator_client
             .is_operator_active(harness.operator_account())
             .await
             .context("failed to check operator active status")?;
         println!("Operator active status: {}", is_active);
 
         // Test operator stake
-        let stake = harness.operator_client
+        let stake = harness
+            .operator_client
             .get_operator_stake(harness.operator_account())
             .await
             .context("failed to get operator stake")?;
         println!("Operator stake: {} wei", stake);
 
         // Test minimum operator stake
-        let min_stake = harness.operator_client
+        let min_stake = harness
+            .operator_client
             .min_operator_stake()
             .await
             .context("failed to get minimum stake")?;
         println!("Minimum operator stake: {} wei", min_stake);
 
         // Test blueprint count
-        let blueprint_count = harness.operator_client
+        let blueprint_count = harness
+            .operator_client
             .blueprint_count()
             .await
             .context("failed to get blueprint count")?;
@@ -260,7 +300,8 @@ async fn test_operator_status_queries() -> Result<()> {
         ensure!(blueprint_count > 0, "should have at least one blueprint");
 
         // Test service count
-        let service_count = harness.operator_client
+        let service_count = harness
+            .operator_client
             .service_count()
             .await
             .context("failed to get service count")?;
@@ -284,7 +325,8 @@ async fn test_service_operator_weights() -> Result<()> {
         let harness = LifecycleTestHarness::new(deployment).await?;
 
         // Get service operator weights
-        let weights = harness.operator_client
+        let weights = harness
+            .operator_client
             .get_service_operator_weights(SERVICE_ID)
             .await
             .context("failed to get operator weights")?;
@@ -295,7 +337,8 @@ async fn test_service_operator_weights() -> Result<()> {
         }
 
         // Get total exposure
-        let total_exposure = harness.operator_client
+        let total_exposure = harness
+            .operator_client
             .get_service_total_exposure(SERVICE_ID)
             .await
             .context("failed to get total exposure")?;
@@ -360,10 +403,7 @@ async fn run_minimal_runner_loop(
     Ok(())
 }
 
-async fn wait_for_job_completion(
-    client: TangleEvmClient,
-    call_id: u64,
-) -> Result<()> {
+async fn wait_for_job_completion(client: TangleEvmClient, call_id: u64) -> Result<()> {
     use tokio::time::sleep;
 
     timeout(Duration::from_secs(120), async {
@@ -440,7 +480,9 @@ async fn create_client(
     .test_mode(true);
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(keystore_path))?;
-    Ok(Arc::new(TangleEvmClient::with_keystore(config, keystore).await?))
+    Ok(Arc::new(
+        TangleEvmClient::with_keystore(config, keystore).await?,
+    ))
 }
 
 fn seed_operator_key(path: &Path, private_key: &str) -> Result<()> {
