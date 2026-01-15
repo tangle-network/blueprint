@@ -579,6 +579,20 @@ enum DelegatorCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Deposit funds without delegating.
+    Deposit {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Token address (zero address for native ETH).
+        #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
+        token: String,
+        /// Amount to deposit (in wei).
+        #[arg(long)]
+        amount: u128,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
     /// Delegate stake to an operator.
     Delegate {
         #[command(flatten)]
@@ -798,6 +812,33 @@ enum OperatorCommands {
     CompleteLeaving {
         #[command(flatten)]
         network: TangleClientArgs,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Register as an operator on the restaking layer.
+    ///
+    /// Uses the configured bond token (TNT or native ETH depending on deployment).
+    /// You must approve the restaking contract to spend your tokens first if using ERC20.
+    Register {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Amount to stake (in wei).
+        #[arg(long)]
+        amount: u128,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Increase operator stake.
+    ///
+    /// Uses the configured bond token (TNT or native ETH depending on deployment).
+    IncreaseStake {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Amount to add to stake (in wei).
+        #[arg(long)]
+        amount: u128,
         /// Emit JSON instead of human-readable output.
         #[arg(long)]
         json: bool,
@@ -1688,6 +1729,27 @@ async fn main() -> Result<()> {
                     .map_err(|e| eyre!(e.to_string()))?;
                 log_tx("Delegator approve", &tx, json);
             }
+            DelegatorCommands::Deposit {
+                network,
+                token,
+                amount,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let token_address = parse_address(&token, "TOKEN")?;
+                let tx = if token_address == Address::ZERO {
+                    client
+                        .deposit_native(U256::from(amount))
+                        .await
+                        .map_err(|e| eyre!(e.to_string()))?
+                } else {
+                    client
+                        .deposit_erc20(token_address, U256::from(amount))
+                        .await
+                        .map_err(|e| eyre!(e.to_string()))?
+                };
+                log_tx("Delegator deposit", &tx, json);
+            }
             DelegatorCommands::Delegate {
                 network,
                 operator,
@@ -1975,6 +2037,30 @@ async fn main() -> Result<()> {
                     .await
                     .map_err(|e| eyre!(e.to_string()))?;
                 log_tx("Operator complete-leaving", &tx, json);
+            }
+            OperatorCommands::Register {
+                network,
+                amount,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .register_operator_restaking(U256::from(amount))
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator register", &tx, json);
+            }
+            OperatorCommands::IncreaseStake {
+                network,
+                amount,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .increase_stake(U256::from(amount))
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator increase-stake", &tx, json);
             }
         },
     }

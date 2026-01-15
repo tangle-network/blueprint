@@ -1802,6 +1802,147 @@ impl TangleEvmClient {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR RESTAKING REGISTRATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Get the operator bond token address.
+    ///
+    /// Returns `Address::ZERO` if native ETH is used for operator bonds,
+    /// otherwise returns the ERC20 token address (e.g., TNT).
+    pub async fn operator_bond_token(&self) -> Result<Address> {
+        let contract = self.restaking_contract();
+        contract
+            .operatorBondToken()
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Register as an operator on the restaking layer.
+    ///
+    /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
+    /// The operator must have approved the restaking contract if using ERC20.
+    pub async fn register_operator_restaking(&self, stake_amount: U256) -> Result<TransactionResult> {
+        let bond_token = self.operator_bond_token().await?;
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = if bond_token == Address::ZERO {
+            // Native ETH bond
+            contract
+                .registerOperator()
+                .value(stake_amount)
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        } else {
+            // ERC20 bond (e.g., TNT)
+            contract
+                .registerOperatorWithAsset(bond_token, stake_amount)
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        };
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Increase operator stake.
+    ///
+    /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
+    pub async fn increase_stake(&self, amount: U256) -> Result<TransactionResult> {
+        let bond_token = self.operator_bond_token().await?;
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = if bond_token == Address::ZERO {
+            // Native ETH bond
+            contract
+                .increaseStake()
+                .value(amount)
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        } else {
+            // ERC20 bond (e.g., TNT)
+            contract
+                .increaseStakeWithAsset(bond_token, amount)
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        };
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Deposit native ETH without delegating.
+    ///
+    /// Use this to pre-fund your account before delegating.
+    pub async fn deposit_native(&self, amount: U256) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .deposit()
+            .value(amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Deposit ERC20 tokens without delegating.
+    ///
+    /// Use this to pre-fund your account before delegating.
+    pub async fn deposit_erc20(&self, token: Address, amount: U256) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .depositERC20(token, amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // BLS AGGREGATION QUERIES
     // ═══════════════════════════════════════════════════════════════════════════
 
