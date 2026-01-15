@@ -10,8 +10,8 @@ pub mod error;
 pub mod source;
 pub mod types;
 
-/// Required template keys for the v2 Tangle EVM template (simplified)
-const TANGLE_EVM_REQUIRED_KEYS: [&str; 2] = ["project-description", "authors"];
+/// Required template keys for v2 Tangle EVM templates
+const TANGLE_EVM_REQUIRED_KEYS: [&str; 2] = ["project-description", "project-authors"];
 
 /// Required template keys for EigenLayer templates (more complex)
 const EIGENLAYER_REQUIRED_KEYS: [&str; 6] = [
@@ -44,8 +44,8 @@ pub struct TemplateVariables {
     pub project_description: Option<String>,
 
     /// Authors of the project (comma-separated list)
-    #[arg(long = "authors", value_name = "AUTHORS")]
-    pub authors: Option<String>,
+    #[arg(long = "project-authors", value_name = "AUTHORS")]
+    pub project_authors: Option<String>,
 
     /// Homepage or documentation URL
     #[arg(long = "project-homepage", value_name = "URL")]
@@ -86,7 +86,7 @@ impl TemplateVariables {
         Self::push("gh-repo", self.gh_repo, define);
         Self::push("gh-organization", self.gh_organization, define);
         Self::push("project-description", self.project_description, define);
-        Self::push("authors", self.authors, define);
+        Self::push("project-authors", self.project_authors, define);
         Self::push("project-homepage", self.project_homepage, define);
         Self::push("flakes", self.flakes, define);
         Self::push("container", self.container, define);
