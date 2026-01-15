@@ -10,7 +10,11 @@ pub mod error;
 pub mod source;
 pub mod types;
 
-const BASE_REQUIRED_TEMPLATE_KEYS: [&str; 6] = [
+/// Required template keys for the v2 Tangle EVM template (simplified)
+const TANGLE_EVM_REQUIRED_KEYS: [&str; 2] = ["project-description", "authors"];
+
+/// Required template keys for EigenLayer templates (more complex)
+const EIGENLAYER_REQUIRED_KEYS: [&str; 6] = [
     "gh-username",
     "gh-repo",
     "gh-organization",
@@ -38,6 +42,10 @@ pub struct TemplateVariables {
     /// Short description of the project
     #[arg(long = "project-description", value_name = "TEXT")]
     pub project_description: Option<String>,
+
+    /// Authors of the project (comma-separated list)
+    #[arg(long = "authors", value_name = "AUTHORS")]
+    pub authors: Option<String>,
 
     /// Homepage or documentation URL
     #[arg(long = "project-homepage", value_name = "URL")]
@@ -78,6 +86,7 @@ impl TemplateVariables {
         Self::push("gh-repo", self.gh_repo, define);
         Self::push("gh-organization", self.gh_organization, define);
         Self::push("project-description", self.project_description, define);
+        Self::push("authors", self.authors, define);
         Self::push("project-homepage", self.project_homepage, define);
         Self::push("flakes", self.flakes, define);
         Self::push("container", self.container, define);
@@ -104,17 +113,27 @@ fn ensure_default_bool(define: &mut Vec<String>, key: &str, default: bool) {
     define.push(format!("{key}={}", default));
 }
 
-fn missing_required_template_variables(define: &[String]) -> Vec<&'static str> {
+fn missing_required_template_variables(
+    define: &[String],
+    is_tangle_evm: bool,
+) -> Vec<&'static str> {
     let provided = build_define_map(define);
     let mut missing = Vec::new();
 
-    for key in BASE_REQUIRED_TEMPLATE_KEYS {
-        if !provided.contains_key(key) {
-            missing.push(key);
+    let required_keys: &[&str] = if is_tangle_evm {
+        &TANGLE_EVM_REQUIRED_KEYS
+    } else {
+        &EIGENLAYER_REQUIRED_KEYS
+    };
+
+    for key in required_keys {
+        if !provided.contains_key(*key) {
+            missing.push(*key);
         }
     }
 
-    if container_fields_required(&provided) {
+    // Container fields only required for EigenLayer templates
+    if !is_tangle_evm && container_fields_required(&provided) {
         for key in CONTAINER_TEMPLATE_KEYS {
             if !provided.contains_key(key) {
                 missing.push(key);
@@ -190,10 +209,13 @@ pub fn new_blueprint(
 
         cargo_generate::TemplatePath {
             git: Some(template_repo),
-            branch: Some(String::from("main")),
+            branch: Some(String::from("v2")),
             ..Default::default()
         }
     });
+
+    // Determine if this is a Tangle EVM template (simpler requirements)
+    let is_tangle_evm = matches!(blueprint_variant, None | Some(BlueprintVariant::Tangle));
 
     template_variables.merge_into(&mut define);
     ensure_default_bool(&mut define, "flakes", true);
@@ -205,7 +227,7 @@ pub fn new_blueprint(
         println!(
             "Skipping prompts; all template variables must be provided via CLI flags when using --skip-prompts."
         );
-        let missing = missing_required_template_variables(&define);
+        let missing = missing_required_template_variables(&define, is_tangle_evm);
         if !missing.is_empty() {
             let missing_list = missing.join(", ");
             return Err(Error::MissingTemplateVariables(missing_list));
@@ -235,7 +257,7 @@ pub fn new_blueprint(
         config: None,
         vcs: Some(cargo_generate::Vcs::Git),
         lib: false,
-        bin: true,
+        bin: false,
         ssh_identity: None,
         gitconfig: None,
         define,
