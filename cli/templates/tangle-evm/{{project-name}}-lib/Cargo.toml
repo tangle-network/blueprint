@@ -1,0 +1,18 @@
+[package]
+name = "{{project-name}}-lib"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+alloy-primitives = "1"
+alloy-sol-types = "1"
+blueprint-sdk = { git = "https://github.com/tangle-network/blueprint", branch = "v2", default-features = false, features = ["std", "tracing", "macros", "tangle-evm"] }
+tokio = { version = "1", default-features = false, features = ["sync"] }
+
+[dev-dependencies]
+anyhow = "1"
+blueprint-anvil-testing-utils = { git = "https://github.com/tangle-network/blueprint", branch = "v2" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

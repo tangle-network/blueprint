@@ -2,10 +2,12 @@ pub use crate::command::create::error::Error;
 pub use crate::command::create::source::Source;
 pub use crate::command::create::types::BlueprintType;
 use crate::foundry::FoundryToolchain;
+use templates::TangleEvmTemplate;
 use types::{BlueprintVariant, EigenlayerVariant};
 
 pub mod error;
 pub mod source;
+mod templates;
 pub mod types;
 
 /// Generate a new blueprint from a template
@@ -36,24 +38,51 @@ pub fn new_blueprint(
     let blueprint_variant = blueprint_type.map(|t| t.get_type()).unwrap_or_default();
     let template_path_opt: Option<cargo_generate::TemplatePath> = source.into();
 
+    // Track if we're using embedded templates (need to clean up temp dir later)
+    let mut using_embedded_template = false;
+
     let template_path = template_path_opt.unwrap_or_else(|| {
-        // TODO: Interactive selection (#352)
-        let template_repo: String = match blueprint_variant {
+        match blueprint_variant {
+            // Use embedded template for Tangle EVM blueprints
             Some(BlueprintVariant::Tangle) | None => {
-                "https://github.com/tangle-network/blueprint-template".into()
+                println!("Using embedded Tangle EVM template");
+                match TangleEvmTemplate::write_to_temp_dir() {
+                    Ok(temp_dir) => {
+                        using_embedded_template = true;
+                        cargo_generate::TemplatePath {
+                            path: Some(temp_dir.to_string_lossy().into()),
+                            ..Default::default()
+                        }
+                    }
+                    Err(e) => {
+                        println!(
+                            "Warning: Failed to write embedded template: {e}. Falling back to GitHub."
+                        );
+                        cargo_generate::TemplatePath {
+                            git: Some(
+                                "https://github.com/tangle-network/blueprint-template".into(),
+                            ),
+                            branch: Some(String::from("main")),
+                            ..Default::default()
+                        }
+                    }
+                }
             }
+            // EigenLayer templates still use GitHub
             Some(BlueprintVariant::Eigenlayer(EigenlayerVariant::BLS)) => {
-                "https://github.com/tangle-network/eigenlayer-bls-template".into()
+                cargo_generate::TemplatePath {
+                    git: Some("https://github.com/tangle-network/eigenlayer-bls-template".into()),
+                    branch: Some(String::from("main")),
+                    ..Default::default()
+                }
             }
             Some(BlueprintVariant::Eigenlayer(EigenlayerVariant::ECDSA)) => {
-                "https://github.com/tangle-network/eigenlayer-ecdsa-template".into()
+                cargo_generate::TemplatePath {
+                    git: Some("https://github.com/tangle-network/eigenlayer-ecdsa-template".into()),
+                    branch: Some(String::from("main")),
+                    ..Default::default()
+                }
             }
-        };
-
-        cargo_generate::TemplatePath {
-            git: Some(template_repo),
-            branch: Some(String::from("main")),
-            ..Default::default()
         }
     });
 
@@ -68,12 +97,15 @@ pub fn new_blueprint(
             }
         }
 
-        // Define default values for common template variables
+        // Define default values for template variables
+        // These cover both embedded templates and legacy GitHub templates
         let defaults = [
+            ("project-description", "A Tangle EVM blueprint"),
+            ("author", "Tangle Network"),
+            // Legacy GitHub template variables (for backwards compatibility)
             ("gh-username", ""),
             ("gh-repo", ""),
             ("gh-organization", ""),
-            ("project-description", ""),
             ("project-homepage", ""),
             ("flakes", "false"),
             ("container", "true"),
@@ -98,14 +130,17 @@ pub fn new_blueprint(
     if !define.is_empty() {
         println!("Using template variables: {:?}", define);
     }
-    let (silent, template_values_file) = if let Some(file) = &template_values_file {
-        println!("Using template values file: {}", file);
-        (true, Some(file.clone()))
-    } else {
-        (false, None)
-    };
+    // Enable silent mode when skip_prompts is true or a values file is provided
+    let template_values_file = template_values_file.clone();
+    let silent = skip_prompts || template_values_file.is_some();
+    if template_values_file.is_some() {
+        println!(
+            "Using template values file: {}",
+            template_values_file.as_ref().unwrap()
+        );
+    }
 
-    let path = cargo_generate::generate(cargo_generate::GenerateArgs {
+    let generation_result = cargo_generate::generate(cargo_generate::GenerateArgs {
         template_path,
         list_favorites: false,
         name: Some(name.to_string()),
@@ -116,7 +151,6 @@ pub fn new_blueprint(
         config: None,
         vcs: Some(cargo_generate::Vcs::Git),
         lib: false,
-        bin: true,
         ssh_identity: None,
         gitconfig: None,
         define,
@@ -130,8 +164,16 @@ pub fn new_blueprint(
         continue_on_error: false,
         quiet: false,
         no_workspace: false,
-    })
-    .map_err(Error::GenerationFailed)?;
+    });
+
+    // Clean up embedded template temp directory if we used it
+    if using_embedded_template {
+        if let Err(e) = TangleEvmTemplate::cleanup_temp_dir() {
+            println!("Warning: Failed to clean up temp template directory: {e}");
+        }
+    }
+
+    let path = generation_result.map_err(Error::GenerationFailed)?;
 
     println!("Blueprint generated at: {}", path.display());
 

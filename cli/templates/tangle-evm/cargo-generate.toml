@@ -1,0 +1,12 @@
+[template]
+cargo_generate_version = ">=0.18.0"
+
+[placeholders.project-description]
+type = "string"
+prompt = "Project description?"
+default = "A Tangle EVM blueprint"
+
+[placeholders.author]
+type = "string"
+prompt = "Author name?"
+default = "Tangle Network"

@@ -123,7 +123,7 @@ enum BlueprintCommands {
     /// Run a blueprint
     #[command(visible_alias = "r")]
     Run {
-        #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
+        #[arg(short = 'p', long, value_enum, default_value = "tangleevm")]
         protocol: Protocol,
         #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:8545")]
         http_rpc_url: Url,
@@ -161,7 +161,7 @@ enum BlueprintCommands {
     /// Generate registration inputs for a blueprint without registering on-chain
     #[command(visible_alias = "pre")]
     Preregister {
-        #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
+        #[arg(short = 'p', long, value_enum, default_value = "tangleevm")]
         protocol: Protocol,
         #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:8545")]
         http_rpc_url: Url,
@@ -254,7 +254,7 @@ enum KeyCommands {
         secret: Option<String>,
         #[arg(short = 'k', long)]
         keystore_path: PathBuf,
-        #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
+        #[arg(short = 'p', long, value_enum, default_value = "tangleevm")]
         protocol: Protocol,
     },
     /// Export a key from the keystore

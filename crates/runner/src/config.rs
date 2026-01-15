@@ -43,11 +43,7 @@ pub trait ProtocolSettingsT: Sized + 'static {
 
 /// The protocol on which a blueprint will be executed.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(
-    feature = "std",
-    derive(clap::ValueEnum),
-    clap(rename_all = "lowercase")
-)]
+#[cfg_attr(feature = "std", derive(clap::ValueEnum), clap(rename_all = "lower"))]
 #[non_exhaustive]
 pub enum Protocol {
     #[cfg(feature = "tangle-evm")]
@@ -79,7 +75,7 @@ impl Protocol {
         #[allow(unreachable_patterns)]
         match self {
             #[cfg(feature = "tangle-evm")]
-            Self::TangleEvm => "tangle-evm",
+            Self::TangleEvm => "tangleevm",
             #[cfg(feature = "eigenlayer")]
             Self::Eigenlayer => "eigenlayer",
             #[cfg(feature = "symbiotic")]
