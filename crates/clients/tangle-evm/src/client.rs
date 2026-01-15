@@ -1821,9 +1821,15 @@ impl TangleEvmClient {
     /// Register as an operator on the restaking layer.
     ///
     /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
-    /// The operator must have approved the restaking contract if using ERC20.
+    /// For ERC20 tokens, automatically approves the restaking contract first.
     pub async fn register_operator_restaking(&self, stake_amount: U256) -> Result<TransactionResult> {
         let bond_token = self.operator_bond_token().await?;
+
+        // Auto-approve ERC20 bond token if needed
+        if bond_token != Address::ZERO {
+            self.erc20_approve(bond_token, self.restaking_address, stake_amount)
+                .await?;
+        }
 
         let wallet = self.wallet()?;
         let provider = ProviderBuilder::new()
@@ -1860,8 +1866,15 @@ impl TangleEvmClient {
     /// Increase operator stake.
     ///
     /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
+    /// For ERC20 tokens, automatically approves the restaking contract first.
     pub async fn increase_stake(&self, amount: U256) -> Result<TransactionResult> {
         let bond_token = self.operator_bond_token().await?;
+
+        // Auto-approve ERC20 bond token if needed
+        if bond_token != Address::ZERO {
+            self.erc20_approve(bond_token, self.restaking_address, amount)
+                .await?;
+        }
 
         let wallet = self.wallet()?;
         let provider = ProviderBuilder::new()
