@@ -560,7 +560,10 @@ impl TangleEvmClient {
 
         let signing_key = self.ecdsa_signing_key()?;
         let verifying = signing_key.verifying_key();
-        let ecdsa_bytes = Bytes::copy_from_slice(&verifying.to_bytes());
+        // Use uncompressed SEC1 format (65 bytes starting with 0x04)
+        // The contract expects uncompressed public keys, not compressed (33 bytes)
+        let encoded_point = verifying.0.to_encoded_point(false);
+        let ecdsa_bytes = Bytes::copy_from_slice(encoded_point.as_bytes());
         let rpc_endpoint = rpc_endpoint.into();
 
         let receipt = if let Some(inputs) = registration_inputs {

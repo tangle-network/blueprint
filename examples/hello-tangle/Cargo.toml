@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 alloy-sol-types = { workspace = true }
 alloy-primitives = { workspace = true }
+blueprint-core = { workspace = true }
 blueprint-router = { workspace = true }
 blueprint-tangle-evm-extra = { workspace = true }
 once_cell = { workspace = true }

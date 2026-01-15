@@ -1,7 +1,9 @@
 use alloy_primitives::Address;
 use alloy_sol_types::sol;
+use blueprint_core::Job;
 use blueprint_router::Router;
 use blueprint_tangle_evm_extra::extract::{Caller, TangleEvmArg, TangleEvmResult};
+use blueprint_tangle_evm_extra::TangleEvmLayer;
 use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -51,7 +53,7 @@ pub async fn create_document(
 /// Router used by the example blueprint runner.
 #[must_use]
 pub fn router() -> Router {
-    Router::new().route(CREATE_DOCUMENT_JOB, create_document)
+    Router::new().route(CREATE_DOCUMENT_JOB, create_document.layer(TangleEvmLayer))
 }
 
 /// Inspect the in-memory store (handy for doctests).

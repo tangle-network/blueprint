@@ -303,7 +303,6 @@ struct BlueprintConfigSpec {
     subscription_rate: Option<u128>,
     subscription_interval: Option<u64>,
     event_rate: Option<u128>,
-    operator_bond: Option<u128>,
 }
 
 impl BlueprintConfigSpec {
@@ -319,7 +318,6 @@ impl BlueprintConfigSpec {
             subscriptionRate: U256::from(self.subscription_rate.unwrap_or_default()),
             subscriptionInterval: self.subscription_interval.unwrap_or_default(),
             eventRate: U256::from(self.event_rate.unwrap_or_default()),
-            operatorBond: U256::from(self.operator_bond.unwrap_or_default()),
         }
     }
 }

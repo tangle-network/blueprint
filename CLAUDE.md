@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Tangle Network Blueprint SDK - a Rust workspace for building blockchain services ("blueprints") on Tangle Network, EigenLayer, and EVM networks. The project is in alpha stage with 40+ crates organized in a modular architecture.
+Tangle Network Blueprint SDK - a Rust workspace for building decentralized blockchain services ("blueprints") on Tangle Network (EVM), EigenLayer, and standard EVM chains. Blueprints turn complex on-chain and off-chain infrastructure into reproducible, deployable units of logic.
+
+The v2 architecture is EVM-only, removing all Substrate dependencies in favor of `tnt-core` v2 contracts.
 
 ## Essential Commands
 
@@ -16,15 +18,37 @@ cargo build
 # Run all tests
 cargo test
 
-# Run tests with nextest (preferred in CI)
+# Run tests with nextest (preferred)
 cargo nextest run --profile ci
 
-# Format code
-cargo fmt
+# Run a single test
+cargo test -p <crate_name> --test <test_name> -- --nocapture
+
+# Run serial tests (for crates requiring single-threaded execution)
+cargo nextest run --profile serial -p <crate_name>
+
+# Format code (requires nightly)
+cargo +nightly fmt
 
 # Lint code
-cargo clippy -- -D warnings
 cargo clippy --tests --examples -- -D warnings
+```
+
+### Anvil-Based Integration Tests
+Tests require Docker for `testcontainers`. Set `RUN_TNT_E2E=1` for longer integration suites.
+
+```bash
+# Client integration tests
+cargo test -p blueprint-client-tangle-evm --test anvil
+
+# Blueprint harness end-to-end
+cargo test -p hello-tangle-blueprint --test anvil -- --nocapture
+
+# Manager runner tests
+cargo test -p blueprint-manager --test tangle_evm_runner
+
+# Pricing engine tests
+cargo test -p blueprint-pricing-engine --test evm_listener
 ```
 
 ### CLI Tool
@@ -36,72 +60,71 @@ cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --f
 cargo tangle blueprint create --name <blueprint_name>
 
 # Deploy to devnet (auto-starts local testnet)
-cargo tangle blueprint deploy tangle --network devnet
+cargo tangle blueprint deploy tangle --network devnet --package <package_name>
 
 # Deploy to testnet/mainnet using a definition manifest
 cargo tangle blueprint deploy tangle --network testnet --definition ./path/to/definition.json
 
 # Generate keys
 cargo tangle blueprint generate-keys -k <KEY_TYPE> -p <PATH> -s <SURI/SEED>
+
+# Run blueprint
+cargo tangle blueprint run --protocol tangle-evm --http-rpc-url <URL> --ws-rpc-url <URL> --keystore-path <PATH>
 ```
 
 ## Architecture
 
-### Core Abstraction: Job System
-The blueprint SDK centers around a job system that provides:
-- Multi-network execution contexts (Tangle, EigenLayer, EVM)
-- Dynamic routing and scheduling via `blueprint-router`
-- Protocol-specific execution via `blueprint-runner`
-- Network management via `blueprint-manager`
+### Job System
+The SDK centers around a job system:
+- `blueprint-core`: Job primitives and definitions
+- `blueprint-router`: Dynamic job scheduling and routing
+- `blueprint-runner`: Protocol-specific job execution
+- `blueprint-manager`: Network connection layer, spawns blueprint binaries
 
-### Workspace Structure
-```
-cli/                    # cargo-tangle CLI tool
-crates/
-├── blueprint-sdk/      # Main SDK re-export crate
-├── blueprint-core/     # Job system primitives
-├── blueprint-runner/   # Job execution engine
-├── blueprint-router/   # Dynamic job scheduling
-├── blueprint-manager/  # Network connection layer
-├── blueprint-clients/  # Network-specific clients (Tangle, EigenLayer, EVM)
-├── blueprint-crypto/   # Multi-scheme cryptography (BLS, BN254, Ed25519, K256, Sr25519)
-├── blueprint-networking/ # P2P with MPC protocol extensions
-├── blueprint-testing-utils/ # Test utilities for different networks
-└── blueprint-stores/   # Local database implementations
-examples/               # Example blueprints (incredible-squaring)
-```
+### Network Clients (v2 EVM-only)
+- `blueprint-client-tangle-evm`: Tangle v2 EVM contracts (`Tangle.sol`, `MultiAssetDelegation.sol`, `OperatorStatusRegistry.sol`)
+- `blueprint-client-eigenlayer`: EigenLayer AVS integration
+- `blueprint-client-evm`: Generic EVM utilities
 
-### Key Architectural Patterns
+### Key Crate Groups
+- **Crypto** (`crates/crypto/`): BLS, BN254, Ed25519, K256, Sr25519 implementations
+- **Networking** (`crates/networking/`): P2P with libp2p, round-based MPC protocol extensions
+- **Testing** (`crates/testing-utils/`): Anvil harness, core utilities, EigenLayer test utilities
+- **Chain Setup** (`crates/chain-setup/anvil/`): Anvil testnet snapshots and deployment
 
-1. **Meta-crates Pattern**: Major functionality is exposed through meta-crates that re-export component crates
-2. **Multi-Network Abstraction**: Common interfaces with network-specific implementations in separate crates
-3. **Hardware Wallet Support**: Built-in support for Ledger and remote signing (AWS KMS, GCP)
-4. **Test Isolation**: Certain crates require serial test execution due to resource conflicts
+### Meta-crates Pattern
+Major functionality exposed through re-export crates:
+- `blueprint-sdk`: Main entry point, re-exports all SDK components
+- `blueprint-clients`: Network client collection
+- `blueprint-crypto`: All cryptographic schemes
+- `blueprint-testing-utils`: All test utilities
 
 ## Development Constraints
 
 ### Rust Configuration
-- Version: 1.86 (2024 edition)
+- Edition: 2024
+- Rust version: 1.88
 - Workspace resolver: v3
-- Nightly features used for formatting
+- Nightly required for formatting only
 
-### Linting Rules
-- Clippy pedantic enabled with specific allowances
-- Deny: rust_2018_idioms, trivial_casts, unused_import_braces
-- Custom doc-valid-idents including "EigenLayer"
+### Linting
+Clippy pedantic enabled. Key denials: `rust_2018_idioms`, `trivial_casts`, `unused_import_braces`.
 
 ### Serial Test Crates
-These require `--test-threads=1` or nextest serial execution:
-- `blueprint-tangle-testing-utils`
+These require `--test-threads=1` or nextest `--profile serial`:
 - `blueprint-client-evm`
-- `blueprint-tangle-extra`
 - `blueprint-networking`
 - `blueprint-qos`
 - `cargo-tangle`
 
+### Test Fixtures
+- Anvil snapshot: `crates/chain-setup/anvil/snapshots/localtestnet-state.json`
+- Fallback broadcast: `crates/chain-setup/anvil/snapshots/localtestnet-broadcast.json`
+- Refresh with: `scripts/fetch-localtestnet-fixtures.sh`
+
 ### External Dependencies
-- **Substrate**: sp-core, sp-runtime (v34-39.x)
-- **Alloy**: EVM interaction (v0.12)
-- **libp2p**: P2P networking (v0.55)
-- **Eigensdk**: EigenLayer integration (v0.5)
+- **Alloy**: EVM interaction (v1.0.x)
+- **libp2p**: P2P networking (v0.54)
+- **Eigensdk**: EigenLayer integration (v2.0)
 - **Foundry**: Smart contract compilation
+- **tnt-core-bindings**: Tangle v2 contract bindings
