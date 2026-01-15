@@ -240,13 +240,13 @@ where
     /// # Examples
     ///
     /// ```rust
-/// use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
-/// use blueprint_qos::servers::prometheus::{PrometheusServer, PrometheusServerConfig};
-/// use blueprint_qos::service_builder::QoSServiceBuilder;
-/// use blueprint_router::Router;
-/// use blueprint_runner::BlueprintRunner;
-/// use blueprint_runner::config::BlueprintEnvironment;
-/// use std::sync::Arc;
+    /// use blueprint_qos::heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService};
+    /// use blueprint_qos::servers::prometheus::{PrometheusServer, PrometheusServerConfig};
+    /// use blueprint_qos::service_builder::QoSServiceBuilder;
+    /// use blueprint_router::Router;
+    /// use blueprint_runner::BlueprintRunner;
+    /// use blueprint_runner::config::BlueprintEnvironment;
+    /// use std::sync::Arc;
     ///
     /// // Define a custom heartbeat consumer
     /// struct MyHeartbeatConsumer;

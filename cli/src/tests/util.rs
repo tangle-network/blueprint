@@ -8,7 +8,6 @@ use std::{
     sync::OnceLock,
 };
 
-
 /// Environment variable that enables end-to-end CLI tests.
 pub const RUN_TNT_E2E_ENV: &str = "RUN_TNT_E2E";
 
@@ -69,7 +68,10 @@ pub fn cargo_tangle_bin() -> Result<PathBuf> {
     }
 
     if !bin_path.is_file() {
-        return Err(eyre!("cargo-tangle binary not found at {}", bin_path.display()));
+        return Err(eyre!(
+            "cargo-tangle binary not found at {}",
+            bin_path.display()
+        ));
     }
 
     let _ = BIN_PATH.set(bin_path.clone());

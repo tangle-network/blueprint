@@ -811,9 +811,7 @@ fn coerce_value(value: &Value, schema: &SchemaParam) -> Result<DynSolValue> {
             Ok(DynSolValue::Function(Function::from(raw)))
         }
         #[allow(unreachable_patterns)]
-        other => {
-            Err(eyre!("unsupported type {other:?} for job parameters"))
-        }
+        other => Err(eyre!("unsupported type {other:?} for job parameters")),
     }
 }
 

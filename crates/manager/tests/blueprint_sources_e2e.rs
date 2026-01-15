@@ -163,8 +163,8 @@ async fn github_source_handles_errors() {
 /// Test: Remote fetcher validates checksums correctly
 #[tokio::test]
 async fn remote_source_validates_checksum() {
-    use axum::routing::get;
     use axum::Router;
+    use axum::routing::get;
 
     let binary_content = b"#!/bin/sh\necho test\n";
     let sha256 = Sha256::digest(binary_content);
@@ -185,20 +185,26 @@ async fn remote_source_validates_checksum() {
     let archive_bytes = archive;
 
     let app = Router::new()
-        .route("/dist.json", get({
-            let data = manifest_bytes.clone();
-            move || {
-                let d = data.clone();
-                async move { d }
-            }
-        }))
-        .route("/archive.tar.xz", get({
-            let data = archive_bytes.clone();
-            move || {
-                let d = data.clone();
-                async move { d }
-            }
-        }));
+        .route(
+            "/dist.json",
+            get({
+                let data = manifest_bytes.clone();
+                move || {
+                    let d = data.clone();
+                    async move { d }
+                }
+            }),
+        )
+        .route(
+            "/archive.tar.xz",
+            get({
+                let data = archive_bytes.clone();
+                move || {
+                    let d = data.clone();
+                    async move { d }
+                }
+            }),
+        );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -238,8 +244,8 @@ async fn remote_source_validates_checksum() {
 /// Test: Remote fetcher rejects bad checksums
 #[tokio::test]
 async fn remote_source_rejects_bad_checksum() {
-    use axum::routing::get;
     use axum::Router;
+    use axum::routing::get;
 
     let manifest = serde_json::json!({
         "artifacts": {
@@ -255,20 +261,26 @@ async fn remote_source_rejects_bad_checksum() {
     let archive_bytes = archive;
 
     let app = Router::new()
-        .route("/dist.json", get({
-            let data = manifest_bytes.clone();
-            move || {
-                let d = data.clone();
-                async move { d }
-            }
-        }))
-        .route("/archive.tar.xz", get({
-            let data = archive_bytes.clone();
-            move || {
-                let d = data.clone();
-                async move { d }
-            }
-        }));
+        .route(
+            "/dist.json",
+            get({
+                let data = manifest_bytes.clone();
+                move || {
+                    let d = data.clone();
+                    async move { d }
+                }
+            }),
+        )
+        .route(
+            "/archive.tar.xz",
+            get({
+                let data = archive_bytes.clone();
+                move || {
+                    let d = data.clone();
+                    async move { d }
+                }
+            }),
+        );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -312,8 +324,8 @@ async fn remote_source_rejects_bad_checksum() {
 /// Test: Remote fetcher rejects missing binary
 #[tokio::test]
 async fn remote_source_rejects_missing_binary() {
-    use axum::routing::get;
     use axum::Router;
+    use axum::routing::get;
 
     let manifest = serde_json::json!({
         "artifacts": {
@@ -329,20 +341,26 @@ async fn remote_source_rejects_missing_binary() {
     let archive_bytes = archive;
 
     let app = Router::new()
-        .route("/dist.json", get({
-            let data = manifest_bytes.clone();
-            move || {
-                let d = data.clone();
-                async move { d }
-            }
-        }))
-        .route("/archive.tar.xz", get({
-            let data = archive_bytes.clone();
-            move || {
-                let d = data.clone();
-                async move { d }
-            }
-        }));
+        .route(
+            "/dist.json",
+            get({
+                let data = manifest_bytes.clone();
+                move || {
+                    let d = data.clone();
+                    async move { d }
+                }
+            }),
+        )
+        .route(
+            "/archive.tar.xz",
+            get({
+                let data = archive_bytes.clone();
+                move || {
+                    let d = data.clone();
+                    async move { d }
+                }
+            }),
+        );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -386,8 +404,8 @@ async fn remote_source_rejects_missing_binary() {
 /// Test: Remote fetcher uses cache on second fetch
 #[tokio::test]
 async fn remote_source_uses_cache() {
-    use axum::routing::get;
     use axum::Router;
+    use axum::routing::get;
 
     let hit_count = Arc::new(AtomicUsize::new(0));
     let manifest_hits = hit_count.clone();
@@ -411,22 +429,28 @@ async fn remote_source_uses_cache() {
     let archive_bytes = archive;
 
     let app = Router::new()
-        .route("/dist.json", get({
-            let data = manifest_bytes.clone();
-            let hits = manifest_hits.clone();
-            move || {
-                hits.fetch_add(1, Ordering::SeqCst);
-                let d = data.clone();
-                async move { d }
-            }
-        }))
-        .route("/archive.tar.xz", get({
-            let data = archive_bytes.clone();
-            move || {
-                let d = data.clone();
-                async move { d }
-            }
-        }));
+        .route(
+            "/dist.json",
+            get({
+                let data = manifest_bytes.clone();
+                let hits = manifest_hits.clone();
+                move || {
+                    hits.fetch_add(1, Ordering::SeqCst);
+                    let d = data.clone();
+                    async move { d }
+                }
+            }),
+        )
+        .route(
+            "/archive.tar.xz",
+            get({
+                let data = archive_bytes.clone();
+                move || {
+                    let d = data.clone();
+                    async move { d }
+                }
+            }),
+        );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -465,7 +489,11 @@ async fn remote_source_uses_cache() {
     server.abort();
 
     let hits = hit_count.load(Ordering::SeqCst);
-    assert_eq!(hits, 1, "Second fetch should use cache, but hit {} times", hits);
+    assert_eq!(
+        hits, 1,
+        "Second fetch should use cache, but hit {} times",
+        hits
+    );
     println!("✓ Cache correctly reused");
 }
 

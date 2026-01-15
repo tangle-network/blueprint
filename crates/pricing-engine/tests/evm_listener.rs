@@ -361,10 +361,14 @@ mod evm_listener_tests {
             // Create benchmark cache with a profile for the test blueprint
             let test_blueprint_id = BLUEPRINT_ID;
             let benchmark_cache = Arc::new(BenchmarkCache::new(temp.path())?);
-            benchmark_cache
-                .store_profile(test_blueprint_id, &utils::sample_benchmark_profile(test_blueprint_id))?;
+            benchmark_cache.store_profile(
+                test_blueprint_id,
+                &utils::sample_benchmark_profile(test_blueprint_id),
+            )?;
 
-            let pricing_config = Arc::new(Mutex::new(utils::sample_pricing_map(Some(test_blueprint_id))));
+            let pricing_config = Arc::new(Mutex::new(utils::sample_pricing_map(Some(
+                test_blueprint_id,
+            ))));
 
             // Setup operator signer
             let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
@@ -427,12 +431,24 @@ mod evm_listener_tests {
             let response = grpc_client.get_price(request).await?.into_inner();
 
             // Verify the quote response
-            assert!(!response.signature.is_empty(), "Quote signature must be present");
-            assert_eq!(response.operator_id.len(), 20, "Operator ID must be 20 bytes");
+            assert!(
+                !response.signature.is_empty(),
+                "Quote signature must be present"
+            );
+            assert_eq!(
+                response.operator_id.len(),
+                20,
+                "Operator ID must be 20 bytes"
+            );
 
-            let quote_details = response.quote_details.expect("Quote details must be present");
+            let quote_details = response
+                .quote_details
+                .expect("Quote details must be present");
             assert_eq!(quote_details.blueprint_id, test_blueprint_id);
-            assert!(quote_details.total_cost_rate > 0.0, "Total cost must be positive");
+            assert!(
+                quote_details.total_cost_rate > 0.0,
+                "Total cost must be positive"
+            );
 
             println!("✓ Received signed quote from pricing engine");
             println!("  Blueprint ID: {}", quote_details.blueprint_id);
@@ -482,7 +498,8 @@ mod evm_listener_tests {
 
         let blueprint_id = 42;
         let benchmark_cache = Arc::new(BenchmarkCache::new(temp.path())?);
-        benchmark_cache.store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
+        benchmark_cache
+            .store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
         let pricing_config = Arc::new(Mutex::new(utils::sample_pricing_map(Some(blueprint_id))));
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
@@ -562,7 +579,8 @@ mod evm_listener_tests {
 
         let blueprint_id = 42;
         let benchmark_cache = Arc::new(BenchmarkCache::new(temp.path())?);
-        benchmark_cache.store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
+        benchmark_cache
+            .store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
         let pricing_config = Arc::new(Mutex::new(utils::sample_pricing_map(Some(blueprint_id))));
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
@@ -765,7 +783,10 @@ mod evm_listener_tests {
             };
 
             let response = grpc_client.get_price(request).await?.into_inner();
-            let _quote_details = response.quote_details.as_ref().expect("Quote details required");
+            let _quote_details = response
+                .quote_details
+                .as_ref()
+                .expect("Quote details required");
 
             println!("✓ Received signed quote from pricing engine");
 
@@ -811,7 +832,10 @@ mod evm_listener_tests {
                 }
                 Err(e) => {
                     // This is expected if the operator isn't registered or other setup issues
-                    println!("⚠ Transaction failed (expected in minimal test setup): {}", e);
+                    println!(
+                        "⚠ Transaction failed (expected in minimal test setup): {}",
+                        e
+                    );
                 }
             }
 
@@ -1054,8 +1078,7 @@ mod evm_listener_tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn e2e_mismatched_blueprint_rejected() -> Result<()> {
         run_anvil_test("e2e_mismatched_blueprint_rejected", async {
-            let Some(deployment) = boot_testnet("e2e_mismatched_blueprint_rejected").await?
-            else {
+            let Some(deployment) = boot_testnet("e2e_mismatched_blueprint_rejected").await? else {
                 return Ok(());
             };
             log_testnet_endpoints(&deployment);
@@ -1098,10 +1121,7 @@ mod evm_listener_tests {
             match result {
                 Ok(pending) => {
                     let receipt = pending.get_receipt().await?;
-                    assert!(
-                        !receipt.status(),
-                        "Should reject mismatched blueprint ID"
-                    );
+                    assert!(!receipt.status(), "Should reject mismatched blueprint ID");
                     println!("✓ Mismatched blueprint ID correctly rejected");
                 }
                 Err(e) => {
@@ -1124,7 +1144,8 @@ mod evm_listener_tests {
 
         let blueprint_id = 42;
         let benchmark_cache = Arc::new(BenchmarkCache::new(temp.path())?);
-        benchmark_cache.store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
+        benchmark_cache
+            .store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
         let pricing_config = Arc::new(Mutex::new(utils::sample_pricing_map(Some(blueprint_id))));
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
@@ -1171,7 +1192,10 @@ mod evm_listener_tests {
         };
 
         let result = client.get_price(request).await;
-        assert!(result.is_err(), "Should reject missing security requirements");
+        assert!(
+            result.is_err(),
+            "Should reject missing security requirements"
+        );
 
         let status = result.unwrap_err();
         assert_eq!(
@@ -1197,7 +1221,8 @@ mod evm_listener_tests {
 
         let blueprint_id = 42;
         let benchmark_cache = Arc::new(BenchmarkCache::new(temp.path())?);
-        benchmark_cache.store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
+        benchmark_cache
+            .store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
         let pricing_config = Arc::new(Mutex::new(utils::sample_pricing_map(Some(blueprint_id))));
 
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
@@ -1287,7 +1312,8 @@ mod evm_listener_tests {
         let operator_config = Arc::new(operator_config);
 
         let benchmark_cache = Arc::new(BenchmarkCache::new(temp.path())?);
-        benchmark_cache.store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
+        benchmark_cache
+            .store_profile(blueprint_id, &utils::sample_benchmark_profile(blueprint_id))?;
 
         let pricing_config = Arc::new(Mutex::new(utils::sample_pricing_map(Some(blueprint_id))));
 
@@ -1362,31 +1388,32 @@ mod evm_listener_tests {
             .ok_or_else(|| anyhow::anyhow!("Missing quote details"))?;
 
         // Convert security commitments
-        let security_commitments: Vec<ITangleServicesTypes::AssetSecurityCommitment> = quote_details
-            .security_commitments
-            .iter()
-            .filter_map(|sc| {
-                let asset = sc.asset.as_ref()?;
-                let asset_type = asset.asset_type.as_ref()?;
+        let security_commitments: Vec<ITangleServicesTypes::AssetSecurityCommitment> =
+            quote_details
+                .security_commitments
+                .iter()
+                .filter_map(|sc| {
+                    let asset = sc.asset.as_ref()?;
+                    let asset_type = asset.asset_type.as_ref()?;
 
-                match asset_type {
-                    pricing_engine::asset::AssetType::Erc20(bytes) => {
-                        let mut addr = [0u8; 20];
-                        if bytes.len() == 20 {
-                            addr.copy_from_slice(bytes);
+                    match asset_type {
+                        pricing_engine::asset::AssetType::Erc20(bytes) => {
+                            let mut addr = [0u8; 20];
+                            if bytes.len() == 20 {
+                                addr.copy_from_slice(bytes);
+                            }
+                            Some(ITangleServicesTypes::AssetSecurityCommitment {
+                                asset: ITangleServicesTypes::Asset {
+                                    kind: 1, // ERC20
+                                    token: Address::from(addr),
+                                },
+                                exposureBps: (sc.exposure_percent as u16) * 100,
+                            })
                         }
-                        Some(ITangleServicesTypes::AssetSecurityCommitment {
-                            asset: ITangleServicesTypes::Asset {
-                                kind: 1, // ERC20
-                                token: Address::from(addr),
-                            },
-                            exposureBps: (sc.exposure_percent as u16) * 100,
-                        })
+                        _ => None,
                     }
-                    _ => None,
-                }
-            })
-            .collect();
+                })
+                .collect();
 
         // Scale total cost (from float to U256 with 18 decimals)
         let total_cost_scaled = (quote_details.total_cost_rate * 1e18) as u128;

@@ -22,19 +22,35 @@ use blueprint_keystore::backends::Backend;
 use blueprint_std::collections::BTreeMap;
 use blueprint_std::sync::Arc;
 use blueprint_std::vec::Vec;
+use core::fmt;
 use core::time::Duration;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use tokio::sync::Mutex;
 
 use crate::config::TangleEvmClientConfig;
 use crate::contracts::{
-    IBlueprintServiceManager, IMultiAssetDelegation, IOperatorStatusRegistry, ITangle, ITangleTypes,
+    IBlueprintServiceManager, IMultiAssetDelegation, IMultiAssetDelegationTypes,
+    IOperatorStatusRegistry, ITangle, ITangleTypes,
 };
 use crate::error::{Error, Result};
 use crate::services::ServiceRequestParams;
 use IMultiAssetDelegation::IMultiAssetDelegationInstance;
 use IOperatorStatusRegistry::IOperatorStatusRegistryInstance;
 use ITangle::ITangleInstance;
+
+#[allow(missing_docs)]
+mod erc20 {
+    alloy_sol_types::sol! {
+        #[sol(rpc)]
+        interface IERC20 {
+            function approve(address spender, uint256 amount) external returns (bool);
+            function allowance(address owner, address spender) external view returns (uint256);
+            function balanceOf(address owner) external view returns (uint256);
+        }
+    }
+}
+
+use erc20::IERC20;
 
 /// Type alias for the dynamic provider
 pub type TangleProvider = DynProvider<Ethereum>;
@@ -80,6 +96,190 @@ impl From<u8> for RestakingStatus {
             other => RestakingStatus::Unknown(other),
         }
     }
+}
+
+/// Asset kinds supported by MultiAssetDelegation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssetKind {
+    /// Native asset (e.g. ETH).
+    Native,
+    /// ERC-20 token.
+    Erc20,
+    /// Unknown asset kind value.
+    Unknown(u8),
+}
+
+impl From<u8> for AssetKind {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => AssetKind::Native,
+            1 => AssetKind::Erc20,
+            other => AssetKind::Unknown(other),
+        }
+    }
+}
+
+impl fmt::Display for AssetKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AssetKind::Native => write!(f, "native"),
+            AssetKind::Erc20 => write!(f, "erc20"),
+            AssetKind::Unknown(value) => write!(f, "unknown({value})"),
+        }
+    }
+}
+
+/// Blueprint selection mode for a delegation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlueprintSelectionMode {
+    /// Delegate across all blueprints.
+    All,
+    /// Delegate to a fixed set of blueprints.
+    Fixed,
+    /// Unknown selection mode value.
+    Unknown(u8),
+}
+
+impl From<u8> for BlueprintSelectionMode {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => BlueprintSelectionMode::All,
+            1 => BlueprintSelectionMode::Fixed,
+            other => BlueprintSelectionMode::Unknown(other),
+        }
+    }
+}
+
+impl fmt::Display for BlueprintSelectionMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BlueprintSelectionMode::All => write!(f, "all"),
+            BlueprintSelectionMode::Fixed => write!(f, "fixed"),
+            BlueprintSelectionMode::Unknown(value) => write!(f, "unknown({value})"),
+        }
+    }
+}
+
+/// Lock multiplier tier for a deposit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockMultiplier {
+    /// No lock multiplier.
+    None,
+    /// One-month lock.
+    OneMonth,
+    /// Two-month lock.
+    TwoMonths,
+    /// Three-month lock.
+    ThreeMonths,
+    /// Six-month lock.
+    SixMonths,
+    /// Unknown multiplier value.
+    Unknown(u8),
+}
+
+impl From<u8> for LockMultiplier {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => LockMultiplier::None,
+            1 => LockMultiplier::OneMonth,
+            2 => LockMultiplier::TwoMonths,
+            3 => LockMultiplier::ThreeMonths,
+            4 => LockMultiplier::SixMonths,
+            other => LockMultiplier::Unknown(other),
+        }
+    }
+}
+
+impl fmt::Display for LockMultiplier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LockMultiplier::None => write!(f, "none"),
+            LockMultiplier::OneMonth => write!(f, "one-month"),
+            LockMultiplier::TwoMonths => write!(f, "two-months"),
+            LockMultiplier::ThreeMonths => write!(f, "three-months"),
+            LockMultiplier::SixMonths => write!(f, "six-months"),
+            LockMultiplier::Unknown(value) => write!(f, "unknown({value})"),
+        }
+    }
+}
+
+/// Asset specification returned by MultiAssetDelegation.
+#[derive(Debug, Clone)]
+pub struct AssetInfo {
+    /// Asset kind identifier.
+    pub kind: AssetKind,
+    /// Token contract address (zero for native).
+    pub token: Address,
+}
+
+/// Deposit summary for a delegator and token.
+#[derive(Debug, Clone)]
+pub struct DepositInfo {
+    /// Total deposited amount.
+    pub amount: U256,
+    /// Portion already delegated.
+    pub delegated_amount: U256,
+}
+
+/// Lock details for a delegator and token.
+#[derive(Debug, Clone)]
+pub struct LockInfo {
+    /// Locked amount.
+    pub amount: U256,
+    /// Multiplier tier.
+    pub multiplier: LockMultiplier,
+    /// Block when lock expires.
+    pub expiry_block: u64,
+}
+
+/// Delegation info for a delegator.
+#[derive(Debug, Clone)]
+pub struct DelegationInfo {
+    /// Operator address.
+    pub operator: Address,
+    /// Delegated shares.
+    pub shares: U256,
+    /// Asset metadata.
+    pub asset: AssetInfo,
+    /// Blueprint selection mode.
+    pub selection_mode: BlueprintSelectionMode,
+}
+
+/// Delegation with optional blueprint selections.
+#[derive(Debug, Clone)]
+pub struct DelegationRecord {
+    /// Delegation metadata.
+    pub info: DelegationInfo,
+    /// Selected blueprint IDs (fixed mode only).
+    pub blueprint_ids: Vec<u64>,
+}
+
+/// Pending delegator unstake request.
+#[derive(Debug, Clone)]
+pub struct PendingUnstake {
+    /// Operator address.
+    pub operator: Address,
+    /// Asset metadata.
+    pub asset: AssetInfo,
+    /// Shares scheduled to unstake.
+    pub shares: U256,
+    /// Round when the unstake was requested.
+    pub requested_round: u64,
+    /// Blueprint selection mode.
+    pub selection_mode: BlueprintSelectionMode,
+    /// Slash factor snapshot at request time.
+    pub slash_factor_snapshot: U256,
+}
+
+/// Pending delegator withdrawal request.
+#[derive(Debug, Clone)]
+pub struct PendingWithdrawal {
+    /// Asset metadata.
+    pub asset: AssetInfo,
+    /// Amount requested for withdrawal.
+    pub amount: U256,
+    /// Round when the withdrawal was requested.
+    pub requested_round: u64,
 }
 
 /// Metadata associated with a registered operator.
@@ -144,8 +344,8 @@ pub struct TangleEvmClient {
     block_subscription: Arc<Mutex<Option<u64>>>,
 }
 
-impl core::fmt::Debug for TangleEvmClient {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for TangleEvmClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TangleEvmClient")
             .field("tangle_address", &self.tangle_address)
             .field("restaking_address", &self.restaking_address)
@@ -745,8 +945,7 @@ impl TangleEvmClient {
             security_requirements,
         } = params;
 
-        let is_native_payment =
-            payment_token == Address::ZERO && payment_amount > U256::ZERO;
+        let is_native_payment = payment_token == Address::ZERO && payment_amount > U256::ZERO;
         let request_id_hint = if !security_requirements.is_empty() {
             let mut call = contract.requestServiceWithSecurity(
                 blueprint_id,
@@ -851,25 +1050,18 @@ impl TangleEvmClient {
             ));
         }
 
-        let request_id =
-            match self.extract_request_id(&receipt, blueprint_id).await {
-                Ok(id) => id,
-                Err(err) => {
-                    if let Some(id) = request_id_hint {
-                        return Ok((
-                            transaction_result_from_receipt(&receipt),
-                            id,
-                        ));
-                    }
-                    if let Some(count) = pre_count {
-                        return Ok((
-                            transaction_result_from_receipt(&receipt),
-                            count,
-                        ));
-                    }
-                    return Err(err);
+        let request_id = match self.extract_request_id(&receipt, blueprint_id).await {
+            Ok(id) => id,
+            Err(err) => {
+                if let Some(id) = request_id_hint {
+                    return Ok((transaction_result_from_receipt(&receipt), id));
                 }
-            };
+                if let Some(count) = pre_count {
+                    return Ok((transaction_result_from_receipt(&receipt), count));
+                }
+                return Err(err);
+            }
+        };
 
         Ok((transaction_result_from_receipt(&receipt), request_id))
     }
@@ -1071,6 +1263,699 @@ impl TangleEvmClient {
             last_heartbeat,
             online,
         })
+    }
+
+    /// Fetch restaking metadata for an operator.
+    pub async fn get_restaking_metadata(&self, operator: Address) -> Result<RestakingMetadata> {
+        let restaking_meta = self
+            .restaking_contract()
+            .getOperatorMetadata(operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(format!("getOperatorMetadata failed: {e}")))?;
+        Ok(RestakingMetadata {
+            stake: restaking_meta.stake,
+            delegation_count: restaking_meta.delegationCount,
+            status: RestakingStatus::from(u8::from(restaking_meta.status)),
+            leaving_round: restaking_meta.leavingRound,
+        })
+    }
+
+    /// Get operator self stake from MultiAssetDelegation.
+    pub async fn get_operator_self_stake(&self, operator: Address) -> Result<U256> {
+        let contract = self.restaking_contract();
+        contract
+            .getOperatorSelfStake(operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get operator delegated stake from MultiAssetDelegation.
+    pub async fn get_operator_delegated_stake(&self, operator: Address) -> Result<U256> {
+        let contract = self.restaking_contract();
+        contract
+            .getOperatorDelegatedStake(operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get delegators for the operator.
+    pub async fn get_operator_delegators(&self, operator: Address) -> Result<Vec<Address>> {
+        let contract = self.restaking_contract();
+        contract
+            .getOperatorDelegators(operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get delegator count for the operator.
+    pub async fn get_operator_delegator_count(&self, operator: Address) -> Result<u64> {
+        let contract = self.restaking_contract();
+        let count = contract
+            .getOperatorDelegatorCount(operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(u64::try_from(count).unwrap_or(u64::MAX))
+    }
+
+    /// Get current restaking round.
+    pub async fn restaking_round(&self) -> Result<u64> {
+        let contract = self.restaking_contract();
+        contract
+            .currentRound()
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Get operator commission (basis points).
+    pub async fn operator_commission_bps(&self) -> Result<u16> {
+        let contract = self.restaking_contract();
+        contract
+            .operatorCommissionBps()
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Fetch ERC20 allowance for an owner/spender pair.
+    pub async fn erc20_allowance(
+        &self,
+        token: Address,
+        owner: Address,
+        spender: Address,
+    ) -> Result<U256> {
+        let contract = IERC20::new(token, Arc::clone(&self.provider));
+        contract
+            .allowance(owner, spender)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Fetch ERC20 balance for an owner.
+    pub async fn erc20_balance(&self, token: Address, owner: Address) -> Result<U256> {
+        let contract = IERC20::new(token, Arc::clone(&self.provider));
+        contract
+            .balanceOf(owner)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Approve ERC20 spending for the given spender.
+    pub async fn erc20_approve(
+        &self,
+        token: Address,
+        spender: Address,
+        amount: U256,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IERC20::new(token, &provider);
+
+        let receipt = contract
+            .approve(spender, amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Fetch delegator deposit info for a token.
+    pub async fn get_deposit_info(
+        &self,
+        delegator: Address,
+        token: Address,
+    ) -> Result<DepositInfo> {
+        let contract = self.restaking_contract();
+        let deposit = contract
+            .getDeposit(delegator, token)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(DepositInfo {
+            amount: deposit.amount,
+            delegated_amount: deposit.delegatedAmount,
+        })
+    }
+
+    /// Fetch lock info for a token.
+    pub async fn get_locks(&self, delegator: Address, token: Address) -> Result<Vec<LockInfo>> {
+        let contract = self.restaking_contract();
+        let locks = contract
+            .getLocks(delegator, token)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(locks
+            .into_iter()
+            .map(|lock| LockInfo {
+                amount: lock.amount,
+                multiplier: LockMultiplier::from(lock.multiplier),
+                expiry_block: lock.expiryBlock,
+            })
+            .collect())
+    }
+
+    /// Fetch delegations for a delegator.
+    pub async fn get_delegations(&self, delegator: Address) -> Result<Vec<DelegationInfo>> {
+        let contract = self.restaking_contract();
+        let delegations = contract
+            .getDelegations(delegator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(delegations
+            .into_iter()
+            .map(|delegation| DelegationInfo {
+                operator: delegation.operator,
+                shares: delegation.shares,
+                asset: asset_info_from_types(delegation.asset),
+                selection_mode: BlueprintSelectionMode::from(delegation.selectionMode),
+            })
+            .collect())
+    }
+
+    /// Fetch delegations with blueprint selections attached.
+    pub async fn get_delegations_with_blueprints(
+        &self,
+        delegator: Address,
+    ) -> Result<Vec<DelegationRecord>> {
+        let delegations = self.get_delegations(delegator).await?;
+        let mut records = Vec::with_capacity(delegations.len());
+        for (idx, info) in delegations.into_iter().enumerate() {
+            let blueprint_ids = if matches!(info.selection_mode, BlueprintSelectionMode::Fixed) {
+                self.get_delegation_blueprints(delegator, idx as u64)
+                    .await?
+            } else {
+                Vec::new()
+            };
+            records.push(DelegationRecord {
+                info,
+                blueprint_ids,
+            });
+        }
+        Ok(records)
+    }
+
+    /// Fetch blueprint IDs for a fixed delegation.
+    pub async fn get_delegation_blueprints(
+        &self,
+        delegator: Address,
+        index: u64,
+    ) -> Result<Vec<u64>> {
+        let contract = self.restaking_contract();
+        let ids = contract
+            .getDelegationBlueprints(delegator, U256::from(index))
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(ids)
+    }
+
+    /// Fetch pending delegator unstakes.
+    pub async fn get_pending_unstakes(&self, delegator: Address) -> Result<Vec<PendingUnstake>> {
+        let contract = self.restaking_contract();
+        let unstakes = contract
+            .getPendingUnstakes(delegator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(unstakes
+            .into_iter()
+            .map(|request| PendingUnstake {
+                operator: request.operator,
+                asset: asset_info_from_types(request.asset),
+                shares: request.shares,
+                requested_round: request.requestedRound,
+                selection_mode: BlueprintSelectionMode::from(request.selectionMode),
+                slash_factor_snapshot: request.slashFactorSnapshot,
+            })
+            .collect())
+    }
+
+    /// Fetch pending delegator withdrawals.
+    pub async fn get_pending_withdrawals(
+        &self,
+        delegator: Address,
+    ) -> Result<Vec<PendingWithdrawal>> {
+        let contract = self.restaking_contract();
+        let withdrawals = contract
+            .getPendingWithdrawals(delegator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(withdrawals
+            .into_iter()
+            .map(|request| PendingWithdrawal {
+                asset: asset_info_from_types(request.asset),
+                amount: request.amount,
+                requested_round: request.requestedRound,
+            })
+            .collect())
+    }
+
+    /// Deposit and delegate in a single call.
+    pub async fn deposit_and_delegate_with_options(
+        &self,
+        operator: Address,
+        token: Address,
+        amount: U256,
+        selection_mode: BlueprintSelectionMode,
+        blueprint_ids: Vec<u64>,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let mut call = contract.depositAndDelegateWithOptions(
+            operator,
+            token,
+            amount,
+            selection_mode_to_u8(selection_mode),
+            blueprint_ids,
+        );
+        if token == Address::ZERO {
+            call = call.value(amount);
+        }
+
+        let receipt = call
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Delegate existing deposits with explicit selection.
+    pub async fn delegate_with_options(
+        &self,
+        operator: Address,
+        token: Address,
+        amount: U256,
+        selection_mode: BlueprintSelectionMode,
+        blueprint_ids: Vec<u64>,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .delegateWithOptions(
+                operator,
+                token,
+                amount,
+                selection_mode_to_u8(selection_mode),
+                blueprint_ids,
+            )
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Schedule a delegator unstake (bond-less).
+    pub async fn schedule_delegator_unstake(
+        &self,
+        operator: Address,
+        token: Address,
+        amount: U256,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .scheduleDelegatorUnstake(operator, token, amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Execute any matured delegator unstake requests.
+    pub async fn execute_delegator_unstake(&self) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .executeDelegatorUnstake()
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Execute a specific delegator unstake and withdraw.
+    pub async fn execute_delegator_unstake_and_withdraw(
+        &self,
+        operator: Address,
+        token: Address,
+        shares: U256,
+        requested_round: u64,
+        receiver: Address,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .executeDelegatorUnstakeAndWithdraw(operator, token, shares, requested_round, receiver)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Schedule a withdrawal for a token.
+    pub async fn schedule_withdraw(
+        &self,
+        token: Address,
+        amount: U256,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .scheduleWithdraw(token, amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Execute any matured withdrawal requests.
+    pub async fn execute_withdraw(&self) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .executeWithdraw()
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Schedule an operator unstake.
+    pub async fn schedule_operator_unstake(&self, amount: U256) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .scheduleOperatorUnstake(amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Execute an operator unstake.
+    pub async fn execute_operator_unstake(&self) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .executeOperatorUnstake()
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Start leaving the operator set.
+    pub async fn start_leaving(&self) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .startLeaving()
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Complete leaving after delay.
+    pub async fn complete_leaving(&self) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .completeLeaving()
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR RESTAKING REGISTRATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Get the operator bond token address.
+    ///
+    /// Returns `Address::ZERO` if native ETH is used for operator bonds,
+    /// otherwise returns the ERC20 token address (e.g., TNT).
+    pub async fn operator_bond_token(&self) -> Result<Address> {
+        let contract = self.restaking_contract();
+        contract
+            .operatorBondToken()
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Register as an operator on the restaking layer.
+    ///
+    /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
+    /// For ERC20 tokens, automatically approves the restaking contract first.
+    pub async fn register_operator_restaking(&self, stake_amount: U256) -> Result<TransactionResult> {
+        let bond_token = self.operator_bond_token().await?;
+
+        // Auto-approve ERC20 bond token if needed
+        if bond_token != Address::ZERO {
+            self.erc20_approve(bond_token, self.restaking_address, stake_amount)
+                .await?;
+        }
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = if bond_token == Address::ZERO {
+            // Native ETH bond
+            contract
+                .registerOperator()
+                .value(stake_amount)
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        } else {
+            // ERC20 bond (e.g., TNT)
+            contract
+                .registerOperatorWithAsset(bond_token, stake_amount)
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        };
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Increase operator stake.
+    ///
+    /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
+    /// For ERC20 tokens, automatically approves the restaking contract first.
+    pub async fn increase_stake(&self, amount: U256) -> Result<TransactionResult> {
+        let bond_token = self.operator_bond_token().await?;
+
+        // Auto-approve ERC20 bond token if needed
+        if bond_token != Address::ZERO {
+            self.erc20_approve(bond_token, self.restaking_address, amount)
+                .await?;
+        }
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = if bond_token == Address::ZERO {
+            // Native ETH bond
+            contract
+                .increaseStake()
+                .value(amount)
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        } else {
+            // ERC20 bond (e.g., TNT)
+            contract
+                .increaseStakeWithAsset(bond_token, amount)
+                .send()
+                .await
+                .map_err(|e| Error::Contract(e.to_string()))?
+                .get_receipt()
+                .await?
+        };
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Deposit native ETH without delegating.
+    ///
+    /// Use this to pre-fund your account before delegating.
+    pub async fn deposit_native(&self, amount: U256) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .deposit()
+            .value(amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Deposit ERC20 tokens without delegating.
+    ///
+    /// Use this to pre-fund your account before delegating.
+    pub async fn deposit_erc20(&self, token: Address, amount: U256) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
+
+        let receipt = contract
+            .depositERC20(token, amount)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1371,14 +2256,11 @@ impl TangleEvmClient {
         if let Some(event) = receipt.decoded_log::<ITangle::ServiceRequested>() {
             return Ok(event.data.requestId);
         }
-        if let Some(event) =
-            receipt.decoded_log::<ITangle::ServiceRequestedWithSecurity>()
-        {
+        if let Some(event) = receipt.decoded_log::<ITangle::ServiceRequestedWithSecurity>() {
             return Ok(event.data.requestId);
         }
 
-        let requested_sig =
-            keccak256("ServiceRequested(uint64,uint64,address)".as_bytes());
+        let requested_sig = keccak256("ServiceRequested(uint64,uint64,address)".as_bytes());
         let requested_with_security_sig = keccak256(
             "ServiceRequestedWithSecurity(uint64,uint64,address,address[],((uint8,address),uint16,uint16)[])"
                 .as_bytes(),
@@ -1407,10 +2289,7 @@ impl TangleEvmClient {
             let filter = Filter::new()
                 .select(block_number)
                 .address(self.tangle_address)
-                .event_signature(vec![
-                    requested_sig,
-                    requested_with_security_sig,
-                ]);
+                .event_signature(vec![requested_sig, requested_with_security_sig]);
             if let Ok(logs) = self.get_logs(&filter).await {
                 for log in logs {
                     let topics = log.topics();
@@ -1436,9 +2315,7 @@ impl TangleEvmClient {
         let start = count.saturating_sub(5);
         for candidate in (start..count).rev() {
             if let Ok(request) = self.get_service_request(candidate).await {
-                if request.blueprintId == blueprint_id
-                    && request.requester == account
-                {
+                if request.blueprintId == blueprint_id && request.requester == account {
                     return Ok(candidate);
                 }
             }
@@ -1575,6 +2452,21 @@ fn normalize_public_key(raw: &[u8]) -> Result<EcdsaPublicKey> {
         len => Err(Error::InvalidAddress(format!(
             "Unexpected operator key length: {len}"
         ))),
+    }
+}
+
+fn asset_info_from_types(asset: IMultiAssetDelegationTypes::Asset) -> AssetInfo {
+    AssetInfo {
+        kind: AssetKind::from(asset.kind),
+        token: asset.token,
+    }
+}
+
+fn selection_mode_to_u8(mode: BlueprintSelectionMode) -> u8 {
+    match mode {
+        BlueprintSelectionMode::All => 0,
+        BlueprintSelectionMode::Fixed => 1,
+        BlueprintSelectionMode::Unknown(value) => value,
     }
 }
 

@@ -22,9 +22,7 @@ use blueprint_anvil_testing_utils::{
     SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
 use blueprint_client_tangle_evm::contracts::ITangle::addPermittedCallerCall;
-use blueprint_client_tangle_evm::{
-    TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
-};
+use blueprint_client_tangle_evm::{TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
 use blueprint_keystore::backends::Backend;
@@ -71,7 +69,11 @@ impl MultiOperatorHarness {
             OPERATOR3_PRIVATE_KEY,
         ];
 
-        ensure!(operator_count <= operator_keys.len(), "not enough test keys for {} operators", operator_count);
+        ensure!(
+            operator_count <= operator_keys.len(),
+            "not enough test keys for {} operators",
+            operator_count
+        );
 
         let mut operators = Vec::new();
         for i in 0..operator_count {
@@ -82,10 +84,7 @@ impl MultiOperatorHarness {
             let client = create_client(&deployment, &keystore_path).await?;
             let address = client.account();
 
-            operators.push(OperatorContext {
-                client,
-                address,
-            });
+            operators.push(OperatorContext { client, address });
         }
 
         // Create owner client
@@ -155,27 +154,37 @@ async fn test_multi_operator_service_membership() -> Result<()> {
         let harness = MultiOperatorHarness::new(deployment, 2).await?;
 
         // Check service operators
-        let operators = harness.owner_client
+        let operators = harness
+            .owner_client
             .get_service_operators(SERVICE_ID)
             .await
             .context("failed to get service operators")?;
 
-        println!("Service {} has {} operator(s):", SERVICE_ID, operators.len());
+        println!(
+            "Service {} has {} operator(s):",
+            SERVICE_ID,
+            operators.len()
+        );
         for op in &operators {
             println!("  - {}", op);
         }
 
         // Check if each test operator is registered for the blueprint
         for (i, op) in harness.operators.iter().enumerate() {
-            let is_registered = op.client
+            let is_registered = op
+                .client
                 .is_operator_registered(BLUEPRINT_ID, op.address)
                 .await
                 .unwrap_or(false);
-            println!("Operator {} ({}) registered: {}", i, op.address, is_registered);
+            println!(
+                "Operator {} ({}) registered: {}",
+                i, op.address, is_registered
+            );
         }
 
         // Get operator weights for the service
-        let weights = harness.owner_client
+        let weights = harness
+            .owner_client
             .get_service_operator_weights(SERVICE_ID)
             .await
             .context("failed to get operator weights")?;
@@ -215,7 +224,8 @@ async fn test_result_submission_flow() -> Result<()> {
         // Submit a job
         let input: u64 = 7;
         let encoded_input = Bytes::from(input.abi_encode());
-        let submission = harness.owner_client
+        let submission = harness
+            .owner_client
             .submit_job(SERVICE_ID, 0, encoded_input)
             .await
             .context("failed to submit job")?;
@@ -224,7 +234,8 @@ async fn test_result_submission_flow() -> Result<()> {
         // Submit result
         let result: u64 = input * input;
         let encoded_result = Bytes::from(result.abi_encode());
-        let tx_result = operator.client
+        let tx_result = operator
+            .client
             .submit_result(SERVICE_ID, submission.call_id, encoded_result)
             .await
             .context("failed to submit result")?;
@@ -232,14 +243,15 @@ async fn test_result_submission_flow() -> Result<()> {
 
         // Verify job completion
         tokio::time::sleep(Duration::from_secs(2)).await;
-        let job_call = harness.owner_client
+        let job_call = harness
+            .owner_client
             .get_job_call(SERVICE_ID, submission.call_id)
             .await
             .context("failed to get job call")?;
 
-        println!("Job state: completed={}, result_count={}",
-            job_call.completed,
-            job_call.resultCount
+        println!(
+            "Job state: completed={}, result_count={}",
+            job_call.completed, job_call.resultCount
         );
 
         println!("\n✓ Result submission flow test passed!");
@@ -269,7 +281,9 @@ async fn create_client(
     .test_mode(true);
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(keystore_path))?;
-    Ok(Arc::new(TangleEvmClient::with_keystore(config, keystore).await?))
+    Ok(Arc::new(
+        TangleEvmClient::with_keystore(config, keystore).await?,
+    ))
 }
 
 fn seed_operator_key(path: &Path, private_key: &str) -> Result<()> {

@@ -48,7 +48,9 @@ const OPERATOR1_PRIVATE_KEY: &str =
 /// Errors raised while preparing the deterministic harness.
 #[derive(Debug, Error)]
 pub enum HarnessError {
-    #[error("LocalTestnet broadcast artifact missing at {0}. Run scripts/fetch-localtestnet-fixtures.sh to refresh fixtures.")]
+    #[error(
+        "LocalTestnet broadcast artifact missing at {0}. Run scripts/fetch-localtestnet-fixtures.sh to refresh fixtures."
+    )]
     MissingBroadcast(PathBuf),
 }
 

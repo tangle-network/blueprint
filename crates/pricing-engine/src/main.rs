@@ -13,9 +13,9 @@ use blueprint_pricing_engine_lib::{
     cleanup,
     error::{PricingError, Result},
     init_benchmark_cache, init_operator_signer, init_pricing_config, load_operator_config,
-    signer::QuoteSigningDomain,
     service::blockchain::event::BlockchainEvent,
     service::rpc::server::run_rpc_server,
+    signer::QuoteSigningDomain,
     spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
 };
 

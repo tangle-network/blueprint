@@ -458,9 +458,7 @@ async fn cli_service_join_and_leave_dynamic_service() -> Result<()> {
         .await
         .map_err(|e| eyre!(e.to_string()))?;
     if service_info.membership != MembershipModel::Dynamic {
-        eprintln!(
-            "Skipping cli_service_join_and_leave_dynamic_service: service is not dynamic"
-        );
+        eprintln!("Skipping cli_service_join_and_leave_dynamic_service: service is not dynamic");
         return Ok(());
     }
     register_client

@@ -1,5 +1,5 @@
-use blueprint_pricing_engine_lib::pricing_engine;
 use blueprint_pricing_engine_lib::OperatorConfig;
+use blueprint_pricing_engine_lib::pricing_engine;
 use std::path::PathBuf;
 
 pub fn create_test_config() -> OperatorConfig {

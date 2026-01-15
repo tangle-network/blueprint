@@ -87,17 +87,15 @@ impl BackgroundKeeper for RoundKeeper {
         let contract = IMultiAssetDelegationRounds::new(mad_address, read_provider);
 
         // Check timing
-        let last_advance: u64 = contract
-            .lastRoundAdvance()
-            .call()
-            .await
-            .map_err(|e| KeeperError::Contract(format!("Failed to get lastRoundAdvance: {}", e)))?;
+        let last_advance: u64 =
+            contract.lastRoundAdvance().call().await.map_err(|e| {
+                KeeperError::Contract(format!("Failed to get lastRoundAdvance: {}", e))
+            })?;
 
-        let duration: u64 = contract
-            .roundDuration()
-            .call()
-            .await
-            .map_err(|e| KeeperError::Contract(format!("Failed to get roundDuration: {}", e)))?;
+        let duration: u64 =
+            contract.roundDuration().call().await.map_err(|e| {
+                KeeperError::Contract(format!("Failed to get roundDuration: {}", e))
+            })?;
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -108,11 +106,10 @@ impl BackgroundKeeper for RoundKeeper {
         let can_advance = last_advance == 0 || now >= (last_advance + duration);
 
         if !can_advance {
-            let current: u64 = contract
-                .currentRound()
-                .call()
-                .await
-                .map_err(|e| KeeperError::Contract(format!("Failed to get currentRound: {}", e)))?;
+            let current: u64 =
+                contract.currentRound().call().await.map_err(|e| {
+                    KeeperError::Contract(format!("Failed to get currentRound: {}", e))
+                })?;
 
             let ready_at = last_advance + duration;
             let remaining = ready_at.saturating_sub(now);

@@ -103,7 +103,7 @@ mod validation_tests {
 
         let temp_dir = tempdir().unwrap();
         let blueprint_path = temp_dir.path().join("test_blueprint");
-        std::fs::create_dir(&blueprint_path).unwrap();
+        std::fs::create_dir_all(&blueprint_path).unwrap();
 
         let config = blueprint_eigenlayer_extra::AvsRegistrationConfig {
             service_manager: alloy_primitives::Address::ZERO,
@@ -150,6 +150,51 @@ mod validation_tests {
             );
         }
     }
+
+    /// Test: Hypervisor runtime rejects pre-compiled binaries
+    #[tokio::test]
+    async fn test_hypervisor_rejects_precompiled_binary() {
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let blueprint_path = temp_dir.path().join("test_blueprint");
+        std::fs::File::create(&blueprint_path).unwrap();
+
+        let config = blueprint_eigenlayer_extra::AvsRegistrationConfig {
+            service_manager: alloy_primitives::Address::ZERO,
+            registry_coordinator: alloy_primitives::Address::ZERO,
+            operator_state_retriever: alloy_primitives::Address::ZERO,
+            strategy_manager: alloy_primitives::Address::ZERO,
+            delegation_manager: alloy_primitives::Address::ZERO,
+            avs_directory: alloy_primitives::Address::ZERO,
+            rewards_coordinator: alloy_primitives::Address::ZERO,
+            permission_controller: alloy_primitives::Address::ZERO,
+            allocation_manager: alloy_primitives::Address::ZERO,
+            strategy_address: alloy_primitives::Address::ZERO,
+            stake_registry: alloy_primitives::Address::ZERO,
+            blueprint_path,
+            container_image: None,
+            runtime_target: RuntimeTarget::Hypervisor,
+            allocation_delay: 0,
+            deposit_amount: 1000,
+            stake_amount: 100,
+            operator_sets: vec![0],
+        };
+
+        let result = config.validate();
+        assert!(result.is_err(), "Pre-compiled binaries should be rejected");
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("Pre-compiled binaries are not yet supported"),
+            "Error should mention pre-compiled binaries. Got: {}",
+            err_msg
+        );
+    }
+
+    // TODO: Test: Hypervisor runtime requires vm-sandbox feature flag with different
+    // RuntimeTarget, except for RuntimeTarget::Native
+    // because "Pre-compiled binaries not yet supported for Native/Hypervisor runtimes"
+    // See `AvsRegistrationConfig::validate` in crates/eigenlayer-extra/src/registration.rs:191
 
     /// Test: Container runtime requires container_image field
     ///

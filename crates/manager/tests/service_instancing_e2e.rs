@@ -43,7 +43,7 @@ const SERVICE_OWNER_PRIVATE_KEY: &str =
     "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 const BLUEPRINT_ID: u64 = 0;
-const SERVICE_ID_0: u64 = 0;  // Pre-seeded service
+const SERVICE_ID_0: u64 = 0; // Pre-seeded service
 const JOB_INDEX: u8 = 0;
 const ANVIL_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -63,13 +63,15 @@ impl MultiServiceHarness {
         let op1_keystore_path = temp.path().join("operator1_keystore");
         std::fs::create_dir_all(&op1_keystore_path)?;
         seed_operator_key(&op1_keystore_path, OPERATOR1_PRIVATE_KEY)?;
-        let operator1_client = create_client(&deployment, &op1_keystore_path, Some(SERVICE_ID_0)).await?;
+        let operator1_client =
+            create_client(&deployment, &op1_keystore_path, Some(SERVICE_ID_0)).await?;
 
         // Owner keystore
         let owner_keystore_path = temp.path().join("owner_keystore");
         std::fs::create_dir_all(&owner_keystore_path)?;
         seed_operator_key(&owner_keystore_path, SERVICE_OWNER_PRIVATE_KEY)?;
-        let owner_client = create_client(&deployment, &owner_keystore_path, Some(SERVICE_ID_0)).await?;
+        let owner_client =
+            create_client(&deployment, &owner_keystore_path, Some(SERVICE_ID_0)).await?;
 
         Ok(Self {
             deployment,
@@ -82,7 +84,6 @@ impl MultiServiceHarness {
     fn operator1_account(&self) -> Address {
         self.operator1_client.account()
     }
-
 }
 
 /// Test: Multiple operators process jobs from the same service
@@ -102,29 +103,40 @@ async fn test_multi_operator_same_service() -> Result<()> {
         let harness = MultiServiceHarness::new(deployment).await?;
 
         // Verify both operators are in the service
-        let operators = harness.owner_client
+        let operators = harness
+            .owner_client
             .get_service_operators(SERVICE_ID_0)
             .await
             .context("failed to get service operators")?;
 
-        println!("Service {} has {} operators:", SERVICE_ID_0, operators.len());
+        println!(
+            "Service {} has {} operators:",
+            SERVICE_ID_0,
+            operators.len()
+        );
         for op in &operators {
             println!("  - {}", op);
         }
 
-        ensure!(operators.len() >= 1, "service should have at least one operator");
+        ensure!(
+            operators.len() >= 1,
+            "service should have at least one operator"
+        );
 
         // Grant caller permissions to operator1
         grant_permitted_caller(
             harness.deployment.http_endpoint().as_str(),
             harness.deployment.tangle_contract,
             harness.operator1_account(),
-        ).await.context("failed to grant operator1 permissions")?;
+        )
+        .await
+        .context("failed to grant operator1 permissions")?;
 
         // Submit a job
         let input: u64 = 42;
         let encoded_input = Bytes::from(input.abi_encode());
-        let submission = harness.owner_client
+        let submission = harness
+            .owner_client
             .submit_job(SERVICE_ID_0, JOB_INDEX, encoded_input)
             .await
             .context("failed to submit job")?;
@@ -133,7 +145,8 @@ async fn test_multi_operator_same_service() -> Result<()> {
         // Operator1 submits result
         let result: u64 = input * input;
         let encoded_result = Bytes::from(result.abi_encode());
-        harness.operator1_client
+        harness
+            .operator1_client
             .submit_result(SERVICE_ID_0, submission.call_id, encoded_result)
             .await
             .context("failed to submit result")?;
@@ -141,7 +154,8 @@ async fn test_multi_operator_same_service() -> Result<()> {
 
         // Verify job completed
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let job_call = harness.owner_client
+        let job_call = harness
+            .owner_client
             .get_job_call(SERVICE_ID_0, submission.call_id)
             .await
             .context("failed to get job call")?;
@@ -151,7 +165,8 @@ async fn test_multi_operator_same_service() -> Result<()> {
 
         println!("\n🎉 Multi-operator same service test passed!");
         Ok(())
-    }).await
+    })
+    .await
 }
 
 /// Test: Job routing to correct service
@@ -170,7 +185,8 @@ async fn test_job_routing_isolation() -> Result<()> {
         let harness = MultiServiceHarness::new(deployment).await?;
 
         // Get service info
-        let service = harness.owner_client
+        let service = harness
+            .owner_client
             .get_service(SERVICE_ID_0)
             .await
             .context("failed to get service")?;
@@ -186,26 +202,32 @@ async fn test_job_routing_isolation() -> Result<()> {
             harness.deployment.http_endpoint().as_str(),
             harness.deployment.tangle_contract,
             harness.operator1_account(),
-        ).await?;
+        )
+        .await?;
 
         // Submit multiple jobs and track their call_ids
         let mut job_inputs: Vec<(u64, u64)> = Vec::new();
         for i in 1..=3 {
             let input: u64 = i * 10;
             let encoded = Bytes::from(input.abi_encode());
-            let submission = harness.owner_client
+            let submission = harness
+                .owner_client
                 .submit_job(SERVICE_ID_0, JOB_INDEX, encoded)
                 .await
                 .context("failed to submit job")?;
             job_inputs.push((submission.call_id, input));
-            println!("✓ Submitted job {} with input {}", submission.call_id, input);
+            println!(
+                "✓ Submitted job {} with input {}",
+                submission.call_id, input
+            );
         }
 
         // Submit results for each job
         for (call_id, input) in &job_inputs {
             let result = *input * *input;
             let encoded = Bytes::from(result.abi_encode());
-            harness.operator1_client
+            harness
+                .operator1_client
                 .submit_result(SERVICE_ID_0, *call_id, encoded)
                 .await
                 .context("failed to submit result")?;
@@ -214,7 +236,8 @@ async fn test_job_routing_isolation() -> Result<()> {
         // Verify all jobs completed with correct results
         tokio::time::sleep(Duration::from_secs(1)).await;
         for (call_id, _input) in &job_inputs {
-            let job_call = harness.owner_client
+            let job_call = harness
+                .owner_client
                 .get_job_call(SERVICE_ID_0, *call_id)
                 .await
                 .context("failed to get job call")?;
@@ -224,7 +247,8 @@ async fn test_job_routing_isolation() -> Result<()> {
 
         println!("\n🎉 Job routing isolation test passed!");
         Ok(())
-    }).await
+    })
+    .await
 }
 
 /// Test: Concurrent job processing
@@ -251,7 +275,8 @@ async fn test_concurrent_job_processing() -> Result<()> {
             let keystore_path = caller_temp.path().join(format!("caller_{idx}"));
             std::fs::create_dir_all(&keystore_path)?;
             seed_operator_key(&keystore_path, key)?;
-            let client = create_client(&harness.deployment, &keystore_path, Some(SERVICE_ID_0)).await?;
+            let client =
+                create_client(&harness.deployment, &keystore_path, Some(SERVICE_ID_0)).await?;
             grant_permitted_caller(
                 harness.deployment.http_endpoint().as_str(),
                 harness.deployment.tangle_contract,
@@ -290,7 +315,8 @@ async fn test_concurrent_job_processing() -> Result<()> {
         for (call_id, input) in &submissions {
             let result = input * input;
             let encoded = Bytes::from(result.abi_encode());
-            harness.operator1_client
+            harness
+                .operator1_client
                 .submit_result(SERVICE_ID_0, *call_id, encoded)
                 .await
                 .context("failed to submit result")?;
@@ -300,7 +326,8 @@ async fn test_concurrent_job_processing() -> Result<()> {
         tokio::time::sleep(Duration::from_secs(2)).await;
         let mut completed = 0;
         for (call_id, _input) in &submissions {
-            let job_call = harness.owner_client
+            let job_call = harness
+                .owner_client
                 .get_job_call(SERVICE_ID_0, *call_id)
                 .await
                 .context("failed to get job call")?;
@@ -319,7 +346,8 @@ async fn test_concurrent_job_processing() -> Result<()> {
 
         println!("\n🎉 Concurrent job processing test passed!");
         Ok(())
-    }).await
+    })
+    .await
 }
 
 /// Test: Service operator weights affect result aggregation
@@ -336,7 +364,8 @@ async fn test_operator_weights_in_service() -> Result<()> {
         let harness = MultiServiceHarness::new(deployment).await?;
 
         // Get operator weights
-        let weights = harness.owner_client
+        let weights = harness
+            .owner_client
             .get_service_operator_weights(SERVICE_ID_0)
             .await
             .context("failed to get operator weights")?;
@@ -350,7 +379,8 @@ async fn test_operator_weights_in_service() -> Result<()> {
         println!("Total weight: {}", total_weight);
 
         // Get total exposure
-        let exposure = harness.owner_client
+        let exposure = harness
+            .owner_client
             .get_service_total_exposure(SERVICE_ID_0)
             .await
             .context("failed to get total exposure")?;
@@ -359,7 +389,8 @@ async fn test_operator_weights_in_service() -> Result<()> {
 
         println!("\n✓ Operator weights query successful!");
         Ok(())
-    }).await
+    })
+    .await
 }
 
 // =============================================================================
@@ -386,7 +417,9 @@ async fn create_client(
     .test_mode(true);
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(keystore_path))?;
-    Ok(Arc::new(TangleEvmClient::with_keystore(config, keystore).await?))
+    Ok(Arc::new(
+        TangleEvmClient::with_keystore(config, keystore).await?,
+    ))
 }
 
 fn seed_operator_key(path: &Path, private_key: &str) -> Result<()> {

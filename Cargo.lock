@@ -6233,7 +6233,6 @@ dependencies = [
  "alloy-sol-types",
  "anyhow",
  "blueprint-anvil-testing-utils",
- "blueprint-core",
  "blueprint-router",
  "blueprint-tangle-evm-extra",
  "once_cell",
@@ -12265,9 +12264,9 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bindings"
-version = "0.5.2"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7940bebe94c9ac80f81178db9bf263b2f3fb553bfa7f9be26243b825c8152fa5"
+checksum = "2bfb23291479ad6ad1116cc7cf64a62ad547de38f434613a9bae130b557c538f"
 dependencies = [
  "alloy",
  "alloy-contract",

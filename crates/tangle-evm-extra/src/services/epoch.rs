@@ -86,19 +86,18 @@ impl BackgroundKeeper for EpochKeeper {
     }
 
     async fn check_and_execute(config: &KeeperConfig) -> KeeperResult<bool> {
-        let inflation_pool = config.inflation_pool.ok_or_else(|| {
-            KeeperError::Config("InflationPool address not configured".into())
-        })?;
+        let inflation_pool = config
+            .inflation_pool
+            .ok_or_else(|| KeeperError::Config("InflationPool address not configured".into()))?;
 
         // First check if epoch is ready (read-only)
         let read_provider = config.get_read_provider().await?;
         let pool = IInflationPool::new(inflation_pool, read_provider);
 
-        let is_ready = pool
-            .isEpochReady()
-            .call()
-            .await
-            .map_err(|e| KeeperError::Contract(format!("Failed to check epoch ready: {}", e)))?;
+        let is_ready =
+            pool.isEpochReady().call().await.map_err(|e| {
+                KeeperError::Contract(format!("Failed to check epoch ready: {}", e))
+            })?;
 
         if !is_ready {
             // Log time until next epoch for debugging
@@ -113,11 +112,10 @@ impl BackgroundKeeper for EpochKeeper {
         }
 
         // Epoch is ready, get current epoch for logging
-        let current_epoch = pool
-            .currentEpoch()
-            .call()
-            .await
-            .map_err(|e| KeeperError::Contract(format!("Failed to get current epoch: {}", e)))?;
+        let current_epoch =
+            pool.currentEpoch().call().await.map_err(|e| {
+                KeeperError::Contract(format!("Failed to get current epoch: {}", e))
+            })?;
 
         info!(
             "[{}] Epoch {} is ready for distribution, submitting transaction",
@@ -133,7 +131,9 @@ impl BackgroundKeeper for EpochKeeper {
             .distributeEpoch()
             .send()
             .await
-            .map_err(|e| KeeperError::Transaction(format!("Failed to send distributeEpoch: {}", e)))?
+            .map_err(|e| {
+                KeeperError::Transaction(format!("Failed to send distributeEpoch: {}", e))
+            })?
             .get_receipt()
             .await
             .map_err(|e| {

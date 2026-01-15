@@ -76,7 +76,12 @@ impl BlueprintConfig for EigenlayerBLSConfig {
 }
 
 async fn requires_registration_bls_impl(env: &BlueprintEnvironment) -> Result<bool, RunnerError> {
-    is_operator_registered(env).await
+    if is_operator_registered(env).await? {
+        info!("Operator is already registered for Eigenlayer");
+        Ok(false)
+    } else {
+        Ok(true)
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -150,35 +155,40 @@ async fn register_bls_impl(
         .eigenlayer()
         .map_err(|e| EigenlayerError::Other(e.to_string().into()))?;
 
-    let operator_details = Operator {
-        address: operator_address,
-        delegation_approver_address,
-        metadata_url: eigenlayer_settings.metadata_url.clone(),
-        allocation_delay: Some(eigenlayer_settings.allocation_delay),
-        _deprecated_earnings_receiver_address: None, // Deprecated in eigensdk-rs v2.0.0
-        staker_opt_out_window_blocks: Some(eigenlayer_settings.staker_opt_out_window_blocks),
-    };
-
-    let tx_hash = el_writer
-        .register_as_operator(operator_details)
-        .await
-        .map_err(EigenlayerError::ElContracts)?;
-    let registration_receipt = wait_transaction(env.http_rpc_endpoint.clone(), tx_hash)
-        .await
-        .map_err(|e| EigenlayerError::Registration(format!("AVS registration error: {}", e)))?;
-    if registration_receipt.status() {
-        info!("Registered as operator {} for Eigenlayer", operator_address);
-    } else if is_operator_registered(env).await? {
+    // Check if operator is already registered before attempting registration
+    if is_operator_registered(env).await? {
         info!(
             "Operator {} is already registered for Eigenlayer",
             operator_address
         );
     } else {
-        blueprint_core::error!(
-            "Operator registration failed for operator {}",
-            operator_address
-        );
-        return Err(EigenlayerError::Registration("Operator registration failed".into()).into());
+        let operator_details = Operator {
+            address: operator_address,
+            delegation_approver_address,
+            metadata_url: eigenlayer_settings.metadata_url.clone(),
+            allocation_delay: Some(eigenlayer_settings.allocation_delay),
+            _deprecated_earnings_receiver_address: None, // Deprecated in eigensdk-rs v2.0.0
+            staker_opt_out_window_blocks: Some(eigenlayer_settings.staker_opt_out_window_blocks),
+        };
+
+        let tx_hash = el_writer
+            .register_as_operator(operator_details)
+            .await
+            .map_err(EigenlayerError::ElContracts)?;
+        let registration_receipt = wait_transaction(env.http_rpc_endpoint.clone(), tx_hash)
+            .await
+            .map_err(|e| EigenlayerError::Registration(format!("AVS registration error: {}", e)))?;
+        if registration_receipt.status() {
+            info!("Registered as operator {} for Eigenlayer", operator_address);
+        } else {
+            blueprint_core::error!(
+                "Operator registration failed for operator {}",
+                operator_address
+            );
+            return Err(
+                EigenlayerError::Registration("Operator registration failed".into()).into(),
+            );
+        }
     }
 
     let deposit_amount = U256::from(eigenlayer_settings.deposit_amount);
@@ -320,7 +330,7 @@ async fn is_operator_registered(env: &BlueprintEnvironment) -> Result<bool, Runn
         .is_operator_registered(operator_address)
         .await
     {
-        Ok(is_registered) => Ok(!is_registered),
+        Ok(is_registered) => Ok(is_registered),
         Err(e) => Err(EigenlayerError::AvsRegistry(e).into()),
     }
 }
