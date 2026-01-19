@@ -1,3 +1,4 @@
+#![cfg(feature = "aws")]
 //! Provider-specific Kubernetes integration tests
 //!
 //! Tests each cloud provider's Kubernetes integration using the shared

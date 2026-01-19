@@ -1,3 +1,4 @@
+#![cfg(feature = "aws")]
 //! Property-based tests that verify ACTUAL logic, not mocked behavior
 
 use blueprint_remote_providers::AwsInstanceMapper;

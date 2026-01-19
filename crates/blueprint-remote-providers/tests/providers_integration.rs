@@ -1,3 +1,4 @@
+#![cfg(feature = "aws")]
 //! Comprehensive integration tests for ALL cloud providers
 //!
 //! These tests verify real functionality with minimal mocking.
@@ -361,17 +362,11 @@ mod cross_provider_tests {
             );
         }
 
-        // GCP supports GPUs
-        #[cfg(feature = "gcp")]
-        {
-            println!("GCP GPU support: n1-standard-4 + nvidia-tesla-k80");
-        }
+        // GCP supports GPUs (uses REST API, always available)
+        println!("GCP GPU support: n1-standard-4 + nvidia-tesla-k80");
 
-        // Azure supports GPUs
-        #[cfg(feature = "azure")]
-        {
-            println!("Azure GPU support: Standard_NC6");
-        }
+        // Azure supports GPUs (uses REST API, always available)
+        println!("Azure GPU support: Standard_NC6");
     }
 
     #[test]

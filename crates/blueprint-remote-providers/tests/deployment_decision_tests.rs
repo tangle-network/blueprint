@@ -1,3 +1,4 @@
+#![cfg(feature = "aws")]
 //! Tests for deployment decision logic - NO MOCKS
 //!
 //! Validates:

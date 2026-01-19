@@ -1,3 +1,4 @@
+#![cfg(feature = "aws")]
 //! Real-world integration tests for incredible-squaring blueprint
 //!
 //! Requires actual cloud credentials and Docker/k8s infrastructure.
