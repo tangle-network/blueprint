@@ -67,7 +67,7 @@ pub fn load_protocol_settings(
                 status_registry_contract,
             }))
         }
-        _ => Err(ConfigError::UnsupportedProtocol(protocol.to_string())),
+        _ => Err(ConfigError::UnexpectedProtocol("Unsupported protocol")),
     }
 }
 

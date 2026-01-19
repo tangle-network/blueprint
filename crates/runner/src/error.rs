@@ -110,9 +110,6 @@ pub enum ConfigError {
     /// Unsupported keystore URI.
     #[error("Unsupported keystore URI: {0}")]
     UnsupportedKeystoreUri(String),
-    /// Error parsing the protocol, from the `PROTOCOL` environment variable.
-    #[error("Unsupported protocol: {0}")]
-    UnsupportedProtocol(String),
     /// Attempting to load the [`ProtocolSettings`] of a protocol differing from the target
     ///
     /// [`ProtocolSettings`]: crate::config::ProtocolSettings

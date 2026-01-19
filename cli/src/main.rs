@@ -1015,7 +1015,7 @@ async fn main() -> Result<()> {
                         };
                         run_blueprint(run_opts).await?;
                     }
-                    _ => return Err(ConfigError::UnsupportedProtocol(protocol.to_string()).into()),
+                    _ => return Err(ConfigError::UnexpectedProtocol("Unsupported protocol").into()),
                 }
             }
             BlueprintCommands::Register {

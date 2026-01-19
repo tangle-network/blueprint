@@ -16,7 +16,7 @@ use alloy_rpc_types::{
 };
 use alloy_sol_types::SolType;
 use blueprint_client_core::{BlueprintServicesClient, OperatorSet};
-use blueprint_crypto::{BytesEncoding, k256::K256Ecdsa};
+use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::Keystore;
 use blueprint_keystore::backends::Backend;
 use blueprint_std::collections::BTreeMap;
@@ -614,6 +614,20 @@ impl TangleEvmClient {
         Ok(result)
     }
 
+    /// Get the full blueprint definition.
+    pub async fn get_blueprint_definition(
+        &self,
+        blueprint_id: u64,
+    ) -> Result<ITangleTypes::BlueprintDefinition> {
+        let contract = self.tangle_contract();
+        let result = contract
+            .getBlueprintDefinition(blueprint_id)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(result)
+    }
+
     /// Create a new blueprint from an encoded definition.
     pub async fn create_blueprint(
         &self,
@@ -760,7 +774,10 @@ impl TangleEvmClient {
 
         let signing_key = self.ecdsa_signing_key()?;
         let verifying = signing_key.verifying_key();
-        let ecdsa_bytes = Bytes::copy_from_slice(&verifying.to_bytes());
+        // Use uncompressed SEC1 format (65 bytes starting with 0x04)
+        // The contract expects uncompressed public keys, not compressed (33 bytes)
+        let encoded_point = verifying.0.to_encoded_point(false);
+        let ecdsa_bytes = Bytes::copy_from_slice(encoded_point.as_bytes());
         let rpc_endpoint = rpc_endpoint.into();
 
         let receipt = if let Some(inputs) = registration_inputs {
