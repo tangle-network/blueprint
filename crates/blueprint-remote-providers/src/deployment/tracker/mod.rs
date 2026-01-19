@@ -17,8 +17,8 @@ mod tests {
     use chrono::{Duration, Utc};
     use std::collections::HashMap;
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
     use tempfile::TempDir;
 
@@ -72,14 +72,20 @@ mod tests {
             .unwrap();
 
         let tracker_clone = tracker.clone();
-        let task = tokio::spawn(async move { tracker_clone.handle_termination("blueprint-retry").await });
+        let task =
+            tokio::spawn(async move { tracker_clone.handle_termination("blueprint-retry").await });
 
         tokio::time::advance(blueprint_std::time::Duration::from_secs(20)).await;
         let result = task.await.unwrap();
 
         assert!(result.is_ok());
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
-        assert!(tracker.get_deployment_status("blueprint-retry").await.is_none());
+        assert!(
+            tracker
+                .get_deployment_status("blueprint-retry")
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -126,7 +132,8 @@ mod tests {
             .unwrap();
 
         let tracker_clone = tracker.clone();
-        let task = tokio::spawn(async move { tracker_clone.handle_termination("blueprint-fail").await });
+        let task =
+            tokio::spawn(async move { tracker_clone.handle_termination("blueprint-fail").await });
 
         tokio::time::advance(blueprint_std::time::Duration::from_secs(20)).await;
         let result = task.await.unwrap();
@@ -215,7 +222,9 @@ mod tests {
         tracker
             .set_cleanup_handler(
                 DeploymentType::LocalDocker,
-                Box::new(CountingCleanup { calls: calls.clone() }),
+                Box::new(CountingCleanup {
+                    calls: calls.clone(),
+                }),
             )
             .await;
 

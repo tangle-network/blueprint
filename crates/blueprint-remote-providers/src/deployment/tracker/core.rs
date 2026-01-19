@@ -332,10 +332,7 @@ impl DeploymentTracker {
     /// Get a deployment by instance ID (linear search)
     pub async fn get_by_instance_id(&self, instance_id: &str) -> Result<Option<DeploymentRecord>> {
         let deployments = self.deployments.read().await;
-        Ok(deployments
-            .values()
-            .find(|d| d.id == instance_id)
-            .cloned())
+        Ok(deployments.values().find(|d| d.id == instance_id).cloned())
     }
 
     /// Remove a deployment by instance ID
@@ -346,7 +343,7 @@ impl DeploymentTracker {
             .iter()
             .find(|(_, d)| d.id == instance_id)
             .map(|(k, _)| k.clone());
-            
+
         if let Some(k) = key {
             deployments.remove(&k);
             drop(deployments);

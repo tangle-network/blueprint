@@ -435,7 +435,6 @@ fn build_azure_rule_payload(rule: &SecurityRule, index: usize) -> serde_json::Va
     })
 }
 
-
 /// Vultr Firewall Group implementation
 #[derive(Debug)]
 pub struct VultrFirewallManager {

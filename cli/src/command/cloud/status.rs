@@ -343,7 +343,7 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
             DS::Failed => "🔴",
             DS::Unknown => "⚪",
         };
-        
+
         let status_str = match deployment.status {
             DS::Active => "active",
             DS::Terminating => "terminating",
@@ -353,20 +353,21 @@ async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
         };
 
         let duration = chrono::Utc::now().signed_duration_since(deployment.deployed_at);
-        let uptime = format!(
-            "{}h {}m",
-            duration.num_hours(),
-            duration.num_minutes() % 60
-        );
+        let uptime = format!("{}h {}m", duration.num_hours(), duration.num_minutes() % 60);
 
         deployments.push(DeploymentStatus {
             id: deployment.id.clone(),
             provider: format!("{:?}", deployment.provider),
-            region: deployment.region.clone().unwrap_or_else(|| "unknown".to_string()),
+            region: deployment
+                .region
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             status: format!("{} {}", status_icon, status_str),
             health: health_status,
             ip: deployment
-                .metadata.get("public_ip").cloned()
+                .metadata
+                .get("public_ip")
+                .cloned()
                 .unwrap_or_else(|| "Pending".to_string()),
             uptime,
             ttl: deployment
@@ -419,7 +420,11 @@ async fn terminate_real_deployment(
 
     // Terminate the instance
     if let Some(provider) = deployment.provider {
-        let cloud_id = deployment.resource_ids.get("instance_id").map(|s| s.as_str()).unwrap_or(instance_id);
+        let cloud_id = deployment
+            .resource_ids
+            .get("instance_id")
+            .map(|s| s.as_str())
+            .unwrap_or(instance_id);
         provisioner
             .terminate(provider, cloud_id)
             .await

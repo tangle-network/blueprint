@@ -305,7 +305,11 @@ impl RemoteDeploymentService {
 
             // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
-                .provision(convert_provider(provider), &convert_resource_spec(&resource_spec), &region)
+                .provision(
+                    convert_provider(provider),
+                    &convert_resource_spec(&resource_spec),
+                    &region,
+                )
                 .await
                 .map_err(|e| Error::Other(format!("Failed to provision instance: {}", e)))?;
 
@@ -442,8 +446,7 @@ impl RemoteDeploymentService {
         #[cfg(feature = "remote-providers")]
         {
             use blueprint_remote_providers::{
-                CloudProvisioner,
-                core::deployment_target::DeploymentTarget,
+                CloudProvisioner, core::deployment_target::DeploymentTarget,
             };
 
             // Create provisioner
@@ -581,7 +584,10 @@ impl RemoteDeploymentService {
 
                 // Terminate the instance with the correct provider
                 provisioner
-                    .terminate(convert_provider(deployment_info.provider), &deployment_info.instance_id)
+                    .terminate(
+                        convert_provider(deployment_info.provider),
+                        &deployment_info.instance_id,
+                    )
                     .await
                     .map_err(|e| Error::Other(format!("Failed to terminate instance: {}", e)))?;
 
@@ -839,13 +845,13 @@ fn convert_provider(
             blueprint_remote_providers::CloudProvider::Vultr
         }
         crate::remote::provider_selector::CloudProvider::Generic => {
-             // Fallback for Generic to DigitalOcean or error? 
-             // Generic usually implies K8s which might not need a specific provider for some ops,
-             // but provisioner.provision expects a provider.
-             // However, for K8s we use deploy_with_target, not provision.
-             // But if we ever need to convert Generic, let's map it to something safe or panic if invalid usage.
-             // For now mapping to DigitalOcean as placeholder or we should handle it.
-             blueprint_remote_providers::CloudProvider::DigitalOcean 
+            // Fallback for Generic to DigitalOcean or error?
+            // Generic usually implies K8s which might not need a specific provider for some ops,
+            // but provisioner.provision expects a provider.
+            // However, for K8s we use deploy_with_target, not provision.
+            // But if we ever need to convert Generic, let's map it to something safe or panic if invalid usage.
+            // For now mapping to DigitalOcean as placeholder or we should handle it.
+            blueprint_remote_providers::CloudProvider::DigitalOcean
         }
     }
 }

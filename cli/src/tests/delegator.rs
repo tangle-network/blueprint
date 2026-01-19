@@ -5,12 +5,12 @@
 
 use std::{fs, path::Path};
 
-use blueprint_crypto::{BytesEncoding, k256::{K256Ecdsa, K256SigningKey}};
-use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
-use blueprint_testing_utils::anvil::{
-    seed_operator_key,
-    tangle_evm::LOCAL_BLUEPRINT_ID,
+use blueprint_crypto::{
+    BytesEncoding,
+    k256::{K256Ecdsa, K256SigningKey},
 };
+use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
+use blueprint_testing_utils::anvil::{seed_operator_key, tangle_evm::LOCAL_BLUEPRINT_ID};
 use color_eyre::eyre::{Result, eyre};
 use hex::FromHex;
 use serde_json::Value;
@@ -71,10 +71,7 @@ async fn cli_delegator_positions_empty() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_delegator_keystore(&keystore_path)?;
 
-    let mut args = vec![
-        "delegator".to_string(),
-        "positions".to_string(),
-    ];
+    let mut args = vec!["delegator".to_string(), "positions".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--json".into());
 
@@ -117,10 +114,7 @@ async fn cli_delegator_positions_for_address() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_operator_keystore(&keystore_path)?;
 
-    let mut args = vec![
-        "delegator".to_string(),
-        "positions".to_string(),
-    ];
+    let mut args = vec!["delegator".to_string(), "positions".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--delegator".into());
     args.push(DELEGATOR_ADDRESS.into());
@@ -159,10 +153,7 @@ async fn cli_delegator_delegations_empty() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_delegator_keystore(&keystore_path)?;
 
-    let mut args = vec![
-        "delegator".to_string(),
-        "delegations".to_string(),
-    ];
+    let mut args = vec!["delegator".to_string(), "delegations".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--json".into());
 
@@ -198,10 +189,7 @@ async fn cli_delegator_pending_unstakes_empty() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_delegator_keystore(&keystore_path)?;
 
-    let mut args = vec![
-        "delegator".to_string(),
-        "pending-unstakes".to_string(),
-    ];
+    let mut args = vec!["delegator".to_string(), "pending-unstakes".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--json".into());
 
@@ -237,10 +225,7 @@ async fn cli_delegator_pending_withdrawals_empty() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_delegator_keystore(&keystore_path)?;
 
-    let mut args = vec![
-        "delegator".to_string(),
-        "pending-withdrawals".to_string(),
-    ];
+    let mut args = vec!["delegator".to_string(), "pending-withdrawals".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--json".into());
 
@@ -276,10 +261,7 @@ async fn cli_delegator_deposit_native() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_delegator_keystore(&keystore_path)?;
 
-    let mut args = vec![
-        "delegator".to_string(),
-        "deposit".to_string(),
-    ];
+    let mut args = vec!["delegator".to_string(), "deposit".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--amount".into());
     args.push(DEPOSIT_AMOUNT.to_string());
@@ -301,10 +283,7 @@ async fn cli_delegator_deposit_native() -> Result<()> {
     // Verify deposit increased in positions
     sleep(Duration::from_millis(500)).await;
 
-    let mut pos_args = vec![
-        "delegator".to_string(),
-        "positions".to_string(),
-    ];
+    let mut pos_args = vec!["delegator".to_string(), "positions".to_string()];
     pos_args.extend(network_cli_args(&harness, &keystore_path));
     pos_args.push("--json".into());
 
@@ -347,10 +326,7 @@ async fn cli_delegator_delegate_and_undelegate() -> Result<()> {
     let network_args = network_cli_args(&harness, &keystore_path);
 
     // Step 1: Deposit native ETH
-    let mut deposit_args = vec![
-        "delegator".to_string(),
-        "deposit".to_string(),
-    ];
+    let mut deposit_args = vec!["delegator".to_string(), "deposit".to_string()];
     deposit_args.extend(network_args.clone());
     deposit_args.push("--amount".into());
     deposit_args.push(DEPOSIT_AMOUNT.to_string());
@@ -360,10 +336,7 @@ async fn cli_delegator_delegate_and_undelegate() -> Result<()> {
     sleep(Duration::from_millis(500)).await;
 
     // Step 2: Delegate to operator using from-deposit
-    let mut delegate_args = vec![
-        "delegator".to_string(),
-        "delegate".to_string(),
-    ];
+    let mut delegate_args = vec!["delegator".to_string(), "delegate".to_string()];
     delegate_args.extend(network_args.clone());
     delegate_args.push("--operator".into());
     delegate_args.push(OPERATOR1_ADDRESS.into());
@@ -386,10 +359,7 @@ async fn cli_delegator_delegate_and_undelegate() -> Result<()> {
     sleep(Duration::from_millis(500)).await;
 
     // Verify delegation exists
-    let mut delegations_args = vec![
-        "delegator".to_string(),
-        "delegations".to_string(),
-    ];
+    let mut delegations_args = vec!["delegator".to_string(), "delegations".to_string()];
     delegations_args.extend(network_args.clone());
     delegations_args.push("--json".into());
 
@@ -407,10 +377,7 @@ async fn cli_delegator_delegate_and_undelegate() -> Result<()> {
     );
 
     // Step 3: Undelegate (schedule unstake)
-    let mut undelegate_args = vec![
-        "delegator".to_string(),
-        "undelegate".to_string(),
-    ];
+    let mut undelegate_args = vec!["delegator".to_string(), "undelegate".to_string()];
     undelegate_args.extend(network_args.clone());
     undelegate_args.push("--operator".into());
     undelegate_args.push(OPERATOR1_ADDRESS.into());
@@ -432,10 +399,7 @@ async fn cli_delegator_delegate_and_undelegate() -> Result<()> {
     sleep(Duration::from_millis(500)).await;
 
     // Verify pending unstake exists
-    let mut unstakes_args = vec![
-        "delegator".to_string(),
-        "pending-unstakes".to_string(),
-    ];
+    let mut unstakes_args = vec!["delegator".to_string(), "pending-unstakes".to_string()];
     unstakes_args.extend(network_args.clone());
     unstakes_args.push("--json".into());
 
@@ -473,10 +437,7 @@ async fn cli_delegator_execute_unstake() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_delegator_keystore(&keystore_path)?;
 
-    let mut args = vec![
-        "delegator".to_string(),
-        "execute-unstake".to_string(),
-    ];
+    let mut args = vec!["delegator".to_string(), "execute-unstake".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--json".into());
 
@@ -526,10 +487,7 @@ async fn cli_delegator_schedule_and_execute_withdraw() -> Result<()> {
     let network_args = network_cli_args(&harness, &keystore_path);
 
     // Step 1: Deposit first
-    let mut deposit_args = vec![
-        "delegator".to_string(),
-        "deposit".to_string(),
-    ];
+    let mut deposit_args = vec!["delegator".to_string(), "deposit".to_string()];
     deposit_args.extend(network_args.clone());
     deposit_args.push("--amount".into());
     deposit_args.push(DEPOSIT_AMOUNT.to_string());
@@ -539,10 +497,7 @@ async fn cli_delegator_schedule_and_execute_withdraw() -> Result<()> {
     sleep(Duration::from_millis(500)).await;
 
     // Step 2: Schedule withdrawal
-    let mut schedule_args = vec![
-        "delegator".to_string(),
-        "schedule-withdraw".to_string(),
-    ];
+    let mut schedule_args = vec!["delegator".to_string(), "schedule-withdraw".to_string()];
     schedule_args.extend(network_args.clone());
     schedule_args.push("--amount".into());
     schedule_args.push((DEPOSIT_AMOUNT / 2).to_string());
@@ -562,10 +517,7 @@ async fn cli_delegator_schedule_and_execute_withdraw() -> Result<()> {
     sleep(Duration::from_millis(500)).await;
 
     // Verify pending withdrawal exists
-    let mut withdrawals_args = vec![
-        "delegator".to_string(),
-        "pending-withdrawals".to_string(),
-    ];
+    let mut withdrawals_args = vec!["delegator".to_string(), "pending-withdrawals".to_string()];
     withdrawals_args.extend(network_args.clone());
     withdrawals_args.push("--json".into());
 
@@ -583,10 +535,7 @@ async fn cli_delegator_schedule_and_execute_withdraw() -> Result<()> {
     );
 
     // Step 3: Try execute-withdraw (may not be matured yet)
-    let mut execute_args = vec![
-        "delegator".to_string(),
-        "execute-withdraw".to_string(),
-    ];
+    let mut execute_args = vec!["delegator".to_string(), "execute-withdraw".to_string()];
     execute_args.extend(network_args.clone());
     execute_args.push("--json".into());
 
@@ -616,10 +565,7 @@ async fn cli_delegator_delegate_direct() -> Result<()> {
     let network_args = network_cli_args(&harness, &keystore_path);
 
     // Delegate directly without pre-deposit (deposits + delegates in one tx)
-    let mut delegate_args = vec![
-        "delegator".to_string(),
-        "delegate".to_string(),
-    ];
+    let mut delegate_args = vec!["delegator".to_string(), "delegate".to_string()];
     delegate_args.extend(network_args.clone());
     delegate_args.push("--operator".into());
     delegate_args.push(OPERATOR1_ADDRESS.into());
@@ -641,10 +587,7 @@ async fn cli_delegator_delegate_direct() -> Result<()> {
     sleep(Duration::from_millis(500)).await;
 
     // Verify delegation exists
-    let mut delegations_args = vec![
-        "delegator".to_string(),
-        "delegations".to_string(),
-    ];
+    let mut delegations_args = vec!["delegator".to_string(), "delegations".to_string()];
     delegations_args.extend(network_args.clone());
     delegations_args.push("--json".into());
 
@@ -684,10 +627,7 @@ async fn cli_delegator_delegate_fixed_selection() -> Result<()> {
     let network_args = network_cli_args(&harness, &keystore_path);
 
     // Delegate with fixed selection mode
-    let mut delegate_args = vec![
-        "delegator".to_string(),
-        "delegate".to_string(),
-    ];
+    let mut delegate_args = vec!["delegator".to_string(), "delegate".to_string()];
     delegate_args.extend(network_args.clone());
     delegate_args.push("--operator".into());
     delegate_args.push(OPERATOR1_ADDRESS.into());
@@ -731,10 +671,7 @@ async fn cli_delegator_positions_with_token() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_delegator_keystore(&keystore_path)?;
 
-    let mut args = vec![
-        "delegator".to_string(),
-        "positions".to_string(),
-    ];
+    let mut args = vec!["delegator".to_string(), "positions".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--token".into());
     args.push(NATIVE_TOKEN.into());

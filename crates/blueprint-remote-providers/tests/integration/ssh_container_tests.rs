@@ -3,13 +3,13 @@
 //! These tests validate our SSH deployment logic by actually deploying
 //! to a real SSH server in a container. No mocking - real validation.
 
+use blueprint_remote_providers::core::resources::ResourceSpec;
 use blueprint_remote_providers::deployment::ssh::{
     ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
 };
-use blueprint_remote_providers::core::resources::ResourceSpec;
 use std::collections::HashMap;
-use testcontainers::{core::WaitFor, runners::AsyncRunner, GenericImage, ImageExt};
-use tokio::time::{sleep, timeout, Duration};
+use testcontainers::{GenericImage, ImageExt, core::WaitFor, runners::AsyncRunner};
+use tokio::time::{Duration, sleep, timeout};
 
 /// Test helper to wait for SSH server to be ready
 async fn wait_for_ssh_ready(port: u16, max_attempts: u32) -> bool {
@@ -117,7 +117,10 @@ async fn test_real_ssh_deployment_with_container() {
             }
         }
         Err(e) => {
-            println!("⚠️  SSH connection failed (expected in test environment): {}", e);
+            println!(
+                "⚠️  SSH connection failed (expected in test environment): {}",
+                e
+            );
         }
     }
 }

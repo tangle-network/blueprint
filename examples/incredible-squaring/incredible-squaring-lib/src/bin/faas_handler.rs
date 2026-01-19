@@ -29,14 +29,14 @@ fn main() -> io::Result<()> {
     io::stdin().read_to_string(&mut input)?;
 
     // Deserialize payload
-    let payload: FaasPayload = serde_json::from_str(&input)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let payload: FaasPayload =
+        serde_json::from_str(&input).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
     // Extract input (u64 from little-endian bytes)
     let x = u64::from_le_bytes(
         payload.args[..8]
             .try_into()
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid args length"))?
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid args length"))?,
     );
 
     // ⚡ EXECUTE THE ACTUAL JOB LOGIC (compiled code!)

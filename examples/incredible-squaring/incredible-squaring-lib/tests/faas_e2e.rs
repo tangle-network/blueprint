@@ -8,20 +8,18 @@
 //! Run with: cargo test --test faas_e2e
 
 mod tests {
-    use axum::{
-        extract::Json,
-        routing::post,
-        Router,
-    };
+    use axum::{Router, extract::Json, routing::post};
     use blueprint_faas::custom::HttpFaasExecutor;
     use blueprint_faas::{FaasPayload, FaasResponse};
+    use blueprint_sdk::Job;
+    use blueprint_sdk::tangle::layers::TangleLayer;
     use blueprint_sdk::testing::tempfile;
     use blueprint_sdk::testing::utils::setup_log;
     use blueprint_sdk::testing::utils::tangle::{InputValue, OutputValue, TangleTestHarness};
-    use blueprint_sdk::tangle::layers::TangleLayer;
-    use blueprint_sdk::Job;
     use color_eyre::Result;
-    use incredible_squaring_blueprint_lib::{square, square_faas, XSQUARE_FAAS_JOB_ID, XSQUARE_JOB_ID};
+    use incredible_squaring_blueprint_lib::{
+        XSQUARE_FAAS_JOB_ID, XSQUARE_JOB_ID, square, square_faas,
+    };
     use tokio::task::JoinHandle;
 
     /// Handler for the /square endpoint
@@ -60,11 +58,17 @@ mod tests {
 
         // Write input to stdin
         let mut stdin = child.stdin.take().expect("Failed to open stdin");
-        stdin.write_all(input_json.as_bytes()).await.expect("Failed to write to stdin");
+        stdin
+            .write_all(input_json.as_bytes())
+            .await
+            .expect("Failed to write to stdin");
         drop(stdin); // Close stdin to signal EOF
 
         // Wait for process to complete and collect output
-        let output = child.wait_with_output().await.expect("Failed to wait for faas_handler");
+        let output = child
+            .wait_with_output()
+            .await
+            .expect("Failed to wait for faas_handler");
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -73,8 +77,8 @@ mod tests {
         }
 
         // Parse response from stdout
-        let response: FaasResponse = serde_json::from_slice(&output.stdout)
-            .expect("Failed to parse FaaS response");
+        let response: FaasResponse =
+            serde_json::from_slice(&output.stdout).expect("Failed to parse FaaS response");
 
         let x = u64::from_le_bytes(payload.args[..8].try_into().unwrap());
         let result = u64::from_le_bytes(response.result[..8].try_into().unwrap());
@@ -97,9 +101,7 @@ mod tests {
         let url = format!("http://{}", addr);
 
         let handle = tokio::spawn(async move {
-            axum::serve(listener, app)
-                .await
-                .expect("Server failed");
+            axum::serve(listener, app).await.expect("Server failed");
         });
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -137,7 +139,11 @@ mod tests {
 
         // Test LOCAL execution (Job 0)
         let job_local = harness
-            .submit_job(service_id, XSQUARE_JOB_ID as u8, vec![InputValue::Uint64(5)])
+            .submit_job(
+                service_id,
+                XSQUARE_JOB_ID as u8,
+                vec![InputValue::Uint64(5)],
+            )
             .await?;
         let call_id_local = job_local.call_id;
 
@@ -149,13 +155,15 @@ mod tests {
 
         // Test FAAS execution (Job 1)
         let job_faas = harness
-            .submit_job(service_id, XSQUARE_FAAS_JOB_ID as u8, vec![InputValue::Uint64(6)])
+            .submit_job(
+                service_id,
+                XSQUARE_FAAS_JOB_ID as u8,
+                vec![InputValue::Uint64(6)],
+            )
             .await?;
         let call_id_faas = job_faas.call_id;
 
-        let results_faas = harness
-            .wait_for_job_execution(service_id, job_faas)
-            .await?;
+        let results_faas = harness.wait_for_job_execution(service_id, job_faas).await?;
 
         harness.verify_job(&results_faas, vec![OutputValue::Uint64(36)]);
 

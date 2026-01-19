@@ -2,8 +2,8 @@
 
 #[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
-    deployment::ssh::SshDeploymentClient,
     DeploymentTracker,
+    deployment::ssh::SshDeploymentClient,
     infra::provisioner::CloudProvisioner,
     monitoring::logs::{LogAggregator, LogFilters, LogLevel, LogSource, LogStreamer},
 };
@@ -268,7 +268,10 @@ fn determine_provider_log_source(
 ) -> Result<LogSource> {
     use blueprint_remote_providers::core::remote::CloudProvider;
 
-    let provider = deployment.provider.as_ref().ok_or_else(|| eyre!("Provider not found in deployment"))?;
+    let provider = deployment
+        .provider
+        .as_ref()
+        .ok_or_else(|| eyre!("Provider not found in deployment"))?;
     let _instance_id = deployment.id.clone();
 
     match provider {

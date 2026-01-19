@@ -6,8 +6,8 @@
 //! read by the Blueprint Manager to make deployment decisions (FaaS vs VM sizing).
 
 use blueprint_profiling::{BlueprintProfiles, JobProfile, ProfileConfig, ProfileRunner};
-use incredible_squaring_blueprint_lib::square;
 use blueprint_sdk::tangle::extract::TangleArg;
+use incredible_squaring_blueprint_lib::square;
 use std::time::Duration;
 
 #[tokio::test]
@@ -70,12 +70,14 @@ async fn test_profile_square_job() {
         && profile.peak_memory_mb < aws_lambda_memory_mb;
 
     println!("\nFaaS Compatibility (AWS Lambda limits):");
-    println!("  P95 duration: {}ms < {}ms: {}",
+    println!(
+        "  P95 duration: {}ms < {}ms: {}",
         profile.p95_duration_ms,
         aws_lambda_timeout_ms,
         profile.p95_duration_ms < aws_lambda_timeout_ms
     );
-    println!("  Peak memory: {}MB < {}MB: {}",
+    println!(
+        "  Peak memory: {}MB < {}MB: {}",
         profile.peak_memory_mb,
         aws_lambda_memory_mb,
         profile.peak_memory_mb < aws_lambda_memory_mb

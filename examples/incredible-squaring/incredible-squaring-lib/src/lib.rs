@@ -256,7 +256,11 @@ mod tests {
         // Check all pairs are unique
         for i in 0..all_ids.len() {
             for j in (i + 1)..all_ids.len() {
-                assert_ne!(all_ids[i], all_ids[j], "Job IDs at positions {} and {} are not unique", i, j);
+                assert_ne!(
+                    all_ids[i], all_ids[j],
+                    "Job IDs at positions {} and {} are not unique",
+                    i, j
+                );
             }
         }
     }

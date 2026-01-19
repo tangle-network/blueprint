@@ -11,16 +11,16 @@
 //! **IMPORTANT**: These tests use SSH key-based authentication (not passwords)
 //! because the SecureSshClient uses `-o BatchMode=yes` which disables password auth.
 
+use blueprint_remote_providers::core::resources::ResourceSpec;
 use blueprint_remote_providers::deployment::ssh::{
     ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
 };
-use blueprint_remote_providers::core::resources::ResourceSpec;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use testcontainers::{core::WaitFor, runners::AsyncRunner, GenericImage, ImageExt};
+use testcontainers::{GenericImage, ImageExt, core::WaitFor, runners::AsyncRunner};
 use tokio::process::Command;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{Duration, sleep, timeout};
 
 /// Generate SSH key pair for testing
 async fn generate_ssh_key() -> (PathBuf, String) {
@@ -73,7 +73,7 @@ async fn create_ssh_container() -> (testcontainers::ContainerAsync<GenericImage>
         .with_env_var("USER_NAME", "testuser")
         .with_env_var("PUBLIC_KEY", &public_key)
         .with_env_var("SUDO_ACCESS", "true")
-        .with_env_var("PASSWORD_ACCESS", "false");  // Only key-based auth
+        .with_env_var("PASSWORD_ACCESS", "false"); // Only key-based auth
 
     let container = ssh_image
         .start()
@@ -84,7 +84,10 @@ async fn create_ssh_container() -> (testcontainers::ContainerAsync<GenericImage>
         .await
         .expect("Failed to get SSH port");
 
-    println!("⏳ Waiting for SSH server to be ready on port {}...", ssh_port);
+    println!(
+        "⏳ Waiting for SSH server to be ready on port {}...",
+        ssh_port
+    );
     wait_for_ssh_ready(ssh_port, 40).await;
 
     (container, ssh_port, private_key_path)
@@ -139,22 +142,27 @@ fn create_test_deployment_config(name: &str) -> DeploymentConfig {
 async fn test_ssh_connection_works() {
     // Test: Verify SSH connection actually works before running other tests
     let (_container, ssh_port, key_path) = create_ssh_container().await;
-    
+
     println!("🔍 Testing raw SSH connection to 127.0.0.1:{}", ssh_port);
     println!("   Key: {}", key_path.display());
 
     // Test raw SSH command execution (not using SshDeploymentClient to avoid Docker verification)
     use tokio::process::Command;
-    
+
     let output = Command::new("ssh")
         .args(&[
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "-o", "BatchMode=yes",
-            "-i", key_path.to_str().unwrap(),
-            "-p", &ssh_port.to_string(),
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-o",
+            "BatchMode=yes",
+            "-i",
+            key_path.to_str().unwrap(),
+            "-p",
+            &ssh_port.to_string(),
             "testuser@127.0.0.1",
-            "echo 'SSH Connection Test Successful'"
+            "echo 'SSH Connection Test Successful'",
         ])
         .output()
         .await
@@ -186,7 +194,8 @@ async fn test_deploy_blueprint_as_container() {
     let config = create_test_deployment_config("test-blueprint-container");
 
     // Try to create client - will fail if Docker is not installed
-    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await {
+    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await
+    {
         Ok(c) => c,
         Err(e) => {
             println!("⚠️  Test skipped: Docker not available in container");
@@ -223,7 +232,10 @@ async fn test_deploy_blueprint_as_container() {
     println!("   Ports: {:?}", deployment.ports);
 
     // Verify deployment worked
-    assert!(!deployment.container_id.is_empty(), "Container ID must not be empty");
+    assert!(
+        !deployment.container_id.is_empty(),
+        "Container ID must not be empty"
+    );
     assert_eq!(deployment.host, "127.0.0.1");
 
     // Cleanup
@@ -241,7 +253,8 @@ async fn test_deploy_native_blueprint_binary() {
     let connection = create_test_connection(ssh_port, key_path);
     let config = create_test_deployment_config("test-native-blueprint");
 
-    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await {
+    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await
+    {
         Ok(c) => c,
         Err(e) => {
             println!("⚠️  Test skipped: Docker not available in container");
@@ -261,7 +274,10 @@ async fn test_deploy_native_blueprint_binary() {
     };
 
     let mut config_vars = HashMap::new();
-    config_vars.insert("rpc_endpoint".to_string(), "ws://localhost:9944".to_string());
+    config_vars.insert(
+        "rpc_endpoint".to_string(),
+        "ws://localhost:9944".to_string(),
+    );
     config_vars.insert("qos_port".to_string(), "9615".to_string());
 
     // Create a test binary (in real scenario, this would be the actual blueprint binary)
@@ -295,7 +311,8 @@ async fn test_deploy_blueprint_binary_as_service() {
     let connection = create_test_connection(ssh_port, key_path);
     let config = create_test_deployment_config("test-blueprint-service");
 
-    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await {
+    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await
+    {
         Ok(c) => c,
         Err(e) => {
             println!("⚠️  Test skipped: Docker not available in container");
@@ -345,7 +362,8 @@ async fn test_install_blueprint_runtime() {
     let connection = create_test_connection(ssh_port, key_path);
     let config = create_test_deployment_config("test-runtime-install");
 
-    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await {
+    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await
+    {
         Ok(c) => c,
         Err(e) => {
             println!("⚠️  Test skipped: Docker not available in container");
@@ -378,7 +396,8 @@ async fn test_check_blueprint_health_endpoints() {
     let connection = create_test_connection(ssh_port, key_path);
     let config = create_test_deployment_config("test-health-check");
 
-    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await {
+    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await
+    {
         Ok(c) => c,
         Err(e) => {
             println!("⚠️  Test skipped: Docker not available in container");
@@ -426,7 +445,8 @@ async fn test_blueprint_deployment_lifecycle() {
     let connection = create_test_connection(ssh_port, key_path);
     let config = create_test_deployment_config("test-lifecycle");
 
-    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await {
+    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await
+    {
         Ok(c) => c,
         Err(e) => {
             println!("⚠️  Test skipped: Docker not available in container");
@@ -465,13 +485,19 @@ async fn test_blueprint_deployment_lifecycle() {
 
     // Step 2: Verify deployment is running
     sleep(Duration::from_secs(2)).await;
-    match client.health_check_container(&deployment.container_id).await {
+    match client
+        .health_check_container(&deployment.container_id)
+        .await
+    {
         Ok(_) => println!("✅ Step 2: Blueprint is healthy"),
         Err(e) => println!("⚠️  Health check failed: {}", e),
     }
 
     // Step 3: Check Blueprint-specific health
-    match client.check_blueprint_health(&deployment.container_id).await {
+    match client
+        .check_blueprint_health(&deployment.container_id)
+        .await
+    {
         Ok(status) => println!("✅ Step 3: Blueprint health status: {:?}", status),
         Err(e) => println!("⚠️  Blueprint health check failed: {}", e),
     }
@@ -491,7 +517,8 @@ async fn test_blueprint_with_qos_metrics() {
     let connection = create_test_connection(ssh_port, key_path);
     let config = create_test_deployment_config("test-qos-metrics");
 
-    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await {
+    let client = match SshDeploymentClient::new(connection, ContainerRuntime::Docker, config).await
+    {
         Ok(c) => c,
         Err(e) => {
             println!("⚠️  Test skipped: Docker not available in container");
@@ -524,7 +551,10 @@ async fn test_blueprint_with_qos_metrics() {
 
             // Check if QoS port is exposed
             if let Some(qos_port) = deployment.ports.get("9615/tcp") {
-                println!("   QoS metrics available at {}:{}", deployment.host, qos_port);
+                println!(
+                    "   QoS metrics available at {}:{}",
+                    deployment.host, qos_port
+                );
             } else {
                 println!("   QoS port configuration applied (nginx doesn't expose 9615)");
             }
@@ -658,4 +688,3 @@ async fn test_blueprint_deployment_with_custom_runtime() {
         }
     }
 }
-

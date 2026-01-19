@@ -8,7 +8,9 @@ use blueprint_core::{error, info};
 use blueprint_remote_providers::deployment::manager_integration::{
     RemoteDeploymentRegistry, TtlManager,
 };
-use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker, CloudProvider, ResourceSpec};
+use blueprint_remote_providers::{
+    CloudProvider, CloudProvisioner, DeploymentTracker, ResourceSpec,
+};
 use blueprint_std::sync::Arc;
 
 /// Remote provider manager that handles cloud deployments
@@ -99,10 +101,7 @@ impl RemoteProviderManager {
             .await
         {
             Ok(instance) => {
-                info!(
-                    "Service deployed to {}: instance={}",
-                    provider, instance.id
-                );
+                info!("Service deployed to {}: instance={}", provider, instance.id);
 
                 // Register with TTL manager for automatic cleanup
                 self.ttl_manager

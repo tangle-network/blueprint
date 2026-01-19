@@ -4,8 +4,8 @@ use super::service::Status;
 use crate::error::{Error, Result};
 use blueprint_core::info;
 use blueprint_remote_providers::deployment::manager_integration::RemoteDeploymentConfig;
-use blueprint_remote_providers::deployment::tracker::DeploymentTracker;
 use blueprint_remote_providers::deployment::tracker::DeploymentStatus;
+use blueprint_remote_providers::deployment::tracker::DeploymentTracker;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -41,7 +41,11 @@ impl RemoteServiceInstance {
 
         // The deployment was already created in try_remote_deployment
         // Just verify it's running
-        match self.tracker.get_deployment_status(&self.config.instance_id).await {
+        match self
+            .tracker
+            .get_deployment_status(&self.config.instance_id)
+            .await
+        {
             Some(DeploymentStatus::Active) => {
                 *self.status.write().await = Status::Running;
                 Ok(())
@@ -66,7 +70,6 @@ impl RemoteServiceInstance {
                 *self.status.write().await = Status::Error;
                 Err(Error::Other("Remote deployment not found".into()))
             }
-
         }
     }
 

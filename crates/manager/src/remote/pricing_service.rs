@@ -30,10 +30,8 @@
 use crate::error::Result;
 use crate::remote::blueprint_analyzer::{BlueprintAnalysis, DeploymentStrategy, analyze_blueprint};
 use crate::remote::blueprint_fetcher::{BlueprintMetadata, fetch_blueprint_metadata};
-use blueprint_pricing_engine_lib::{
-    BenchmarkProfile, FaasPricingFetcher, PricingFetcher,
-};
 use blueprint_pricing_engine_lib::types::CloudProvider;
+use blueprint_pricing_engine_lib::{BenchmarkProfile, FaasPricingFetcher, PricingFetcher};
 use serde::{Deserialize, Serialize};
 
 /// Operator pricing service for calculating deployment costs

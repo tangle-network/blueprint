@@ -305,4 +305,3 @@ pub async fn run_auth_proxy(
         Ok(())
     }))
 }
-

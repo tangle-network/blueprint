@@ -68,11 +68,20 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     info!("Registered jobs (Execution × Aggregation matrix):");
     info!("  Local execution:");
     info!("    - Job {}: square (1 result)", XSQUARE_JOB_ID);
-    info!("    - Job {}: verified_square (2 results)", VERIFIED_XSQUARE_JOB_ID);
-    info!("    - Job {}: consensus_square (3 results)", CONSENSUS_XSQUARE_JOB_ID);
+    info!(
+        "    - Job {}: verified_square (2 results)",
+        VERIFIED_XSQUARE_JOB_ID
+    );
+    info!(
+        "    - Job {}: consensus_square (3 results)",
+        CONSENSUS_XSQUARE_JOB_ID
+    );
     info!("  FaaS execution:");
     info!("    - Job {}: square_faas (1 result)", XSQUARE_FAAS_JOB_ID);
-    info!("    - Job {}: verified_square_faas (2 results)", VERIFIED_XSQUARE_FAAS_JOB_ID);
+    info!(
+        "    - Job {}: verified_square_faas (2 results)",
+        VERIFIED_XSQUARE_FAAS_JOB_ID
+    );
 
     let result = BlueprintRunner::builder(tangle_config, env)
         .router(router())

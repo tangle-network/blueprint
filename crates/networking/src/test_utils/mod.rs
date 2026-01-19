@@ -7,7 +7,7 @@ use libp2p::{
     Multiaddr, PeerId,
     identity::{self, Keypair},
 };
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, fmt::Write, time::Duration};
 use tokio::time::timeout;
 
 pub fn setup_log() {
@@ -419,7 +419,7 @@ pub async fn wait_for_all_handshakes<K: KeyType>(
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .subsec_nanos();
-            let jitter = Duration::from_millis((nanos % 50) as u64);
+            let jitter = Duration::from_millis(u64::from(nanos % 50));
             tokio::time::sleep(current_delay + jitter).await;
 
             // Increase delay for next iteration (capped at max)
@@ -450,13 +450,14 @@ pub async fn wait_for_all_handshakes<K: KeyType>(
             for (i, j) in pending.iter().take(10) {
                 let peer_i = &handles[*i].local_peer_id;
                 let peer_j = &handles[*j].local_peer_id;
-                error_msg.push_str(&format!(
-                    "  Node {} ({}) -> Node {} ({})\n",
+                let _ = writeln!(
+                    error_msg,
+                    "  Node {} ({}) -> Node {} ({})",
                     i, peer_i, j, peer_j
-                ));
+                );
             }
             if pending.len() > 10 {
-                error_msg.push_str(&format!("  ... and {} more\n", pending.len() - 10));
+                let _ = writeln!(error_msg, "  ... and {} more", pending.len() - 10);
             }
             panic!("{}", error_msg);
         }

@@ -2,9 +2,13 @@
 
 #[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
-    deployment::{DeploymentVersion, UpdateManager, UpdateStrategy, DeploymentRecord},
-    infra::{provisioner::CloudProvisioner, traits::BlueprintDeploymentResult, types::{ProvisionedInstance, InstanceStatus}},
     DeploymentTracker,
+    deployment::{DeploymentRecord, DeploymentVersion, UpdateManager, UpdateStrategy},
+    infra::{
+        provisioner::CloudProvisioner,
+        traits::BlueprintDeploymentResult,
+        types::{InstanceStatus, ProvisionedInstance},
+    },
 };
 use color_eyre::{Result, eyre::eyre};
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
@@ -54,7 +58,7 @@ pub async fn update(
 
     // Get current deployment
     let provisioner = CloudProvisioner::new().await?;
-    
+
     let tracker_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".tangle")
@@ -105,7 +109,10 @@ pub async fn update(
     pb.enable_steady_tick(Duration::from_millis(100));
 
     // Get the appropriate adapter based on provider
-    let provider = current.provider.as_ref().ok_or_else(|| eyre!("Provider not found"))?;
+    let provider = current
+        .provider
+        .as_ref()
+        .ok_or_else(|| eyre!("Provider not found"))?;
     let adapter = provisioner.get_adapter(provider)?;
 
     // Extract resource spec from current deployment
@@ -134,7 +141,13 @@ pub async fn update(
     let current_deployment = deployment_record_to_blueprint_result(current)?;
 
     match update_manager
-        .update_blueprint(adapter.as_ref(), &image, &resource_spec, env_vars, &current_deployment)
+        .update_blueprint(
+            adapter.as_ref(),
+            &image,
+            &resource_spec,
+            env_vars,
+            &current_deployment,
+        )
         .await
     {
         Ok(new_deployment) => {
@@ -154,7 +167,7 @@ pub async fn update(
                     println!("    {} -> {}", internal, external);
                 }
             }
-            
+
             Ok(())
         }
         Err(e) => {
@@ -183,7 +196,7 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
 
     // Get deployment history
     let provisioner = CloudProvisioner::new().await?;
-    
+
     let tracker_path = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".tangle")
@@ -267,7 +280,10 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
     pb.enable_steady_tick(Duration::from_millis(100));
 
     // Get the appropriate adapter
-    let provider = current.provider.as_ref().ok_or_else(|| eyre!("Provider not found"))?;
+    let provider = current
+        .provider
+        .as_ref()
+        .ok_or_else(|| eyre!("Provider not found"))?;
     let adapter = provisioner.get_adapter(provider)?;
 
     // Convert DeploymentRecord to BlueprintDeploymentResult
@@ -353,22 +369,31 @@ pub async fn history(service_id: String, limit: usize) -> Result<()> {
 }
 
 /// Convert DeploymentRecord to BlueprintDeploymentResult for update operations
-fn deployment_record_to_blueprint_result(record: &DeploymentRecord) -> Result<BlueprintDeploymentResult> {
-    let provider = record.provider.as_ref()
+fn deployment_record_to_blueprint_result(
+    record: &DeploymentRecord,
+) -> Result<BlueprintDeploymentResult> {
+    let provider = record
+        .provider
+        .as_ref()
         .ok_or_else(|| eyre!("Provider not found in deployment record"))?;
-    
+
     let instance = ProvisionedInstance {
         id: record.id.clone(),
         provider: provider.clone(),
-        instance_type: record.metadata.get("instance_type")
+        instance_type: record
+            .metadata
+            .get("instance_type")
             .cloned()
             .unwrap_or_else(|| "unknown".to_string()),
-        region: record.region.clone().unwrap_or_else(|| "unknown".to_string()),
+        region: record
+            .region
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string()),
         public_ip: record.metadata.get("public_ip").cloned(),
         private_ip: record.metadata.get("private_ip").cloned(),
         status: InstanceStatus::Running,
     };
-    
+
     // Extract port mappings from metadata
     let mut port_mappings = HashMap::new();
     for (key, value) in &record.metadata {
@@ -380,7 +405,7 @@ fn deployment_record_to_blueprint_result(record: &DeploymentRecord) -> Result<Bl
             }
         }
     }
-    
+
     Ok(BlueprintDeploymentResult {
         instance,
         blueprint_id: record.blueprint_id.clone(),

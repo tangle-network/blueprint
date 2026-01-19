@@ -1822,7 +1822,10 @@ impl TangleEvmClient {
     ///
     /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
     /// For ERC20 tokens, automatically approves the restaking contract first.
-    pub async fn register_operator_restaking(&self, stake_amount: U256) -> Result<TransactionResult> {
+    pub async fn register_operator_restaking(
+        &self,
+        stake_amount: U256,
+    ) -> Result<TransactionResult> {
         let bond_token = self.operator_bond_token().await?;
 
         // Auto-approve ERC20 bond token if needed

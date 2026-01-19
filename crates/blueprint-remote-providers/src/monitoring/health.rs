@@ -397,7 +397,10 @@ mod tests {
             Err(Error::Other("not implemented".into()))
         }
 
-        async fn health_check_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<bool> {
+        async fn health_check_blueprint(
+            &self,
+            _deployment: &BlueprintDeploymentResult,
+        ) -> Result<bool> {
             Ok(true)
         }
 
@@ -422,7 +425,10 @@ mod tests {
         };
 
         let mut providers = std::collections::HashMap::new();
-        providers.insert(CloudProvider::AWS, Box::new(adapter) as Box<dyn CloudProviderAdapter>);
+        providers.insert(
+            CloudProvider::AWS,
+            Box::new(adapter) as Box<dyn CloudProviderAdapter>,
+        );
         let provisioner = Arc::new(CloudProvisioner::with_providers(providers));
 
         let mut record = DeploymentRecord::new(
@@ -439,8 +445,11 @@ mod tests {
             .unwrap();
 
         let monitor = Arc::new(
-            HealthMonitor::new(provisioner, tracker.clone())
-                .with_config(Duration::from_secs(1), 1, true),
+            HealthMonitor::new(provisioner, tracker.clone()).with_config(
+                Duration::from_secs(1),
+                1,
+                true,
+            ),
         );
 
         let task = tokio::spawn({
@@ -455,14 +464,8 @@ mod tests {
 
         assert!(tracker.get("instance-old").await.unwrap().is_none());
         assert!(tracker.get("instance-new").await.unwrap().is_some());
-        assert_eq!(
-            terminate_calls.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
-        assert_eq!(
-            provision_calls.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
+        assert_eq!(terminate_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(provision_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
         task.abort();
     }
@@ -481,7 +484,10 @@ mod tests {
         };
 
         let mut providers = std::collections::HashMap::new();
-        providers.insert(CloudProvider::AWS, Box::new(adapter) as Box<dyn CloudProviderAdapter>);
+        providers.insert(
+            CloudProvider::AWS,
+            Box::new(adapter) as Box<dyn CloudProviderAdapter>,
+        );
         let provisioner = Arc::new(CloudProvisioner::with_providers(providers));
 
         let mut record = DeploymentRecord::new(
