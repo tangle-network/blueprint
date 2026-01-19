@@ -4,6 +4,7 @@
 
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
+use crate::create_provider_client;
 use crate::deployment::tracker::{DeploymentRecord, DeploymentTracker};
 use crate::infra::provisioner::CloudProvisioner;
 use crate::infra::types::InstanceStatus;
@@ -250,10 +251,7 @@ impl Default for ApplicationHealthChecker {
 impl ApplicationHealthChecker {
     pub fn new() -> Self {
         Self {
-            http_client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(5))
-                .build()
-                .unwrap(),
+            http_client: create_provider_client(5).unwrap_or_default(),
         }
     }
 
@@ -296,7 +294,12 @@ impl crate::deployment::tracker::DeploymentType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::error::Error;
+    use crate::deployment::DeploymentType;
+    use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
+    use crate::infra::types::ProvisionedInstance;
     use tempfile::TempDir;
+    use tokio::task::yield_now;
 
     #[tokio::test]
     async fn test_health_status_mapping() {
@@ -343,5 +346,153 @@ mod tests {
         assert_eq!(monitor.check_interval, Duration::from_secs(30));
         assert_eq!(monitor.max_consecutive_failures, 5);
         assert!(!monitor.auto_recover);
+    }
+
+    struct MockAdapter {
+        status: Arc<std::sync::Mutex<InstanceStatus>>,
+        terminate_calls: Arc<std::sync::atomic::AtomicUsize>,
+        provision_calls: Arc<std::sync::atomic::AtomicUsize>,
+        provision_id: String,
+    }
+
+    #[async_trait::async_trait]
+    impl CloudProviderAdapter for MockAdapter {
+        async fn provision_instance(
+            &self,
+            _instance_type: &str,
+            region: &str,
+        ) -> Result<ProvisionedInstance> {
+            self.provision_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(ProvisionedInstance::builder(
+                self.provision_id.clone(),
+                CloudProvider::AWS,
+                region.to_string(),
+            )
+            .status(InstanceStatus::Running)
+            .build())
+        }
+
+        async fn terminate_instance(&self, _instance_id: &str) -> Result<()> {
+            self.terminate_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let mut status = self.status.lock().unwrap();
+            *status = InstanceStatus::Terminated;
+            Ok(())
+        }
+
+        async fn get_instance_status(&self, _instance_id: &str) -> Result<InstanceStatus> {
+            Ok(*self.status.lock().unwrap())
+        }
+
+        async fn deploy_blueprint_with_target(
+            &self,
+            _target: &crate::core::deployment_target::DeploymentTarget,
+            _blueprint_image: &str,
+            _resource_spec: &crate::core::resources::ResourceSpec,
+            _env_vars: std::collections::HashMap<String, String>,
+        ) -> Result<BlueprintDeploymentResult> {
+            Err(Error::Other("not implemented".into()))
+        }
+
+        async fn health_check_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<bool> {
+            Ok(true)
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_health_monitor_recovers_unhealthy_instance() {
+        let temp_dir = TempDir::new().unwrap();
+        let tracker = Arc::new(DeploymentTracker::new(temp_dir.path()).await.unwrap());
+
+        let status = Arc::new(std::sync::Mutex::new(InstanceStatus::Stopped));
+        let terminate_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let provision_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let adapter = MockAdapter {
+            status: status.clone(),
+            terminate_calls: terminate_calls.clone(),
+            provision_calls: provision_calls.clone(),
+            provision_id: "instance-new".to_string(),
+        };
+
+        let mut providers = std::collections::HashMap::new();
+        providers.insert(CloudProvider::AWS, Box::new(adapter) as Box<dyn CloudProviderAdapter>);
+        let provisioner = Arc::new(CloudProvisioner::with_providers(providers));
+
+        let mut record = DeploymentRecord::new(
+            "instance-old".to_string(),
+            DeploymentType::AwsEc2,
+            crate::core::resources::ResourceSpec::default(),
+            None,
+        );
+        record.id = "instance-old".to_string();
+
+        tracker
+            .register_deployment("instance-old".to_string(), record)
+            .await
+            .unwrap();
+
+        let monitor = Arc::new(
+            HealthMonitor::new(provisioner, tracker.clone())
+                .with_config(Duration::from_secs(1), 1, true),
+        );
+
+        let task = tokio::spawn({
+            let monitor = monitor.clone();
+            async move { monitor.start_monitoring().await }
+        });
+
+        tokio::time::advance(Duration::from_secs(1)).await;
+        yield_now().await;
+        tokio::time::advance(Duration::from_secs(11)).await;
+        yield_now().await;
+
+        assert!(tracker.get("instance-old").await.unwrap().is_none());
+        assert!(tracker.get("instance-new").await.unwrap().is_some());
+        assert_eq!(
+            terminate_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        assert_eq!(
+            provision_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn test_health_monitor_is_healthy_when_running() {
+        let temp_dir = TempDir::new().unwrap();
+        let tracker = Arc::new(DeploymentTracker::new(temp_dir.path()).await.unwrap());
+
+        let status = Arc::new(std::sync::Mutex::new(InstanceStatus::Running));
+        let adapter = MockAdapter {
+            status,
+            terminate_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            provision_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            provision_id: "instance-new".to_string(),
+        };
+
+        let mut providers = std::collections::HashMap::new();
+        providers.insert(CloudProvider::AWS, Box::new(adapter) as Box<dyn CloudProviderAdapter>);
+        let provisioner = Arc::new(CloudProvisioner::with_providers(providers));
+
+        let mut record = DeploymentRecord::new(
+            "instance-ok".to_string(),
+            DeploymentType::AwsEc2,
+            crate::core::resources::ResourceSpec::default(),
+            None,
+        );
+        record.id = "instance-ok".to_string();
+
+        tracker
+            .register_deployment("instance-ok".to_string(), record)
+            .await
+            .unwrap();
+
+        let monitor = HealthMonitor::new(provisioner, tracker);
+        let healthy = monitor.is_healthy("instance-ok").await.unwrap();
+        assert!(healthy);
     }
 }

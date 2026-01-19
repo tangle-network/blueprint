@@ -13,7 +13,6 @@ use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
 use crate::monitoring::discovery::{CloudCredentials, MachineTypeDiscovery};
 use crate::providers::azure::adapter::AzureAdapter;
 use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
-#[cfg(feature = "gcp")]
 use crate::providers::gcp::GcpAdapter;
 use crate::providers::vultr::adapter::VultrAdapter;
 use blueprint_core::{error, info, warn};
@@ -39,7 +38,7 @@ impl CloudProvisioner {
             );
         }
 
-        #[cfg(feature = "gcp")]
+        // GCP uses REST API via reqwest, no extra dependencies needed
         if std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
             providers.insert(
                 CloudProvider::GCP,
@@ -75,6 +74,17 @@ impl CloudProvisioner {
             retry_policy: RetryPolicy::default(),
             discovery: MachineTypeDiscovery::new(),
         })
+    }
+
+    #[cfg(test)]
+    pub fn with_providers(
+        providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
+    ) -> Self {
+        Self {
+            providers,
+            retry_policy: RetryPolicy::default(),
+            discovery: MachineTypeDiscovery::new(),
+        }
     }
 
     /// Get the adapter for a specific provider
@@ -114,7 +124,7 @@ impl CloudProvisioner {
                     );
                     return Ok(instance);
                 }
-                Err(e) if attempt < self.retry_policy.max_retries => {
+                Err(e) if attempt < self.retry_policy.max_retries() => {
                     attempt += 1;
                     let delay = self.retry_policy.delay_for_attempt(attempt);
                     warn!(
