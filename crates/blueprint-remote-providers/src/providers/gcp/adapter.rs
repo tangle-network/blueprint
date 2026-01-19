@@ -1,20 +1,30 @@
 //! GCP CloudProviderAdapter implementation
+//!
+//! This adapter uses the GCP REST API via reqwest and is always available.
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
+use crate::providers::common::ProvisioningConfig;
 use crate::providers::gcp::GcpProvisioner;
+use crate::security::auth;
+use crate::shared::security::BlueprintSecurityConfig;
 use async_trait::async_trait;
-use blueprint_core::info;
+use blueprint_core::{info, warn};
 use blueprint_std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 
 /// Professional GCP adapter with security and performance optimizations
 pub struct GcpAdapter {
-    provisioner: GcpProvisioner,
+    provisioner: Arc<Mutex<GcpProvisioner>>,
     project_id: String,
     ssh_key_path: Option<String>,
+    /// Maps instance IDs to their zones for proper termination
+    zone_map: Arc<RwLock<HashMap<String, String>>>,
+    /// Default region used when zone lookup fails
+    default_region: String,
 }
 
 impl GcpAdapter {
@@ -26,130 +36,122 @@ impl GcpAdapter {
         let provisioner = GcpProvisioner::new(project_id.clone()).await?;
 
         let ssh_key_path = std::env::var("GCP_SSH_KEY_PATH").ok();
+        let default_region =
+            std::env::var("GCP_DEFAULT_REGION").unwrap_or_else(|_| "us-central1".to_string());
 
         Ok(Self {
-            provisioner,
+            provisioner: Arc::new(Mutex::new(provisioner)),
             project_id,
             ssh_key_path,
+            zone_map: Arc::new(RwLock::new(HashMap::new())),
+            default_region,
         })
-    }
-
-    /// Convert ProvisionedInfrastructure to ProvisionedInstance
-    fn to_provisioned_instance(infra: ProvisionedInfrastructure) -> ProvisionedInstance {
-        ProvisionedInstance {
-            id: infra.instance_id,
-            public_ip: infra.public_ip,
-            private_ip: infra.private_ip,
-            status: InstanceStatus::Running,
-            provider: infra.provider,
-            region: infra.region,
-            instance_type: infra.instance_type,
-        }
     }
 
     /// Create secure firewall rules for blueprint deployment
     async fn ensure_firewall_rules(&self) -> Result<()> {
-        #[cfg(feature = "gcp")]
-        {
-            let access_token = std::env::var("GCP_ACCESS_TOKEN").map_err(|_| {
-                Error::ConfigurationError(
-                    "No GCP access token available. Set GCP_ACCESS_TOKEN".into(),
-                )
-            })?;
+        let access_token = auth::gcp_access_token().await?;
 
-            let client = reqwest::Client::new();
-            let base_url = format!(
-                "https://compute.googleapis.com/compute/v1/projects/{}/global/firewalls",
-                self.project_id
-            );
+        let client = crate::create_provider_client(30)?;
+        let base_url = format!(
+            "https://compute.googleapis.com/compute/v1/projects/{}/global/firewalls",
+            self.project_id
+        );
 
-            let firewall_rules = vec![
-                serde_json::json!({
-                    "name": format!("blueprint-ssh-{}", uuid::Uuid::new_v4().simple()),
-                    "description": "Allow SSH access for Blueprint management",
-                    "direction": "INGRESS",
-                    "priority": 1000,
-                    "targetTags": ["blueprint"],
-                    "allowed": [{
-                        "IPProtocol": "tcp",
-                        "ports": ["22"]
-                    }],
-                    "sourceRanges": ["0.0.0.0/0"], // Open to all - restrict for production
-                }),
-                serde_json::json!({
-                    "name": format!("blueprint-qos-{}", uuid::Uuid::new_v4().simple()),
-                    "description": "Allow Blueprint QoS ports",
-                    "direction": "INGRESS",
-                    "priority": 1000,
-                    "targetTags": ["blueprint"],
-                    "allowed": [{
-                        "IPProtocol": "tcp",
-                        "ports": ["8080", "9615", "9944"]
-                    }],
-                    "sourceRanges": ["0.0.0.0/0"], // Open to all - restrict for production
-                }),
-            ];
+        let firewall_rules = Self::build_firewall_rules();
 
-            info!(
-                "Creating {} firewall rules for GCP Blueprint security",
-                firewall_rules.len()
-            );
+        info!(
+            "Creating {} firewall rules for GCP Blueprint security",
+            firewall_rules.len()
+        );
 
-            for rule in &firewall_rules {
-                let rule_name = rule["name"].as_str().unwrap_or("unknown");
+        for rule in &firewall_rules {
+            let rule_name = rule["name"].as_str().unwrap_or("unknown");
 
-                // Check if rule already exists
-                let check_url = format!("{}/{}", base_url, rule_name);
-                let check_response = client
-                    .get(&check_url)
-                    .bearer_auth(&access_token)
-                    .send()
-                    .await;
+            // Check if rule already exists
+            let check_url = format!("{}/{}", base_url, rule_name);
+            let check_response = client
+                .get(&check_url)
+                .bearer_auth(&access_token)
+                .send()
+                .await;
 
-                if let Ok(resp) = check_response {
-                    if resp.status().is_success() {
-                        info!("Firewall rule {} already exists, skipping", rule_name);
-                        continue;
-                    }
-                }
-
-                // Create the firewall rule
-                match client
-                    .post(&base_url)
-                    .bearer_auth(&access_token)
-                    .json(rule)
-                    .send()
-                    .await
-                {
-                    Ok(response) if response.status().is_success() => {
-                        info!(
-                            "Created firewall rule: {} - {}",
-                            rule_name,
-                            rule["description"].as_str().unwrap_or("")
-                        );
-                    }
-                    Ok(response) => {
-                        let error_text = response.text().await.unwrap_or_default();
-                        warn!(
-                            "Failed to create firewall rule {}: {} - {}",
-                            rule_name,
-                            response.status(),
-                            error_text
-                        );
-                    }
-                    Err(e) => {
-                        warn!("Failed to create firewall rule {}: {}", rule_name, e);
-                    }
+            if let Ok(resp) = check_response {
+                if resp.status().is_success() {
+                    info!("Firewall rule {} already exists, skipping", rule_name);
+                    continue;
                 }
             }
 
-            Ok(())
+            // Create the firewall rule
+            match client
+                .post(&base_url)
+                .bearer_auth(&access_token)
+                .json(rule)
+                .send()
+                .await
+            {
+                Ok(response) if response.status().is_success() => {
+                    info!(
+                        "Created firewall rule: {} - {}",
+                        rule_name,
+                        rule["description"].as_str().unwrap_or("")
+                    );
+                }
+                Ok(response) => {
+                    let status = response.status();
+                    let error_text = response.text().await.unwrap_or_default();
+                    warn!(
+                        "Failed to create firewall rule {}: {} - {}",
+                        rule_name, status, error_text
+                    );
+                }
+                Err(e) => {
+                    warn!("Failed to create firewall rule {}: {}", rule_name, e);
+                }
+            }
         }
-        #[cfg(not(feature = "gcp"))]
-        {
-            info!("GCP firewall rules skipped - gcp feature not enabled");
-            Ok(())
-        }
+
+        Ok(())
+    }
+
+    fn build_firewall_rules() -> Vec<serde_json::Value> {
+        let security_config = BlueprintSecurityConfig::default();
+        let rules = security_config.standard_rules();
+        vec![
+            serde_json::json!({
+                "name": format!("blueprint-ssh-{}", uuid::Uuid::new_v4().simple()),
+                "description": "Allow SSH access for Blueprint management",
+                "direction": "INGRESS",
+                "priority": 1000,
+                "targetTags": ["blueprint"],
+                "allowed": [{
+                    "IPProtocol": "tcp",
+                    "ports": ["22"]
+                }],
+                "sourceRanges": rules
+                    .iter()
+                    .find(|rule| rule.name == "blueprint-ssh")
+                    .map(|rule| rule.source_cidrs.clone())
+                    .unwrap_or_else(|| vec!["0.0.0.0/0".to_string()]),
+            }),
+            serde_json::json!({
+                "name": format!("blueprint-qos-{}", uuid::Uuid::new_v4().simple()),
+                "description": "Allow Blueprint QoS ports",
+                "direction": "INGRESS",
+                "priority": 1000,
+                "targetTags": ["blueprint"],
+                "allowed": [{
+                    "IPProtocol": "tcp",
+                    "ports": ["8080", "9615", "9944"]
+                }],
+                "sourceRanges": rules
+                    .iter()
+                    .find(|rule| rule.name == "blueprint-qos")
+                    .map(|rule| rule.source_cidrs.clone())
+                    .unwrap_or_else(|| vec!["0.0.0.0/0".to_string()]),
+            }),
+        ]
     }
 }
 
@@ -190,63 +192,84 @@ impl CloudProviderAdapter for GcpAdapter {
             },
         };
 
-        let infra = self.provisioner.provision_instance(&spec, &config).await?;
+        let infra = self
+            .provisioner
+            .lock()
+            .await
+            .provision_instance(&spec, &config)
+            .await?;
+
+        // Store the zone for later termination/status lookups
+        let zone = format!("{}-a", region);
+        self.zone_map
+            .write()
+            .await
+            .insert(infra.instance_id.clone(), zone.clone());
 
         info!(
-            "Provisioned GCP instance {} in region {}",
-            infra.instance_id, region
+            "Provisioned GCP instance {} in zone {} (region {})",
+            infra.instance_id, zone, region
         );
 
-        Ok(Self::to_provisioned_instance(infra))
+        Ok(infra.into_provisioned_instance())
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        // For GCP, we need the zone as well as instance name
-        // In a real implementation, we'd store this mapping
-        let zone = "us-central1-a"; // Default zone - in production, store zone mapping
-        self.provisioner.terminate_instance(instance_id, zone).await
+        // Retrieve the zone from our tracking map, falling back to default region
+        let zone = self
+            .zone_map
+            .read()
+            .await
+            .get(instance_id)
+            .cloned()
+            .unwrap_or_else(|| format!("{}-a", self.default_region));
+
+        self.provisioner
+            .lock()
+            .await
+            .terminate_instance(instance_id, &zone)
+            .await?;
+
+        // Remove from zone map on successful termination
+        self.zone_map.write().await.remove(instance_id);
+
+        Ok(())
     }
 
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        #[cfg(feature = "gcp")]
-        {
-            let zone = "us-central1-a"; // Default zone
-            let url = format!(
-                "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
-                self.project_id, zone, instance_id
-            );
+        // Retrieve the zone from our tracking map, falling back to default region
+        let zone = self
+            .zone_map
+            .read()
+            .await
+            .get(instance_id)
+            .cloned()
+            .unwrap_or_else(|| format!("{}-a", self.default_region));
 
-            let access_token = std::env::var("GCP_ACCESS_TOKEN").map_err(|_| {
-                Error::ConfigurationError(
-                    "No GCP access token available. Set GCP_ACCESS_TOKEN".into(),
-                )
-            })?;
+        let url = format!(
+            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
+            self.project_id, zone, instance_id
+        );
 
-            let client = reqwest::Client::new();
-            match client.get(&url).bearer_auth(&access_token).send().await {
-                Ok(response) if response.status().is_success() => {
-                    if let Ok(instance) = response.json::<serde_json::Value>().await {
-                        match instance["status"].as_str() {
-                            Some("RUNNING") => Ok(InstanceStatus::Running),
-                            Some("PROVISIONING") | Some("STAGING") => Ok(InstanceStatus::Starting),
-                            Some("TERMINATED") | Some("STOPPING") => Ok(InstanceStatus::Terminated),
-                            _ => Ok(InstanceStatus::Unknown),
-                        }
-                    } else {
-                        Ok(InstanceStatus::Unknown)
+        let access_token = auth::gcp_access_token().await?;
+
+        let client = crate::create_provider_client(30)?;
+        match client.get(&url).bearer_auth(&access_token).send().await {
+            Ok(response) if response.status().is_success() => {
+                if let Ok(instance) = response.json::<serde_json::Value>().await {
+                    match instance["status"].as_str() {
+                        Some("RUNNING") => Ok(InstanceStatus::Running),
+                        Some("PROVISIONING") | Some("STAGING") => Ok(InstanceStatus::Starting),
+                        Some("TERMINATED") | Some("STOPPING") => Ok(InstanceStatus::Terminated),
+                        _ => Ok(InstanceStatus::Unknown),
                     }
+                } else {
+                    Ok(InstanceStatus::Unknown)
                 }
-                Ok(response) if response.status() == 404 => Ok(InstanceStatus::Terminated),
-                Ok(_) => Ok(InstanceStatus::Unknown),
-                Err(_) => Ok(InstanceStatus::Unknown),
             }
-        }
-        #[cfg(not(feature = "gcp"))]
-        {
-            let _ = instance_id; // Suppress unused warning
-            Err(Error::ConfigurationError(
-                "GCP support not enabled. Enable the 'gcp' feature".into(),
-            ))
+            Ok(response) if response.status() == 404 => Ok(InstanceStatus::Terminated),
+            Ok(_) => Ok(InstanceStatus::Unknown),
+            Err(_) => Ok(InstanceStatus::Unknown),
         }
     }
 
@@ -300,14 +323,36 @@ impl CloudProviderAdapter for GcpAdapter {
             Ok(false)
         }
     }
+}
 
-    async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
-        info!(
-            "Cleaning up GCP Blueprint deployment: {}",
-            deployment.blueprint_id
-        );
-        // Terminate the Compute Engine instance
-        self.terminate_instance(&deployment.instance.id).await
+#[cfg(test)]
+mod tests {
+    use super::GcpAdapter;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn firewall_rules_use_configured_cidrs() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8");
+            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "192.168.0.0/16");
+        }
+
+        let rules = GcpAdapter::build_firewall_rules();
+        let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
+        let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
+        assert_eq!(ssh_rule[0].as_str(), Some("10.0.0.0/8"));
+        assert_eq!(qos_rule[0].as_str(), Some("192.168.0.0/16"));
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
     }
 }
 

@@ -4,7 +4,10 @@
 //! that work consistently across all cloud providers.
 
 use crate::core::error::{Error, Result};
+use crate::create_default_provider_client;
+use crate::security::auth;
 use blueprint_core::info;
+use url::Url;
 
 /// Standard Blueprint security configuration
 #[derive(Debug, Clone)]
@@ -166,52 +169,19 @@ impl SecurityGroupManager for AzureNsgManager {
         let resource_group = self.resource_group.clone();
 
         async move {
-            let access_token = std::env::var("AZURE_ACCESS_TOKEN")
-                .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
+            let access_token = auth::azure_access_token().await?;
 
-            let client = reqwest::Client::new();
+            let client = create_default_provider_client()?;
             let url = format!(
                 "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{name}?api-version=2023-09-01"
             );
+            validate_management_url(&url)?;
 
             let rules = config.standard_rules();
             let mut security_rules = Vec::new();
 
             for (index, rule) in rules.iter().enumerate() {
-                let direction = match rule.direction {
-                    Direction::Ingress => "Inbound",
-                    Direction::Egress => "Outbound",
-                };
-
-                let protocol = match rule.protocol {
-                    Protocol::Tcp => "Tcp",
-                    Protocol::Udp => "Udp",
-                    Protocol::Icmp => "Icmp",
-                };
-
-                let port_ranges = if rule.ports.len() == 1 {
-                    rule.ports[0].to_string()
-                } else {
-                    rule.ports
-                        .iter()
-                        .map(|p| p.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                };
-
-                security_rules.push(serde_json::json!({
-                "name": format!("{}-{}", rule.name, index),
-                "properties": {
-                    "protocol": protocol,
-                    "sourcePortRange": "*",
-                    "destinationPortRange": port_ranges,
-                    "sourceAddressPrefix": rule.source_cidrs.first().unwrap_or(&"*".to_string()),
-                    "destinationAddressPrefix": "*",
-                    "access": "Allow",
-                    "priority": rule.priority + index as u16,
-                    "direction": direction
-                }
-            }));
+                security_rules.push(build_azure_rule_payload(rule, index));
             }
 
             let nsg_body = serde_json::json!({
@@ -254,13 +224,13 @@ impl SecurityGroupManager for AzureNsgManager {
         let resource_group = self.resource_group.clone();
 
         async move {
-            let access_token = std::env::var("AZURE_ACCESS_TOKEN")
-                .map_err(|_| Error::ConfigurationError("AZURE_ACCESS_TOKEN not set".into()))?;
+            let access_token = auth::azure_access_token().await?;
 
-            let client = reqwest::Client::new();
+            let client = create_default_provider_client()?;
             let url = format!(
                 "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Network/networkSecurityGroups/{group_id}?api-version=2023-09-01"
             );
+            validate_management_url(&url)?;
 
             match client.delete(&url).bearer_auth(&access_token).send().await {
                 Ok(response) if response.status().is_success() => {
@@ -294,7 +264,7 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
         name: &str,
         config: &BlueprintSecurityConfig,
     ) -> Result<String> {
-        let client = reqwest::Client::new();
+        let client = create_default_provider_client()?;
         let url = "https://api.digitalocean.com/v2/firewalls";
 
         let rules = config.standard_rules();
@@ -329,7 +299,9 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
                     let mut egress_rule = rule_json;
                     egress_rule["destinations"] =
                         serde_json::json!({"addresses": rule.destination_cidrs});
-                    egress_rule.as_object_mut().unwrap().remove("sources");
+                    if let Some(obj) = egress_rule.as_object_mut() {
+                        obj.remove("sources");
+                    }
                     outbound_rules.push(egress_rule);
                 }
             }
@@ -374,7 +346,7 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
     }
 
     async fn delete_security_group(&self, group_id: &str) -> Result<()> {
-        let client = reqwest::Client::new();
+        let client = create_default_provider_client()?;
         let url = format!("https://api.digitalocean.com/v2/firewalls/{group_id}");
 
         match client
@@ -395,6 +367,75 @@ impl SecurityGroupManager for DigitalOceanFirewallManager {
     }
 }
 
+fn validate_management_url(url: &str) -> Result<()> {
+    let parsed =
+        Url::parse(url).map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
+    if parsed.scheme() != "https" {
+        return Err(Error::ConfigurationError(
+            "Azure management URLs must use HTTPS".into(),
+        ));
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| Error::ConfigurationError("Missing host in URL".into()))?;
+    if host != "management.azure.com" {
+        return Err(Error::ConfigurationError(format!(
+            "Unexpected Azure management host: {host}"
+        )));
+    }
+    Ok(())
+}
+
+fn build_azure_rule_payload(rule: &SecurityRule, index: usize) -> serde_json::Value {
+    let direction = match rule.direction {
+        Direction::Ingress => "Inbound",
+        Direction::Egress => "Outbound",
+    };
+
+    let protocol = match rule.protocol {
+        Protocol::Tcp => "Tcp",
+        Protocol::Udp => "Udp",
+        Protocol::Icmp => "Icmp",
+    };
+
+    let port_ranges = if rule.ports.len() == 1 {
+        rule.ports[0].to_string()
+    } else {
+        rule.ports
+            .iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+
+    let mut properties = serde_json::json!({
+        "protocol": protocol,
+        "sourcePortRange": "*",
+        "destinationPortRange": port_ranges,
+        "destinationAddressPrefix": "*",
+        "access": "Allow",
+        "priority": rule.priority + index as u16,
+        "direction": direction
+    });
+
+    if rule.source_cidrs.len() <= 1 {
+        let source = rule
+            .source_cidrs
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "*".to_string());
+        properties["sourceAddressPrefix"] = serde_json::json!(source);
+    } else {
+        properties["sourceAddressPrefixes"] = serde_json::json!(rule.source_cidrs.clone());
+    }
+
+    serde_json::json!({
+        "name": format!("{}-{}", rule.name, index),
+        "properties": properties
+    })
+}
+
+
 /// Vultr Firewall Group implementation
 #[derive(Debug)]
 pub struct VultrFirewallManager {
@@ -413,7 +454,7 @@ impl SecurityGroupManager for VultrFirewallManager {
         name: &str,
         config: &BlueprintSecurityConfig,
     ) -> Result<String> {
-        let client = reqwest::Client::new();
+        let client = create_default_provider_client()?;
         let url = "https://api.vultr.com/v2/firewalls";
 
         // First create the firewall group
@@ -457,8 +498,8 @@ impl SecurityGroupManager for VultrFirewallManager {
             } else {
                 format!(
                     "{}:{}",
-                    rule.ports.iter().min().unwrap(),
-                    rule.ports.iter().max().unwrap()
+                    rule.ports.iter().min().unwrap_or(&0),
+                    rule.ports.iter().max().unwrap_or(&0)
                 )
             };
 
@@ -495,7 +536,7 @@ impl SecurityGroupManager for VultrFirewallManager {
     }
 
     async fn delete_security_group(&self, group_id: &str) -> Result<()> {
-        let client = reqwest::Client::new();
+        let client = create_default_provider_client()?;
         let url = format!("https://api.vultr.com/v2/firewalls/{group_id}");
 
         match client.delete(&url).bearer_auth(&self.api_key).send().await {
@@ -513,10 +554,94 @@ impl SecurityGroupManager for VultrFirewallManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        BlueprintSecurityConfig, Direction, Protocol, SecurityRule, build_azure_rule_payload,
+        validate_management_url,
+    };
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn validates_management_url() {
+        assert!(validate_management_url("https://management.azure.com/").is_ok());
+        assert!(validate_management_url("http://management.azure.com/").is_err());
+        assert!(validate_management_url("https://example.com/").is_err());
+    }
+
+    #[test]
+    fn standard_rules_use_configured_cidrs() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8,192.168.0.0/16");
+            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "172.16.0.0/12");
+        }
+
+        let config = BlueprintSecurityConfig::default();
+        let rules = config.standard_rules();
+        let ssh_rule = rules
+            .iter()
+            .find(|rule| rule.name == "blueprint-ssh")
+            .unwrap();
+        let qos_rule = rules
+            .iter()
+            .find(|rule| rule.name == "blueprint-qos")
+            .unwrap();
+
+        assert_eq!(
+            ssh_rule.source_cidrs,
+            vec!["10.0.0.0/8".to_string(), "192.168.0.0/16".to_string()]
+        );
+        assert_eq!(qos_rule.source_cidrs, vec!["172.16.0.0/12".to_string()]);
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+    }
+
+    #[test]
+    fn azure_rule_payload_uses_source_prefixes_for_multiple_cidrs() {
+        let rule = SecurityRule {
+            name: "blueprint-ssh".to_string(),
+            direction: Direction::Ingress,
+            protocol: Protocol::Tcp,
+            ports: vec![22],
+            source_cidrs: vec!["10.0.0.0/8".to_string(), "192.168.0.0/16".to_string()],
+            destination_cidrs: vec![],
+            priority: 1000,
+        };
+
+        let payload = build_azure_rule_payload(&rule, 0);
+        let props = payload["properties"].as_object().unwrap();
+        assert!(props.contains_key("sourceAddressPrefixes"));
+        assert!(!props.contains_key("sourceAddressPrefix"));
+    }
+
+    #[test]
+    fn azure_rule_payload_uses_single_prefix_for_one_cidr() {
+        let rule = SecurityRule {
+            name: "blueprint-ssh".to_string(),
+            direction: Direction::Ingress,
+            protocol: Protocol::Tcp,
+            ports: vec![22],
+            source_cidrs: vec!["10.0.0.0/8".to_string()],
+            destination_cidrs: vec![],
+            priority: 1000,
+        };
+
+        let payload = build_azure_rule_payload(&rule, 0);
+        let props = payload["properties"].as_object().unwrap();
+        assert!(props.contains_key("sourceAddressPrefix"));
+        assert!(!props.contains_key("sourceAddressPrefixes"));
+    }
 
     #[test]
     fn test_default_cidr_configuration() {
+        let _guard = env_lock();
         // Without environment variables, should default to 0.0.0.0/0
         unsafe {
             std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
@@ -544,6 +669,7 @@ mod tests {
 
     #[test]
     fn test_custom_ssh_cidr_configuration() {
+        let _guard = env_lock();
         // Set custom SSH CIDR
         unsafe {
             std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8");
@@ -567,6 +693,7 @@ mod tests {
 
     #[test]
     fn test_multiple_cidrs_configuration() {
+        let _guard = env_lock();
         // Set multiple CIDRs comma-separated
         unsafe {
             std::env::set_var(
@@ -591,6 +718,7 @@ mod tests {
 
     #[test]
     fn test_empty_cidr_fallback() {
+        let _guard = env_lock();
         // Empty string should fall back to default
         unsafe {
             std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "");
@@ -609,6 +737,7 @@ mod tests {
 
     #[test]
     fn test_whitespace_trimming() {
+        let _guard = env_lock();
         // Should trim whitespace from CIDRs
         unsafe {
             std::env::set_var(
