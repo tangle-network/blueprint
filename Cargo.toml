@@ -54,7 +54,7 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.1.0-alpha.22", path = "./crates/sdk", default-features = false }
-tnt-core-bindings = { version = "0.6.0" }
+tnt-core-bindings = { version = "0.6.1" }
 
 # Job system
 blueprint-core = { version = "0.1.0-alpha.5", path = "crates/core", default-features = false }
@@ -71,6 +71,12 @@ blueprint-tangle-aggregation-svc = { version = "0.1.0", path = "crates/tangle-ag
 # Blueprint utils
 blueprint-manager = { version = "0.3.0-alpha.23", path = "./crates/manager", default-features = false }
 blueprint-manager-bridge = { version = "0.1.0-alpha.9", path = "./crates/manager/bridge", default-features = false }
+blueprint-remote-providers = { version = "0.1.0-alpha.1", path = "./crates/blueprint-remote-providers", default-features = false }
+blueprint-faas = { version = "0.1.0-alpha.1", path = "./crates/blueprint-faas", default-features = false }
+blueprint-profiling = { version = "0.1.0-alpha.1", path = "./crates/blueprint-profiling", default-features = false }
+
+# Example blueprints
+incredible-squaring-blueprint-lib = { version = "0.1.1", path = "./examples/incredible-squaring/incredible-squaring-lib", default-features = false }
 blueprint-build-utils = { version = "0.1.0-alpha.4", path = "./crates/build-utils", default-features = false }
 blueprint-auth = { version = "0.1.0-alpha.10", path = "./crates/auth", default-features = false }
 

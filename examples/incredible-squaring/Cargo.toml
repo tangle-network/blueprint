@@ -18,7 +18,8 @@ blueprint-tangle-evm-extra = { version = "0.1.0", path = "../../crates/tangle-ev
 blueprint-tangle-aggregation-svc = { version = "0.1.0", path = "../../crates/tangle-aggregation-svc", default-features = false }
 blueprint-crypto-bn254 = { version = "0.1.0-alpha.9", path = "../../crates/crypto/bn254", default-features = false }
 blueprint-crypto-core = { version = "0.1.0-alpha.9", path = "../../crates/crypto/core", default-features = false }
-
+blueprint-faas = { version = "0.1.0-alpha.1", path = "../../crates/blueprint-faas", default-features = false }
+blueprint-profiling = { version = "0.1.0-alpha.1", path = "../../crates/blueprint-profiling", default-features = false }
 tokio = { version = "^1", default-features = false }
 tower = { version = "0.5.2", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false }
@@ -27,6 +28,7 @@ anyhow = { version = "1.0.99", default-features = false }
 color-eyre = { version = "0.6", default-features = false }
 axum = { version = "0.8", default-features = false }
 
+serde = { version = "1.0", default-features = false }
 serde_json = { version = "1.0", default-features = false }
 bytes = { version = "1.10.1", default-features = false }
 
@@ -40,3 +42,5 @@ ark-bn254 = { version = "0.5.0", default-features = false }
 ark-ec = { version = "0.5.0", default-features = false }
 ark-ff = { version = "0.5.0", default-features = false }
 ark-serialize = { version = "0.5.0", default-features = false, features = ["derive"] }
+serial_test = { version = "3.2", default-features = false }
+reqwest = { version = "0.12", default-features = false }

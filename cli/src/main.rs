@@ -77,6 +77,14 @@ enum Commands {
         command: BlueprintCommands,
     },
 
+    /// Cloud deployment
+    #[cfg(feature = "remote-providers")]
+    #[command(visible_alias = "c")]
+    Cloud {
+        #[command(subcommand)]
+        command: cargo_tangle::command::cloud::CloudCommands,
+    },
+
     /// Key management
     #[command(visible_alias = "k")]
     Key {
@@ -257,7 +265,6 @@ enum KeyCommands {
         key_type: SupportedKey,
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
-        #[arg(long)]
         seed: Option<Vec<u8>>,
         #[arg(short = 'v', long)]
         show_secret: bool,
@@ -1874,6 +1881,10 @@ async fn main() -> Result<()> {
                 log_tx("Delegator execute-withdraw", &tx, json);
             }
         },
+        #[cfg(feature = "remote-providers")]
+        Commands::Cloud { command } => {
+            cargo_tangle::command::cloud::execute(command).await?;
+        }
         Commands::Operator { command } => match command {
             OperatorCommands::Status {
                 network,

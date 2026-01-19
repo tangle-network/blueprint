@@ -26,6 +26,8 @@ pub struct BlueprintManagerContext {
     pub vm: VmContext,
     pub(crate) db: Mutex<Option<RocksDb>>,
     config: BlueprintManagerConfig,
+    #[cfg(feature = "remote-providers")]
+    cloud_config: Option<blueprint_remote_providers::CloudConfig>,
 }
 
 impl BlueprintManagerContext {
@@ -101,6 +103,8 @@ impl BlueprintManagerContext {
             },
             // Set in `run_blueprint_manager_with_keystore`
             db: Mutex::new(None),
+            #[cfg(feature = "remote-providers")]
+            cloud_config: Self::load_cloud_config(&config),
             config,
         })
     }
@@ -117,6 +121,19 @@ impl BlueprintManagerContext {
     pub async fn kube_service_port(&self) -> u16 {
         let mut guard = self.containers.kube_service_port.lock().await;
         guard.unlock()
+    }
+
+    #[cfg(feature = "remote-providers")]
+    pub fn cloud_config(&self) -> &Option<blueprint_remote_providers::CloudConfig> {
+        &self.cloud_config
+    }
+
+    #[cfg(feature = "remote-providers")]
+    fn load_cloud_config(
+        _config: &BlueprintManagerConfig,
+    ) -> Option<blueprint_remote_providers::CloudConfig> {
+        // Use the centralized config loading from remote providers crate
+        blueprint_remote_providers::CloudConfig::from_env()
     }
 }
 

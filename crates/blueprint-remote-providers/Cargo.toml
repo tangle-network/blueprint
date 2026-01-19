@@ -1,0 +1,117 @@
+[package]
+name = "blueprint-remote-providers"
+version = "0.1.0-alpha.1"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+documentation = "https://docs.rs/blueprint-remote-providers"
+
+[dependencies]
+# Blueprint standard library
+blueprint-std.workspace = true
+base64 = "0.22"
+
+# Core dependencies
+anyhow.workspace = true
+async-trait = "0.1"
+auto_impl = "1.2"
+chrono = { workspace = true, features = ["serde", "clock"] }
+futures.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_yaml = "0.9"
+shell-escape = "0.1"
+aes-gcm = "0.10"
+blake3 = "1.5"
+hex = "0.4"
+zeroize = { version = "1.8", features = ["derive"] }
+url = "2.5"
+jsonwebtoken = "9.3"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+toml = "0.8"
+blueprint-core = { workspace = true, features = ["tracing"] }
+
+# Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
+# blueprint-auth.workspace = true
+blueprint-keystore = { workspace = true, default-features = false, features = ["std"] }
+blueprint-pricing-engine.workspace = true
+
+# Provider-specific dependencies
+bollard = { workspace = true, optional = true }
+kube = { version = "0.90", features = ["rustls-tls"], optional = true }
+k8s-openapi = { version = "0.21", features = ["v1_29"], optional = true }
+
+# AWS SDK
+aws-config = { version = "1.5", optional = true }
+aws-sdk-ec2 = { version = "1.47", optional = true }
+aws-sdk-eks = { version = "1.47", optional = true }
+aws-sdk-autoscaling = { version = "1.47", optional = true }
+aws-sdk-cloudwatchlogs = { version = "1.47", optional = true }
+
+# HTTP client for cloud APIs and pricing
+reqwest = { workspace = true, features = ["json", "rustls-tls", "gzip", "deflate"] }
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
+
+# TLS and secure communication  
+tokio-rustls = "0.26"
+aws-lc-rs = "1.13" # Replaces ring for RUSTSEC-2025-0009 mitigation
+chacha20poly1305 = "0.10"
+
+
+# Utilities
+uuid = { version = "1.10", features = ["v4", "serde"] }
+libc = "0.2"
+rand = "0.8"
+urlencoding = "2.1"
+
+[dev-dependencies]
+mockall = "0.13"
+tempfile.workspace = true
+tokio-test = "0.4"
+wiremock = "0.6"
+serial_test.workspace = true
+proptest = "1.0"
+mockito = "1.0"
+# Official AWS mocking library
+aws-smithy-mocks-experimental = "0.2"
+aws-smithy-runtime = { version = "1.7", features = ["test-util"] }
+aws-smithy-types = "1.2"
+http = "1.0"
+# Additional dependencies for integration tests
+chrono = { workspace = true, features = ["serde", "clock"] }
+rand = "0.8"
+tracing-subscriber.workspace = true
+# For regex in wiremock matchers
+regex = "1.10"
+# For container-based testing
+testcontainers = "0.23"
+# For K8s testing
+kube = { version = "0.90", features = ["runtime", "derive"] }
+k8s-openapi = { version = "0.21", features = ["v1_29"] }
+
+[features]
+default = ["std", "aws"]
+std = [
+    "blueprint-std/std",
+    "blueprint-core/std",
+    "blueprint-keystore/std",
+    "blueprint-pricing-engine/std",
+]
+aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling", "dep:aws-sdk-cloudwatchlogs"]
+aws-eks = ["aws", "dep:aws-sdk-eks"]
+gcp = []  # GCP support via REST API
+azure = []  # Azure support via REST API
+digitalocean = []  # DigitalOcean support via REST API
+vultr = []  # Vultr support via REST API
+kubernetes = ["dep:kube", "dep:k8s-openapi"]
+docker = ["dep:bollard"]
+testing = []
+
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,3 +1,5 @@
+#[cfg(feature = "remote-providers")]
+pub mod cloud;
 pub mod create;
 pub mod debug;
 pub mod delegator;

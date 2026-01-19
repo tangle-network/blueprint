@@ -48,6 +48,12 @@ pub enum PricingError {
     #[error("Resource unit parsing error")]
     ResourceUnitParsing(#[from] ParseResourceUnitError),
 
+    #[error("HTTP error: {0}")]
+    HttpError(String),
+
+    #[error("Configuration error: {0}")]
+    ConfigurationError(String),
+
     #[error("Other error: {0}")]
     Other(String),
 }

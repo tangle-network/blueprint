@@ -2,6 +2,27 @@
 
 Create, run, and operate blueprints on the Tangle EVM and EigenLayer.
 
+## Table of Contents
+
+- [Tangle CLI](#tangle-cli)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Installation](#installation)
+    - [Feature flags](#feature-flags)
+  - [Creating a New Blueprint](#creating-a-new-blueprint)
+  - [Running a Blueprint on Tangle EVM](#running-a-blueprint-on-tangle-evm)
+  - [Registering an Operator](#registering-an-operator)
+  - [Service Lifecycle Commands](#service-lifecycle-commands)
+  - [Cloud Deployment](#cloud-deployment)
+    - [Configure Cloud Provider](#configure-cloud-provider)
+    - [Cost Estimation](#cost-estimation)
+    - [Deploy Blueprint to Cloud](#deploy-blueprint-to-cloud)
+    - [Monitor Cloud Deployments](#monitor-cloud-deployments)
+  - [Key Management](#key-management)
+  - [EigenLayer Helpers](#eigenlayer-helpers)
+  - [Generating Keys from the Command Line](#generating-keys-from-the-command-line)
+    - [Flags](#flags)
+
 ## Overview
 
 The CLI bundles every workflow needed for the EVM-only SDK:
@@ -19,6 +40,31 @@ All Substrate helpers have been removed; the CLI now targets EVM-first flows onl
 
 ```bash
 cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --force
+```
+
+### Feature flags
+
+The CLI supports optional features that can be enabled at build time:
+
+**`remote-providers`** - Enables cloud deployment functionality
+
+Adds support for deploying blueprints to AWS, GCP, Azure, DigitalOcean, and Vultr. This enables the `cargo tangle cloud` subcommand and the `--remote` flag for blueprint deployment.
+
+```bash
+cargo install cargo-tangle --git https://github.com/tangle-network/blueprint \
+  --features remote-providers --force
+```
+
+Without this feature, cloud commands are not available and using `--remote` will show:
+```
+❌ Remote deployment requires the 'remote-providers' feature.
+   Build with: cargo build --features remote-providers
+```
+
+**`vm-debug`** - Enables VM sandbox debugging (Linux only)
+
+```bash
+cargo build --features vm-debug
 ```
 
 ## Creating a New Blueprint
@@ -128,6 +174,64 @@ cargo tangle blueprint service requests --json
 ```
 
 Both commands read via `TangleEvmClient::{list_services,list_service_requests}` and print either friendly tables or JSON for automation.
+
+## Cloud Deployment
+
+> **Note:** Cloud deployment requires the `remote-providers` feature flag. See [Feature flags](#feature-flags) for installation instructions.
+
+The Tangle CLI supports deploying blueprints to cloud providers for scalable, distributed execution:
+
+### Configure Cloud Provider
+
+```bash
+# Configure AWS
+cargo tangle cloud configure aws --region us-east-1 --set-default
+
+# Configure GCP
+cargo tangle cloud configure gcp --region us-central1
+
+# Configure other providers
+cargo tangle cloud configure digitalocean --region nyc1
+cargo tangle cloud configure vultr --region ewr
+cargo tangle cloud configure azure --region eastus
+```
+
+### Cost Estimation
+
+```bash
+# Compare costs across all providers
+cargo tangle cloud estimate --compare --cpu 4 --memory 16
+
+# Estimate for specific provider with spot pricing
+cargo tangle cloud estimate --provider aws --spot --duration 30d
+
+# GPU-enabled instances
+cargo tangle cloud estimate --provider gcp --gpu 1 --cpu 8 --memory 32
+```
+
+### Deploy Blueprint to Cloud
+
+```bash
+# Deploy with remote deployment flag
+cargo tangle blueprint deploy tangle --remote --package my_blueprint
+
+# Deploy with specific policy
+cargo tangle cloud policy --gpu-providers gcp,aws --cost-providers vultr,do
+cargo tangle blueprint deploy tangle --remote --package my_blueprint
+```
+
+### Monitor Cloud Deployments
+
+```bash
+# Check status of all deployments
+cargo tangle cloud status
+
+# Check specific deployment
+cargo tangle cloud status --deployment-id dep-abc123
+
+# Terminate deployment
+cargo tangle cloud terminate --deployment-id dep-abc123
+```
 
 ### Spawning a Service Runtime
 
