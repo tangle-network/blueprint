@@ -90,6 +90,18 @@ impl ProvisionedInfrastructure {
     pub fn get_endpoint(&self) -> Option<String> {
         self.public_ip.clone().or_else(|| self.private_ip.clone())
     }
+
+    pub fn into_provisioned_instance(self) -> crate::infra::types::ProvisionedInstance {
+        crate::infra::types::ProvisionedInstance {
+            id: self.instance_id,
+            provider: self.provider,
+            instance_type: self.instance_type,
+            region: self.region,
+            public_ip: self.public_ip,
+            private_ip: self.private_ip,
+            status: crate::infra::types::InstanceStatus::Running,
+        }
+    }
 }
 
 /// Trait for cloud provider provisioners

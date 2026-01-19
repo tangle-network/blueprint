@@ -323,6 +323,10 @@ impl CloudProviderAdapter for GcpAdapter {
             Ok(false)
         }
     }
+
+    async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
+        self.terminate_instance(&deployment.instance.id).await
+    }
 }
 
 #[cfg(test)]

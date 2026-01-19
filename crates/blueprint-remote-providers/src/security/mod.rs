@@ -3,6 +3,7 @@
 //! Provides secure credential storage, authentication, and security utilities
 
 pub mod encrypted_credentials;
+pub mod auth;
 pub mod secure_http_client;
 
 pub use encrypted_credentials::{

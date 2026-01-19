@@ -364,13 +364,15 @@ mod tests {
         ) -> Result<ProvisionedInstance> {
             self.provision_calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Ok(ProvisionedInstance::builder(
-                self.provision_id.clone(),
-                CloudProvider::AWS,
-                region.to_string(),
-            )
-            .status(InstanceStatus::Running)
-            .build())
+            Ok(ProvisionedInstance {
+                id: self.provision_id.clone(),
+                provider: CloudProvider::AWS,
+                instance_type: "t3.micro".to_string(),
+                region: region.to_string(),
+                public_ip: None,
+                private_ip: None,
+                status: InstanceStatus::Running,
+            })
         }
 
         async fn terminate_instance(&self, _instance_id: &str) -> Result<()> {
@@ -397,6 +399,10 @@ mod tests {
 
         async fn health_check_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<bool> {
             Ok(true)
+        }
+
+        async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
+            self.terminate_instance(&deployment.instance.id).await
         }
     }
 

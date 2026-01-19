@@ -29,6 +29,22 @@ pub use providers::{ProvisionedInfrastructure, ProvisioningConfig};
 #[cfg(feature = "aws")]
 pub use providers::{AwsInstanceMapper, AwsProvisioner};
 
+pub fn create_provider_client(timeout_secs: u64) -> Result<reqwest::Client> {
+    use blueprint_std::time::Duration;
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| Error::HttpError(e.to_string()))
+}
+
+pub fn create_default_provider_client() -> Result<reqwest::Client> {
+    create_provider_client(10)
+}
+
+pub fn create_metadata_client(timeout_secs: u64) -> Result<reqwest::Client> {
+    create_provider_client(timeout_secs)
+}
+
 // Legacy compatibility for manager integration
 pub mod auto_deployment {
     pub use crate::infra::auto::*;

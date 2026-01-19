@@ -124,7 +124,7 @@ impl CloudProvisioner {
                     );
                     return Ok(instance);
                 }
-                Err(e) if attempt < self.retry_policy.max_retries() => {
+                Err(e) if attempt < self.retry_policy.max_retries => {
                     attempt += 1;
                     let delay = self.retry_policy.delay_for_attempt(attempt);
                     warn!(
