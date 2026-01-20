@@ -1,8 +1,9 @@
 use crate::command::tangle::parse_address;
+use alloy_json_abi::Param;
 use alloy_primitives::{Address, Bytes, FixedBytes, U256};
 use alloy_sol_types::{SolType, SolValue};
 use blueprint_client_tangle_evm::contracts::ITangleTypes;
-use color_eyre::eyre::{Context, Result, eyre};
+use color_eyre::eyre::{eyre, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashSet;
@@ -149,10 +150,23 @@ impl BlueprintDefinitionSpec {
             ));
         }
 
-        let (has_config, cfg_spec) = match self.config.clone() {
+        let (explicit_config, cfg_spec) = match self.config.clone() {
             Some(cfg) => (true, cfg),
             None => (false, BlueprintConfigSpec::default()),
         };
+
+        // Determine effective membership and pricing values
+        let effective_membership = cfg_spec.membership.unwrap_or(self.supported_memberships[0]);
+        let effective_pricing = cfg_spec.pricing.unwrap_or_default();
+
+        // Set hasConfig = true if we have an explicit config OR if we're using
+        // non-default values. The contract defaults to Fixed/PayOnce when hasConfig
+        // is false, so we must set it true to preserve Dynamic membership or other
+        // non-default pricing models.
+        let has_config = explicit_config
+            || effective_membership != MembershipModelSpec::Fixed
+            || effective_pricing != PricingModelSpec::PayOnce;
+
         let config = cfg_spec.into_blueprint_config(self.supported_memberships[0]);
 
         Ok(BlueprintDefinition {
@@ -829,7 +843,7 @@ fn parse_operating_system(value: &str) -> Result<<BlueprintOperatingSystem as So
     Ok(variant.into_underlying())
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum MembershipModelSpec {
     Fixed,
@@ -846,7 +860,7 @@ impl MembershipModelSpec {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum PricingModelSpec {
     PayOnce,
@@ -958,13 +972,210 @@ fn hex_to_bytes(value: Option<&str>) -> Result<Bytes> {
         if raw.trim().is_empty() {
             return Ok(Bytes::new());
         }
-        let trimmed = raw.strip_prefix("0x").unwrap_or(raw);
-        let decoded =
-            hex::decode(trimmed).map_err(|e| eyre!("failed to decode hex schema {raw}: {e}"))?;
+        let trimmed = raw.trim();
+
+        // Check if this looks like JSON schema (starts with '[')
+        if trimmed.starts_with('[') {
+            return encode_json_schema_to_tlv(trimmed);
+        }
+
+        // Check if hex-encoded data might be JSON (0x5b = '[')
+        let hex_trimmed = trimmed.strip_prefix("0x").unwrap_or(trimmed);
+        if hex_trimmed.starts_with("5b") || hex_trimmed.starts_with("5B") {
+            // Decode hex first, then check if it's JSON
+            if let Ok(decoded) = hex::decode(hex_trimmed) {
+                if let Ok(json_str) = std::str::from_utf8(&decoded) {
+                    if json_str.trim().starts_with('[') {
+                        return encode_json_schema_to_tlv(json_str);
+                    }
+                }
+            }
+        }
+
+        // Otherwise treat as raw hex bytes (pre-encoded TLV or other binary format)
+        let decoded = hex::decode(hex_trimmed)
+            .map_err(|e| eyre!("failed to decode hex schema {raw}: {e}"))?;
         Ok(Bytes::from(decoded))
     } else {
         Ok(Bytes::new())
     }
+}
+
+/// Encode a JSON ABI schema to the TLV binary format expected by the contract.
+///
+/// The TLV format is:
+/// - 2 bytes: uint16 field count (big-endian)
+/// - For each field (5 bytes header + children recursively):
+///   - 1 byte: BlueprintFieldKind enum (0-22)
+///   - 2 bytes: uint16 arrayLength (big-endian)
+///   - 2 bytes: uint16 childCount (big-endian)
+fn encode_json_schema_to_tlv(json_str: &str) -> Result<Bytes> {
+    let params: Vec<Param> =
+        serde_json::from_str(json_str).map_err(|e| eyre!("failed to parse JSON schema: {e}"))?;
+
+    if params.is_empty() {
+        return Ok(Bytes::new());
+    }
+
+    let field_count = params.len();
+    if field_count > u16::MAX as usize {
+        return Err(eyre!("schema has too many fields (max {})", u16::MAX));
+    }
+
+    // Count total nodes needed
+    let total_nodes: usize = params.iter().map(count_nodes).sum();
+
+    // Allocate buffer: 2 bytes for field count + 5 bytes per node
+    let mut buffer = vec![0u8; 2 + total_nodes * 5];
+
+    // Write field count (big-endian)
+    buffer[0] = (field_count >> 8) as u8;
+    buffer[1] = (field_count & 0xFF) as u8;
+
+    // Write each field
+    let mut cursor = 2;
+    for param in &params {
+        cursor = write_field(&mut buffer, cursor, param)?;
+    }
+
+    Ok(Bytes::from(buffer))
+}
+
+/// Count total nodes in a schema field (including nested children).
+fn count_nodes(param: &Param) -> usize {
+    1 + param.components.iter().map(count_nodes).sum::<usize>()
+}
+
+/// Write a single field to the buffer and return the new cursor position.
+fn write_field(buffer: &mut [u8], cursor: usize, param: &Param) -> Result<usize> {
+    let (kind, array_length) = parse_solidity_type(&param.ty)?;
+    let child_count = param.components.len();
+
+    if child_count > u16::MAX as usize {
+        return Err(eyre!("field has too many children (max {})", u16::MAX));
+    }
+
+    // Write 5-byte header
+    buffer[cursor] = kind;
+    buffer[cursor + 1] = (array_length >> 8) as u8;
+    buffer[cursor + 2] = (array_length & 0xFF) as u8;
+    buffer[cursor + 3] = (child_count >> 8) as u8;
+    buffer[cursor + 4] = (child_count & 0xFF) as u8;
+
+    // Write children recursively
+    let mut next_cursor = cursor + 5;
+    for child in &param.components {
+        next_cursor = write_field(buffer, next_cursor, child)?;
+    }
+
+    Ok(next_cursor)
+}
+
+/// Parse a Solidity type string and return (BlueprintFieldKind, arrayLength).
+///
+/// BlueprintFieldKind enum values:
+/// - Void=0, Bool=1, Uint8=2, Int8=3, Uint16=4, Int16=5, Uint32=6, Int32=7
+/// - Uint64=8, Int64=9, Uint128=10, Int128=11, Uint256=12, Int256=13
+/// - Address=14, Bytes32=15, FixedBytes=16, String=17, Bytes=18
+/// - Optional=19, Array=20, List=21, Struct=22
+fn parse_solidity_type(ty: &str) -> Result<(u8, u16)> {
+    let ty = ty.trim();
+
+    // Handle arrays: type[] or type[n]
+    if ty.ends_with(']') {
+        if let Some(bracket_pos) = ty.rfind('[') {
+            let base_type = &ty[..bracket_pos];
+            let size_str = &ty[bracket_pos + 1..ty.len() - 1];
+
+            if size_str.is_empty() {
+                // Dynamic array: type[] → List (21) with child being the element type
+                // For List, arrayLength=0 (dynamic), the actual element type goes in children
+                return Ok((21, 0)); // List
+            } else {
+                // Fixed array: type[n] → Array (20) with arrayLength=n
+                let size: u16 = size_str
+                    .parse()
+                    .map_err(|_| eyre!("invalid array size in type '{ty}'"))?;
+                return Ok((20, size)); // Array
+            }
+        }
+    }
+
+    // Handle tuple (struct)
+    if ty == "tuple" {
+        return Ok((22, 0)); // Struct
+    }
+
+    // Handle basic types
+    let kind = match ty {
+        "bool" => 1,
+        "uint8" => 2,
+        "int8" => 3,
+        "uint16" => 4,
+        "int16" => 5,
+        "uint32" => 6,
+        "int32" => 7,
+        "uint64" => 8,
+        "int64" => 9,
+        "uint128" => 10,
+        "int128" => 11,
+        "uint256" | "uint" => 12,
+        "int256" | "int" => 13,
+        "address" => 14,
+        "bytes32" => 15,
+        "string" => 17,
+        "bytes" => 18,
+        _ => {
+            // Handle fixed bytes (bytes1 to bytes32)
+            if let Some(size_str) = ty.strip_prefix("bytes") {
+                if let Ok(size) = size_str.parse::<u16>() {
+                    if size >= 1 && size <= 32 {
+                        if size == 32 {
+                            return Ok((15, 0)); // Bytes32
+                        }
+                        return Ok((16, size)); // FixedBytes with arrayLength=size
+                    }
+                }
+            }
+            // Handle uint with explicit size
+            if let Some(size_str) = ty.strip_prefix("uint") {
+                if let Ok(bits) = size_str.parse::<u16>() {
+                    return Ok((
+                        match bits {
+                            8 => 2,
+                            16 => 4,
+                            32 => 6,
+                            64 => 8,
+                            128 => 10,
+                            256 => 12,
+                            _ => return Err(eyre!("unsupported uint size: uint{bits}")),
+                        },
+                        0,
+                    ));
+                }
+            }
+            // Handle int with explicit size
+            if let Some(size_str) = ty.strip_prefix("int") {
+                if let Ok(bits) = size_str.parse::<u16>() {
+                    return Ok((
+                        match bits {
+                            8 => 3,
+                            16 => 5,
+                            32 => 7,
+                            64 => 9,
+                            128 => 11,
+                            256 => 13,
+                            _ => return Err(eyre!("unsupported int size: int{bits}")),
+                        },
+                        0,
+                    ));
+                }
+            }
+            return Err(eyre!("unsupported Solidity type: '{ty}'"));
+        }
+    };
+
+    Ok((kind, 0))
 }
 
 fn default_memberships() -> Vec<MembershipModelSpec> {
@@ -1224,10 +1435,9 @@ mod tests {
         });
         fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
         let err = load_blueprint_definition(&path, None).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("native source requires a non-empty entrypoint")
-        );
+        assert!(err
+            .to_string()
+            .contains("native source requires a non-empty entrypoint"));
     }
 
     #[test]
@@ -1359,5 +1569,170 @@ mod tests {
             "expected 'invalid sha256 digest' error but got: {}",
             err
         );
+    }
+
+    // Tests for schema TLV encoding
+
+    #[test]
+    fn encodes_simple_string_schema_to_tlv() {
+        // JSON schema for a single string parameter
+        let json = r#"[{"name": "greeting", "type": "string"}]"#;
+        let result = encode_json_schema_to_tlv(json).unwrap();
+
+        // Expected TLV format:
+        // - 2 bytes: field count = 1 (0x00, 0x01)
+        // - 5 bytes: header for string field (kind=17, arrayLength=0, childCount=0)
+        assert_eq!(result.len(), 7); // 2 + 5
+        assert_eq!(result[0], 0x00); // field count high byte
+        assert_eq!(result[1], 0x01); // field count low byte
+        assert_eq!(result[2], 17); // String kind
+        assert_eq!(result[3], 0x00); // arrayLength high byte
+        assert_eq!(result[4], 0x00); // arrayLength low byte
+        assert_eq!(result[5], 0x00); // childCount high byte
+        assert_eq!(result[6], 0x00); // childCount low byte
+    }
+
+    #[test]
+    fn encodes_multiple_fields_schema_to_tlv() {
+        // JSON schema for (string, uint256)
+        let json = r#"[{"name": "name", "type": "string"}, {"name": "value", "type": "uint256"}]"#;
+        let result = encode_json_schema_to_tlv(json).unwrap();
+
+        // Expected TLV format:
+        // - 2 bytes: field count = 2
+        // - 5 bytes: string field
+        // - 5 bytes: uint256 field
+        assert_eq!(result.len(), 12); // 2 + 5 + 5
+        assert_eq!(result[0], 0x00); // field count high byte
+        assert_eq!(result[1], 0x02); // field count low byte
+        assert_eq!(result[2], 17); // String kind
+        assert_eq!(result[7], 12); // Uint256 kind
+    }
+
+    #[test]
+    fn encodes_tuple_with_children_to_tlv() {
+        // JSON schema for a tuple with nested fields
+        let json = r#"[{"name": "data", "type": "tuple", "components": [{"name": "x", "type": "uint64"}, {"name": "y", "type": "bool"}]}]"#;
+        let result = encode_json_schema_to_tlv(json).unwrap();
+
+        // Expected TLV format:
+        // - 2 bytes: field count = 1
+        // - 5 bytes: tuple header (kind=22, arrayLength=0, childCount=2)
+        // - 5 bytes: uint64 field
+        // - 5 bytes: bool field
+        assert_eq!(result.len(), 17); // 2 + 5 + 5 + 5
+        assert_eq!(result[0], 0x00); // field count high byte
+        assert_eq!(result[1], 0x01); // field count low byte
+        assert_eq!(result[2], 22); // Struct kind
+        assert_eq!(result[5], 0x00); // childCount high byte
+        assert_eq!(result[6], 0x02); // childCount low byte = 2 children
+        assert_eq!(result[7], 8); // Uint64 kind
+        assert_eq!(result[12], 1); // Bool kind
+    }
+
+    #[test]
+    fn encodes_dynamic_array_to_tlv() {
+        // JSON schema for a dynamic array: uint256[]
+        let json = r#"[{"name": "values", "type": "uint256[]"}]"#;
+        let result = encode_json_schema_to_tlv(json).unwrap();
+
+        // Expected TLV format:
+        // - 2 bytes: field count = 1
+        // - 5 bytes: List header (kind=21, arrayLength=0, childCount=0)
+        assert_eq!(result.len(), 7);
+        assert_eq!(result[2], 21); // List kind
+    }
+
+    #[test]
+    fn encodes_fixed_array_to_tlv() {
+        // JSON schema for a fixed array: uint256[3]
+        let json = r#"[{"name": "triple", "type": "uint256[3]"}]"#;
+        let result = encode_json_schema_to_tlv(json).unwrap();
+
+        // Expected TLV format:
+        // - 2 bytes: field count = 1
+        // - 5 bytes: Array header (kind=20, arrayLength=3, childCount=0)
+        assert_eq!(result.len(), 7);
+        assert_eq!(result[2], 20); // Array kind
+        assert_eq!(result[3], 0x00); // arrayLength high byte
+        assert_eq!(result[4], 0x03); // arrayLength low byte = 3
+    }
+
+    #[test]
+    fn hex_to_bytes_converts_json_schema() {
+        // Test that hex_to_bytes correctly identifies and converts JSON schema
+        let json = r#"[{"name": "name", "type": "string"}]"#;
+        let result = hex_to_bytes(Some(json)).unwrap();
+
+        // Should be TLV format, not raw JSON bytes
+        assert_eq!(result.len(), 7); // TLV format
+        assert_eq!(result[2], 17); // String kind
+    }
+
+    #[test]
+    fn hex_to_bytes_converts_hex_encoded_json_schema() {
+        // Test that hex_to_bytes correctly identifies hex-encoded JSON schema
+        // JSON: [{"name": "name", "type": "string"}]
+        // The hex starts with 0x5b which is '['
+        let json = r#"[{"name": "name", "type": "string"}]"#;
+        let hex_encoded = format!("0x{}", hex::encode(json.as_bytes()));
+        let result = hex_to_bytes(Some(&hex_encoded)).unwrap();
+
+        // Should be TLV format, not raw JSON bytes
+        assert_eq!(result.len(), 7); // TLV format
+        assert_eq!(result[2], 17); // String kind
+    }
+
+    #[test]
+    fn hex_to_bytes_passes_through_tlv_bytes() {
+        // Test that hex_to_bytes passes through pre-encoded TLV bytes
+        // TLV for a single string field: field_count=1, kind=17, arrayLength=0, childCount=0
+        let tlv_bytes = "0x0001110000000000";
+        let result = hex_to_bytes(Some(tlv_bytes)).unwrap();
+
+        // Should be passed through as-is
+        assert_eq!(result.len(), 8);
+        assert_eq!(result[2], 17); // String kind at offset 2
+    }
+
+    #[test]
+    fn parses_all_basic_solidity_types() {
+        assert_eq!(parse_solidity_type("bool").unwrap(), (1, 0));
+        assert_eq!(parse_solidity_type("uint8").unwrap(), (2, 0));
+        assert_eq!(parse_solidity_type("int8").unwrap(), (3, 0));
+        assert_eq!(parse_solidity_type("uint16").unwrap(), (4, 0));
+        assert_eq!(parse_solidity_type("int16").unwrap(), (5, 0));
+        assert_eq!(parse_solidity_type("uint32").unwrap(), (6, 0));
+        assert_eq!(parse_solidity_type("int32").unwrap(), (7, 0));
+        assert_eq!(parse_solidity_type("uint64").unwrap(), (8, 0));
+        assert_eq!(parse_solidity_type("int64").unwrap(), (9, 0));
+        assert_eq!(parse_solidity_type("uint128").unwrap(), (10, 0));
+        assert_eq!(parse_solidity_type("int128").unwrap(), (11, 0));
+        assert_eq!(parse_solidity_type("uint256").unwrap(), (12, 0));
+        assert_eq!(parse_solidity_type("int256").unwrap(), (13, 0));
+        assert_eq!(parse_solidity_type("uint").unwrap(), (12, 0));
+        assert_eq!(parse_solidity_type("int").unwrap(), (13, 0));
+        assert_eq!(parse_solidity_type("address").unwrap(), (14, 0));
+        assert_eq!(parse_solidity_type("bytes32").unwrap(), (15, 0));
+        assert_eq!(parse_solidity_type("string").unwrap(), (17, 0));
+        assert_eq!(parse_solidity_type("bytes").unwrap(), (18, 0));
+        assert_eq!(parse_solidity_type("tuple").unwrap(), (22, 0));
+    }
+
+    #[test]
+    fn parses_fixed_bytes_types() {
+        assert_eq!(parse_solidity_type("bytes1").unwrap(), (16, 1));
+        assert_eq!(parse_solidity_type("bytes16").unwrap(), (16, 16));
+        assert_eq!(parse_solidity_type("bytes31").unwrap(), (16, 31));
+        assert_eq!(parse_solidity_type("bytes32").unwrap(), (15, 0)); // bytes32 is special
+    }
+
+    #[test]
+    fn parses_array_types() {
+        // Dynamic array
+        assert_eq!(parse_solidity_type("uint256[]").unwrap(), (21, 0));
+        // Fixed array
+        assert_eq!(parse_solidity_type("uint256[10]").unwrap(), (20, 10));
+        assert_eq!(parse_solidity_type("address[5]").unwrap(), (20, 5));
     }
 }
