@@ -648,8 +648,86 @@ fn encode_arguments(arguments: Vec<DynSolValue>) -> Bytes {
     if arguments.is_empty() {
         Bytes::new()
     } else {
-        let tuple = DynSolValue::Tuple(arguments);
-        Bytes::from(tuple.abi_encode_params())
+        // Use compact binary encoding (not ABI encoding) to match tnt-core SchemaLib format
+        let mut buffer = Vec::new();
+        for arg in arguments {
+            encode_compact_value(&arg, &mut buffer);
+        }
+        Bytes::from(buffer)
+    }
+}
+
+/// Encode a value in compact binary format matching tnt-core SchemaLib.
+fn encode_compact_value(value: &DynSolValue, buffer: &mut Vec<u8>) {
+    match value {
+        DynSolValue::Bool(b) => buffer.push(if *b { 1 } else { 0 }),
+        DynSolValue::Uint(n, bits) => {
+            let bytes = n.to_be_bytes::<32>();
+            let byte_len = (*bits + 7) / 8;
+            buffer.extend_from_slice(&bytes[32 - byte_len..]);
+        }
+        DynSolValue::Int(n, bits) => {
+            let bytes = n.to_be_bytes::<32>();
+            let byte_len = (*bits + 7) / 8;
+            buffer.extend_from_slice(&bytes[32 - byte_len..]);
+        }
+        DynSolValue::Address(addr) => buffer.extend_from_slice(&addr[..]),
+        DynSolValue::FixedBytes(word, len) => buffer.extend_from_slice(&word[..*len]),
+        DynSolValue::String(s) => {
+            encode_compact_length(s.len(), buffer);
+            buffer.extend_from_slice(s.as_bytes());
+        }
+        DynSolValue::Bytes(b) => {
+            encode_compact_length(b.len(), buffer);
+            buffer.extend_from_slice(b);
+        }
+        DynSolValue::Array(items) | DynSolValue::FixedArray(items) => {
+            // For dynamic arrays, include length; for fixed arrays, just encode elements
+            if matches!(value, DynSolValue::Array(_)) {
+                encode_compact_length(items.len(), buffer);
+            }
+            for item in items {
+                encode_compact_value(item, buffer);
+            }
+        }
+        DynSolValue::Tuple(fields) => {
+            // Structs: encode field count + fields
+            encode_compact_length(fields.len(), buffer);
+            for field in fields {
+                encode_compact_value(field, buffer);
+            }
+        }
+        DynSolValue::Function(f) => buffer.extend_from_slice(f.0.as_slice()),
+    }
+}
+
+/// Encode a length using compact encoding matching tnt-core SchemaLib._readCompactLength.
+/// - 0x00-0x7F: single byte
+/// - 0x80-0xBF + 1 byte: 2-byte encoding (14 bits = max 16383)
+/// - 0xC0-0xDF + 2 bytes: 3-byte encoding (21 bits = max 2097151)
+/// - 0xE0-0xEF + 3 bytes: 4-byte encoding (28 bits = max 268435455)
+fn encode_compact_length(len: usize, buffer: &mut Vec<u8>) {
+    if len < 0x80 {
+        buffer.push(len as u8);
+    } else if len < 0x4000 {
+        buffer.push(0x80 | ((len >> 8) as u8));
+        buffer.push((len & 0xFF) as u8);
+    } else if len < 0x200000 {
+        buffer.push(0xC0 | ((len >> 16) as u8));
+        buffer.push(((len >> 8) & 0xFF) as u8);
+        buffer.push((len & 0xFF) as u8);
+    } else if len < 0x10000000 {
+        buffer.push(0xE0 | ((len >> 24) as u8));
+        buffer.push(((len >> 16) & 0xFF) as u8);
+        buffer.push(((len >> 8) & 0xFF) as u8);
+        buffer.push((len & 0xFF) as u8);
+    } else {
+        // For very large lengths, use 5-byte format
+        buffer.push(0xF0);
+        buffer.push(((len >> 24) & 0xFF) as u8);
+        buffer.push(((len >> 16) & 0xFF) as u8);
+        buffer.push(((len >> 8) & 0xFF) as u8);
+        buffer.push((len & 0xFF) as u8);
     }
 }
 
@@ -667,9 +745,149 @@ fn parse_schema_payload(bytes: &[u8], prefer_outputs: bool) -> Result<Vec<Schema
         return params.iter().map(SchemaParam::from_param).collect();
     }
 
+    // Try to decode as TLV binary format (used by tnt-core contract)
+    if let Ok(params) = decode_tlv_schema(bytes) {
+        return Ok(params);
+    }
+
     let text =
         std::str::from_utf8(bytes).map_err(|_| eyre!("schema payload is not valid UTF-8"))?;
     parse_schema_text(text, prefer_outputs)
+}
+
+/// Decode a TLV binary schema format used by the tnt-core contract.
+///
+/// TLV format:
+/// - 2 bytes: uint16 field count (big-endian)
+/// - For each field (5 bytes header + children recursively):
+///   - 1 byte: BlueprintFieldKind enum (0-22)
+///   - 2 bytes: uint16 arrayLength (big-endian)
+///   - 2 bytes: uint16 childCount (big-endian)
+fn decode_tlv_schema(bytes: &[u8]) -> Result<Vec<SchemaParam>> {
+    if bytes.len() < 2 {
+        return Err(eyre!("TLV schema too short"));
+    }
+
+    let field_count = u16::from_be_bytes([bytes[0], bytes[1]]) as usize;
+
+    // Quick sanity check: each field needs at least 5 bytes
+    if bytes.len() < 2 + field_count * 5 {
+        return Err(eyre!("TLV schema truncated"));
+    }
+
+    let mut cursor = 2;
+    let mut params = Vec::with_capacity(field_count);
+
+    for i in 0..field_count {
+        let (param, new_cursor) = decode_tlv_field(bytes, cursor, i)?;
+        params.push(param);
+        cursor = new_cursor;
+    }
+
+    Ok(params)
+}
+
+fn decode_tlv_field(bytes: &[u8], cursor: usize, field_idx: usize) -> Result<(SchemaParam, usize)> {
+    if cursor + 5 > bytes.len() {
+        return Err(eyre!("TLV field {} truncated", field_idx));
+    }
+
+    let kind = bytes[cursor];
+    let array_length = u16::from_be_bytes([bytes[cursor + 1], bytes[cursor + 2]]);
+    let child_count = u16::from_be_bytes([bytes[cursor + 3], bytes[cursor + 4]]) as usize;
+
+    let mut next_cursor = cursor + 5;
+    let mut components = Vec::with_capacity(child_count);
+
+    for i in 0..child_count {
+        let (child, new_cursor) = decode_tlv_field(bytes, next_cursor, i)?;
+        components.push(child);
+        next_cursor = new_cursor;
+    }
+
+    let ty = tlv_kind_to_dyn_sol_type(kind, array_length, &components)?;
+
+    Ok((
+        SchemaParam {
+            name: None,
+            ty,
+            components,
+        },
+        next_cursor,
+    ))
+}
+
+/// Convert BlueprintFieldKind enum to DynSolType.
+///
+/// BlueprintFieldKind values:
+/// - Void=0, Bool=1, Uint8=2, Int8=3, Uint16=4, Int16=5, Uint32=6, Int32=7
+/// - Uint64=8, Int64=9, Uint128=10, Int128=11, Uint256=12, Int256=13
+/// - Address=14, Bytes32=15, FixedBytes=16, String=17, Bytes=18
+/// - Optional=19, Array=20, List=21, Struct=22
+fn tlv_kind_to_dyn_sol_type(
+    kind: u8,
+    array_length: u16,
+    components: &[SchemaParam],
+) -> Result<DynSolType> {
+    match kind {
+        0 => Ok(DynSolType::Tuple(vec![])), // Void - empty tuple
+        1 => Ok(DynSolType::Bool),
+        2 => Ok(DynSolType::Uint(8)),
+        3 => Ok(DynSolType::Int(8)),
+        4 => Ok(DynSolType::Uint(16)),
+        5 => Ok(DynSolType::Int(16)),
+        6 => Ok(DynSolType::Uint(32)),
+        7 => Ok(DynSolType::Int(32)),
+        8 => Ok(DynSolType::Uint(64)),
+        9 => Ok(DynSolType::Int(64)),
+        10 => Ok(DynSolType::Uint(128)),
+        11 => Ok(DynSolType::Int(128)),
+        12 => Ok(DynSolType::Uint(256)),
+        13 => Ok(DynSolType::Int(256)),
+        14 => Ok(DynSolType::Address),
+        15 => Ok(DynSolType::FixedBytes(32)), // Bytes32
+        16 => Ok(DynSolType::FixedBytes(array_length as usize)), // FixedBytes with size in arrayLength
+        17 => Ok(DynSolType::String),
+        18 => Ok(DynSolType::Bytes),
+        19 => {
+            // Optional - treat as the inner type (first component) wrapped in a way that allows null
+            // For simplicity, we'll treat it as the inner type directly
+            if components.is_empty() {
+                Ok(DynSolType::Bytes) // Fallback
+            } else {
+                Ok(components[0].ty.clone())
+            }
+        }
+        20 => {
+            // Array (fixed size) - arrayLength contains the size
+            if components.is_empty() {
+                // If no components, assume bytes
+                Ok(DynSolType::FixedArray(
+                    Box::new(DynSolType::Bytes),
+                    array_length as usize,
+                ))
+            } else {
+                Ok(DynSolType::FixedArray(
+                    Box::new(components[0].ty.clone()),
+                    array_length as usize,
+                ))
+            }
+        }
+        21 => {
+            // List (dynamic array)
+            if components.is_empty() {
+                Ok(DynSolType::Array(Box::new(DynSolType::Bytes)))
+            } else {
+                Ok(DynSolType::Array(Box::new(components[0].ty.clone())))
+            }
+        }
+        22 => {
+            // Struct (tuple)
+            let inner_types: Vec<DynSolType> = components.iter().map(|c| c.ty.clone()).collect();
+            Ok(DynSolType::Tuple(inner_types))
+        }
+        _ => Err(eyre!("unknown BlueprintFieldKind: {}", kind)),
+    }
 }
 
 fn parse_schema_text(text: &str, prefer_outputs: bool) -> Result<Vec<SchemaParam>> {

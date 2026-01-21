@@ -3,7 +3,7 @@ use alloy_json_abi::Param;
 use alloy_primitives::{Address, Bytes, FixedBytes, U256};
 use alloy_sol_types::{SolType, SolValue};
 use blueprint_client_tangle_evm::contracts::ITangleTypes;
-use color_eyre::eyre::{eyre, Context, Result};
+use color_eyre::eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashSet;
@@ -1043,13 +1043,51 @@ fn encode_json_schema_to_tlv(json_str: &str) -> Result<Bytes> {
 
 /// Count total nodes in a schema field (including nested children).
 fn count_nodes(param: &Param) -> usize {
+    // For array types (type[] or type[n]), we need to count the element type as a child
+    if param.ty.ends_with(']') && param.components.is_empty() {
+        if let Some(bracket_pos) = param.ty.rfind('[') {
+            let base_type = &param.ty[..bracket_pos];
+            if !base_type.is_empty() {
+                // Create synthetic child for element type
+                let element_param = Param {
+                    name: String::new(),
+                    ty: base_type.to_string(),
+                    components: vec![],
+                    internal_type: None,
+                };
+                return 1 + count_nodes(&element_param);
+            }
+        }
+    }
     1 + param.components.iter().map(count_nodes).sum::<usize>()
 }
 
 /// Write a single field to the buffer and return the new cursor position.
 fn write_field(buffer: &mut [u8], cursor: usize, param: &Param) -> Result<usize> {
     let (kind, array_length) = parse_solidity_type(&param.ty)?;
-    let child_count = param.components.len();
+
+    // For array types (kind 20 or 21) without explicit components, create synthetic child
+    let (child_count, synthetic_child) =
+        if (kind == 20 || kind == 21) && param.components.is_empty() && param.ty.ends_with(']') {
+            if let Some(bracket_pos) = param.ty.rfind('[') {
+                let base_type = &param.ty[..bracket_pos];
+                if !base_type.is_empty() {
+                    let element_param = Param {
+                        name: String::new(),
+                        ty: base_type.to_string(),
+                        components: vec![],
+                        internal_type: None,
+                    };
+                    (1, Some(element_param))
+                } else {
+                    (param.components.len(), None)
+                }
+            } else {
+                (param.components.len(), None)
+            }
+        } else {
+            (param.components.len(), None)
+        };
 
     if child_count > u16::MAX as usize {
         return Err(eyre!("field has too many children (max {})", u16::MAX));
@@ -1064,6 +1102,13 @@ fn write_field(buffer: &mut [u8], cursor: usize, param: &Param) -> Result<usize>
 
     // Write children recursively
     let mut next_cursor = cursor + 5;
+
+    // If we have a synthetic child for array element type, write it
+    if let Some(ref element) = synthetic_child {
+        next_cursor = write_field(buffer, next_cursor, element)?;
+    }
+
+    // Write explicit children (for tuples, etc.)
     for child in &param.components {
         next_cursor = write_field(buffer, next_cursor, child)?;
     }
@@ -1435,9 +1480,10 @@ mod tests {
         });
         fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
         let err = load_blueprint_definition(&path, None).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("native source requires a non-empty entrypoint"));
+        assert!(
+            err.to_string()
+                .contains("native source requires a non-empty entrypoint")
+        );
     }
 
     #[test]
@@ -1638,9 +1684,13 @@ mod tests {
 
         // Expected TLV format:
         // - 2 bytes: field count = 1
-        // - 5 bytes: List header (kind=21, arrayLength=0, childCount=0)
-        assert_eq!(result.len(), 7);
+        // - 5 bytes: List header (kind=21, arrayLength=0, childCount=1)
+        // - 5 bytes: element type header (kind=12 for uint256)
+        assert_eq!(result.len(), 12);
         assert_eq!(result[2], 21); // List kind
+        assert_eq!(result[5], 0x00); // childCount high byte
+        assert_eq!(result[6], 0x01); // childCount low byte = 1
+        assert_eq!(result[7], 12); // element type = uint256
     }
 
     #[test]
@@ -1651,11 +1701,15 @@ mod tests {
 
         // Expected TLV format:
         // - 2 bytes: field count = 1
-        // - 5 bytes: Array header (kind=20, arrayLength=3, childCount=0)
-        assert_eq!(result.len(), 7);
+        // - 5 bytes: Array header (kind=20, arrayLength=3, childCount=1)
+        // - 5 bytes: element type header (kind=12 for uint256)
+        assert_eq!(result.len(), 12);
         assert_eq!(result[2], 20); // Array kind
         assert_eq!(result[3], 0x00); // arrayLength high byte
         assert_eq!(result[4], 0x03); // arrayLength low byte = 3
+        assert_eq!(result[5], 0x00); // childCount high byte
+        assert_eq!(result[6], 0x01); // childCount low byte = 1
+        assert_eq!(result[7], 12); // element type = uint256
     }
 
     #[test]
