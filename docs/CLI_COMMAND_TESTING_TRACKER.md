@@ -9,7 +9,7 @@ This document tracks the testing status of all `cargo-tangle` CLI commands. Use 
 - 🔇 Ignored - Intentionally skipped for now (low priority or out of scope)
 - 🚫 N/A - Not applicable for local testing (e.g., mainnet-only features)
 
-**Last Updated:** 2026-01-20 (Service Lifecycle commands completed, Job System test plan prepared)
+**Last Updated:** 2026-01-21 (Job System commands completed - 30/30 tests passed)
 
 ---
 
@@ -20,14 +20,14 @@ This document tracks the testing status of all `cargo-tangle` CLI commands. Use 
 | Blueprint Lifecycle | 5 | 4 | 0 | 1 | 0 |
 | Key Management | 5 | 1 | 0 | 0 | 4 |
 | Service Lifecycle | 9 | 9 | 0 | 0 | 0 |
-| Job System | 4 | 0 | 2 | 2 | 0 |
+| Job System | 4 | 4 | 0 | 0 | 0 |
 | Operator Utilities | 13 | 0 | 0 | 13 | 0 |
 | Delegator Utilities | 14 | 0 | 0 | 14 | 0 |
 | Chain State Queries | 3 | 0 | 0 | 3 | 0 |
 | Cloud Deployment | 7 | 0 | 0 | 7 | 0 |
 | EigenLayer AVS | 7 | 0 | 0 | 7 | 0 |
 | Debug | 1 | 0 | 0 | 1 | 0 |
-| **Total** | **68** | **14** | **2** | **48** | **4** |
+| **Total** | **68** | **18** | **0** | **46** | **4** |
 
 ---
 
@@ -236,10 +236,10 @@ cargo tangle blueprint service show \
 
 | Command | Description | Status | Tested Options | Notes | Reference |
 |---------|-------------|--------|----------------|-------|-----------|
-| `jobs list` | List all available jobs defined in a blueprint | ❌ | | Test plan ready | JOB_SYSTEM_TEST_PLAN.md Phase 1 |
-| `jobs show` | Show detailed metadata for a specific job call | ❌ | | Test plan ready (note: was `jobs inspect` in original tracker) | JOB_SYSTEM_TEST_PLAN.md Phase 5 |
-| `jobs submit` | Submit a job invocation to a running service | ⚠️ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--job`, `--payload-hex` | Basic E2E tested; full test plan ready for `--params-file`, `--payload-file`, `--prompt`, `--watch`, `--json` | E2E Step 13, JOB_SYSTEM_TEST_PLAN.md Phase 2-3 |
-| `jobs watch` | Wait for a job result and display the output | ⚠️ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--call-id`, `--timeout-secs` | Basic E2E tested; full test plan ready | E2E Step 14, JOB_SYSTEM_TEST_PLAN.md Phase 4 |
+| `jobs list` | List all available jobs defined in a blueprint | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--blueprint-id`, `--json` | 4/4 tests passed; human-readable and JSON output verified | JOB_SYSTEM_TEST_PROGRESS.md Phase 1 |
+| `jobs show` | Show detailed metadata for a specific job call | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--blueprint-id`, `--service-id`, `--call-id`, `--json` | 4/4 tests passed; before/after completion, JSON output verified | JOB_SYSTEM_TEST_PROGRESS.md Phase 5 |
+| `jobs submit` | Submit a job invocation to a running service | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--job`, `--payload-hex`, `--payload-file`, `--params-file`, `--prompt`, `--watch`, `--json`, `--timeout-secs` | 9/9 tests passed; all input methods verified including TLV v2 object format, complex types (int, address, array, tuple) | JOB_SYSTEM_TEST_PROGRESS.md Phase 2-3, 7 |
+| `jobs watch` | Wait for a job result and display the output | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--blueprint-id`, `--service-id`, `--call-id`, `--timeout-secs` | 3/3 tests passed; timeout behavior, non-existent call handling, custom timeout verified | JOB_SYSTEM_TEST_PROGRESS.md Phase 4 |
 
 ### Tested Command Examples
 
@@ -393,8 +393,8 @@ These are essential for the basic operator/user workflow:
 ### Medium Priority (Extended Workflow)
 1. ✅ `service reject` - Operators may need to reject requests - **DONE**
 2. ✅ `service list-requests` - List pending requests (preferred over `list requests`) - **DONE**
-3. ❌ `jobs list` - Discover available jobs
-4. ❌ `jobs inspect` - Understand job parameters
+3. ✅ `jobs list` - Discover available jobs - **DONE**
+4. ✅ `jobs show` - Understand job parameters - **DONE**
 
 ### Lower Priority (Advanced Features)
 1. ❌ All delegator commands
@@ -406,7 +406,8 @@ These are essential for the basic operator/user workflow:
 1. 🔇 Key management commands (except `import`) - Low priority for E2E testing
 
 ### Completed
-1. ✅ All service lifecycle commands (9/9) - See Phase 1-10 in SERVICE_LIFECYCLE_TEST_PROGRESS.md
+1. ✅ All service lifecycle commands (9/9) - See SERVICE_LIFECYCLE_TEST_PROGRESS.md
+2. ✅ All job system commands (4/4) - See JOB_SYSTEM_TEST_PROGRESS.md (30/30 tests passed)
 
 ---
 

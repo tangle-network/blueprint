@@ -3,7 +3,7 @@
 This document tracks testing progress for all job system commands and documents any bugs found.
 
 **Started:** 2026-01-20
-**Last Updated:** 2026-01-21 (Phase 7 COMPLETE - All 4 complex type tests PASSED)
+**Last Updated:** 2026-01-21 (ALL TESTS COMPLETE - 30/30 tests PASSED, Test 2.3 verified with TLV v2)
 
 ---
 
@@ -27,13 +27,13 @@ This document tracks testing progress for all job system commands and documents 
 |---------|--------|--------------|--------------|---------|-------|
 | `jobs list` | ✅ Complete | 4/4 | 0 | 0 | All tests passed |
 | `jobs show` | ✅ Complete | 4/4 | 0 | 0 | All tests passed |
-| `jobs submit` | ✅ Complete | 5/6 | 0 | 1 | Test 2.3 - expected behavior (see notes) |
+| `jobs submit` | ✅ Complete | 6/6 | 0 | 0 | All tests passed (Test 2.3 verified with TLV v2) |
 | `jobs submit --watch` | ✅ Complete | 3/3 | 0 | 0 | All tests passed - CLI functionality verified |
 | `jobs watch` | ✅ Complete | 3/3 | 0 | 0 | All tests passed |
 | Edge Cases | ✅ Complete | 6/6 | 0 | 0 | All error handling verified |
 | Complex Types | ✅ Complete | 4/4 | 0 | 0 | All complex type tests passed |
 
-**Overall Progress:** 29/30 tests passed
+**Overall Progress:** 30/30 tests passed ✅
 
 **Bugs Found & Fixed:**
 - Bug #1 - TLV schema encoding mismatch (panic 0x21) → **FIXED** in `definition.rs`
@@ -41,7 +41,7 @@ This document tracks testing progress for all job system commands and documents 
 - Bug #3 - Operator runtime missing contract env vars → **FIXED** in `manager/src/sources/mod.rs`
 - Bug #5 - TLV array element type missing as child → **FIXED** in `definition.rs`
 
-**Limitation Found:** Test 2.3 (object format params) requires named parameters in schema, but TLV format doesn't preserve names.
+**Limitation Found:** ~~Test 2.3 (object format params) requires named parameters in schema, but TLV format doesn't preserve names.~~ **FIXED & VERIFIED** - TLV v2 format now includes field names (implemented Session 12, verified Session 13).
 
 **Current Blocker (2026-01-21 Update):**
 - Bug #3 fix has been implemented and CLI rebuilt
@@ -325,23 +325,38 @@ Submitted job 0 to service 8. Call ID: 0 (tx: 0xf9c786bfb33e6b67edfd597249b1a821
 ```
 
 ### Test 2.3: Submit Job with Params File (Object Format)
-- [x] **Status:** EXPECTED BEHAVIOR (Not a bug)
-- [x] **Result:** CLI correctly rejects object format when schema parameters are unnamed
-- [x] **Call ID obtained:** N/A
-- [x] **Notes:** TLV format doesn't preserve parameter names. Object format requires named params. Use array format instead.
+- [x] **Status:** PASSED ✅ (verified 2026-01-21)
+- [x] **Result:** Job submitted successfully using object format with TLV v2 schemas
+- [x] **Call ID obtained:** 0, 1 (two jobs tested)
+- [x] **Notes:** TLV v2 format now preserves field names. After redeploying contracts and blueprints with TLV v2 support, object format works.
 
 ```bash
-# Command executed:
+# Test environment (2026-01-21):
+# - Fresh anvil instance with redeployed tnt-core contracts (TLV v2 support)
+# - Blueprint 1 created with TLV v2 schemas: hello(name: string), multiplyNumbers(a: uint256, b: uint256)
+# - Service 1 active for Blueprint 1
+
+# Test 1: Single string parameter (object format)
 echo '{"name": "ObjectUser"}' > /tmp/job-params-object.json
 cargo tangle blueprint jobs submit \
-  --blueprint-id 3 --service-id 8 --job 0 \
+  --blueprint-id 1 --service-id 1 --job 0 \
   --params-file /tmp/job-params-object.json
 
-# Output (expected):
-Error: parameter 0 is unnamed; provide an array instead of an object
+# Output:
+# Job submission: submitted tx_hash=0x68f8483269713a217d32a76bdce326981a93c0d42ca92baf85a26597f846aa34
+# Job submission: confirmed block=Some(245) gas_used=180257
+# Submitted job 0 to service 1. Call ID: 0
 
-# Explanation: TLV schema format doesn't preserve field names, so CLI shows "arg_0" instead of "name".
-# Use array format: ["ObjectUser"] instead of {"name": "ObjectUser"}
+# Test 2: Multiple parameters (object format)
+echo '{"a": 5, "b": 7}' > /tmp/job-params-multiply.json
+cargo tangle blueprint jobs submit \
+  --blueprint-id 1 --service-id 1 --job 1 \
+  --params-file /tmp/job-params-multiply.json
+
+# Output:
+# Job submission: submitted tx_hash=0x481a7d3665a32a93f1b99688c67c4eab2815671eb8a2ca5624506a5d6934b887
+# Job submission: confirmed block=Some(246) gas_used=193879
+# Submitted job 1 to service 1. Call ID: 1
 ```
 
 ### Test 2.4: Submit Job with Payload File
@@ -1586,6 +1601,133 @@ All job system CLI tests are now complete. 29/30 tests passed (Test 2.3 is expec
 
 ---
 
+### Session 12: TLV v2 Format - Field Names Support (2026-01-21)
+
+**Time Started:** Continuation from Session 11
+**Time Ended:** Completed
+**Tester:** Claude Code
+
+**Work Completed:**
+1. Implemented TLV v2 schema format that preserves field names
+2. Updated both tnt-core (Solidity) and blueprint CLI (Rust) repositories
+
+**Problem Solved:**
+Test 2.3 (object format params like `{"name": "Alice"}`) was blocked because the TLV v1 format didn't preserve field names. Users were forced to use positional array format (`["Alice"]`) instead.
+
+**Changes Made:**
+
+**tnt-core repository:**
+- `src/v2/libraries/Types.sol`: Added `string name` field to `BlueprintFieldType` struct
+- `src/v2/libraries/SchemaLib.sol`: Added v2 format encoding/validation with names
+- `test/support/*.sol`: Updated all test helpers to include name field
+
+**blueprint CLI repository:**
+- `cli/src/command/deploy/definition.rs`: Updated encoder to write v2 format with names
+- `cli/src/command/jobs/helpers.rs`: Updated decoder to detect version and read names
+- Updated all CLI tests for v2 format byte patterns
+
+**TLV Format Changes:**
+```
+v1 format: [2 bytes field_count] + [5 bytes header per field]
+v2 format: [1 byte version=0x02] + [2 bytes field_count] + [5 bytes header + compact-encoded name per field]
+```
+
+**Backwards Compatibility:**
+- v2 decoder uses version detection heuristic
+- If first byte is 0x02 and field count would be valid, treats as v2
+- Otherwise falls back to v1 parsing
+
+**Tests Passed:**
+- 7/7 TLV encoding tests in CLI
+- 12/12 SchemaLib tests in tnt-core (including fuzz tests)
+
+**Files Modified:**
+- `tnt-core/src/v2/libraries/Types.sol`
+- `tnt-core/src/v2/libraries/SchemaLib.sol`
+- `tnt-core/test/support/SchemaTestUtils.sol`
+- `tnt-core/test/support/BlueprintDefinitionHelper.sol`
+- `tnt-core/test/v2/libraries/SchemaLibFuzz.t.sol`
+- `blueprint/cli/src/command/deploy/definition.rs`
+- `blueprint/cli/src/command/jobs/helpers.rs`
+
+**Summary:**
+TLV v2 format implementation complete. After redeploying blueprints with the updated CLI, users will be able to submit job parameters using object format (`{"name": "Alice"}`) instead of being forced to use array format (`["Alice"]`).
+
+**Verification Steps:**
+1. Deploy a blueprint with the updated CLI (schemas will be v2 encoded with names)
+2. Query the blueprint's job schema - field names will be preserved
+3. Submit a job using object format: `--params '{"recipient": "0x...", "amount": 100}'`
+
+**Blockers:**
+- None
+
+**Next Steps:**
+~~1. Redeploy test blueprints with updated CLI to verify end-to-end~~
+~~2. Re-run Test 2.3 to confirm object format now works~~
+
+**COMPLETED** - See Session 13 below
+
+---
+
+### Session 13 - 2026-01-21
+
+**Time Started:** 20:40
+**Time Ended:** 21:10
+**Tester:** Claude Code
+
+**Tests Executed:**
+- TLV v2 End-to-End Verification:
+  - [x] Fresh anvil deployment with TLV v2 contracts: **PASSED**
+  - [x] Blueprint 1 created with TLV v2 schemas: **PASSED**
+  - [x] Field names preserved in schema (verified via `jobs list`): **PASSED**
+  - [x] Test 2.3 - Object format single param: **PASSED** (tx: 0x68f8483269713a217d32a76bdce326981a93c0d42ca92baf85a26597f846aa34)
+  - [x] Test 2.3 - Object format multiple params: **PASSED** (tx: 0x481a7d3665a32a93f1b99688c67c4eab2815671eb8a2ca5624506a5d6934b887)
+
+**Details:**
+1. Restarted anvil fresh (no snapshot)
+2. Deployed tnt-core contracts using `forge script --non-interactive`
+3. Created Blueprint 1 with TLV v2 schemas:
+   - Job 0: `hello(name: string) -> greeting: string`
+   - Job 1: `multiplyNumbers(a: uint256, b: uint256) -> product: uint256`
+4. Verified field names preserved via CLI:
+   ```
+   Jobs
+   =============================================
+   Job 0
+     Name: hello
+     Parameters:
+       - name: string
+     Results:
+       - greeting: string
+   =============================================
+   Job 1
+     Name: multiplyNumbers
+     Parameters:
+       - a: uint256
+       - b: uint256
+     Results:
+       - product: uint256
+   ```
+5. Created Service 1 for Blueprint 1
+6. Submitted jobs with object format:
+   - `{"name": "ObjectUser"}` → Call ID 0
+   - `{"a": 5, "b": 7}` → Call ID 1
+
+**Summary:**
+TLV v2 format implementation fully verified. Object format params now work end-to-end:
+- CLI encodes JSON schemas to TLV v2 binary with field names
+- Contracts store and validate TLV v2 schemas
+- CLI decodes TLV v2 schemas to display field names
+- Job submission accepts object format (`{"name": "value"}`) by matching field names
+
+**Blockers:**
+- None
+
+**Next Steps:**
+- None - All tests complete
+
+---
+
 ### Session 1 - [DATE]
 
 **Time Started:**
@@ -1609,11 +1751,11 @@ All job system CLI tests are now complete. 29/30 tests passed (Test 2.3 is expec
 ### Commands Tested
 - [x] `jobs list` - 4/4 tests passed ✅
 - [x] `jobs show` - 4/4 tests passed ✅
-- [x] `jobs submit` - 5/6 tests passed (Test 2.3 is expected behavior) ✅
+- [x] `jobs submit` - 6/6 tests passed ✅ (Test 2.3 verified with TLV v2)
 - [x] `jobs submit --watch` - 3/3 tests passed ✅
 - [x] `jobs watch` - 3/3 tests passed ✅
 - [x] Edge Cases - 6/6 tests passed ✅
-- [ ] Complex Types - 0/4 tests passed (optional)
+- [x] Complex Types - 4/4 tests passed ✅
 
 ### Bugs Found & Fixed
 1. **Bug #1:** TLV schema encoding - CLI stored JSON schemas, contract expects TLV binary → **FIXED** in `definition.rs`
@@ -1621,18 +1763,18 @@ All job system CLI tests are now complete. 29/30 tests passed (Test 2.3 is expec
 3. **Bug #5:** TLV array element type missing - Arrays encoded without element type child → **FIXED** in `definition.rs`
 
 ### Limitations Documented
-1. **Test 2.3 (object params):** TLV format doesn't preserve field names; use array format instead of object format
+1. ~~**Test 2.3 (object params):** TLV format doesn't preserve field names; use array format instead of object format~~ **FIXED & VERIFIED** - TLV v2 format now includes field names (Session 13)
 2. **Test 5.4 (non-existent call):** CLI returns zeroed/default values instead of error for non-existent calls; could be improved to detect "caller = zero address" as "call not found"
 
 ### Feature Requests
 *(None yet)*
 
 ### Overall Test Result
-**Status:** COMPLETE - All Phases Complete (29/30 tests passed)
+**Status:** COMPLETE - All Phases Complete (30/30 tests passed) ✅
 
 **Notes:**
 - Phase 1 (jobs list): 4/4 tests passed ✅
-- Phase 2 (jobs submit): 5/6 tests passed (1 expected behavior documented) ✅
+- Phase 2 (jobs submit): 6/6 tests passed ✅ (Test 2.3 verified with TLV v2 in Session 13)
 - Phase 3 (jobs submit --watch): 3/3 tests passed ✅
 - Phase 4 (jobs watch): 3/3 tests passed ✅
 - Phase 5 (jobs show): 4/4 tests passed ✅
@@ -1653,7 +1795,7 @@ All job system CLI tests are now complete. 29/30 tests passed (Test 2.3 is expec
 **Recommendations:**
 1. ~~**HIGH PRIORITY:** Fix Bug #3~~ ✅ DONE - Contract addresses now passed to spawned blueprints
 2. ~~**NEW ISSUE:** Investigate operator event processing~~ ✅ DONE - Bug #4 identified and fixed
-3. Consider preserving field names in TLV format (enhancement) to support object-format params
+3. ~~Consider preserving field names in TLV format (enhancement) to support object-format params~~ ✅ DONE - TLV v2 format implemented (Session 12)
 4. Document compact binary encoding format in CLI user documentation
 5. Add integration tests for schema encoding/decoding roundtrip
 

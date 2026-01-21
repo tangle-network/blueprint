@@ -757,25 +757,34 @@ fn parse_schema_payload(bytes: &[u8], prefer_outputs: bool) -> Result<Vec<Schema
 
 /// Decode a TLV binary schema format used by the tnt-core contract.
 ///
-/// TLV format:
+/// Schema version constant
+const SCHEMA_VERSION_2: u8 = 0x02;
+
+/// TLV format (version 2 with field names):
+/// - 1 byte: version (0x02)
 /// - 2 bytes: uint16 field count (big-endian)
-/// - For each field (5 bytes header + children recursively):
+/// - For each field (5 bytes header + name + children recursively):
 ///   - 1 byte: BlueprintFieldKind enum (0-22)
 ///   - 2 bytes: uint16 arrayLength (big-endian)
 ///   - 2 bytes: uint16 childCount (big-endian)
+///   - 1-4 bytes: compact-encoded name length
+///   - N bytes: field name UTF-8 string
 fn decode_tlv_schema(bytes: &[u8]) -> Result<Vec<SchemaParam>> {
-    if bytes.len() < 2 {
+    if bytes.len() < 3 {
         return Err(eyre!("TLV schema too short"));
     }
 
-    let field_count = u16::from_be_bytes([bytes[0], bytes[1]]) as usize;
-
-    // Quick sanity check: each field needs at least 5 bytes
-    if bytes.len() < 2 + field_count * 5 {
-        return Err(eyre!("TLV schema truncated"));
+    // Verify version byte
+    if bytes[0] != SCHEMA_VERSION_2 {
+        return Err(eyre!(
+            "Invalid schema version: expected 0x{:02x}, got 0x{:02x}",
+            SCHEMA_VERSION_2,
+            bytes[0]
+        ));
     }
 
-    let mut cursor = 2;
+    let field_count = u16::from_be_bytes([bytes[1], bytes[2]]) as usize;
+    let mut cursor = 3; // 1 byte version + 2 bytes field count
     let mut params = Vec::with_capacity(field_count);
 
     for i in 0..field_count {
@@ -787,7 +796,11 @@ fn decode_tlv_schema(bytes: &[u8]) -> Result<Vec<SchemaParam>> {
     Ok(params)
 }
 
-fn decode_tlv_field(bytes: &[u8], cursor: usize, field_idx: usize) -> Result<(SchemaParam, usize)> {
+fn decode_tlv_field(
+    bytes: &[u8],
+    cursor: usize,
+    field_idx: usize,
+) -> Result<(SchemaParam, usize)> {
     if cursor + 5 > bytes.len() {
         return Err(eyre!("TLV field {} truncated", field_idx));
     }
@@ -797,6 +810,26 @@ fn decode_tlv_field(bytes: &[u8], cursor: usize, field_idx: usize) -> Result<(Sc
     let child_count = u16::from_be_bytes([bytes[cursor + 3], bytes[cursor + 4]]) as usize;
 
     let mut next_cursor = cursor + 5;
+
+    // Read field name (always present in v2 format)
+    let (name_len, after_len) = read_compact_length(bytes, next_cursor)?;
+    next_cursor = after_len;
+
+    if next_cursor + name_len > bytes.len() {
+        return Err(eyre!("TLV field {} name truncated", field_idx));
+    }
+
+    let name_bytes = &bytes[next_cursor..next_cursor + name_len];
+    let name_str = String::from_utf8_lossy(name_bytes).to_string();
+    next_cursor += name_len;
+
+    // Return Some only if name is non-empty
+    let name = if name_str.is_empty() {
+        None
+    } else {
+        Some(name_str)
+    };
+
     let mut components = Vec::with_capacity(child_count);
 
     for i in 0..child_count {
@@ -809,12 +842,52 @@ fn decode_tlv_field(bytes: &[u8], cursor: usize, field_idx: usize) -> Result<(Sc
 
     Ok((
         SchemaParam {
-            name: None,
+            name,
             ty,
             components,
         },
         next_cursor,
     ))
+}
+
+/// Read a compact-encoded length from bytes.
+fn read_compact_length(bytes: &[u8], cursor: usize) -> Result<(usize, usize)> {
+    if cursor >= bytes.len() {
+        return Err(eyre!("compact length truncated"));
+    }
+
+    let first = bytes[cursor];
+
+    if first & 0x80 == 0 {
+        // Single byte: 0x00-0x7F
+        Ok((first as usize, cursor + 1))
+    } else if first & 0xC0 == 0x80 {
+        // Two bytes: 0x80-0xBF
+        if cursor + 2 > bytes.len() {
+            return Err(eyre!("compact length truncated"));
+        }
+        let value = (((first & 0x3F) as usize) << 8) | (bytes[cursor + 1] as usize);
+        Ok((value, cursor + 2))
+    } else if first & 0xE0 == 0xC0 {
+        // Three bytes: 0xC0-0xDF
+        if cursor + 3 > bytes.len() {
+            return Err(eyre!("compact length truncated"));
+        }
+        let value = (((first & 0x1F) as usize) << 16)
+            | ((bytes[cursor + 1] as usize) << 8)
+            | (bytes[cursor + 2] as usize);
+        Ok((value, cursor + 3))
+    } else {
+        // Four bytes: 0xE0-0xEF
+        if cursor + 4 > bytes.len() {
+            return Err(eyre!("compact length truncated"));
+        }
+        let value = (((first & 0x0F) as usize) << 24)
+            | ((bytes[cursor + 1] as usize) << 16)
+            | ((bytes[cursor + 2] as usize) << 8)
+            | (bytes[cursor + 3] as usize);
+        Ok((value, cursor + 4))
+    }
 }
 
 /// Convert BlueprintFieldKind enum to DynSolType.

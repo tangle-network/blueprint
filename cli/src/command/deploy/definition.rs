@@ -1001,14 +1001,20 @@ fn hex_to_bytes(value: Option<&str>) -> Result<Bytes> {
     }
 }
 
+/// Schema version constants
+const SCHEMA_VERSION_2: u8 = 0x02;
+
 /// Encode a JSON ABI schema to the TLV binary format expected by the contract.
 ///
-/// The TLV format is:
+/// The TLV format (version 2 with field names) is:
+/// - 1 byte: version (0x02)
 /// - 2 bytes: uint16 field count (big-endian)
-/// - For each field (5 bytes header + children recursively):
+/// - For each field (5 bytes header + name + children recursively):
 ///   - 1 byte: BlueprintFieldKind enum (0-22)
 ///   - 2 bytes: uint16 arrayLength (big-endian)
 ///   - 2 bytes: uint16 childCount (big-endian)
+///   - 1-4 bytes: compact-encoded name length
+///   - N bytes: field name UTF-8 string
 fn encode_json_schema_to_tlv(json_str: &str) -> Result<Bytes> {
     let params: Vec<Param> =
         serde_json::from_str(json_str).map_err(|e| eyre!("failed to parse JSON schema: {e}"))?;
@@ -1022,23 +1028,70 @@ fn encode_json_schema_to_tlv(json_str: &str) -> Result<Bytes> {
         return Err(eyre!("schema has too many fields (max {})", u16::MAX));
     }
 
-    // Count total nodes needed
-    let total_nodes: usize = params.iter().map(count_nodes).sum();
+    // Calculate total size needed: 1 byte version + 2 bytes field count + fields with names
+    let total_size: usize = 1 + 2 + params.iter().map(calculate_field_size).sum::<usize>();
 
-    // Allocate buffer: 2 bytes for field count + 5 bytes per node
-    let mut buffer = vec![0u8; 2 + total_nodes * 5];
+    let mut buffer = vec![0u8; total_size];
+
+    // Write version byte
+    buffer[0] = SCHEMA_VERSION_2;
 
     // Write field count (big-endian)
-    buffer[0] = (field_count >> 8) as u8;
-    buffer[1] = (field_count & 0xFF) as u8;
+    buffer[1] = (field_count >> 8) as u8;
+    buffer[2] = (field_count & 0xFF) as u8;
 
     // Write each field
-    let mut cursor = 2;
+    let mut cursor = 3;
     for param in &params {
         cursor = write_field(&mut buffer, cursor, param)?;
     }
 
     Ok(Bytes::from(buffer))
+}
+
+/// Calculate the total encoded size of a field including header, name, and children.
+fn calculate_field_size(param: &Param) -> usize {
+    // Header (5 bytes) + name length encoding + name bytes
+    let name_len = param.name.len();
+    let mut size = 5 + compact_length_size(name_len) + name_len;
+
+    // For array types (type[] or type[n]), we need to count the element type as a child
+    if param.ty.ends_with(']') && param.components.is_empty() {
+        if let Some(bracket_pos) = param.ty.rfind('[') {
+            let base_type = &param.ty[..bracket_pos];
+            if !base_type.is_empty() {
+                // Create synthetic child for element type (with empty name)
+                let element_param = Param {
+                    name: String::new(),
+                    ty: base_type.to_string(),
+                    components: vec![],
+                    internal_type: None,
+                };
+                size += calculate_field_size(&element_param);
+                return size;
+            }
+        }
+    }
+
+    // Add children recursively
+    for child in &param.components {
+        size += calculate_field_size(child);
+    }
+
+    size
+}
+
+/// Calculate the number of bytes needed for compact length encoding.
+fn compact_length_size(len: usize) -> usize {
+    if len < 0x80 {
+        1
+    } else if len < 0x4000 {
+        2
+    } else if len < 0x200000 {
+        3
+    } else {
+        4
+    }
 }
 
 /// Count total nodes in a schema field (including nested children).
@@ -1100,8 +1153,10 @@ fn write_field(buffer: &mut [u8], cursor: usize, param: &Param) -> Result<usize>
     buffer[cursor + 3] = (child_count >> 8) as u8;
     buffer[cursor + 4] = (child_count & 0xFF) as u8;
 
-    // Write children recursively
     let mut next_cursor = cursor + 5;
+
+    // Write field name (compact length + UTF-8 bytes)
+    next_cursor = write_compact_string(buffer, next_cursor, &param.name);
 
     // If we have a synthetic child for array element type, write it
     if let Some(ref element) = synthetic_child {
@@ -1114,6 +1169,43 @@ fn write_field(buffer: &mut [u8], cursor: usize, param: &Param) -> Result<usize>
     }
 
     Ok(next_cursor)
+}
+
+/// Write a compact-encoded string to the buffer.
+fn write_compact_string(buffer: &mut [u8], cursor: usize, s: &str) -> usize {
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+
+    // Write compact length
+    let cursor = write_compact_length(buffer, cursor, len);
+
+    // Write string bytes
+    buffer[cursor..cursor + len].copy_from_slice(bytes);
+
+    cursor + len
+}
+
+/// Write a compact-encoded length to the buffer.
+fn write_compact_length(buffer: &mut [u8], cursor: usize, len: usize) -> usize {
+    if len < 0x80 {
+        buffer[cursor] = len as u8;
+        cursor + 1
+    } else if len < 0x4000 {
+        buffer[cursor] = (0x80 | (len >> 8)) as u8;
+        buffer[cursor + 1] = (len & 0xFF) as u8;
+        cursor + 2
+    } else if len < 0x200000 {
+        buffer[cursor] = (0xC0 | (len >> 16)) as u8;
+        buffer[cursor + 1] = ((len >> 8) & 0xFF) as u8;
+        buffer[cursor + 2] = (len & 0xFF) as u8;
+        cursor + 3
+    } else {
+        buffer[cursor] = (0xE0 | (len >> 24)) as u8;
+        buffer[cursor + 1] = ((len >> 16) & 0xFF) as u8;
+        buffer[cursor + 2] = ((len >> 8) & 0xFF) as u8;
+        buffer[cursor + 3] = (len & 0xFF) as u8;
+        cursor + 4
+    }
 }
 
 /// Parse a Solidity type string and return (BlueprintFieldKind, arrayLength).
@@ -1625,17 +1717,23 @@ mod tests {
         let json = r#"[{"name": "greeting", "type": "string"}]"#;
         let result = encode_json_schema_to_tlv(json).unwrap();
 
-        // Expected TLV format:
+        // Expected TLV v2 format:
+        // - 1 byte: version = 0x02
         // - 2 bytes: field count = 1 (0x00, 0x01)
         // - 5 bytes: header for string field (kind=17, arrayLength=0, childCount=0)
-        assert_eq!(result.len(), 7); // 2 + 5
-        assert_eq!(result[0], 0x00); // field count high byte
-        assert_eq!(result[1], 0x01); // field count low byte
-        assert_eq!(result[2], 17); // String kind
-        assert_eq!(result[3], 0x00); // arrayLength high byte
-        assert_eq!(result[4], 0x00); // arrayLength low byte
-        assert_eq!(result[5], 0x00); // childCount high byte
-        assert_eq!(result[6], 0x00); // childCount low byte
+        // - 1 byte: name length = 8 ("greeting")
+        // - 8 bytes: name "greeting"
+        assert_eq!(result.len(), 17); // 1 + 2 + 5 + 1 + 8
+        assert_eq!(result[0], 0x02); // version
+        assert_eq!(result[1], 0x00); // field count high byte
+        assert_eq!(result[2], 0x01); // field count low byte
+        assert_eq!(result[3], 17); // String kind
+        assert_eq!(result[4], 0x00); // arrayLength high byte
+        assert_eq!(result[5], 0x00); // arrayLength low byte
+        assert_eq!(result[6], 0x00); // childCount high byte
+        assert_eq!(result[7], 0x00); // childCount low byte
+        assert_eq!(result[8], 8); // name length
+        assert_eq!(&result[9..17], b"greeting"); // name
     }
 
     #[test]
@@ -1644,15 +1742,21 @@ mod tests {
         let json = r#"[{"name": "name", "type": "string"}, {"name": "value", "type": "uint256"}]"#;
         let result = encode_json_schema_to_tlv(json).unwrap();
 
-        // Expected TLV format:
+        // Expected TLV v2 format:
+        // - 1 byte: version = 0x02
         // - 2 bytes: field count = 2
-        // - 5 bytes: string field
-        // - 5 bytes: uint256 field
-        assert_eq!(result.len(), 12); // 2 + 5 + 5
-        assert_eq!(result[0], 0x00); // field count high byte
-        assert_eq!(result[1], 0x02); // field count low byte
-        assert_eq!(result[2], 17); // String kind
-        assert_eq!(result[7], 12); // Uint256 kind
+        // - 5 bytes: string header + 1 byte name len + 4 bytes "name" = 10 bytes
+        // - 5 bytes: uint256 header + 1 byte name len + 5 bytes "value" = 11 bytes
+        assert_eq!(result.len(), 24); // 1 + 2 + 10 + 11
+        assert_eq!(result[0], 0x02); // version
+        assert_eq!(result[1], 0x00); // field count high byte
+        assert_eq!(result[2], 0x02); // field count low byte
+        assert_eq!(result[3], 17); // String kind
+        assert_eq!(result[8], 4); // name length for "name"
+        assert_eq!(&result[9..13], b"name"); // first field name
+        assert_eq!(result[13], 12); // Uint256 kind
+        assert_eq!(result[18], 5); // name length for "value"
+        assert_eq!(&result[19..24], b"value"); // second field name
     }
 
     #[test]
@@ -1661,19 +1765,27 @@ mod tests {
         let json = r#"[{"name": "data", "type": "tuple", "components": [{"name": "x", "type": "uint64"}, {"name": "y", "type": "bool"}]}]"#;
         let result = encode_json_schema_to_tlv(json).unwrap();
 
-        // Expected TLV format:
+        // Expected TLV v2 format:
+        // - 1 byte: version = 0x02
         // - 2 bytes: field count = 1
-        // - 5 bytes: tuple header (kind=22, arrayLength=0, childCount=2)
-        // - 5 bytes: uint64 field
-        // - 5 bytes: bool field
-        assert_eq!(result.len(), 17); // 2 + 5 + 5 + 5
-        assert_eq!(result[0], 0x00); // field count high byte
-        assert_eq!(result[1], 0x01); // field count low byte
-        assert_eq!(result[2], 22); // Struct kind
-        assert_eq!(result[5], 0x00); // childCount high byte
-        assert_eq!(result[6], 0x02); // childCount low byte = 2 children
-        assert_eq!(result[7], 8); // Uint64 kind
-        assert_eq!(result[12], 1); // Bool kind
+        // - 5 bytes: tuple header (kind=22, arrayLength=0, childCount=2) + 1 + 4 = 10 bytes for "data"
+        // - 5 bytes: uint64 header + 1 + 1 = 7 bytes for "x"
+        // - 5 bytes: bool header + 1 + 1 = 7 bytes for "y"
+        assert_eq!(result.len(), 27); // 1 + 2 + 10 + 7 + 7
+        assert_eq!(result[0], 0x02); // version
+        assert_eq!(result[1], 0x00); // field count high byte
+        assert_eq!(result[2], 0x01); // field count low byte
+        assert_eq!(result[3], 22); // Struct kind
+        assert_eq!(result[6], 0x00); // childCount high byte
+        assert_eq!(result[7], 0x02); // childCount low byte = 2 children
+        assert_eq!(result[8], 4); // name length for "data"
+        assert_eq!(&result[9..13], b"data"); // tuple name
+        assert_eq!(result[13], 8); // Uint64 kind
+        assert_eq!(result[18], 1); // name length for "x"
+        assert_eq!(result[19], b'x'); // first child name
+        assert_eq!(result[20], 1); // Bool kind
+        assert_eq!(result[25], 1); // name length for "y"
+        assert_eq!(result[26], b'y'); // second child name
     }
 
     #[test]
@@ -1682,15 +1794,20 @@ mod tests {
         let json = r#"[{"name": "values", "type": "uint256[]"}]"#;
         let result = encode_json_schema_to_tlv(json).unwrap();
 
-        // Expected TLV format:
+        // Expected TLV v2 format:
+        // - 1 byte: version = 0x02
         // - 2 bytes: field count = 1
-        // - 5 bytes: List header (kind=21, arrayLength=0, childCount=1)
-        // - 5 bytes: element type header (kind=12 for uint256)
-        assert_eq!(result.len(), 12);
-        assert_eq!(result[2], 21); // List kind
-        assert_eq!(result[5], 0x00); // childCount high byte
-        assert_eq!(result[6], 0x01); // childCount low byte = 1
-        assert_eq!(result[7], 12); // element type = uint256
+        // - 5 bytes: List header (kind=21, arrayLength=0, childCount=1) + 1 + 6 = 12 bytes for "values"
+        // - 5 bytes: element type header (kind=12 for uint256) + 1 + 0 = 6 bytes (empty name)
+        assert_eq!(result.len(), 21); // 1 + 2 + 12 + 6
+        assert_eq!(result[0], 0x02); // version
+        assert_eq!(result[3], 21); // List kind
+        assert_eq!(result[6], 0x00); // childCount high byte
+        assert_eq!(result[7], 0x01); // childCount low byte = 1
+        assert_eq!(result[8], 6); // name length for "values"
+        assert_eq!(&result[9..15], b"values"); // list name
+        assert_eq!(result[15], 12); // element type = uint256
+        assert_eq!(result[20], 0); // empty name for element
     }
 
     #[test]
@@ -1699,17 +1816,22 @@ mod tests {
         let json = r#"[{"name": "triple", "type": "uint256[3]"}]"#;
         let result = encode_json_schema_to_tlv(json).unwrap();
 
-        // Expected TLV format:
+        // Expected TLV v2 format:
+        // - 1 byte: version = 0x02
         // - 2 bytes: field count = 1
-        // - 5 bytes: Array header (kind=20, arrayLength=3, childCount=1)
-        // - 5 bytes: element type header (kind=12 for uint256)
-        assert_eq!(result.len(), 12);
-        assert_eq!(result[2], 20); // Array kind
-        assert_eq!(result[3], 0x00); // arrayLength high byte
-        assert_eq!(result[4], 0x03); // arrayLength low byte = 3
-        assert_eq!(result[5], 0x00); // childCount high byte
-        assert_eq!(result[6], 0x01); // childCount low byte = 1
-        assert_eq!(result[7], 12); // element type = uint256
+        // - 5 bytes: Array header (kind=20, arrayLength=3, childCount=1) + 1 + 6 = 12 bytes for "triple"
+        // - 5 bytes: element type header (kind=12 for uint256) + 1 + 0 = 6 bytes (empty name)
+        assert_eq!(result.len(), 21); // 1 + 2 + 12 + 6
+        assert_eq!(result[0], 0x02); // version
+        assert_eq!(result[3], 20); // Array kind
+        assert_eq!(result[4], 0x00); // arrayLength high byte
+        assert_eq!(result[5], 0x03); // arrayLength low byte = 3
+        assert_eq!(result[6], 0x00); // childCount high byte
+        assert_eq!(result[7], 0x01); // childCount low byte = 1
+        assert_eq!(result[8], 6); // name length for "triple"
+        assert_eq!(&result[9..15], b"triple"); // array name
+        assert_eq!(result[15], 12); // element type = uint256
+        assert_eq!(result[20], 0); // empty name for element
     }
 
     #[test]
@@ -1718,9 +1840,11 @@ mod tests {
         let json = r#"[{"name": "name", "type": "string"}]"#;
         let result = hex_to_bytes(Some(json)).unwrap();
 
-        // Should be TLV format, not raw JSON bytes
-        assert_eq!(result.len(), 7); // TLV format
-        assert_eq!(result[2], 17); // String kind
+        // Should be TLV v2 format, not raw JSON bytes
+        // 1 byte version + 2 bytes field count + 5 bytes header + 1 + 4 = 13 bytes
+        assert_eq!(result.len(), 13); // TLV v2 format
+        assert_eq!(result[0], 0x02); // version
+        assert_eq!(result[3], 17); // String kind
     }
 
     #[test]
@@ -1732,9 +1856,11 @@ mod tests {
         let hex_encoded = format!("0x{}", hex::encode(json.as_bytes()));
         let result = hex_to_bytes(Some(&hex_encoded)).unwrap();
 
-        // Should be TLV format, not raw JSON bytes
-        assert_eq!(result.len(), 7); // TLV format
-        assert_eq!(result[2], 17); // String kind
+        // Should be TLV v2 format, not raw JSON bytes
+        // 1 byte version + 2 bytes field count + 5 bytes header + 1 + 4 = 13 bytes
+        assert_eq!(result.len(), 13); // TLV v2 format
+        assert_eq!(result[0], 0x02); // version
+        assert_eq!(result[3], 17); // String kind
     }
 
     #[test]
