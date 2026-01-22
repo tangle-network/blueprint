@@ -278,6 +278,10 @@ cargo tangle blueprint jobs watch \
 
 ## 5. Operator Utilities (`operator` / `op`)
 
+**Test Documentation:**
+- Test Plan: [`OPERATOR_UTILITIES_TEST_PLAN.md`](./OPERATOR_UTILITIES_TEST_PLAN.md)
+- Progress Tracker: [`OPERATOR_UTILITIES_TEST_PROGRESS.md`](./OPERATOR_UTILITIES_TEST_PROGRESS.md)
+
 | Command | Description | Status | Tested Options | Notes | Reference |
 |---------|-------------|--------|----------------|-------|-----------|
 | `operator register` | Register as an operator on the restaking layer | ❌ | | | |

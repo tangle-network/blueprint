@@ -28,7 +28,7 @@ When a user defines a job schema with named parameters:
 They expect to submit jobs using intuitive object format:
 
 ```json
-{"recipient": "0x1234...", "amount": 1000}
+{ "recipient": "0x1234...", "amount": 1000 }
 ```
 
 But this fails with:
@@ -50,11 +50,16 @@ This is less readable and error-prone, especially for jobs with many parameters.
 The TLV binary format stores only type information, not field names.
 
 **Original JSON schema:**
+
 ```json
-[{"name": "recipient", "type": "address"}, {"name": "amount", "type": "uint256"}]
+[
+  { "name": "recipient", "type": "address" },
+  { "name": "amount", "type": "uint256" }
+]
 ```
 
 **After TLV encoding (what's stored on-chain):**
+
 ```
 [field_count=2][Address, arrayLen=0, childCount=0][Uint256, arrayLen=0, childCount=0]
 ```
@@ -74,6 +79,7 @@ This issue was discovered during CLI testing (documented in `JOB_SYSTEM_TEST_PRO
 **Location:** `tnt-core/src/v2/libraries/SchemaLib.sol`
 
 **Binary structure:**
+
 ```
 [2 bytes: uint16 field_count (big-endian)]
 For each field:
@@ -147,12 +153,12 @@ struct BlueprintFieldType {
 
 Reuse existing `_readCompactLength()` format from SchemaLib:
 
-| Length Range | Encoding | Bytes Used |
-|--------------|----------|------------|
-| 0-127 | `0x00-0x7F` | 1 byte |
-| 128-16,383 | `0x80-0xBF` + 1 byte | 2 bytes |
-| 16,384-2,097,151 | `0xC0-0xDF` + 2 bytes | 3 bytes |
-| Larger | `0xE0-0xEF` + 3 bytes | 4 bytes |
+| Length Range     | Encoding              | Bytes Used |
+| ---------------- | --------------------- | ---------- |
+| 0-127            | `0x00-0x7F`           | 1 byte     |
+| 128-16,383       | `0x80-0xBF` + 1 byte  | 2 bytes    |
+| 16,384-2,097,151 | `0xC0-0xDF` + 2 bytes | 3 bytes    |
+| Larger           | `0xE0-0xEF` + 3 bytes | 4 bytes    |
 
 Most field names are < 32 characters, so 1 byte length encoding covers typical cases.
 
@@ -189,6 +195,7 @@ struct BlueprintFieldType {
 **File:** `src/v2/libraries/SchemaLib.sol`
 
 **Add version constant:**
+
 ```solidity
 uint8 internal constant SCHEMA_VERSION_1 = 0x01;  // Legacy (no names)
 uint8 internal constant SCHEMA_VERSION_2 = 0x02;  // With names
@@ -196,6 +203,7 @@ uint8 internal constant CURRENT_SCHEMA_VERSION = SCHEMA_VERSION_2;
 ```
 
 **Update `encodeSchema()` (lines 30-47):**
+
 ```solidity
 function encodeSchema(Types.BlueprintFieldType[] memory source) internal pure returns (bytes memory) {
     if (source.length == 0) {
@@ -226,6 +234,7 @@ function encodeSchema(Types.BlueprintFieldType[] memory source) internal pure re
 ```
 
 **Add `_calculateEncodedSize()` helper:**
+
 ```solidity
 function _calculateEncodedSize(Types.BlueprintFieldType[] memory fields) private pure returns (uint256 size) {
     for (uint256 i = 0; i < fields.length; ++i) {
@@ -247,6 +256,7 @@ function _calculateFieldSize(Types.BlueprintFieldType memory field) private pure
 ```
 
 **Update `_writeField()` (lines 55-70):**
+
 ```solidity
 function _writeField(bytes memory out, uint256 cursor, Types.BlueprintFieldType memory field)
     private pure returns (uint256)
@@ -267,6 +277,7 @@ function _writeField(bytes memory out, uint256 cursor, Types.BlueprintFieldType 
 ```
 
 **Add `_writeCompactString()` helper:**
+
 ```solidity
 function _writeCompactString(bytes memory out, uint256 cursor, string memory str)
     private pure returns (uint256)
@@ -287,6 +298,7 @@ function _writeCompactString(bytes memory out, uint256 cursor, string memory str
 ```
 
 **Update `_validateField()` (lines 181-289) to skip names:**
+
 ```solidity
 function _validateField(...) private pure returns (...) {
     // Read header (same as before)
@@ -307,6 +319,7 @@ function _validateField(...) private pure returns (...) {
 #### 1.3 Update Test Helpers
 
 **Files to update:**
+
 - `test/support/SchemaTestUtils.sol`
 - `test/support/BlueprintDefinitionHelper.sol`
 - `test/v2/libraries/SchemaLibFuzz.t.sol`
@@ -343,6 +356,7 @@ Update `encode_json_schema_to_tlv()` to write version 2 format with names.
 **File:** `cli/src/command/jobs/helpers.rs`
 
 **Update `decode_tlv_schema()` (lines 766-788):**
+
 ```rust
 fn decode_tlv_schema(data: &[u8]) -> Result<Vec<SchemaParam>> {
     if data.is_empty() {
@@ -373,6 +387,7 @@ fn decode_tlv_schema(data: &[u8]) -> Result<Vec<SchemaParam>> {
 ```
 
 **Update `decode_tlv_field()` to read names:**
+
 ```rust
 fn decode_tlv_field(data: &[u8], cursor: usize, has_names: bool) -> Result<(SchemaParam, usize)> {
     // Read 5-byte header
@@ -444,11 +459,13 @@ fn decode_tlv_schema(data: &[u8]) -> Result<Vec<SchemaParam>> {
 #### Migration Path
 
 Existing blueprints with version 1 schemas continue to work:
+
 - Validation works (names not needed for type checking)
 - CLI shows `arg_0`, `arg_1`, etc. (same as current behavior)
 - Object-format params still fail (expected)
 
 New blueprints deployed with updated CLI get version 2 schemas:
+
 - CLI shows actual field names
 - Object-format params work
 
@@ -460,32 +477,32 @@ No migration of existing data required.
 
 ### Per-Field Overhead
 
-| Component | Version 1 | Version 2 (empty name) | Version 2 (10-char name) |
-|-----------|-----------|------------------------|--------------------------|
-| Header | 5 bytes | 5 bytes | 5 bytes |
-| Name length | - | 1 byte | 1 byte |
-| Name data | - | 0 bytes | 10 bytes |
-| **Total** | **5 bytes** | **6 bytes** | **16 bytes** |
+| Component   | Version 1   | Version 2 (empty name) | Version 2 (10-char name) |
+| ----------- | ----------- | ---------------------- | ------------------------ |
+| Header      | 5 bytes     | 5 bytes                | 5 bytes                  |
+| Name length | -           | 1 byte                 | 1 byte                   |
+| Name data   | -           | 0 bytes                | 10 bytes                 |
+| **Total**   | **5 bytes** | **6 bytes**            | **16 bytes**             |
 
 ### Example Schemas
 
-| Schema | Fields | Version 1 | Version 2 |
-|--------|--------|-----------|-----------|
-| Simple (1 string) | 1 | 7 bytes | 19 bytes |
-| Transfer (address, uint256) | 2 | 12 bytes | 40 bytes |
-| Complex (5 fields, avg 12-char names) | 5 | 27 bytes | 100 bytes |
-| Nested struct (10 fields total) | 10 | 52 bytes | 195 bytes |
+| Schema                                | Fields | Version 1 | Version 2 |
+| ------------------------------------- | ------ | --------- | --------- |
+| Simple (1 string)                     | 1      | 7 bytes   | 19 bytes  |
+| Transfer (address, uint256)           | 2      | 12 bytes  | 40 bytes  |
+| Complex (5 fields, avg 12-char names) | 5      | 27 bytes  | 100 bytes |
+| Nested struct (10 fields total)       | 10     | 52 bytes  | 195 bytes |
 
 ### Gas Cost Estimate
 
 Storage cost: ~20,000 gas per 32-byte slot
 
-| Schema | V1 Slots | V2 Slots | Additional Gas |
-|--------|----------|----------|----------------|
-| Simple | 1 | 1 | 0 |
-| Transfer | 1 | 2 | ~20,000 |
-| Complex | 1 | 4 | ~60,000 |
-| Nested | 2 | 7 | ~100,000 |
+| Schema   | V1 Slots | V2 Slots | Additional Gas |
+| -------- | -------- | -------- | -------------- |
+| Simple   | 1        | 1        | 0              |
+| Transfer | 1        | 2        | ~20,000        |
+| Complex  | 1        | 4        | ~60,000        |
+| Nested   | 2        | 7        | ~100,000       |
 
 This is a one-time cost during blueprint deployment, not per job submission.
 
@@ -529,6 +546,7 @@ This is a one-time cost during blueprint deployment, not per job submission.
 ### Unit Tests
 
 1. **Encoding tests:**
+
    - Empty schema
    - Single field with/without name
    - Multiple fields with various name lengths
@@ -536,6 +554,7 @@ This is a one-time cost during blueprint deployment, not per job submission.
    - Arrays with named element types
 
 2. **Decoding tests:**
+
    - Version 1 (legacy) schemas
    - Version 2 schemas
    - Round-trip: encode → decode → compare
@@ -548,6 +567,7 @@ This is a one-time cost during blueprint deployment, not per job submission.
 ### Integration Tests
 
 1. **CLI object-format params:**
+
    - Deploy blueprint with named schema
    - Submit job with object format
    - Verify job executes correctly
@@ -567,10 +587,12 @@ This is a one-time cost during blueprint deployment, not per job submission.
 Store a name mapping in IPFS or similar, reference by hash in contract.
 
 **Pros:**
+
 - No contract changes
 - Minimal on-chain storage
 
 **Cons:**
+
 - Requires off-chain infrastructure
 - Names not guaranteed available
 - More complex CLI logic
@@ -580,10 +602,12 @@ Store a name mapping in IPFS or similar, reference by hash in contract.
 Store schemas as ABI-encoded tuples which include names.
 
 **Pros:**
+
 - Well-established format
 - Tooling already exists
 
 **Cons:**
+
 - Much larger storage (ABI is verbose)
 - Would require rewriting validation logic
 - Breaking change to existing format
@@ -593,10 +617,12 @@ Store schemas as ABI-encoded tuples which include names.
 Accept that object-format params don't work.
 
 **Pros:**
+
 - No implementation work
 - No risk of bugs
 
 **Cons:**
+
 - Poor user experience
 - Inconsistent with user expectations
 - Array format is error-prone for complex schemas
