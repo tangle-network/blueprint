@@ -9,7 +9,7 @@ This document tracks the testing status of all `cargo-tangle` CLI commands. Use 
 - 🔇 Ignored - Intentionally skipped for now (low priority or out of scope)
 - 🚫 N/A - Not applicable for local testing (e.g., mainnet-only features)
 
-**Last Updated:** 2026-01-21 (Job System commands completed - 30/30 tests passed)
+**Last Updated:** 2026-01-22 (Chain State Queries completed)
 
 ---
 
@@ -21,13 +21,13 @@ This document tracks the testing status of all `cargo-tangle` CLI commands. Use 
 | Key Management | 5 | 1 | 0 | 0 | 4 |
 | Service Lifecycle | 9 | 9 | 0 | 0 | 0 |
 | Job System | 4 | 4 | 0 | 0 | 0 |
-| Operator Utilities | 13 | 0 | 0 | 13 | 0 |
-| Delegator Utilities | 14 | 0 | 0 | 14 | 0 |
-| Chain State Queries | 3 | 0 | 0 | 3 | 0 |
+| Operator Utilities | 12 | 12 | 0 | 0 | 0 |
+| Delegator Utilities | 14 | 14 | 0 | 0 | 0 |
+| Chain State Queries | 3 | 3 | 0 | 0 | 0 |
 | Cloud Deployment | 7 | 0 | 0 | 7 | 0 |
 | EigenLayer AVS | 7 | 0 | 0 | 7 | 0 |
 | Debug | 1 | 0 | 0 | 1 | 0 |
-| **Total** | **68** | **18** | **0** | **46** | **4** |
+| **Total** | **67** | **47** | **0** | **16** | **4** |
 
 ---
 
@@ -284,51 +284,264 @@ cargo tangle blueprint jobs watch \
 
 | Command | Description | Status | Tested Options | Notes | Reference |
 |---------|-------------|--------|----------------|-------|-----------|
-| `operator register` | Register as an operator on the restaking layer | ❌ | | | |
-| `operator show-status` | Display operator heartbeat and status info | ❌ | | | |
-| `operator submit-heartbeat` | Send a heartbeat to prove operator liveness | ❌ | | | |
-| `operator show-restaking` | Show current restaking status and stake amounts | ❌ | | | |
-| `operator join-service` | Join an existing dynamic service | ❌ | | ⚠️ Duplicate of `service join` (no validation, requires unused `--blueprint-id`) | |
-| `operator leave-service` | Leave a dynamic service | ❌ | | ⚠️ Duplicate of `service leave` (no validation, requires unused `--blueprint-id`) | |
-| `operator list-delegators` | List all delegators staking with this operator | ❌ | | | |
-| `operator unstake` | Schedule an unstake operation | ❌ | | | |
-| `operator execute-unstake` | Execute a matured unstake operation | ❌ | | | |
-| `operator increase-stake` | Add more stake to operator balance | ❌ | | | |
-| `operator schedule-leaving` | Schedule operator departure from network | ❌ | | | |
-| `operator complete-leaving` | Finalize operator departure after cooldown | ❌ | | | |
+| `operator register` | Register as an operator on the restaking layer | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--amount` | 2/2 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 1 |
+| `operator status` | Display operator heartbeat and status info | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--operator`, `--json` | 4/4 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 2 |
+| `operator heartbeat` | Send a heartbeat to prove operator liveness | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--status-code`, `--json` | 3/3 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 2 |
+| `operator restaking` | Show current restaking status and stake amounts | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | 3/3 tests passed; Bug #1 fixed (unregistered operators now show "Not Registered") | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 1 |
+| `operator join` | Join an existing dynamic service | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id` | ⚠️ BLOCKED by contract limitation (SecurityCommitmentsRequired); tested via cast workaround | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 4 |
+| `operator leave` | Leave a dynamic service | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id` | ⚠️ BLOCKED by exit queue; needs schedule-exit/execute-exit commands | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 4 |
+| `operator delegators` | List all delegators staking with this operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--operator`, `--json` | 3/3 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 3 |
+| `operator schedule-unstake` | Schedule an unstake operation | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--amount`, `--json` | 2/2 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 5 |
+| `operator execute-unstake` | Execute a matured unstake operation | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | 2/2 tests passed; requires 56 round delay | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 5 |
+| `operator increase-stake` | Add more stake to operator balance | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--amount`, `--json` | 2/2 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 1 |
+| `operator start-leaving` | Schedule operator departure from network | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | 2/2 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 6 |
+| `operator complete-leaving` | Finalize operator departure after cooldown | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | 2/2 tests passed; requires 56 round delay | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 6 |
 
-**Note:** Operator registration in E2E tests was done via `cast send` directly to the contract, not via CLI.
+### Known Limitations
+
+**Limitation #1: `operator join` Requires Security Commitments**
+- Error Code: `0x732253f5` = `SecurityCommitmentsRequired`
+- CLI needs `--commitments` flag to specify asset commitments for services with security requirements
+- Workaround: Use `cast send` to call `joinServiceWithCommitments()` directly
+
+**Limitation #2: `operator leave` Requires Exit Queue Workflow**
+- CLI needs new commands: `operator schedule-exit`, `operator execute-exit`, `operator cancel-exit`
+- Exit queue workflow verified working via `cast` (see OPERATOR_UTILITIES_TEST_PROGRESS.md)
+
+### Tested Command Examples
+
+```bash
+# Register operator with native ETH
+cargo tangle operator register \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --amount 1000000000000000000
+
+# Show restaking status
+cargo tangle operator restaking \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --json
+
+# Submit heartbeat
+cargo tangle operator heartbeat \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --status-registry-contract $STATUS_REGISTRY \
+  --blueprint-id 0 \
+  --service-id 0
+
+# Show operator status
+cargo tangle operator status \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --status-registry-contract $STATUS_REGISTRY \
+  --blueprint-id 0 \
+  --service-id 0 \
+  --json
+
+# List delegators
+cargo tangle operator delegators \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --json
+
+# Schedule unstake
+cargo tangle operator schedule-unstake \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --amount 500000000000000000
+
+# Start leaving
+cargo tangle operator start-leaving \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING
+```
 
 ---
 
 ## 6. Delegator Utilities (`delegator` / `del`)
 
+**Test Documentation:**
+- Test Plan: [`DELEGATOR_UTILITIES_TEST_PLAN.md`](./DELEGATOR_UTILITIES_TEST_PLAN.md)
+
 | Command | Description | Status | Tested Options | Notes | Reference |
 |---------|-------------|--------|----------------|-------|-----------|
-| `delegator show` | Display deposits, locks, and delegation summary | ❌ | | | |
-| `delegator balance` | Check ERC20 token balance for an address | ❌ | | | |
-| `delegator allowance` | Check ERC20 allowance for restaking contract | ❌ | | | |
-| `delegator approve` | Approve tokens for use by restaking contract | ❌ | | | |
-| `delegator deposit` | Deposit tokens without delegating to an operator | ❌ | | | |
-| `delegator delegate` | Delegate staked tokens to an operator | ❌ | | | |
-| `delegator undelegate` | Schedule removal of delegation from an operator | ❌ | | | |
-| `delegator execute-unstakes` | Execute all matured unstake operations | ❌ | | | |
-| `delegator execute-unstake-and-withdraw` | Execute a specific unstake and withdraw funds | ❌ | | | |
-| `delegator schedule-withdrawal` | Schedule a withdrawal of deposited funds | ❌ | | | |
-| `delegator execute-withdrawals` | Execute all matured withdrawal operations | ❌ | | | |
-| `delegator list-delegations` | List all active delegations | ❌ | | | |
-| `delegator list-pending-unstakes` | List all pending unstake operations | ❌ | | | |
-| `delegator list-pending-withdrawals` | List all pending withdrawal operations | ❌ | | | |
+| `delegator positions` | Display deposits, locks, delegations, and pending requests | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--delegator`, `--token`, `--json` | Shows all delegator positions in one view | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 1 |
+| `delegator delegations` | List all active delegations | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--delegator`, `--json` | Lists delegations with operator, shares, asset, selection mode | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 1 |
+| `delegator pending-unstakes` | List all pending unstake operations | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--delegator`, `--json` | Shows pending unstakes with requested round | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 1 |
+| `delegator pending-withdrawals` | List all pending withdrawal operations | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--delegator`, `--json` | Shows pending withdrawals with requested round | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 1 |
+| `delegator balance` | Check ERC20 token balance for an address | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--token`, `--owner`, `--json` | Query balance for any token/owner | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 2 |
+| `delegator allowance` | Check ERC20 allowance for restaking contract | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--token`, `--owner`, `--spender`, `--json` | Defaults spender to restaking contract | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 2 |
+| `delegator approve` | Approve tokens for use by restaking contract | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--token`, `--amount`, `--spender`, `--json` | Required before ERC20 deposits | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 2 |
+| `delegator deposit` | Deposit tokens without delegating to an operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--token`, `--amount`, `--json` | Supports native ETH and ERC20 tokens | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 3 |
+| `delegator delegate` | Delegate staked tokens to an operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--operator`, `--amount`, `--token`, `--selection`, `--blueprint-id`, `--from-deposit`, `--json` | Supports All/Fixed selection modes | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 4 |
+| `delegator undelegate` | Schedule removal of delegation from an operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--operator`, `--amount`, `--token`, `--json` | Creates pending unstake | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 5 |
+| `delegator execute-unstake` | Execute all matured unstake operations | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | Requires delegationBondLessDelay to pass | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 5 |
+| `delegator execute-unstake-withdraw` | Execute a specific unstake and withdraw funds | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--operator`, `--token`, `--shares`, `--requested-round`, `--receiver`, `--json` | Combined unstake + withdraw in one tx | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 6 |
+| `delegator schedule-withdraw` | Schedule a withdrawal of deposited funds | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--token`, `--amount`, `--json` | Creates pending withdrawal | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 7 |
+| `delegator execute-withdraw` | Execute all matured withdrawal operations | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | Requires leaveDelegatorsDelay to pass | DELEGATOR_UTILITIES_TEST_PLAN.md Phase 7 |
+
+### Tested Command Examples
+
+```bash
+# Show delegator positions
+cargo tangle delegator positions \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --json
+
+# Check ERC20 balance
+cargo tangle delegator balance \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --token $ERC20_TOKEN
+
+# Approve ERC20 tokens
+cargo tangle delegator approve \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --token $ERC20_TOKEN \
+  --amount 1000000000000000000
+
+# Deposit native ETH
+cargo tangle delegator deposit \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --amount 1000000000000000000
+
+# Delegate to operator (direct - deposits and delegates in one tx)
+cargo tangle delegator delegate \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --operator 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
+  --amount 500000000000000000
+
+# Delegate with Fixed selection mode
+cargo tangle delegator delegate \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --operator 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
+  --amount 100000000000000000 \
+  --selection fixed \
+  --blueprint-id 0
+
+# Undelegate (schedule unstake)
+cargo tangle delegator undelegate \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --operator 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
+  --amount 100000000000000000
+
+# Schedule withdrawal
+cargo tangle delegator schedule-withdraw \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --amount 100000000000000000
+
+# List delegations
+cargo tangle delegator delegations \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./delegator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --json
+```
 
 ---
 
 ## 7. Chain State Queries (`list` / `l`)
 
+**Test Documentation:**
+- Test Plan: [`CHAIN_STATE_QUERIES_TEST_PLAN.md`](./CHAIN_STATE_QUERIES_TEST_PLAN.md)
+- Progress Tracker: [`CHAIN_STATE_QUERIES_TEST_PROGRESS.md`](./CHAIN_STATE_QUERIES_TEST_PROGRESS.md)
+
 | Command | Description | Status | Tested Options | Notes | Reference |
 |---------|-------------|--------|----------------|-------|-----------|
-| `list blueprints` | Show all blueprints registered on-chain | ❌ | | | |
-| `list requests` | Show all pending service requests | ❌ | | ⚠️ Duplicate of `service list-requests` (no `--json` support) | |
-| `list services` | Show all active services on the network | ❌ | | ⚠️ Duplicate of `service list` (no `--json` support) | |
+| `list blueprints` | Show all blueprints registered on-chain | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract` | 4/4 tests passed; `ls` alias works; no `--json` support | CHAIN_STATE_QUERIES_TEST_PROGRESS.md Phase 1 |
+| `list requests` | Show all pending service requests | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract` | 5/5 tests passed; `ls` alias works; identical to `service requests` | CHAIN_STATE_QUERIES_TEST_PROGRESS.md Phase 2 |
+| `list services` | Show all active services on the network | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract` | 5/5 tests passed; `ls` alias works; identical to `service list` | CHAIN_STATE_QUERIES_TEST_PROGRESS.md Phase 3 |
+
+### Tested Command Examples
+
+```bash
+# List all blueprints
+cargo tangle blueprint list blueprints \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./user-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING
+
+# List all service requests (using alias)
+cargo tangle blueprint ls requests \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./user-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING
+
+# List all services
+cargo tangle blueprint list services \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./user-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING
+```
+
+### Known Limitations
+
+**Limitation #1: No JSON Output Support**
+- All `list` commands only support human-readable output
+- Use `service list --json` or `service requests --json` instead for programmatic access
+- No JSON equivalent for `list blueprints`
 
 ---
 
@@ -376,8 +589,8 @@ The following commands have overlapping functionality. When testing, prefer the 
 
 | Command A | Command B | Same Code? | Difference | Recommended | Status |
 |-----------|-----------|------------|------------|-------------|--------|
-| `service join` | `operator join-service` | Yes | `service join` validates exposure > 0 and <= MAX_BPS | `service join` | ✅ Tested |
-| `service leave` | `operator leave-service` | Yes | `service leave` validates operator is active first | `service leave` | ✅ Tested |
+| `service join` | `operator join` | Yes | `service join` validates exposure > 0 and <= MAX_BPS | `service join` | ✅ Tested |
+| `service leave` | `operator leave` | Yes | `service leave` validates operator is active first | `service leave` | ✅ Tested |
 | `service list` | `list services` | Yes | `service list` supports `--json` flag | `service list` | ✅ Tested |
 | `service list-requests` | `list requests` | Yes | `service list-requests` supports `--json` flag | `service list-requests` | ✅ Tested |
 
@@ -390,9 +603,9 @@ The following commands have overlapping functionality. When testing, prefer the 
 ### High Priority (Core Workflow)
 These are essential for the basic operator/user workflow:
 
-1. ❌ `list blueprints` - Users need to discover blueprints
+1. ✅ `list blueprints` - Users need to discover blueprints - **DONE**
 2. ✅ `service list` - Users need to see active services (preferred over `list services`) - **DONE**
-3. ❌ `operator register` - Operators need CLI-based registration
+3. ✅ `operator register` - Operators need CLI-based registration - **DONE**
 
 ### Medium Priority (Extended Workflow)
 1. ✅ `service reject` - Operators may need to reject requests - **DONE**
@@ -401,7 +614,7 @@ These are essential for the basic operator/user workflow:
 4. ✅ `jobs show` - Understand job parameters - **DONE**
 
 ### Lower Priority (Advanced Features)
-1. ❌ All delegator commands
+1. ✅ All delegator commands - **DONE** (14/14)
 2. ❌ All cloud commands
 3. ❌ All EigenLayer commands
 4. ❌ Debug commands
@@ -412,6 +625,9 @@ These are essential for the basic operator/user workflow:
 ### Completed
 1. ✅ All service lifecycle commands (9/9) - See SERVICE_LIFECYCLE_TEST_PROGRESS.md
 2. ✅ All job system commands (4/4) - See JOB_SYSTEM_TEST_PROGRESS.md (30/30 tests passed)
+3. ✅ All operator utility commands (12/12) - See OPERATOR_UTILITIES_TEST_PROGRESS.md (34/34 tests passed)
+4. ✅ All delegator utility commands (14/14) - See DELEGATOR_UTILITIES_TEST_PLAN.md
+5. ✅ All chain state query commands (3/3) - See CHAIN_STATE_QUERIES_TEST_PROGRESS.md (19/20 tests passed, 1 skipped)
 
 ---
 
