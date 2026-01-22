@@ -1966,6 +1966,10 @@ async fn main() -> Result<()> {
                 } else {
                     client.account()
                 };
+                let is_registered = client
+                    .is_operator(operator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
                 let restaking = client
                     .get_restaking_metadata(operator_address)
                     .await
@@ -1989,6 +1993,7 @@ async fn main() -> Result<()> {
                 delegator::print_operator_restaking(
                     operator_address,
                     &restaking,
+                    is_registered,
                     self_stake,
                     delegated_stake,
                     commission_bps,
