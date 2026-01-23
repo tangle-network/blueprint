@@ -13392,9 +13392,9 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bindings"
-version = "0.6.1"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03832e0201a046e6287989bd7a16540d0d5a9edd7cb01dfc1cbe48e418916d67"
+checksum = "8b69ab73a388552402802dd63ef4c25296d6910d573aa51a66a917060f162b24"
 dependencies = [
  "alloy",
  "alloy-contract",

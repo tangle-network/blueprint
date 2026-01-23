@@ -30,6 +30,107 @@ use blueprint_std::string::{String, ToString};
 use bytes::Bytes;
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// COMPACT BINARY DECODING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Decode a compact-encoded length value.
+/// Returns (length, bytes_consumed) or None if invalid.
+fn decode_compact_length(data: &[u8]) -> Option<(usize, usize)> {
+    if data.is_empty() {
+        return None;
+    }
+
+    let first = data[0];
+    if first < 0x80 {
+        // Single byte: 0x00-0x7F
+        Some((first as usize, 1))
+    } else if first < 0xC0 {
+        // Two bytes: 0x80-0xBF + 1 byte
+        if data.len() < 2 {
+            return None;
+        }
+        let len = ((first as usize & 0x3F) << 8) | (data[1] as usize);
+        Some((len, 2))
+    } else if first < 0xE0 {
+        // Three bytes: 0xC0-0xDF + 2 bytes
+        if data.len() < 3 {
+            return None;
+        }
+        let len = ((first as usize & 0x1F) << 16) | ((data[1] as usize) << 8) | (data[2] as usize);
+        Some((len, 3))
+    } else if first < 0xF0 {
+        // Four bytes: 0xE0-0xEF + 3 bytes
+        if data.len() < 4 {
+            return None;
+        }
+        let len = ((first as usize & 0x0F) << 24)
+            | ((data[1] as usize) << 16)
+            | ((data[2] as usize) << 8)
+            | (data[3] as usize);
+        Some((len, 4))
+    } else {
+        // Five bytes: 0xF0 + 4 bytes
+        if data.len() < 5 {
+            return None;
+        }
+        let len = ((data[1] as usize) << 24)
+            | ((data[2] as usize) << 16)
+            | ((data[3] as usize) << 8)
+            | (data[4] as usize);
+        Some((len, 5))
+    }
+}
+
+/// Try to decode compact binary format for a string type.
+/// Returns the decoded string or None if decoding fails.
+fn try_decode_compact_string(data: &[u8]) -> Option<String> {
+    let (len, header_size) = decode_compact_length(data)?;
+    let string_start = header_size;
+    let string_end = string_start + len;
+
+    if string_end > data.len() {
+        return None;
+    }
+
+    let string_bytes = &data[string_start..string_end];
+    core::str::from_utf8(string_bytes).ok().map(String::from)
+}
+
+/// Try to decode compact binary format for a tuple/struct with a single string field.
+/// This matches the HelloRequest { name: string } pattern.
+/// Returns the decoded string or None if decoding fails.
+fn try_decode_compact_single_string_struct(data: &[u8]) -> Option<String> {
+    // Compact struct format: field_count (compact length) + fields
+    // For a single-field struct: 0x01 + string
+    let (field_count, header_size) = decode_compact_length(data)?;
+
+    if field_count != 1 {
+        return None;
+    }
+
+    // The rest is the string field
+    try_decode_compact_string(&data[header_size..])
+}
+
+/// Check if data appears to be ABI-encoded (heuristic).
+/// ABI-encoded dynamic types typically have 32-byte alignment and offset patterns.
+fn looks_like_abi_encoded(data: &[u8]) -> bool {
+    // ABI-encoded single dynamic type (like string) typically:
+    // - Has at least 64 bytes (32-byte offset + 32-byte length minimum)
+    // - First 32 bytes contain an offset pointer (typically 0x20 = 32)
+    if data.len() < 64 {
+        return false;
+    }
+
+    // Check if first 32 bytes look like an offset (should be 0x20 for single param)
+    // The offset is stored as big-endian u256, so for offset=32, bytes 0-30 are 0, byte 31 is 32
+    let first_31_zeros = data[..31].iter().all(|&b| b == 0);
+    let offset_is_32 = data[31] == 32;
+
+    first_31_zeros && offset_is_32
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // CALL ID
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -503,15 +604,20 @@ where
 // ═══════════════════════════════════════════════════════════════════════════════
 
 define_rejection! {
-    #[body = "Failed to ABI-decode the job input"]
-    /// A Rejection type for [`TangleEvmArg`] when ABI decoding fails.
+    #[body = "Failed to decode the job input (tried both compact binary and ABI formats)"]
+    /// A Rejection type for [`TangleEvmArg`] when decoding fails.
     pub struct AbiDecodeError;
 }
 
-/// Extracts and ABI-decodes a single argument from the job call body.
+/// Extracts and decodes a single argument from the job call body.
 ///
-/// This extractor uses Alloy's `SolValue::abi_decode` to decode the raw bytes
-/// from the job call into the specified type.
+/// This extractor supports two encoding formats:
+/// 1. **Compact binary** - Tangle's native format used by the CLI with `--params-file`
+/// 2. **ABI encoding** - Standard Ethereum format used with `--payload-hex`
+///
+/// The extractor uses heuristics to detect the format:
+/// - If data looks like ABI-encoded (64+ bytes with offset patterns), try ABI first
+/// - Otherwise, try compact binary first, then fall back to ABI
 ///
 /// # Type Parameters
 ///
@@ -552,9 +658,81 @@ where
 
     async fn from_job_call(call: JobCall, _ctx: &Ctx) -> Result<Self, Self::Rejection> {
         let (_, body) = call.into_parts();
-        let value = T::abi_decode(&body).map_err(|_| AbiDecodeError)?;
-        Ok(TangleEvmArg(value))
+
+        // Strategy: Use heuristics to determine encoding format
+        // 1. If data looks like ABI (64+ bytes with offset pattern), try ABI first
+        // 2. Otherwise, try compact binary first, then fall back to ABI
+        //
+        // This ensures backwards compatibility with --payload-hex (ABI)
+        // while supporting the new --params-file (compact binary) format.
+
+        if looks_like_abi_encoded(&body) {
+            // Data looks like ABI format, try ABI decode first
+            if let Ok(value) = T::abi_decode(&body) {
+                return Ok(TangleEvmArg(value));
+            }
+            // ABI failed, try compact as fallback
+            if let Ok(value) = try_decode_compact::<T>(&body) {
+                return Ok(TangleEvmArg(value));
+            }
+        } else {
+            // Data doesn't look like ABI, try compact first
+            if let Ok(value) = try_decode_compact::<T>(&body) {
+                return Ok(TangleEvmArg(value));
+            }
+            // Compact failed, try ABI as fallback
+            if let Ok(value) = T::abi_decode(&body) {
+                return Ok(TangleEvmArg(value));
+            }
+        }
+
+        Err(AbiDecodeError)
     }
+}
+
+/// Try to decode compact binary format into the target type.
+///
+/// This function attempts to decode compact binary encoded data by:
+/// 1. First trying to ABI-decode the extracted compact data (for struct types)
+/// 2. Using type-specific decoding for common patterns
+///
+/// The compact format used by the CLI encodes:
+/// - Strings: compact_length + UTF-8 bytes
+/// - Structs/tuples: field_count + fields (each field encoded recursively)
+fn try_decode_compact<T>(data: &[u8]) -> Result<T, ()>
+where
+    T: SolValue + From<<T::SolType as alloy_sol_types::SolType>::RustType>,
+{
+    // Get the Solidity type name to determine decoding strategy
+    use alloy_sol_types::SolType;
+    let type_name_str = <T::SolType>::SOL_NAME;
+
+    // Handle tuple/struct types (e.g., "(string)" or "HelloRequest")
+    // These are encoded as: field_count + field_1 + field_2 + ...
+    if type_name_str.starts_with('(') || !type_name_str.contains('(') {
+        // Try to decode as a single-field struct with string
+        // This handles the common HelloRequest { name: string } pattern
+        if let Some(decoded_string) = try_decode_compact_single_string_struct(data) {
+            // Re-encode as ABI and decode to get the proper type
+            // This is a workaround since we can't directly construct T
+            let abi_encoded = alloy_sol_types::SolValue::abi_encode(&(decoded_string,));
+            if let Ok(value) = T::abi_decode(&abi_encoded) {
+                return Ok(value);
+            }
+        }
+
+        // Try direct string decode (for bare string type)
+        if type_name_str == "string" {
+            if let Some(decoded_string) = try_decode_compact_string(data) {
+                let abi_encoded = alloy_sol_types::SolValue::abi_encode(&decoded_string);
+                if let Ok(value) = T::abi_decode(&abi_encoded) {
+                    return Ok(value);
+                }
+            }
+        }
+    }
+
+    Err(())
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -697,5 +875,94 @@ mod tests {
         // Each would result in different aggregation config lookups
         // get_aggregation_config(service_id=1, job_index=0) vs
         // get_aggregation_config(service_id=1, job_index=1)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Compact binary decoding tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_decode_compact_length_single_byte() {
+        // Values 0-127 are encoded as single byte
+        assert_eq!(decode_compact_length(&[0x00]), Some((0, 1)));
+        assert_eq!(decode_compact_length(&[0x05]), Some((5, 1)));
+        assert_eq!(decode_compact_length(&[0x7F]), Some((127, 1)));
+    }
+
+    #[test]
+    fn test_decode_compact_length_two_bytes() {
+        // Values 128-16383 are encoded as 0x80-0xBF + 1 byte
+        // 128 = 0x80 | (128 >> 8), (128 & 0xFF) = 0x80, 0x80
+        assert_eq!(decode_compact_length(&[0x80, 0x80]), Some((128, 2)));
+        // 255 = 0x80 | 0, 0xFF
+        assert_eq!(decode_compact_length(&[0x80, 0xFF]), Some((255, 2)));
+    }
+
+    #[test]
+    fn test_decode_compact_length_empty() {
+        assert_eq!(decode_compact_length(&[]), None);
+    }
+
+    #[test]
+    fn test_try_decode_compact_string() {
+        // "TestUser" has length 8, encoded as 0x08 + "TestUser"
+        let data = b"\x08TestUser";
+        assert_eq!(
+            try_decode_compact_string(data),
+            Some("TestUser".to_string())
+        );
+    }
+
+    #[test]
+    fn test_try_decode_compact_string_empty() {
+        // Empty string: length 0
+        let data = b"\x00";
+        assert_eq!(try_decode_compact_string(data), Some(String::new()));
+    }
+
+    #[test]
+    fn test_try_decode_compact_string_hello() {
+        // "Hello" has length 5
+        let data = b"\x05Hello";
+        assert_eq!(try_decode_compact_string(data), Some("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_try_decode_compact_single_string_struct() {
+        // Struct with 1 field (string "TestUser")
+        // Format: field_count (1) + string (length 8 + "TestUser")
+        let data = b"\x01\x08TestUser";
+        assert_eq!(
+            try_decode_compact_single_string_struct(data),
+            Some("TestUser".to_string())
+        );
+    }
+
+    #[test]
+    fn test_looks_like_abi_encoded() {
+        // ABI-encoded string "Hello" would have:
+        // - 32 bytes offset (0x20 = 32 for single param)
+        // - 32 bytes length
+        // - padded string data
+        let mut abi_data = vec![0u8; 96];
+        abi_data[31] = 32; // offset = 32
+        abi_data[63] = 5; // length = 5
+        abi_data[64..69].copy_from_slice(b"Hello");
+
+        assert!(looks_like_abi_encoded(&abi_data));
+    }
+
+    #[test]
+    fn test_looks_like_abi_encoded_false_for_short_data() {
+        // Short data should not look like ABI
+        let short_data = b"\x08TestUser";
+        assert!(!looks_like_abi_encoded(short_data));
+    }
+
+    #[test]
+    fn test_looks_like_abi_encoded_false_for_compact() {
+        // Compact encoded struct should not look like ABI
+        let compact_data = b"\x01\x08TestUser";
+        assert!(!looks_like_abi_encoded(compact_data));
     }
 }

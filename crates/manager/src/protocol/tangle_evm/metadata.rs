@@ -1,5 +1,4 @@
-use alloy_primitives::U256;
-use alloy_sol_types::{SolType, SolValue};
+use alloy_sol_types::SolType;
 use blueprint_core::warn;
 use hex;
 use std::string::{String, ToString};
@@ -76,8 +75,8 @@ impl OnChainMetadataProvider {
         blueprint_id: u64,
     ) -> Result<Option<(String, Vec<ManagerBlueprintSource>)>> {
         let inner = client.client();
-        let raw_definition = match inner.get_raw_blueprint_definition(blueprint_id).await {
-            Ok(bytes) => bytes,
+        let definition = match inner.get_blueprint_definition(blueprint_id).await {
+            Ok(definition) => definition,
             Err(err) => {
                 warn!(
                     blueprint_id,
@@ -87,16 +86,8 @@ impl OnChainMetadataProvider {
             }
         };
 
-        let (blueprint_name, onchain_sources) = match decode_blueprint_definition(&raw_definition) {
-            Ok(result) => result,
-            Err(err) => {
-                warn!(
-                    blueprint_id,
-                    "Failed to decode blueprint definition payload: {err}"
-                );
-                return Ok(None);
-            }
-        };
+        let blueprint_name = definition.metadata.name.clone().to_string();
+        let onchain_sources = definition.sources;
 
         let sources = Self::convert_sources(&onchain_sources);
 
@@ -436,47 +427,6 @@ impl BlueprintMetadataProvider for OnChainMetadataProvider {
     ) -> Result<Option<ManagerBlueprintMetadata>> {
         Self::build_metadata(client, blueprint_id, REGISTRATION_SERVICE_ID, true).await
     }
-}
-
-fn decode_blueprint_definition(data: &[u8]) -> Result<(String, Vec<OnChainBlueprintSource>)> {
-    const EXPECTED_FIELDS: usize = 11;
-    if data.len() < EXPECTED_FIELDS * 32 {
-        return Err(Error::Other(
-            "Blueprint definition payload shorter than expected".to_string(),
-        ));
-    }
-
-    let metadata_offset = read_offset(data, 1)?;
-    let metadata_slice = data
-        .get(metadata_offset..)
-        .ok_or_else(|| Error::Other("Metadata offset outside payload".to_string()))?;
-    let metadata = <ITangleTypes::BlueprintMetadata as SolType>::abi_decode(metadata_slice)
-        .map_err(|e| Error::Other(format!("Failed to decode blueprint metadata: {e}")))?;
-    let blueprint_name = metadata.name.to_string();
-
-    let sources_offset = read_offset(data, 5)?;
-    let sources_slice = data
-        .get(sources_offset..)
-        .ok_or_else(|| Error::Other("Sources offset outside payload".to_string()))?;
-    let sources: Vec<OnChainBlueprintSource> =
-        Vec::<OnChainBlueprintSource>::abi_decode(sources_slice)
-            .map_err(|e| Error::Other(format!("Failed to decode blueprint sources: {e}")))?;
-
-    Ok((blueprint_name, sources))
-}
-
-fn read_offset(data: &[u8], index: usize) -> Result<usize> {
-    let start = index
-        .checked_mul(32)
-        .ok_or_else(|| Error::Other("Offset overflow".to_string()))?;
-    let end = start + 32;
-    if data.len() < end {
-        return Err(Error::Other("Offset index outside payload".to_string()));
-    }
-    let value = U256::from_be_slice(&data[start..end]);
-    value
-        .try_into()
-        .map_err(|_| Error::Other("Blueprint definition offset is too large".to_string()))
 }
 
 #[cfg(test)]

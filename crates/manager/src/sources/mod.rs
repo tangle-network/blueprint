@@ -2,6 +2,7 @@ use crate::blueprint::native::FilteredBlueprint;
 use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
+use alloy_primitives::Address;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use std::path::{Path, PathBuf};
 use url::Url;
@@ -127,6 +128,10 @@ pub struct BlueprintEnvVars {
     pub registration_mode: bool,
     pub registration_capture_only: bool,
     pub bridge_socket_path: Option<PathBuf>,
+    /// Tangle EVM contract addresses (only set for TangleEvm protocol)
+    pub tangle_contract: Option<Address>,
+    pub restaking_contract: Option<Address>,
+    pub status_registry_contract: Option<Address>,
 }
 
 impl BlueprintEnvVars {
@@ -148,6 +153,18 @@ impl BlueprintEnvVars {
             .iter()
             .fold(String::new(), |acc, bootnode| format!("{acc} {bootnode}"));
 
+        // Extract contract addresses from protocol settings if using TangleEvm
+        let (tangle_contract, restaking_contract, status_registry_contract) =
+            if let Ok(settings) = env.protocol_settings.tangle_evm() {
+                (
+                    Some(settings.tangle_contract),
+                    Some(settings.restaking_contract),
+                    Some(settings.status_registry_contract),
+                )
+            } else {
+                (None, None, None)
+            };
+
         BlueprintEnvVars {
             http_rpc_endpoint: env.http_rpc_endpoint.clone(),
             ws_rpc_endpoint: env.ws_rpc_endpoint.clone(),
@@ -163,6 +180,9 @@ impl BlueprintEnvVars {
             registration_mode: blueprint.registration_mode,
             registration_capture_only: blueprint.registration_capture_only,
             bridge_socket_path: env.bridge_socket_path.clone(),
+            tangle_contract,
+            restaking_contract,
+            status_registry_contract,
         }
     }
 
@@ -183,6 +203,9 @@ impl BlueprintEnvVars {
             registration_mode,
             registration_capture_only,
             bridge_socket_path,
+            tangle_contract,
+            restaking_contract,
+            status_registry_contract,
         } = self;
 
         let chain = chain.unwrap_or_else(|| match http_rpc_endpoint.as_str() {
@@ -206,6 +229,17 @@ impl BlueprintEnvVars {
             ("CHAIN".to_string(), chain.to_string()),
             ("BOOTNODES".to_string(), bootnodes.clone()),
         ];
+
+        // Add TangleEvm contract addresses if present
+        if let Some(addr) = tangle_contract {
+            env_vars.push(("TANGLE_CONTRACT".to_string(), format!("{addr}")));
+        }
+        if let Some(addr) = restaking_contract {
+            env_vars.push(("RESTAKING_CONTRACT".to_string(), format!("{addr}")));
+        }
+        if let Some(addr) = status_registry_contract {
+            env_vars.push(("STATUS_REGISTRY_CONTRACT".to_string(), format!("{addr}")));
+        }
 
         if let Some(bridge_socket_path) = bridge_socket_path {
             env_vars.push((

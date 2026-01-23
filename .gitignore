@@ -26,3 +26,5 @@ cache
 target
 
 .cursor/
+
+docs/cli-testing
