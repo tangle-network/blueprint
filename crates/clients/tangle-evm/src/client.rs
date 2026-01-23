@@ -98,6 +98,43 @@ impl From<u8> for RestakingStatus {
     }
 }
 
+/// Delegation mode for an operator.
+///
+/// Controls who can delegate to the operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DelegationMode {
+    /// Disabled: Only operator can self-stake (default).
+    Disabled,
+    /// Whitelist: Only approved addresses can delegate.
+    Whitelist,
+    /// Open: Anyone can delegate.
+    Open,
+    /// Unknown mode value (future-proofing).
+    Unknown(u8),
+}
+
+impl From<u8> for DelegationMode {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => DelegationMode::Disabled,
+            1 => DelegationMode::Whitelist,
+            2 => DelegationMode::Open,
+            other => DelegationMode::Unknown(other),
+        }
+    }
+}
+
+impl fmt::Display for DelegationMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DelegationMode::Disabled => write!(f, "disabled"),
+            DelegationMode::Whitelist => write!(f, "whitelist"),
+            DelegationMode::Open => write!(f, "open"),
+            DelegationMode::Unknown(value) => write!(f, "unknown({value})"),
+        }
+    }
+}
+
 /// Asset kinds supported by MultiAssetDelegation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssetKind {
@@ -1337,6 +1374,120 @@ impl TangleEvmClient {
             .call()
             .await
             .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPERATOR DELEGATION CONFIG
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Get operator's delegation mode.
+    ///
+    /// Returns the delegation policy for the operator:
+    /// - Disabled: Only operator can self-stake
+    /// - Whitelist: Only approved addresses can delegate
+    /// - Open: Anyone can delegate
+    pub async fn get_delegation_mode(&self, operator: Address) -> Result<DelegationMode> {
+        let contract = self.restaking_contract();
+        let mode = contract
+            .getDelegationMode(operator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok(DelegationMode::from(u8::from(mode)))
+    }
+
+    /// Check if delegator is whitelisted for operator.
+    pub async fn is_delegator_whitelisted(
+        &self,
+        operator: Address,
+        delegator: Address,
+    ) -> Result<bool> {
+        let contract = self.restaking_contract();
+        contract
+            .isWhitelisted(operator, delegator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Check if delegator can delegate to operator.
+    ///
+    /// This checks the operator's delegation mode and whitelist status.
+    pub async fn can_delegate(&self, operator: Address, delegator: Address) -> Result<bool> {
+        let contract = self.restaking_contract();
+        contract
+            .canDelegate(operator, delegator)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
+    }
+
+    /// Set delegation mode for the calling operator.
+    ///
+    /// Changes take effect immediately for NEW delegations only.
+    /// Existing delegations remain valid regardless of mode change.
+    ///
+    /// # Arguments
+    /// * `mode` - Delegation mode: Disabled (0), Whitelist (1), or Open (2)
+    pub async fn set_delegation_mode(&self, mode: DelegationMode) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, provider);
+
+        let mode_value: u8 = match mode {
+            DelegationMode::Disabled => 0,
+            DelegationMode::Whitelist => 1,
+            DelegationMode::Open => 2,
+            DelegationMode::Unknown(v) => v,
+        };
+
+        let receipt = contract
+            .setDelegationMode(mode_value)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Update delegation whitelist for the calling operator.
+    ///
+    /// Whitelist only applies when delegation mode is set to Whitelist.
+    /// Can be called regardless of current mode to pre-configure.
+    ///
+    /// # Arguments
+    /// * `delegators` - Array of delegator addresses to update
+    /// * `approved` - True to approve for delegation, false to revoke
+    pub async fn set_delegation_whitelist(
+        &self,
+        delegators: Vec<Address>,
+        approved: bool,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = IMultiAssetDelegation::new(self.restaking_address, provider);
+
+        let receipt = contract
+            .setDelegationWhitelist(delegators, approved)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+
+        Ok(transaction_result_from_receipt(&receipt))
     }
 
     /// Fetch ERC20 allowance for an owner/spender pair.

@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use alloy_primitives::{Address, Bytes, U256};
 use blueprint_client_tangle_evm::{
-    BlueprintSelectionMode, TangleEvmClient, TransactionResult, contracts::ITangleTypes,
+    BlueprintSelectionMode, DelegationMode, TangleEvmClient, TransactionResult,
+    contracts::ITangleTypes,
 };
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
@@ -843,6 +844,77 @@ enum OperatorCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Get operator's delegation mode.
+    ///
+    /// Shows whether the operator accepts delegations and under what policy.
+    GetDelegationMode {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Operator address (defaults to local account).
+        #[arg(long = "operator")]
+        operator: Option<String>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Set delegation mode for the operator.
+    ///
+    /// Controls who can delegate to this operator:
+    /// - disabled: Only operator can self-stake (default)
+    /// - whitelist: Only approved addresses can delegate
+    /// - open: Anyone can delegate
+    SetDelegationMode {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Delegation mode: disabled, whitelist, or open.
+        #[arg(long, value_enum)]
+        mode: DelegationModeArg,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Update delegation whitelist.
+    ///
+    /// Add or remove addresses from the operator's delegation whitelist.
+    /// Only applies when delegation mode is set to "whitelist".
+    UpdateWhitelist {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Delegator addresses to update.
+        #[arg(long = "delegator", required = true)]
+        delegators: Vec<String>,
+        /// Whether to approve (true) or revoke (false) the addresses.
+        #[arg(long)]
+        approved: bool,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check if delegator can delegate to operator.
+    CanDelegate {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Operator address.
+        #[arg(long)]
+        operator: String,
+        /// Delegator address to check.
+        #[arg(long)]
+        delegator: String,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// Delegation mode argument for CLI.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum DelegationModeArg {
+    /// Only operator can self-stake (default).
+    Disabled,
+    /// Only approved addresses can delegate.
+    Whitelist,
+    /// Anyone can delegate.
+    Open,
 }
 
 #[derive(Subcommand, Debug)]
@@ -2061,6 +2133,89 @@ async fn main() -> Result<()> {
                     .await
                     .map_err(|e| eyre!(e.to_string()))?;
                 log_tx("Operator increase-stake", &tx, json);
+            }
+            OperatorCommands::GetDelegationMode {
+                network,
+                operator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = if let Some(value) = operator {
+                    parse_address(&value, "OPERATOR")?
+                } else {
+                    client.account()
+                };
+                let mode = client
+                    .get_delegation_mode(operator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string(&serde_json::json!({
+                            "operator": format!("{operator_address:?}"),
+                            "delegation_mode": format!("{mode}")
+                        }))?
+                    );
+                } else {
+                    println!("Operator: {operator_address:?}");
+                    println!("Delegation Mode: {mode}");
+                }
+            }
+            OperatorCommands::SetDelegationMode { network, mode, json } => {
+                let client = network.connect(0, None).await?;
+                let delegation_mode = match mode {
+                    DelegationModeArg::Disabled => DelegationMode::Disabled,
+                    DelegationModeArg::Whitelist => DelegationMode::Whitelist,
+                    DelegationModeArg::Open => DelegationMode::Open,
+                };
+                let tx = client
+                    .set_delegation_mode(delegation_mode)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator set-delegation-mode", &tx, json);
+            }
+            OperatorCommands::UpdateWhitelist {
+                network,
+                delegators,
+                approved,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let delegator_addresses = parse_address_list(&delegators, "DELEGATOR")?;
+                let tx = client
+                    .set_delegation_whitelist(delegator_addresses, approved)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator update-whitelist", &tx, json);
+            }
+            OperatorCommands::CanDelegate {
+                network,
+                operator,
+                delegator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = parse_address(&operator, "OPERATOR")?;
+                let delegator_address = parse_address(&delegator, "DELEGATOR")?;
+                let can_delegate = client
+                    .can_delegate(operator_address, delegator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string(&serde_json::json!({
+                            "operator": format!("{operator_address:?}"),
+                            "delegator": format!("{delegator_address:?}"),
+                            "can_delegate": can_delegate
+                        }))?
+                    );
+                } else {
+                    println!("Operator: {operator_address:?}");
+                    println!("Delegator: {delegator_address:?}");
+                    println!("Can Delegate: {can_delegate}");
+                }
             }
         },
     }
