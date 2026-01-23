@@ -3,7 +3,7 @@
 This document tracks testing progress for all service lifecycle commands and documents any bugs found.
 
 **Started:** 2026-01-20
-**Last Updated:** 2026-01-20 18:15
+**Last Updated:** 2026-01-23 (--commitment flag added to service join)
 
 ---
 
@@ -28,7 +28,7 @@ This document tracks testing progress for all service lifecycle commands and doc
 | `service request` | Complete | 7/7 | 0 | All tests passed |
 | `service approve` | Complete | 3/3 | 0 | All tests passed |
 | `service reject` | Complete | 3/3 | 0 | All tests passed |
-| `service join` | Complete | 5/5 | 0 | All tests passed (after fix) |
+| `service join` | Complete | 5/5 | 0 | All tests passed; `--commitment` flag added (2026-01-23) |
 | `service leave` | Complete | 3/3 | 0 | Feature Request #1: Add exit queue commands |
 | `service spawn` | Complete | 4/4 | 0 | All tests passed |
 | `service list` | Complete | 2/2 | 0 | All tests passed |
@@ -267,6 +267,13 @@ Service join: submitted tx_hash=0xfb69060dd33ecef7ffae3e3ac7d1f4c2d5282d5a1081f2
 Service join: confirmed block=Some(308) gas_used=193341
 Joined service 0 with exposure 10000 bps
 ```
+
+> **Note (2026-01-23):** For services with security requirements, use the `--commitment` flag:
+> ```bash
+> cargo tangle blueprint service join --service-id 0 --exposure-bps 5000 \
+>   --commitment "erc20:0x8f86403a4de0bb5791fa46b8e795c547942fe4cf:5000" ...
+> ```
+> Format: `KIND:TOKEN:EXPOSURE_BPS` where KIND is `erc20`, `vault`, or `native`.
 
 ### Test 5.3: Join Service with Custom Exposure
 - [x] **Status:** PASSED
@@ -847,79 +854,49 @@ let config = cfg_spec.into_blueprint_config(self.supported_memberships[0]);
 - **Fix Applied:** 2026-01-20
 - **Fix Commit:** (pending - changes in working directory)
 
-### Feature Request #1: Add Exit Queue Commands to CLI
-- **Priority:** Medium (workaround available via `cast`)
-- **Command:** `cargo tangle blueprint service leave`
-- **Description:** The CLI's `service leave` command calls `leaveService()` on the contract, which only works when `exitQueueDuration == 0`. With the default config (7-day exit queue), the contract requires a two-step exit process: `scheduleExit()` followed by `executeExit()` after the queue duration. Users can work around this by calling contract functions directly via `cast`.
-- **Steps to Reproduce:**
+### ~~Feature Request #1: Add Exit Queue Commands to CLI~~ ✅ IMPLEMENTED
+- **Status:** ✅ **IMPLEMENTED** (2026-01-23)
+- **Original Request:** Add CLI commands for the exit queue workflow
+- **Solution Implemented:** Added three new `operator` commands:
+  1. `operator schedule-exit` - Schedule operator exit from service
+  2. `operator execute-exit` - Execute scheduled exit after delay
+  3. `operator cancel-exit` - Cancel scheduled exit
+- **Implementation Details:**
+  - Added CLI commands in `cli/src/main.rs` (lines 869-911, 2158-2193)
+  - Added client methods in `crates/clients/tangle-evm/src/client.rs` (lines 1164-1237)
+- **Usage:**
 ```bash
-# 1. Have an operator join a dynamic service
-cargo tangle blueprint service join --service-id 0 ...
+# Step 1: Schedule exit (after min commitment period)
+cargo tangle operator schedule-exit \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --service-id 0
 
-# 2. Wait for min commitment period (1 day) - or advance time on Anvil
-cast rpc evm_increaseTime 90000 --rpc-url http://127.0.0.1:8545
+# Step 2: Wait for exit queue duration (~7 days)
 
-# 3. Try to leave the service
-cargo tangle blueprint service leave --service-id 0 ...
+# Step 3: Execute exit
+cargo tangle operator execute-exit \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --service-id 0
 
-# Error: ExitNotExecutable(serviceId, operator, executeAfter, currentTime)
+# (Optional) Cancel exit before execution
+cargo tangle operator cancel-exit \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --service-id 0
 ```
-- **Expected Behavior:** CLI should support the full exit queue flow
-- **Actual Behavior:** `leaveService()` reverts because exit queue is required
-- **Error Message:** `ExitNotExecutable(uint64, address, uint64, uint64)` (selector: `0x200e7ca6`)
-- **Status:** 🟡 FEATURE REQUEST
-- **Root Cause Analysis:**
-
-  **Contract exit flow** (`tnt-core/src/v2/core/ServicesLifecycle.sol`):
-  - Default config: `exitQueueDuration = 7 days`, `minCommitmentDuration = 1 day`
-  - When `exitQueueDuration > 0`:
-    1. Operator must call `scheduleExit(serviceId)` (after minCommitmentDuration)
-    2. Wait for `exitQueueDuration` (7 days)
-    3. Operator calls `executeExit(serviceId)` to complete the exit
-  - `leaveService()` only works when `exitQueueDuration == 0`
-
-  **CLI limitation**:
-  - Only exposes `service leave` → calls `leaveService()`
-  - Missing `service schedule-exit` → calls `scheduleExit()`
-  - Missing `service execute-exit` → calls `executeExit()`
-  - Missing `service cancel-exit` → calls `cancelExit()`
-
-- **Proposed Fix:**
-```rust
-// Add new CLI commands in cli/src/command/service/
-
-// 1. schedule-exit command
-pub async fn schedule_exit(client: &TangleEvmClient, service_id: u64) -> Result<TransactionResult> {
-    client.schedule_exit(service_id).await.map_err(Into::into)
-}
-
-// 2. execute-exit command
-pub async fn execute_exit(client: &TangleEvmClient, service_id: u64) -> Result<TransactionResult> {
-    client.execute_exit(service_id).await.map_err(Into::into)
-}
-
-// 3. cancel-exit command
-pub async fn cancel_exit(client: &TangleEvmClient, service_id: u64) -> Result<TransactionResult> {
-    client.cancel_exit(service_id).await.map_err(Into::into)
-}
-
-// Also need to add these methods to TangleEvmClient in crates/clients/tangle-evm/src/client.rs
-```
-
-- **Workaround:** Use `cast` directly to call contract functions:
-```bash
-# Schedule exit
-cast send $TANGLE_CONTRACT "scheduleExit(uint64)" $SERVICE_ID --private-key $KEY
-
-# Advance time (Anvil only)
-cast rpc evm_increaseTime 604800 && cast rpc evm_mine
-
-# Execute exit
-cast send $TANGLE_CONTRACT "executeExit(uint64)" $SERVICE_ID --private-key $KEY
-```
-
-- **Discovered:** 2026-01-20
-- **Fix Status:** Not yet implemented
+- **Testing:** Verified CLI parses arguments and submits transactions (2026-01-23)
+- **Note:** The original `service leave` command still exists but only works when `exitQueueDuration == 0`. For standard deployments with exit queues, use the new `operator` exit commands.
 
 ---
 
@@ -1261,7 +1238,7 @@ All 39 tests across 10 phases have been completed successfully. The service life
 - [x] `service request` - 7/7 tests passed
 - [x] `service approve` - 3/3 tests passed
 - [x] `service reject` - 3/3 tests passed
-- [x] `service join` - 5/5 tests passed
+- [x] `service join` - 5/5 tests passed (`--commitment` flag added 2026-01-23)
 - [x] `service leave` - 3/3 tests passed (via cast workaround)
 - [x] `service spawn` - 4/4 tests passed
 - [x] `service list` - 2/2 tests passed
@@ -1285,6 +1262,7 @@ All 39 tests across 10 phases have been completed successfully. The service life
 - All Phases 1-10 complete
 - All service lifecycle commands tested successfully
 - Security requirements feature working correctly
+- **Update (2026-01-23):** `--commitment` flag added to `service join` for joining services with security requirements
 
 **Recommendations:**
 - Implement Feature Request #1 to complete CLI coverage for exit queue flow

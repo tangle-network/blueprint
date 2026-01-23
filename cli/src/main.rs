@@ -410,6 +410,14 @@ enum ServiceCommands {
         /// Exposure (basis points) to request.
         #[arg(long, default_value_t = MAX_BPS)]
         exposure_bps: u16,
+        /// Asset security commitment in format KIND:TOKEN:EXPOSURE_BPS.
+        /// KIND: native/eth or erc20.
+        /// TOKEN: Token/vault address (use _ or 0 for native).
+        /// EXPOSURE_BPS: Exposure in basis points (e.g., 5000 = 50%).
+        /// Can be specified multiple times for multiple commitments.
+        /// Example: --commitment erc20:0x1234...abcd:5000
+        #[arg(long, value_name = "KIND:TOKEN:EXPOSURE_BPS")]
+        commitment: Vec<String>,
         /// Emit transaction logs as JSON.
         #[arg(long)]
         json: bool,
@@ -748,6 +756,14 @@ enum OperatorCommands {
         /// Requested exposure in basis points.
         #[arg(long, default_value_t = 10_000)]
         exposure_bps: u16,
+        /// Asset security commitment in format KIND:TOKEN:EXPOSURE_BPS.
+        /// KIND: 0=ERC20, 1=Vault, 2=Native.
+        /// TOKEN: Token/vault address (use 0x0 for native).
+        /// EXPOSURE_BPS: Exposure in basis points (e.g., 5000 = 50%).
+        /// Can be specified multiple times for multiple commitments.
+        /// Example: --commitment 0:0x1234...abcd:5000
+        #[arg(long, value_name = "KIND:TOKEN:EXPOSURE_BPS")]
+        commitment: Vec<String>,
         /// Emit JSON transaction logs.
         #[arg(long)]
         json: bool,
@@ -847,6 +863,49 @@ enum OperatorCommands {
         #[arg(long)]
         amount: u128,
         /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Schedule an exit from a dynamic service.
+    ///
+    /// Enters the operator into the exit queue. After the exit queue duration
+    /// (default 7 days), use `execute-exit` to complete the exit.
+    /// Requires the minimum commitment period to have passed since joining.
+    ScheduleExit {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Service identifier.
+        #[arg(long)]
+        service_id: u64,
+        /// Emit JSON transaction logs.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Execute a previously scheduled exit from a service.
+    ///
+    /// Completes the exit after the exit queue duration has passed.
+    /// Must be called after `schedule-exit` and waiting for the queue duration.
+    ExecuteExit {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Service identifier.
+        #[arg(long)]
+        service_id: u64,
+        /// Emit JSON transaction logs.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Cancel a previously scheduled exit from a service.
+    ///
+    /// Cancels the exit and keeps the operator in the service.
+    /// Can only be called before `execute-exit`.
+    CancelExit {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Service identifier.
+        #[arg(long)]
+        service_id: u64,
+        /// Emit JSON transaction logs.
         #[arg(long)]
         json: bool,
     },
@@ -1383,6 +1442,7 @@ async fn main() -> Result<()> {
                     network,
                     service_id,
                     exposure_bps,
+                    commitment,
                     json,
                 } => {
                     ensure!(exposure_bps > 0, "Exposure must be greater than 0 bps");
@@ -1391,7 +1451,15 @@ async fn main() -> Result<()> {
                         "Exposure cannot exceed {MAX_BPS} bps"
                     );
                     let client = network.connect(0, Some(service_id)).await?;
-                    let tx = join_service(&client, service_id, exposure_bps).await?;
+                    let tx = if commitment.is_empty() {
+                        join_service(&client, service_id, exposure_bps).await?
+                    } else {
+                        let commitments = parse_commitments(&commitment)?;
+                        client
+                            .join_service_with_commitments(service_id, exposure_bps, commitments)
+                            .await
+                            .map_err(|e| eyre!(e.to_string()))?
+                    };
                     log_tx("Service join", &tx, json);
                     if json {
                         println!(
@@ -1933,13 +2001,22 @@ async fn main() -> Result<()> {
                 blueprint_id,
                 service_id,
                 exposure_bps,
+                commitment,
                 json,
             } => {
                 let client = network.connect(blueprint_id, Some(service_id)).await?;
-                let tx = client
-                    .join_service(service_id, exposure_bps)
-                    .await
-                    .map_err(|e| eyre!(e.to_string()))?;
+                let tx = if commitment.is_empty() {
+                    client
+                        .join_service(service_id, exposure_bps)
+                        .await
+                        .map_err(|e| eyre!(e.to_string()))?
+                } else {
+                    let commitments = parse_commitments(&commitment)?;
+                    client
+                        .join_service_with_commitments(service_id, exposure_bps, commitments)
+                        .await
+                        .map_err(|e| eyre!(e.to_string()))?
+                };
                 log_tx("Operator join", &tx, json);
             }
             OperatorCommands::Leave {
@@ -2077,6 +2154,42 @@ async fn main() -> Result<()> {
                     .await
                     .map_err(|e| eyre!(e.to_string()))?;
                 log_tx("Operator increase-stake", &tx, json);
+            }
+            OperatorCommands::ScheduleExit {
+                network,
+                service_id,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .schedule_exit(service_id)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator schedule-exit", &tx, json);
+            }
+            OperatorCommands::ExecuteExit {
+                network,
+                service_id,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .execute_exit(service_id)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator execute-exit", &tx, json);
+            }
+            OperatorCommands::CancelExit {
+                network,
+                service_id,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let tx = client
+                    .cancel_exit(service_id)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator cancel-exit", &tx, json);
             }
         },
     }
@@ -2228,6 +2341,20 @@ fn commitment_to_abi(arg: SecurityCommitmentArg) -> ITangleTypes::AssetSecurityC
         asset: asset_to_abi(arg.kind, arg.token),
         exposureBps: arg.exposure,
     }
+}
+
+/// Parse a list of commitment strings into ABI-compatible commitment structures.
+fn parse_commitments(
+    commitments: &[String],
+) -> Result<Vec<ITangleTypes::AssetSecurityCommitment>> {
+    commitments
+        .iter()
+        .map(|s| {
+            parse_security_commitment(s)
+                .map(commitment_to_abi)
+                .map_err(|e| eyre!("Invalid commitment '{}': {}", s, e))
+        })
+        .collect()
 }
 
 fn asset_to_abi(kind: AssetKindArg, token: Address) -> ITangleTypes::Asset {

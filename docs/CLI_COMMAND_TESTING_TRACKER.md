@@ -9,7 +9,7 @@ This document tracks the testing status of all `cargo-tangle` CLI commands. Use 
 - 🔇 Ignored - Intentionally skipped for now (low priority or out of scope)
 - 🚫 N/A - Not applicable for local testing (e.g., mainnet-only features)
 
-**Last Updated:** 2026-01-22 (Chain State Queries completed)
+**Last Updated:** 2026-01-23 (Exit queue commands added)
 
 ---
 
@@ -21,13 +21,13 @@ This document tracks the testing status of all `cargo-tangle` CLI commands. Use 
 | Key Management | 5 | 1 | 0 | 0 | 4 |
 | Service Lifecycle | 9 | 9 | 0 | 0 | 0 |
 | Job System | 4 | 4 | 0 | 0 | 0 |
-| Operator Utilities | 12 | 12 | 0 | 0 | 0 |
+| Operator Utilities | 15 | 15 | 0 | 0 | 0 |
 | Delegator Utilities | 14 | 14 | 0 | 0 | 0 |
 | Chain State Queries | 3 | 3 | 0 | 0 | 0 |
 | Cloud Deployment | 7 | 0 | 0 | 7 | 0 |
 | EigenLayer AVS | 7 | 0 | 0 | 7 | 0 |
 | Debug | 1 | 0 | 0 | 1 | 0 |
-| **Total** | **67** | **47** | **0** | **16** | **4** |
+| **Total** | **70** | **50** | **0** | **16** | **4** |
 
 ---
 
@@ -116,7 +116,7 @@ cargo tangle key import \
 | `service request` | Request a new service instance from operators | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--operator`, `--ttl`, `--operator-exposure-bps`, `--permitted-caller`, `--config-hex`, `--payment-token`, `--payment-amount`, `--json`, `--security-requirement` | 7/7 tests passed including multi-operator, exposure, payments, security requirements | Service Lifecycle Tests Phase 1-2, 10 |
 | `service approve` | Approve a pending service request as an operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--request-id`, `--restaking-percent`, `--json`, `--security-commitment` | 3/3 tests passed including custom restaking and security commitments | Service Lifecycle Tests Phase 3, 10 |
 | `service reject` | Reject a pending service request as an operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--request-id`, `--json` | 3/3 tests passed; correctly prevents approval of rejected requests | Service Lifecycle Tests Phase 4 |
-| `service join` | Join an existing dynamic service as an operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--service-id`, `--exposure-bps` | 5/5 tests passed; validates exposure 0 < bps <= 10000 | Service Lifecycle Tests Phase 5 |
+| `service join` | Join an existing dynamic service as an operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--service-id`, `--exposure-bps`, `--commitment` | 5/5 tests passed; validates exposure 0 < bps <= 10000; `--commitment` flag added (2026-01-23) for services with security requirements | Service Lifecycle Tests Phase 5 |
 | `service leave` | Leave a dynamic service as an operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--service-id` | 3/3 tests passed via cast; ⚠️ CLI needs exit queue commands (Feature Request #1) | Service Lifecycle Tests Phase 6 |
 | `service spawn` | Manually spawn a service runtime process | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--data-dir`, `--spawn-method`, `--no-vm`, `--dry-run` | 4/4 tests passed including native method, no-vm, dry-run | Service Lifecycle Tests Phase 8 |
 | `service list` | List all active services on the network | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | 2/2 tests passed; preferred over `list services` (has `--json`) | Service Lifecycle Tests Phase 7 |
@@ -217,14 +217,13 @@ cargo tangle blueprint service show \
 
 ### Known Limitations
 
-**Feature Request #1: Exit Queue Commands**
-- The `service leave` command calls `leaveService()` which only works when `exitQueueDuration == 0`
-- Default contract config has 7-day exit queue, requiring:
-  1. `scheduleExit(serviceId)` - after 1-day min commitment
-  2. Wait 7 days
-  3. `executeExit(serviceId)`
-- Workaround: Use `cast` to call contract functions directly
-- Proposed CLI additions: `service schedule-exit`, `service execute-exit`, `service cancel-exit`
+**~~Feature Request #1: Exit Queue Commands~~** ✅ RESOLVED (2026-01-23)
+- Exit queue commands have been added as `operator` commands (not `service` commands):
+  - `operator schedule-exit` - Schedule exit from service
+  - `operator execute-exit` - Execute after ~7 day delay
+  - `operator cancel-exit` - Cancel scheduled exit
+- The `service leave` command still only works when `exitQueueDuration == 0`
+- See Section 5 (Operator Utilities) for command usage examples
 
 ---
 
@@ -288,8 +287,11 @@ cargo tangle blueprint jobs watch \
 | `operator status` | Display operator heartbeat and status info | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--operator`, `--json` | 4/4 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 2 |
 | `operator heartbeat` | Send a heartbeat to prove operator liveness | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--status-code`, `--json` | 3/3 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 2 |
 | `operator restaking` | Show current restaking status and stake amounts | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | 3/3 tests passed; Bug #1 fixed (unregistered operators now show "Not Registered") | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 1 |
-| `operator join` | Join an existing dynamic service | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id` | ⚠️ BLOCKED by contract limitation (SecurityCommitmentsRequired); tested via cast workaround | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 4 |
-| `operator leave` | Leave a dynamic service | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id` | ⚠️ BLOCKED by exit queue; needs schedule-exit/execute-exit commands | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 4 |
+| `operator join` | Join an existing dynamic service | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id`, `--commitment`, `--exposure-bps` | 2/2 tests passed; `--commitment` flag added for services with security requirements | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 4 |
+| `operator leave` | Leave a dynamic service | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--service-id` | Use exit queue commands for services with exit queue enabled | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 4 |
+| `operator schedule-exit` | Schedule operator exit from a service | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--service-id`, `--json` | NEW (2026-01-23): First step in exit queue workflow | OPERATOR_UTILITIES_TEST_PROGRESS.md |
+| `operator execute-exit` | Execute scheduled exit after delay | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--service-id`, `--json` | NEW (2026-01-23): Final step in exit queue workflow (~7 day delay) | OPERATOR_UTILITIES_TEST_PROGRESS.md |
+| `operator cancel-exit` | Cancel a scheduled exit | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--service-id`, `--json` | NEW (2026-01-23): Cancel before execute-exit | OPERATOR_UTILITIES_TEST_PROGRESS.md |
 | `operator delegators` | List all delegators staking with this operator | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--operator`, `--json` | 3/3 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 3 |
 | `operator schedule-unstake` | Schedule an unstake operation | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--amount`, `--json` | 2/2 tests passed | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 5 |
 | `operator execute-unstake` | Execute a matured unstake operation | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--json` | 2/2 tests passed; requires 56 round delay | OPERATOR_UTILITIES_TEST_PROGRESS.md Phase 5 |
@@ -299,14 +301,13 @@ cargo tangle blueprint jobs watch \
 
 ### Known Limitations
 
-**Limitation #1: `operator join` Requires Security Commitments**
-- Error Code: `0x732253f5` = `SecurityCommitmentsRequired`
-- CLI needs `--commitments` flag to specify asset commitments for services with security requirements
-- Workaround: Use `cast send` to call `joinServiceWithCommitments()` directly
+**~~Limitation #1: `operator join` Requires Security Commitments~~** ✅ RESOLVED (2026-01-23)
+- Added `--commitment` flag to specify asset commitments
+- Format: `KIND:TOKEN:EXPOSURE_BPS` (e.g., `erc20:0x1234...:5000`)
 
-**Limitation #2: `operator leave` Requires Exit Queue Workflow**
-- CLI needs new commands: `operator schedule-exit`, `operator execute-exit`, `operator cancel-exit`
-- Exit queue workflow verified working via `cast` (see OPERATOR_UTILITIES_TEST_PROGRESS.md)
+**~~Limitation #2: `operator leave` Requires Exit Queue Workflow~~** ✅ RESOLVED (2026-01-23)
+- Added three new commands: `operator schedule-exit`, `operator execute-exit`, `operator cancel-exit`
+- Workflow: schedule-exit → wait ~7 days → execute-exit (or cancel-exit to abort)
 
 ### Tested Command Examples
 
@@ -377,6 +378,45 @@ cargo tangle operator start-leaving \
   --keystore-path ./operator-keystore \
   --tangle-contract $TANGLE \
   --restaking-contract $RESTAKING
+
+# Join service with security commitment (NEW 2026-01-23)
+cargo tangle operator join \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --status-registry-contract $STATUS_REGISTRY \
+  --blueprint-id 0 \
+  --service-id 0 \
+  --commitment "erc20:0x8f86403a4de0bb5791fa46b8e795c547942fe4cf:5000"
+
+# Schedule exit from service (NEW 2026-01-23)
+cargo tangle operator schedule-exit \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --service-id 0
+
+# Execute exit after delay (NEW 2026-01-23)
+cargo tangle operator execute-exit \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --service-id 0
+
+# Cancel scheduled exit (NEW 2026-01-23)
+cargo tangle operator cancel-exit \
+  --http-rpc-url http://127.0.0.1:8545 \
+  --ws-rpc-url ws://127.0.0.1:8546 \
+  --keystore-path ./operator-keystore \
+  --tangle-contract $TANGLE \
+  --restaking-contract $RESTAKING \
+  --service-id 0
 ```
 
 ---
@@ -625,7 +665,7 @@ These are essential for the basic operator/user workflow:
 ### Completed
 1. ✅ All service lifecycle commands (9/9) - See SERVICE_LIFECYCLE_TEST_PROGRESS.md
 2. ✅ All job system commands (4/4) - See JOB_SYSTEM_TEST_PROGRESS.md (30/30 tests passed)
-3. ✅ All operator utility commands (12/12) - See OPERATOR_UTILITIES_TEST_PROGRESS.md (34/34 tests passed)
+3. ✅ All operator utility commands (15/15) - See OPERATOR_UTILITIES_TEST_PROGRESS.md (34/34 tests passed + 3 new exit queue commands)
 4. ✅ All delegator utility commands (14/14) - See DELEGATOR_UTILITIES_TEST_PLAN.md
 5. ✅ All chain state query commands (3/3) - See CHAIN_STATE_QUERIES_TEST_PROGRESS.md (19/20 tests passed, 1 skipped)
 

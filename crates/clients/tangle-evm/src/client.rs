@@ -1105,7 +1105,42 @@ impl TangleEvmClient {
         Ok(transaction_result_from_receipt(&receipt))
     }
 
+    /// Join a dynamic service with the requested exposure and explicit security commitments.
+    ///
+    /// Use this method when the service has security requirements that mandate operators
+    /// provide asset commitments when joining.
+    pub async fn join_service_with_commitments(
+        &self,
+        service_id: u64,
+        exposure_bps: u16,
+        commitments: Vec<ITangleTypes::AssetSecurityCommitment>,
+    ) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .joinServiceWithCommitments(service_id, exposure_bps, commitments)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
     /// Leave a dynamic service using the legacy immediate exit helper.
+    ///
+    /// Note: This only works when `exitQueueDuration == 0`. For services with
+    /// an exit queue (default 7 days), use the exit queue workflow:
+    /// 1. `schedule_exit()` - Enter the exit queue
+    /// 2. Wait for exit queue duration
+    /// 3. `execute_exit()` - Complete the exit
     pub async fn leave_service(&self, service_id: u64) -> Result<TransactionResult> {
         let wallet = self.wallet()?;
         let provider = ProviderBuilder::new()
@@ -1117,6 +1152,81 @@ impl TangleEvmClient {
 
         let receipt = contract
             .leaveService(service_id)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Schedule an exit from a dynamic service.
+    ///
+    /// This enters the operator into the exit queue. After the exit queue duration
+    /// has passed (default 7 days), call `execute_exit()` to complete the exit.
+    ///
+    /// Requires that the operator has fulfilled the minimum commitment duration
+    /// since joining the service.
+    pub async fn schedule_exit(&self, service_id: u64) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .scheduleExit(service_id)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Execute a previously scheduled exit from a dynamic service.
+    ///
+    /// This completes the exit after the exit queue duration has passed.
+    /// Must be called after `schedule_exit()` and waiting for the queue duration.
+    pub async fn execute_exit(&self, service_id: u64) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .executeExit(service_id)
+            .send()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?
+            .get_receipt()
+            .await?;
+
+        Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Cancel a previously scheduled exit from a dynamic service.
+    ///
+    /// This cancels the exit and keeps the operator in the service.
+    /// Can only be called before `execute_exit()`.
+    pub async fn cancel_exit(&self, service_id: u64) -> Result<TransactionResult> {
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+        let contract = ITangle::new(self.tangle_address, &provider);
+
+        let receipt = contract
+            .cancelExit(service_id)
             .send()
             .await
             .map_err(|e| Error::Contract(e.to_string()))?
