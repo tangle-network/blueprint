@@ -1,4 +1,12 @@
 fn main() {
+    // Use system PROTOC if available, otherwise fall back to bundled protoc
+    if std::env::var("PROTOC").is_err() {
+        // SAFETY: This is a build script, and we're setting PROTOC before any proto compilation
+        unsafe {
+            std::env::set_var("PROTOC", protobuf_src::protoc());
+        }
+    }
+
     // Generate test gRPC service definitions for integration tests.
     tonic_build::configure()
         .build_client(true)

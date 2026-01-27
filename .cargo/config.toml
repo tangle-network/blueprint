@@ -3,3 +3,10 @@ rustflags = [
     "-Clink-arg=-isysroot",
     "-Clink-arg=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
 ]
+
+[alias]
+# Convenient aliases for macOS development
+check-mac = "check --no-default-features --features macos-dev"
+build-mac = "build --no-default-features --features macos-dev"
+test-mac = "test --no-default-features --features macos-dev"
+run-mac = "run --no-default-features --features macos-dev"

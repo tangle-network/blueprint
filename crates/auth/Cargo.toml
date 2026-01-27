@@ -77,7 +77,8 @@ rcgen = { workspace = true }
 hyper-rustls = { workspace = true }
 
 [build-dependencies]
-tonic-build = { workspace = true, features = ["prost"] }
+tonic-build = { workspace = true, features = ["prost", "transport"] }
+protobuf-src = "2.1"
 
 [features]
 default = ["std", "tracing"]

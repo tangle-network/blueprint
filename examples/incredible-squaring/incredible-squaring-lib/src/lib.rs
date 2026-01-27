@@ -1,9 +1,26 @@
 //! Incredible Squaring Blueprint Library
 //!
 //! A simple example blueprint that demonstrates job processing with Tangle EVM (v2).
-//! The blueprint provides two jobs:
-//! - `square`: Single operator result required (simple case)
-//! - `verified_square`: Multiple operator results required (aggregation/consensus case)
+//!
+//! # Job Matrix
+//!
+//! This blueprint demonstrates all four combinations of execution location × aggregation:
+//!
+//! | Execution | Aggregation | Job ID | Function |
+//! |-----------|-------------|--------|----------|
+//! | Local     | Single (1)  | 0      | `square` |
+//! | Local     | Multi (2)   | 1      | `verified_square` |
+//! | Local     | Multi (3)   | 2      | `consensus_square` |
+//! | FaaS      | Single (1)  | 3      | `square_faas` |
+//! | FaaS      | Multi (2)   | 4      | `verified_square_faas` |
+//!
+//! **Execution** determines WHERE the job runs:
+//! - **Local**: On the operator's machine directly
+//! - **FaaS**: On serverless infrastructure (Lambda, Cloud Functions, etc.)
+//!
+//! **Aggregation** determines HOW MANY operator results are needed:
+//! - **Single**: 1 result completes the job
+//! - **Multi**: N results required (for redundancy/consensus)
 
 use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::error::RunnerError;
@@ -16,29 +33,44 @@ use tokio::sync::oneshot::Receiver;
 // ═══════════════════════════════════════════════════════════════════════════
 // JOB INDICES
 // ═══════════════════════════════════════════════════════════════════════════
+//
+// 2x2 matrix: Execution Location × Aggregation
+//
+//                     │  Local Execution    │  FaaS Execution
+// ────────────────────┼─────────────────────┼──────────────────────
+//  Single Operator    │  XSQUARE (0)        │  XSQUARE_FAAS (3)
+//  (1 result)         │                     │
+// ────────────────────┼─────────────────────┼──────────────────────
+//  Multi Operator     │  VERIFIED (1)       │  VERIFIED_FAAS (4)
+//  (2+ results)       │  CONSENSUS (2)      │
+// ────────────────────┴─────────────────────┴──────────────────────
 
-/// The job index for the basic square operation
-/// Requires only 1 operator result to complete
+/// Job 0: Local + Single operator (1 result required)
 pub const XSQUARE_JOB_ID: u8 = 0;
 
-/// The job index for the verified square operation
-/// Requires 2 operator results to complete (demonstrates aggregation)
+/// Job 1: Local + Aggregated (2 results required)
 pub const VERIFIED_XSQUARE_JOB_ID: u8 = 1;
 
-/// The job index for the consensus square operation
-/// Requires 3 operator results to complete (demonstrates quorum)
+/// Job 2: Local + Aggregated (3 results required - quorum)
 pub const CONSENSUS_XSQUARE_JOB_ID: u8 = 2;
+
+/// Job 3: FaaS + Single operator (1 result required)
+pub const XSQUARE_FAAS_JOB_ID: u8 = 3;
+
+/// Job 4: FaaS + Aggregated (2 results required)
+pub const VERIFIED_XSQUARE_FAAS_JOB_ID: u8 = 4;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // JOB FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Square a number (single operator)
+/// Square a number (single operator, local execution)
 ///
 /// This job function receives a u64 value via ABI-encoded input and returns its square.
 /// The input and output are automatically ABI-encoded/decoded by the extractors.
 ///
 /// **Aggregation:** Requires 1 operator result (default behavior)
+/// **Execution:** Local - runs on blueprint operator's machine
 ///
 /// # Arguments
 ///
@@ -48,6 +80,30 @@ pub const CONSENSUS_XSQUARE_JOB_ID: u8 = 2;
 ///
 /// Returns the square of the input value as ABI-encoded output
 pub async fn square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+    let result = x * x;
+    TangleEvmResult(result)
+}
+
+/// Square a number via FaaS (serverless execution)
+///
+/// This job is **IDENTICAL** in logic to `square` but is designed to run on
+/// serverless infrastructure (AWS Lambda, GCP Cloud Functions, etc.) instead
+/// of directly on the operator's machine.
+///
+/// This demonstrates the key property: **same job logic, different execution location**.
+/// The result flows through the same consumer pipeline to reach onchain.
+///
+/// **Aggregation:** Requires 1 operator result
+/// **Execution:** FaaS - runs on serverless infrastructure
+///
+/// # Arguments
+///
+/// * `x` - The number to square
+///
+/// # Returns
+///
+/// Returns the square of the input value
+pub async fn square_faas(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
     let result = x * x;
     TangleEvmResult(result)
 }
@@ -102,6 +158,32 @@ pub async fn consensus_square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmRe
     TangleEvmResult(result)
 }
 
+/// Square a number via FaaS with verification (requires 2 operators)
+///
+/// This combines **FaaS execution** with **aggregation**: the job runs on
+/// serverless infrastructure, but requires 2 operator results before completion.
+///
+/// **Aggregation:** Requires 2 operator results
+/// **Execution:** FaaS - runs on serverless infrastructure
+///
+/// # Use Case
+///
+/// Use this when you need both:
+/// - Scalability/cost benefits of serverless execution
+/// - Redundancy/verification from multiple operators
+///
+/// # Arguments
+///
+/// * `x` - The number to square
+///
+/// # Returns
+///
+/// Returns the square of the input value
+pub async fn verified_square_faas(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+    let result = x * x;
+    TangleEvmResult(result)
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTER
 // ═══════════════════════════════════════════════════════════════════════════
@@ -113,6 +195,7 @@ pub async fn consensus_square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmRe
 #[must_use]
 pub fn router() -> Router {
     Router::new()
+        // Local execution jobs
         .route(XSQUARE_JOB_ID, square.layer(TangleEvmLayer))
         .route(
             VERIFIED_XSQUARE_JOB_ID,
@@ -121,6 +204,12 @@ pub fn router() -> Router {
         .route(
             CONSENSUS_XSQUARE_JOB_ID,
             consensus_square.layer(TangleEvmLayer),
+        )
+        // FaaS execution jobs
+        .route(XSQUARE_FAAS_JOB_ID, square_faas.layer(TangleEvmLayer))
+        .route(
+            VERIFIED_XSQUARE_FAAS_JOB_ID,
+            verified_square_faas.layer(TangleEvmLayer),
         )
 }
 
@@ -156,9 +245,24 @@ mod tests {
 
     #[test]
     fn test_job_indices_are_unique() {
-        assert_ne!(XSQUARE_JOB_ID, VERIFIED_XSQUARE_JOB_ID);
-        assert_ne!(XSQUARE_JOB_ID, CONSENSUS_XSQUARE_JOB_ID);
-        assert_ne!(VERIFIED_XSQUARE_JOB_ID, CONSENSUS_XSQUARE_JOB_ID);
+        let all_ids = [
+            XSQUARE_JOB_ID,
+            VERIFIED_XSQUARE_JOB_ID,
+            CONSENSUS_XSQUARE_JOB_ID,
+            XSQUARE_FAAS_JOB_ID,
+            VERIFIED_XSQUARE_FAAS_JOB_ID,
+        ];
+
+        // Check all pairs are unique
+        for i in 0..all_ids.len() {
+            for j in (i + 1)..all_ids.len() {
+                assert_ne!(
+                    all_ids[i], all_ids[j],
+                    "Job IDs at positions {} and {} are not unique",
+                    i, j
+                );
+            }
+        }
     }
 
     #[test]
@@ -166,5 +270,20 @@ mod tests {
         assert_eq!(XSQUARE_JOB_ID, 0);
         assert_eq!(VERIFIED_XSQUARE_JOB_ID, 1);
         assert_eq!(CONSENSUS_XSQUARE_JOB_ID, 2);
+        assert_eq!(XSQUARE_FAAS_JOB_ID, 3);
+        assert_eq!(VERIFIED_XSQUARE_FAAS_JOB_ID, 4);
+    }
+
+    #[test]
+    fn test_job_matrix_coverage() {
+        // Local + Single
+        assert_eq!(XSQUARE_JOB_ID, 0);
+        // Local + Multi
+        assert_eq!(VERIFIED_XSQUARE_JOB_ID, 1);
+        assert_eq!(CONSENSUS_XSQUARE_JOB_ID, 2);
+        // FaaS + Single
+        assert_eq!(XSQUARE_FAAS_JOB_ID, 3);
+        // FaaS + Multi
+        assert_eq!(VERIFIED_XSQUARE_FAAS_JOB_ID, 4);
     }
 }

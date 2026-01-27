@@ -5,7 +5,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::error::ConfigError;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 #[cfg(feature = "tls")]
 use blueprint_auth::models::TlsProfile;
 #[cfg(feature = "tls")]
@@ -51,6 +51,7 @@ pub trait ProtocolSettingsT: Sized + 'static {
 #[non_exhaustive]
 pub enum Protocol {
     #[cfg(feature = "tangle-evm")]
+    #[cfg_attr(feature = "std", value(alias = "tangle-evm"))]
     TangleEvm,
     #[cfg(feature = "eigenlayer")]
     Eigenlayer,
@@ -59,21 +60,6 @@ pub enum Protocol {
 }
 
 impl Protocol {
-    /// Returns the protocol from the environment variable `PROTOCOL`.
-    ///
-    /// If the environment variable is not set, it will return `None`.
-    ///
-    /// # Errors
-    ///
-    /// * [`ConfigError::UnsupportedProtocol`] if the protocol is unknown. See [`Protocol`].
-    pub fn from_env() -> Result<Option<Self>, ConfigError> {
-        if let Ok(protocol) = std::env::var("PROTOCOL") {
-            return protocol.to_ascii_lowercase().parse::<Protocol>().map(Some);
-        }
-
-        Ok(None)
-    }
-
     #[must_use]
     pub fn as_str(&self) -> &'static str {
         #[allow(unreachable_patterns)]
@@ -92,22 +78,6 @@ impl Protocol {
 impl core::fmt::Display for Protocol {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.as_str())
-    }
-}
-
-impl core::str::FromStr for Protocol {
-    type Err = ConfigError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            #[cfg(feature = "tangle-evm")]
-            "tangle-evm" | "tangle_evm" | "tangleevm" => Ok(Self::TangleEvm),
-            #[cfg(feature = "eigenlayer")]
-            "eigenlayer" => Ok(Self::Eigenlayer),
-            #[cfg(feature = "symbiotic")]
-            "symbiotic" => Ok(Self::Symbiotic),
-            _ => Err(ConfigError::UnsupportedProtocol(s.to_string())),
-        }
     }
 }
 

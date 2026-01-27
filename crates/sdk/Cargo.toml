@@ -71,6 +71,9 @@ tempfile = { workspace = true, optional = true }
 # Optional dependencies for build
 blueprint-build-utils = { workspace = true, optional = true }
 
+# Remote cloud deployments
+blueprint-remote-providers = { workspace = true, optional = true }
+
 openssl-sys = { workspace = true, features = ["vendored"] }
 
 [features]
@@ -205,10 +208,23 @@ testing = [
     "std",
 ]
 
+## Enable testing utilities with FaaS support
+testing-faas = [
+    "testing",
+    "faas",
+    "blueprint-testing-utils/faas",
+]
+
 #! ### Extra producers
 
 ## Enable the cron job producer
 cronjob = ["blueprint-producers-extra/cron"]
+
+## Enable remote cloud deployment providers
+remote-providers = ["dep:blueprint-remote-providers"]
+
+## Enable FaaS (Function-as-a-Service) execution support
+faas = ["blueprint-runner/faas"]
 
 [package.metadata.docs.rs]
 features = ["tangle-evm", "tangle-evm-aggregation", "tangle-evm-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]

@@ -27,7 +27,7 @@ blueprint-std = { workspace = true }
 blueprint-client-tangle-evm = { workspace = true }
 
 # Misc dependencies
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
 serde_json = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
@@ -61,6 +61,10 @@ chrono = { workspace = true, features = ["serde", "clock"] }
 libc = { workspace = true }
 rust_decimal = { workspace = true, features = ["serde"] }
 
+# HTTP client for cloud pricing APIs
+reqwest = { workspace = true, features = ["json"] }
+urlencoding = "2.1"
+
 # gRPC
 tonic = { workspace = true, features = ["transport", "codegen", "prost", "router"] }
 prost = { workspace = true, features = ["derive"] }
@@ -81,6 +85,7 @@ alloy-signer-local = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
+protobuf-src = "2.1"
 
 [features]
 default = ["std"]

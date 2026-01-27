@@ -225,10 +225,32 @@ jobs:
       # Because blueprint-manage spawns many workers, we should run tests with test-threads=1 to avoid conflicts
       - name: tests
         run: |
-          if [[ "${{ matrix.package }}" == "blueprint-manager" ]]; then
-            cargo nextest run --test-threads=1 --no-tests pass --package ${{ matrix.package }} ${{ env.cargo_nextest_args }} && cargo test --package ${{ matrix.package }} --doc
+          export PKG="${{ matrix.package }}"
+          CARGO_METADATA=$(cargo metadata --no-deps --format-version 1)
+          export CARGO_METADATA
+          HAS_LIB=$(python - <<'PY'
+import json
+import os
+
+data = json.loads(os.environ["CARGO_METADATA"])
+pkg = os.environ["PKG"]
+for package in data["packages"]:
+    if package["name"] == pkg:
+        print("true" if any("lib" in target["kind"] for target in package["targets"]) else "false")
+        break
+else:
+    print("false")
+PY
+)
+          if [[ "$PKG" == "blueprint-manager" ]]; then
+            cargo nextest run --test-threads=1 --no-tests pass --package "$PKG" ${{ env.cargo_nextest_args }}
           else
-            cargo nextest run --no-tests pass --package ${{ matrix.package }} ${{ env.cargo_nextest_args }} && cargo test --package ${{ matrix.package }} --doc
+            cargo nextest run --no-tests pass --package "$PKG" ${{ env.cargo_nextest_args }}
+          fi
+          if [[ "$HAS_LIB" == "true" ]]; then
+            cargo test --package "$PKG" --doc
+          else
+            echo "Skipping doc tests for $PKG (no lib target)"
           fi
 
   tangle-evm-integration:

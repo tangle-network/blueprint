@@ -584,6 +584,12 @@ impl BlueprintHarness {
         Arc::clone(&self.client)
     }
 
+    /// Return a clone of the service owner client.
+    #[must_use]
+    pub fn caller_client(&self) -> Arc<TangleEvmClient> {
+        Arc::clone(&self.caller_client)
+    }
+
     /// Service identifier wired into the harness.
     #[must_use]
     pub fn service_id(&self) -> u64 {

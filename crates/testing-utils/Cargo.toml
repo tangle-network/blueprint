@@ -21,3 +21,4 @@ blueprint-eigenlayer-testing-utils = { workspace = true, optional = true }
 default = []
 anvil = ["blueprint-anvil-testing-utils"]
 eigenlayer = ["blueprint-eigenlayer-testing-utils"]
+faas = ["blueprint-core-testing-utils/faas"]

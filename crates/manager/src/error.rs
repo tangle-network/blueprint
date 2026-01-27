@@ -77,4 +77,8 @@ pub enum Error {
     Auth(#[from] blueprint_auth::Error),
     #[error(transparent)]
     Keystore(#[from] blueprint_keystore::Error),
+
+    #[cfg(feature = "remote-providers")]
+    #[error(transparent)]
+    RemoteProvider(#[from] blueprint_remote_providers::Error),
 }

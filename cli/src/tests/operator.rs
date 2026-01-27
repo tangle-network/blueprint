@@ -5,7 +5,10 @@
 
 use std::fs;
 
-use blueprint_crypto::{BytesEncoding, k256::{K256Ecdsa, K256SigningKey}};
+use blueprint_crypto::{
+    BytesEncoding,
+    k256::{K256Ecdsa, K256SigningKey},
+};
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_testing_utils::anvil::seed_operator_key;
 use blueprint_testing_utils::anvil::tangle_evm::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID};
@@ -187,7 +190,10 @@ async fn test_operator_delegators() -> Result<()> {
         .map_err(|e| eyre!("invalid JSON: {e}\n{}", output.stdout))?;
 
     assert!(parsed.get("operator").is_some(), "missing operator field");
-    assert!(parsed.get("delegators").is_some(), "missing delegators field");
+    assert!(
+        parsed.get("delegators").is_some(),
+        "missing delegators field"
+    );
 
     Ok(())
 }

@@ -389,6 +389,7 @@ fn test_calculate_price_negative_scaling_factor() {
 }
 
 #[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "requires Linux /proc/diskstats")]
 fn test_io_benchmark() {
     setup_log();
 
@@ -476,6 +477,7 @@ fn test_memory_benchmark() {
 }
 
 #[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "requires Linux network stats")]
 fn test_network_benchmark() {
     setup_log();
 
