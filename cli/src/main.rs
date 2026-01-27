@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use alloy_primitives::{Address, Bytes, U256};
 use blueprint_client_tangle_evm::{
-    BlueprintSelectionMode, TangleEvmClient, TransactionResult, contracts::ITangleTypes,
+    BlueprintSelectionMode, DelegationMode, TangleEvmClient, TransactionResult,
+    contracts::ITangleTypes,
 };
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
@@ -70,7 +71,10 @@ struct Cli {
 #[allow(clippy::large_enum_variant)]
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Blueprint subcommand
+    /// Create, deploy, run, and manage blueprints.
+    ///
+    /// Blueprints are service templates that define jobs, pricing, and operator requirements.
+    /// Use this to develop and deploy your own blueprint services.
     #[command(visible_alias = "bp")]
     Blueprint {
         #[command(subcommand)]
@@ -85,21 +89,29 @@ enum Commands {
         command: cargo_tangle::command::cloud::CloudCommands,
     },
 
-    /// Key management
+    /// Generate, import, export, and list cryptographic keys.
+    ///
+    /// Manage ECDSA and BLS keys used for signing transactions and attestations.
     #[command(visible_alias = "k")]
     Key {
         #[command(subcommand)]
         command: KeyCommands,
     },
 
-    /// Delegator utilities.
+    /// Deposit, delegate, and withdraw stake as a delegator.
+    ///
+    /// Delegators provide economic security by staking tokens to operators.
+    /// Earn rewards while supporting the network's security.
     #[command(visible_alias = "del")]
     Delegator {
         #[command(subcommand)]
         command: DelegatorCommands,
     },
 
-    /// Operator utilities.
+    /// Register, stake, and manage services as an operator.
+    ///
+    /// Operators run blueprint services and earn rewards for their work.
+    /// Manage your stake, delegation settings, and service participation.
     #[command(visible_alias = "op")]
     Operator {
         #[command(subcommand)]
@@ -109,9 +121,12 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum BlueprintCommands {
-    /// Create a new blueprint
+    /// Create a new blueprint project from a template.
+    ///
+    /// Scaffolds a complete blueprint project with jobs, tests, and build configuration.
     #[command(visible_alias = "c")]
     Create {
+        /// Name for the new blueprint project (used for directory and package name).
         #[arg(short = 'n', long, value_name = "NAME", env = "NAME")]
         name: String,
         #[command(flatten)]
@@ -122,7 +137,8 @@ enum BlueprintCommands {
         #[command(flatten)]
         template_variables: TemplateVariables,
 
-        /// Define a value for template variables (can be used multiple times)
+        /// Define a value for template variables (can be used multiple times).
+        ///
         /// Example: --define gh-username=myusername
         /// Example with spaces: --define "project-description=My Blueprint description"
         #[arg(
@@ -132,124 +148,162 @@ enum BlueprintCommands {
             conflicts_with = "template_values_file"
         )]
         define: Vec<String>,
+        /// JSON file containing template variable values.
         #[arg(long, value_name = "FILE", conflicts_with = "define")]
         template_values_file: Option<String>,
+        /// Skip interactive prompts and use defaults.
         #[arg(long)]
         skip_prompts: bool,
     },
 
-    /// Deploy a blueprint
+    /// Deploy a blueprint to a protocol (Tangle or Eigenlayer).
+    ///
+    /// Compiles and publishes your blueprint to the on-chain registry.
     #[command(visible_alias = "d")]
     Deploy {
         #[command(subcommand)]
         target: DeployTarget,
     },
 
-    /// Run a blueprint
+    /// Run a blueprint as an operator.
+    ///
+    /// Starts the blueprint runtime, connects to the network, and listens for jobs.
+    /// Requires keys in the keystore and protocol settings in settings.env.
     #[command(visible_alias = "r")]
     Run {
+        /// Target protocol: tangle-evm or eigenlayer.
         #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
         protocol: Protocol,
+        /// HTTP RPC endpoint for the EVM chain.
         #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:8545")]
         http_rpc_url: Url,
+        /// WebSocket RPC endpoint for event subscriptions.
         #[arg(long, value_name = "URL", default_value = "ws://127.0.0.1:8546")]
         ws_rpc_url: Url,
+        /// Path to keystore directory containing operator keys.
         #[arg(short = 'k', long)]
         keystore_path: Option<PathBuf>,
+        /// Network name: local, testnet, or mainnet.
         #[arg(short = 'w', long, default_value = "local")]
         network: String,
+        /// Directory for blueprint data and state.
         #[arg(short = 'd', long)]
         data_dir: Option<PathBuf>,
+        /// P2P bootstrap nodes for gossip network.
         #[arg(short = 'n', long)]
         bootnodes: Option<Vec<String>>,
+        /// Path to settings.env file with protocol configuration.
         #[arg(short = 'f', long, default_value = "./settings.env")]
         settings_file: Option<PathBuf>,
+        /// Allow unchecked attestations (testing only, insecure).
         #[arg(long, env)]
         allow_unchecked_attestations: bool,
-        /// Preferred runtime for the service.
+        /// Preferred runtime: vm (sandboxed) or native.
         #[arg(long, value_enum, default_value_t = SpawnMethod::Vm)]
         spawn_method: SpawnMethod,
-        /// Override the manager's preferred blueprint source.
+        /// Override blueprint source: wasm, binary, or container.
         #[arg(long, value_enum)]
         preferred_source: Option<PreferredSourceArg>,
-        /// Force the manager to execute inside a VM sandbox.
+        /// Force VM sandbox execution.
         #[arg(long)]
         vm: bool,
-        /// Disable the VM sandbox for the manager.
+        /// Disable VM sandbox (use native execution).
         #[arg(long)]
         no_vm: bool,
-        /// Persist runtime overrides back to the settings file.
+        /// Save runtime preferences to settings file.
         #[arg(long)]
         save_runtime_prefs: bool,
     },
 
-    /// Generate registration inputs for a blueprint without registering on-chain
+    /// Generate registration data without submitting on-chain.
+    ///
+    /// Produces the signed registration inputs needed to register as an operator
+    /// for this blueprint. Useful for offline signing workflows.
     #[command(visible_alias = "pre")]
     Preregister {
+        /// Target protocol: tangle-evm or eigenlayer.
         #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
         protocol: Protocol,
+        /// HTTP RPC endpoint for the EVM chain.
         #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:8545")]
         http_rpc_url: Url,
+        /// WebSocket RPC endpoint.
         #[arg(long, value_name = "URL", default_value = "ws://127.0.0.1:8546")]
         ws_rpc_url: Url,
+        /// Path to keystore directory containing operator keys.
         #[arg(short = 'k', long)]
         keystore_path: Option<PathBuf>,
+        /// Network name: local, testnet, or mainnet.
         #[arg(short = 'n', long, default_value = "local")]
         network: String,
+        /// Directory for blueprint data and state.
         #[arg(short = 'd', long)]
         data_dir: Option<PathBuf>,
+        /// Path to settings.env file with protocol configuration.
         #[arg(short = 'f', long, default_value = "./settings.env")]
         settings_file: Option<PathBuf>,
-        /// Preferred runtime for the service.
+        /// Preferred runtime: vm (sandboxed) or native.
         #[arg(long, value_enum, default_value_t = SpawnMethod::Vm)]
         spawn_method: SpawnMethod,
-        /// Override the manager's preferred blueprint source.
+        /// Override blueprint source: wasm, binary, or container.
         #[arg(long, value_enum)]
         preferred_source: Option<PreferredSourceArg>,
-        /// Force the manager to execute inside a VM sandbox.
+        /// Force VM sandbox execution.
         #[arg(long)]
         vm: bool,
-        /// Disable the VM sandbox for the manager.
+        /// Disable VM sandbox (use native execution).
         #[arg(long)]
         no_vm: bool,
-        /// Persist runtime overrides back to the settings file.
+        /// Save runtime preferences to settings file.
         #[arg(long)]
         save_runtime_prefs: bool,
     },
 
-    /// Register as a Tangle EVM operator
+    /// Register as an operator for a blueprint.
+    ///
+    /// Submits operator registration to the Tangle contract, enabling you to
+    /// receive service requests and job assignments for this blueprint.
     #[command(visible_alias = "reg")]
     Register {
         #[command(flatten)]
         network: TangleClientArgs,
+        /// RPC endpoint override (uses network default if omitted).
         #[arg(long, value_name = "URL")]
         rpc_endpoint: Option<String>,
+        /// Blueprint ID to register for.
         #[arg(long)]
         blueprint_id: u64,
+        /// JSON file with pre-signed registration inputs from preregister.
         #[arg(long, value_name = "FILE")]
         registration_inputs: Option<PathBuf>,
     },
-    /// Listing helpers for blueprints/services.
+    /// List blueprints, services, and service requests.
     #[command(visible_alias = "ls")]
     List {
         #[command(subcommand)]
         command: ListCommands,
     },
-    /// Spawn local harnesses and debugging utilities.
+    /// Local development and debugging utilities.
+    ///
+    /// Spawn test harnesses, mock services, and debugging tools.
     #[command(visible_alias = "dbg")]
     Debug {
         #[command(subcommand)]
         command: DebugCommands,
     },
 
-    /// Jobs helpers (submit, watch, inspect).
+    /// Submit, watch, and inspect job invocations.
+    ///
+    /// Manage job calls to blueprint services.
     #[command(visible_alias = "j")]
     Jobs {
         #[command(subcommand)]
         command: JobsCommands,
     },
 
-    /// Service lifecycle helpers.
+    /// Manage service lifecycle (request, approve, join, leave).
+    ///
+    /// Control service instantiation and operator participation.
     Service {
         #[command(subcommand)]
         command: ServiceCommands,
@@ -258,48 +312,68 @@ enum BlueprintCommands {
 
 #[derive(Subcommand, Debug)]
 enum KeyCommands {
-    /// Generate a new key
+    /// Generate a new cryptographic key pair.
+    ///
+    /// Creates ECDSA (for signing transactions) or BLS keys (for threshold signatures).
     #[command(visible_alias = "g")]
     Generate {
+        /// Key type: ecdsa (transactions), bls-bn254 (aggregation), sr25519, ed25519.
         #[arg(short = 't', long, value_enum)]
         key_type: SupportedKey,
+        /// Output file path. If omitted, prints to stdout.
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
+        /// Optional seed bytes for deterministic key generation.
+        #[arg(long)]
         seed: Option<Vec<u8>>,
+        /// Display the secret key (use with caution).
         #[arg(short = 'v', long)]
         show_secret: bool,
     },
-    /// Import a key into the keystore
+    /// Import an existing key into the keystore.
+    ///
+    /// Use this to add a pre-existing private key to your local keystore.
     #[command(visible_alias = "i")]
     Import {
+        /// Key type to import. Auto-detected if omitted.
         #[arg(short = 't', long, value_enum)]
         key_type: Option<SupportedKey>,
+        /// Hex-encoded secret key (without 0x prefix).
         #[arg(short = 'x', long)]
         secret: Option<String>,
+        /// Path to the keystore directory.
         #[arg(short = 'k', long)]
         keystore_path: PathBuf,
+        /// Target protocol for key organization.
         #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
         protocol: Protocol,
     },
-    /// Export a key from the keystore
+    /// Export a key from the keystore by its public key.
     #[command(visible_alias = "e")]
     Export {
+        /// Key type to export.
         #[arg(short = 't', long, value_enum)]
         key_type: SupportedKey,
+        /// Public key (hex) to look up in the keystore.
         #[arg(short = 'p', long)]
         public: String,
+        /// Path to the keystore directory.
         #[arg(short = 'k', long)]
         keystore_path: PathBuf,
     },
-    /// List all keys in the keystore
+    /// List all keys stored in the keystore.
     #[command(visible_alias = "l")]
     List {
+        /// Path to the keystore directory.
         #[arg(short = 'k', long)]
         keystore_path: PathBuf,
     },
-    /// Generate a new mnemonic
+    /// Generate a new BIP-39 mnemonic phrase.
+    ///
+    /// Use this to create a seed phrase for deriving keys.
     #[command(visible_alias = "m")]
     GenerateMnemonic {
+        /// Number of words (12, 15, 18, 21, or 24). Default: 12.
         #[arg(short = 'w', long, value_parser = clap::value_parser!(u32).range(12..=24))]
         word_count: Option<u32>,
     },
@@ -307,17 +381,23 @@ enum KeyCommands {
 
 #[derive(Subcommand, Debug)]
 enum ListCommands {
-    /// List all registered blueprints.
+    /// List all registered blueprints on the network.
+    ///
+    /// Shows blueprint IDs, names, owners, and operator requirements.
     Blueprints {
         #[command(flatten)]
         network: TangleClientArgs,
     },
-    /// List all pending service requests.
+    /// List all pending service requests awaiting operator approval.
+    ///
+    /// Shows requests that operators need to approve or reject.
     Requests {
         #[command(flatten)]
         network: TangleClientArgs,
     },
-    /// List all services.
+    /// List all active services on the network.
+    ///
+    /// Shows running service instances with their operators and status.
     Services {
         #[command(flatten)]
         network: TangleClientArgs,
@@ -326,88 +406,102 @@ enum ListCommands {
 
 #[derive(Subcommand, Debug)]
 enum ServiceCommands {
-    /// Request a service from the network.
+    /// Request a new service instance from operators.
+    ///
+    /// Creates a service request that operators can approve or reject.
+    /// Payment and security requirements can be specified to filter operators.
     Request {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID to instantiate.
         #[arg(long)]
         blueprint_id: u64,
-        /// Target operator addresses.
+        /// Operator addresses to include (can specify multiple times).
         #[arg(long = "operator", required = true)]
         operators: Vec<String>,
-        /// Optional operator exposures (basis points, matches --operator ordering).
+        /// Exposure per operator in basis points (10000 = 100%). Matches --operator order.
         #[arg(long = "operator-exposure-bps")]
         operator_exposures: Vec<u16>,
-        /// Additional permitted callers.
+        /// Addresses allowed to submit jobs (in addition to requester).
         #[arg(long = "permitted-caller")]
         permitted_callers: Vec<String>,
-        /// Optional config file (raw bytes).
+        /// File containing service configuration (raw bytes).
         #[arg(long = "config-file", value_name = "PATH")]
         config_file: Option<PathBuf>,
-        /// Optional hex-encoded config payload.
+        /// Hex-encoded service configuration.
         #[arg(long = "config-hex", value_name = "HEX")]
         config_hex: Option<String>,
-        /// Service TTL in seconds (0 = never expires).
+        /// Time-to-live in seconds (0 = no expiration).
         #[arg(long, default_value_t = 600)]
         ttl: u64,
-        /// Payment token address.
+        /// ERC20 token for payment (0x0 = native token).
         #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
         payment_token: String,
-        /// Payment amount (wei).
+        /// Payment amount in wei.
         #[arg(long, default_value_t = 0)]
         payment_amount: u128,
-        /// Optional security requirement (format KIND:TOKEN:MIN:MAX, repeated).
+        /// Security requirement (format: KIND:TOKEN:MIN:MAX, can repeat).
+        ///
+        /// KIND: 0=native, 1=erc20. MIN/MAX are stake bounds in wei.
         #[arg(
             long = "security-requirement",
             value_name = "KIND:TOKEN:MIN:MAX",
             value_parser = parse_security_requirement
         )]
         security_requirements: Vec<SecurityRequirementArg>,
-        /// Emit transaction logs as JSON.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Approve a pending service request.
+    /// Approve a pending service request as an operator.
+    ///
+    /// Commits your stake to the service and enables job execution.
     Approve {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Request identifier.
+        /// Request ID to approve.
         #[arg(long)]
         request_id: u64,
-        /// Restaking percentage to commit.
+        /// Percentage of your stake to commit to this service (0-100).
         #[arg(long, default_value_t = 50)]
         restaking_percent: u8,
-        /// Explicit security commitments (format KIND:TOKEN:EXPOSURE, repeated).
+        /// Explicit security commitment (format: KIND:TOKEN:EXPOSURE, can repeat).
+        ///
+        /// Overrides automatic allocation. EXPOSURE is in wei.
         #[arg(
             long = "security-commitment",
             value_name = "KIND:TOKEN:EXPOSURE",
             value_parser = parse_security_commitment
         )]
         security_commitments: Vec<SecurityCommitmentArg>,
-        /// Emit transaction logs as JSON.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Reject a pending service request.
+    /// Reject a pending service request as an operator.
+    ///
+    /// Declines participation in the service. If all operators reject,
+    /// the request fails and payment is refunded to the requester.
     Reject {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Request identifier.
+        /// Request ID to reject.
         #[arg(long)]
         request_id: u64,
-        /// Emit transaction logs as JSON.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Join a dynamic service as an operator.
+    /// Join a running dynamic service as an operator.
+    ///
+    /// For services with open membership, allows operators to join after creation.
     Join {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Service identifier.
+        /// Service ID to join.
         #[arg(long)]
         service_id: u64,
-        /// Exposure (basis points) to request.
+        /// Stake exposure in basis points (10000 = 100% of your delegated stake).
         #[arg(long, default_value_t = MAX_BPS)]
         exposure_bps: u16,
         /// Asset security commitment in format KIND:TOKEN:EXPOSURE_BPS.
@@ -418,74 +512,79 @@ enum ServiceCommands {
         /// Example: --commitment erc20:0x1234...abcd:5000
         #[arg(long, value_name = "KIND:TOKEN:EXPOSURE_BPS")]
         commitment: Vec<String>,
-        /// Emit transaction logs as JSON.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Leave a dynamic service via the legacy helper.
+    /// Leave a dynamic service as an operator.
+    ///
+    /// Exits the service and recovers your committed stake after the unbonding period.
     Leave {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Service identifier.
+        /// Service ID to leave.
         #[arg(long)]
         service_id: u64,
-        /// Emit transaction logs as JSON.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Spawn a service runtime for the configured blueprint.
+    /// Spawn a local service runtime for testing.
+    ///
+    /// Starts the blueprint runtime locally without full network participation.
+    /// Useful for development and debugging.
     Spawn {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID defining the service logic.
         #[arg(long)]
         blueprint_id: u64,
-        /// Service identifier.
+        /// Service ID to spawn runtime for.
         #[arg(long)]
         service_id: u64,
-        /// Preferred runtime.
+        /// Runtime execution mode: vm (sandboxed) or native.
         #[arg(long, value_enum, default_value_t = SpawnMethod::Vm)]
         spawn_method: SpawnMethod,
-        /// Directory for blueprint data.
+        /// Directory for blueprint data and state.
         #[arg(long, value_name = "PATH")]
         data_dir: Option<PathBuf>,
-        /// Allow unchecked attestations when spinning up the manager.
+        /// Allow unchecked attestations (testing only, insecure).
         #[arg(long)]
         allow_unchecked_attestations: bool,
-        /// Run without submitting on-chain transactions.
+        /// Simulate execution without on-chain transactions.
         #[arg(long)]
         dry_run: bool,
-        /// Override the manager's preferred blueprint source.
+        /// Override blueprint source: wasm, binary, or container.
         #[arg(long, value_enum)]
         preferred_source: Option<PreferredSourceArg>,
-        /// Force the manager to execute inside a VM sandbox.
+        /// Force VM sandbox execution.
         #[arg(long)]
         vm: bool,
-        /// Disable the VM sandbox for the manager.
+        /// Disable VM sandbox (use native execution).
         #[arg(long)]
         no_vm: bool,
     },
-    /// List all services.
+    /// List all active services.
     List {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Emit JSON instead of human-readable text.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// List all service requests.
+    /// List all pending service requests.
     Requests {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Emit JSON instead of human-readable text.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// Show a specific service request.
+    /// Show details for a specific service request.
     Show {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Request identifier.
+        /// Request ID to display.
         #[arg(long)]
         request_id: u64,
     },
@@ -493,214 +592,241 @@ enum ServiceCommands {
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
 enum DelegationSelection {
+    /// Delegation applies to all blueprints the operator supports.
     All,
+    /// Delegation is pinned to specific blueprint IDs.
     Fixed,
 }
 
 #[derive(Subcommand, Debug)]
 enum DelegatorCommands {
-    /// Show deposit, locks, delegations, and pending requests.
+    /// Show all staking positions for a delegator.
+    ///
+    /// Displays deposits, locks, active delegations, and pending requests.
     Positions {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Delegator address (defaults to local account).
+        /// Delegator address to query (defaults to your address).
         #[arg(long)]
         delegator: Option<String>,
-        /// Token address (zero address for native).
+        /// Token contract address (0x0 for native ETH/TNT).
         #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
         token: String,
-        /// Emit JSON instead of human-readable output.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// List delegations for a delegator.
+    /// List active delegations from a delegator to operators.
     Delegations {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Delegator address (defaults to local account).
+        /// Delegator address to query (defaults to your address).
         #[arg(long)]
         delegator: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// List pending delegator unstakes.
+    /// List pending unstake requests waiting for unbonding period.
     PendingUnstakes {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Delegator address (defaults to local account).
+        /// Delegator address to query (defaults to your address).
         #[arg(long)]
         delegator: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// List pending delegator withdrawals.
+    /// List pending withdrawal requests waiting for unbonding period.
     PendingWithdrawals {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Delegator address (defaults to local account).
+        /// Delegator address to query (defaults to your address).
         #[arg(long)]
         delegator: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// Show ERC20 allowance for a token.
+    /// Check ERC20 token allowance for the restaking contract.
+    ///
+    /// Shows how many tokens the contract can spend on your behalf.
     Allowance {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Token address.
+        /// ERC20 token contract address.
         #[arg(long)]
         token: String,
-        /// Owner address (defaults to local account).
+        /// Token owner address (defaults to your address).
         #[arg(long)]
         owner: Option<String>,
         /// Spender address (defaults to restaking contract).
         #[arg(long)]
         spender: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// Show ERC20 balance for a token.
+    /// Check ERC20 token balance.
     Balance {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Token address.
+        /// ERC20 token contract address.
         #[arg(long)]
         token: String,
-        /// Owner address (defaults to local account).
+        /// Address to check balance for (defaults to your address).
         #[arg(long)]
         owner: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// Approve an ERC20 token for restaking.
+    /// Approve ERC20 tokens for restaking.
+    ///
+    /// Required before depositing ERC20 tokens. Sets the allowance for
+    /// the restaking contract to transfer tokens on your behalf.
     Approve {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Token address.
+        /// ERC20 token contract address.
         #[arg(long)]
         token: String,
-        /// Amount to approve (in wei).
+        /// Amount to approve in wei (smallest token unit).
         #[arg(long)]
         amount: u128,
         /// Spender address (defaults to restaking contract).
         #[arg(long)]
         spender: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Deposit funds without delegating.
+    /// Deposit tokens into the restaking contract.
+    ///
+    /// Deposits tokens that can later be delegated to operators.
+    /// For ERC20 tokens, you must approve() first.
     Deposit {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Token address (zero address for native ETH).
+        /// Token contract address (0x0 for native ETH/TNT).
         #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
         token: String,
-        /// Amount to deposit (in wei).
+        /// Amount to deposit in wei (smallest token unit).
         #[arg(long)]
         amount: u128,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Delegate stake to an operator.
+    /// Delegate deposited tokens to an operator.
+    ///
+    /// Assigns your stake to an operator who provides economic security for services.
+    /// You earn rewards when the operator participates in services.
     Delegate {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Operator address to delegate to.
+        /// Operator address to delegate stake to.
         #[arg(long)]
         operator: String,
-        /// Amount to delegate (in wei).
+        /// Amount to delegate in wei (smallest token unit).
         #[arg(long)]
         amount: u128,
-        /// Token address (zero address for native).
+        /// Token contract address (0x0 for native ETH/TNT).
         #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
         token: String,
-        /// Blueprint selection mode.
+        /// Blueprint selection: all (any blueprint) or fixed (specific blueprints).
         #[arg(long, value_enum, default_value = "all")]
         selection: DelegationSelection,
-        /// Blueprint IDs to pin when using fixed selection mode.
+        /// Blueprint IDs for fixed selection (requires --selection=fixed).
         #[arg(long = "blueprint-id")]
         blueprint_ids: Vec<u64>,
-        /// Use existing deposits instead of depositing first.
+        /// Delegate from existing deposit balance instead of new deposit.
         #[arg(long)]
         from_deposit: bool,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Schedule a delegator unstake.
+    /// Request to undelegate stake from an operator.
+    ///
+    /// Initiates the unbonding period. Use execute-unstake after the period ends.
     Undelegate {
         #[command(flatten)]
         network: TangleClientArgs,
         /// Operator address to undelegate from.
         #[arg(long)]
         operator: String,
-        /// Amount to undelegate (in wei).
+        /// Amount to undelegate in wei (smallest token unit).
         #[arg(long)]
         amount: u128,
-        /// Token address (zero address for native).
+        /// Token contract address (0x0 for native ETH/TNT).
         #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
         token: String,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Execute any matured delegator unstakes.
+    /// Execute all matured unstake requests.
+    ///
+    /// Completes undelegation for requests past the unbonding period.
+    /// Tokens move back to your deposit balance.
     ExecuteUnstake {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Execute a specific delegator unstake and withdraw.
+    /// Execute a specific unstake and withdraw in one transaction.
+    ///
+    /// Completes undelegation and immediately withdraws to your wallet.
     ExecuteUnstakeWithdraw {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Operator address tied to the unstake request.
+        /// Operator address from the original delegation.
         #[arg(long)]
         operator: String,
-        /// Token address (zero address for native).
+        /// Token contract address (0x0 for native ETH/TNT).
         #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
         token: String,
-        /// Shares to execute (from pending unstake).
+        /// Share amount from your pending unstake.
         #[arg(long)]
         shares: u128,
-        /// Requested round from the pending unstake.
+        /// Round number from the pending unstake request.
         #[arg(long)]
         requested_round: u64,
-        /// Receiver address (defaults to delegator).
+        /// Recipient address (defaults to your address).
         #[arg(long)]
         receiver: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Schedule a withdrawal.
+    /// Request to withdraw deposited tokens.
+    ///
+    /// Initiates the unbonding period for non-delegated deposits.
+    /// Use execute-withdraw after the period ends.
     ScheduleWithdraw {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Token address (zero address for native).
+        /// Token contract address (0x0 for native ETH/TNT).
         #[arg(long, default_value = "0x0000000000000000000000000000000000000000")]
         token: String,
-        /// Amount to withdraw (in wei).
+        /// Amount to withdraw in wei (smallest token unit).
         #[arg(long)]
         amount: u128,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Execute any matured withdrawals.
+    /// Execute all matured withdrawal requests.
+    ///
+    /// Transfers tokens back to your wallet for requests past the unbonding period.
     ExecuteWithdraw {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
@@ -708,52 +834,60 @@ enum DelegatorCommands {
 
 #[derive(Subcommand, Debug)]
 enum OperatorCommands {
-    /// Show operator heartbeat/status details.
+    /// Show operator heartbeat and status for a service.
+    ///
+    /// Displays the last heartbeat timestamp, status code, and health information.
     Status {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID the service belongs to.
         #[arg(long)]
         blueprint_id: u64,
-        /// Service identifier.
+        /// Service ID to check status for.
         #[arg(long)]
         service_id: u64,
-        /// Operator address (defaults to the local operator).
+        /// Operator address to query (defaults to your address).
         #[arg(long = "operator")]
         operator: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output as JSON instead of formatted display.
         #[arg(long)]
         json: bool,
     },
-    /// Submit a heartbeat to the OperatorStatusRegistry contract.
+    /// Submit a heartbeat to signal operator liveness.
+    ///
+    /// Operators should submit heartbeats periodically to avoid being marked inactive.
+    /// Status code 0 indicates healthy operation.
     #[command(visible_alias = "hb")]
     Heartbeat {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID the service belongs to.
         #[arg(long)]
         blueprint_id: u64,
-        /// Service identifier.
+        /// Service ID to submit heartbeat for.
         #[arg(long)]
         service_id: u64,
-        /// Status code to report (0 = healthy).
+        /// Status code: 0 = healthy, non-zero = error code.
         #[arg(long, default_value_t = 0)]
         status_code: u8,
-        /// Emit JSON instead of human-readable output.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Join a dynamic service as an operator.
+    /// Join a running dynamic service.
+    ///
+    /// For services with open membership, registers as an operator participant.
+    /// Your stake exposure determines slashing risk for this service.
     Join {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID the service belongs to.
         #[arg(long)]
         blueprint_id: u64,
-        /// Service identifier.
+        /// Service ID to join.
         #[arg(long)]
         service_id: u64,
-        /// Requested exposure in basis points.
+        /// Stake exposure in basis points (10000 = 100%).
         #[arg(long, default_value_t = 10_000)]
         exposure_bps: u16,
         /// Asset security commitment in format KIND:TOKEN:EXPOSURE_BPS.
@@ -764,39 +898,129 @@ enum OperatorCommands {
         /// Example: --commitment 0:0x1234...abcd:5000
         #[arg(long, value_name = "KIND:TOKEN:EXPOSURE_BPS")]
         commitment: Vec<String>,
-        /// Emit JSON transaction logs.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
     /// Leave a dynamic service.
+    ///
+    /// Exits service participation. Your committed stake enters the unbonding period.
     Leave {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID the service belongs to.
         #[arg(long)]
         blueprint_id: u64,
-        /// Service identifier.
+        /// Service ID to leave.
         #[arg(long)]
         service_id: u64,
-        /// Emit JSON transaction logs.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Show restaking status for an operator.
+    /// Show operator restaking status and stake amounts.
+    ///
+    /// Displays total stake, delegated amounts, and operator status.
     Restaking {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Operator address (defaults to local account).
+        /// Operator address to query (defaults to your address).
         #[arg(long = "operator")]
         operator: Option<String>,
-        /// Emit JSON instead of human-readable output.
+        /// Output as JSON instead of formatted display.
         #[arg(long)]
         json: bool,
     },
-    /// List delegators for an operator.
+    /// List all delegators who have staked with this operator.
     Delegators {
         #[command(flatten)]
         network: TangleClientArgs,
+        /// Operator address to query (defaults to your address).
+        #[arg(long = "operator")]
+        operator: Option<String>,
+        /// Output as JSON instead of formatted table.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Request to unstake operator bond.
+    ///
+    /// Initiates the unbonding period for operator stake.
+    /// Use execute-unstake after the period ends.
+    ScheduleUnstake {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Amount to unstake in wei (smallest token unit).
+        #[arg(long)]
+        amount: u128,
+        /// Output transaction details as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Execute matured operator unstake requests.
+    ///
+    /// Completes unstaking for requests past the unbonding period.
+    ExecuteUnstake {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Output transaction details as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Begin the process of leaving as an operator.
+    ///
+    /// Starts the exit period. You cannot accept new services while leaving.
+    /// Use complete-leaving after the exit period ends.
+    StartLeaving {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Output transaction details as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Complete the operator exit process.
+    ///
+    /// Finalizes leaving after the exit period. Removes operator status.
+    CompleteLeaving {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Output transaction details as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Register as a new operator on the restaking layer.
+    ///
+    /// Stakes the initial bond and enables operator status.
+    /// For ERC20 bond tokens, you must approve() the restaking contract first.
+    Register {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Initial stake amount in wei (smallest token unit).
+        #[arg(long)]
+        amount: u128,
+        /// Output transaction details as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add more stake to your operator bond.
+    ///
+    /// Increases your total stake, improving your capacity for services.
+    /// For ERC20 bond tokens, you must approve() the additional amount first.
+    IncreaseStake {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Amount to add to stake in wei (smallest token unit).
+        #[arg(long)]
+        amount: u128,
+        /// Output transaction details as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Get operator's delegation mode.
+    ///
+    /// Shows whether the operator accepts delegations and under what policy.
+    GetDelegationMode {
+        #[command(flatten)]
+        network: TangleClientArgs,
         /// Operator address (defaults to local account).
         #[arg(long = "operator")]
         operator: Option<String>,
@@ -804,64 +1028,49 @@ enum OperatorCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Schedule an operator unstake.
-    ScheduleUnstake {
-        #[command(flatten)]
-        network: TangleClientArgs,
-        /// Amount to unstake (in wei).
-        #[arg(long)]
-        amount: u128,
-        /// Emit JSON instead of human-readable output.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Execute any matured operator unstake.
-    ExecuteUnstake {
-        #[command(flatten)]
-        network: TangleClientArgs,
-        /// Emit JSON instead of human-readable output.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Schedule operator leaving.
-    StartLeaving {
-        #[command(flatten)]
-        network: TangleClientArgs,
-        /// Emit JSON instead of human-readable output.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Complete operator leaving.
-    CompleteLeaving {
-        #[command(flatten)]
-        network: TangleClientArgs,
-        /// Emit JSON instead of human-readable output.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Register as an operator on the restaking layer.
+    /// Set delegation mode for the operator.
     ///
-    /// Uses the configured bond token (TNT or native ETH depending on deployment).
-    /// You must approve the restaking contract to spend your tokens first if using ERC20.
-    Register {
+    /// Controls who can delegate to this operator:
+    /// - disabled: Only operator can self-stake (default)
+    /// - whitelist: Only approved addresses can delegate
+    /// - open: Anyone can delegate
+    SetDelegationMode {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Amount to stake (in wei).
-        #[arg(long)]
-        amount: u128,
+        /// Delegation mode: disabled, whitelist, or open.
+        #[arg(long, value_enum)]
+        mode: DelegationModeArg,
         /// Emit JSON instead of human-readable output.
         #[arg(long)]
         json: bool,
     },
-    /// Increase operator stake.
+    /// Update delegation whitelist.
     ///
-    /// Uses the configured bond token (TNT or native ETH depending on deployment).
-    IncreaseStake {
+    /// Add or remove addresses from the operator's delegation whitelist.
+    /// Only applies when delegation mode is set to "whitelist".
+    UpdateWhitelist {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Amount to add to stake (in wei).
+        /// Delegator addresses to update.
+        #[arg(long = "delegator", required = true)]
+        delegators: Vec<String>,
+        /// Whether to approve (true) or revoke (false) the addresses.
         #[arg(long)]
-        amount: u128,
+        approved: bool,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check if delegator can delegate to operator.
+    CanDelegate {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Operator address.
+        #[arg(long)]
+        operator: String,
+        /// Delegator address to check.
+        #[arg(long)]
+        delegator: String,
         /// Emit JSON instead of human-readable output.
         #[arg(long)]
         json: bool,
@@ -911,24 +1120,45 @@ enum OperatorCommands {
     },
 }
 
+/// Delegation mode argument for CLI.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum DelegationModeArg {
+    /// Only operator can self-stake (default).
+    Disabled,
+    /// Only approved addresses can delegate.
+    Whitelist,
+    /// Anyone can delegate.
+    Open,
+}
+
 #[derive(Subcommand, Debug)]
 enum DeployTarget {
-    /// Deploy to Eigenlayer
+    /// Deploy to Eigenlayer AVS registry.
+    ///
+    /// Registers your blueprint as an Eigenlayer AVS (Actively Validated Service).
     Eigenlayer {
+        /// RPC endpoint URL (required unless --devnet is set).
         #[arg(long, value_name = "URL", env, required_unless_present = "devnet")]
         rpc_url: Option<String>,
+        /// Path to compiled contract artifacts.
         #[arg(long)]
         contracts_path: Option<String>,
+        /// Deploy contracts in dependency order.
         #[arg(long)]
         ordered_deployment: bool,
+        /// Network name: local, testnet, or mainnet.
         #[arg(short = 'w', long, default_value = "local")]
         network: String,
+        /// Use built-in devnet configuration.
         #[arg(long)]
         devnet: bool,
+        /// Path to keystore directory containing operator keys.
         #[arg(short = 'k', long)]
         keystore_path: Option<PathBuf>,
     },
-    /// Deploy to a Tangle EVM environment
+    /// Deploy to Tangle EVM protocol.
+    ///
+    /// Registers your blueprint in the Tangle contract registry.
     Tangle(cargo_tangle::command::deploy::tangle::TangleDeployArgs),
 }
 
@@ -2155,6 +2385,93 @@ async fn main() -> Result<()> {
                     .map_err(|e| eyre!(e.to_string()))?;
                 log_tx("Operator increase-stake", &tx, json);
             }
+            OperatorCommands::GetDelegationMode {
+                network,
+                operator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = if let Some(value) = operator {
+                    parse_address(&value, "OPERATOR")?
+                } else {
+                    client.account()
+                };
+                let mode = client
+                    .get_delegation_mode(operator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string(&serde_json::json!({
+                            "operator": format!("{operator_address:?}"),
+                            "delegation_mode": format!("{mode}")
+                        }))?
+                    );
+                } else {
+                    println!("Operator: {operator_address:?}");
+                    println!("Delegation Mode: {mode}");
+                }
+            }
+            OperatorCommands::SetDelegationMode {
+                network,
+                mode,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let delegation_mode = match mode {
+                    DelegationModeArg::Disabled => DelegationMode::Disabled,
+                    DelegationModeArg::Whitelist => DelegationMode::Whitelist,
+                    DelegationModeArg::Open => DelegationMode::Open,
+                };
+                let tx = client
+                    .set_delegation_mode(delegation_mode)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator set-delegation-mode", &tx, json);
+            }
+            OperatorCommands::UpdateWhitelist {
+                network,
+                delegators,
+                approved,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let delegator_addresses = parse_address_list(&delegators, "DELEGATOR")?;
+                let tx = client
+                    .set_delegation_whitelist(delegator_addresses, approved)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                log_tx("Operator update-whitelist", &tx, json);
+            }
+            OperatorCommands::CanDelegate {
+                network,
+                operator,
+                delegator,
+                json,
+            } => {
+                let client = network.connect(0, None).await?;
+                let operator_address = parse_address(&operator, "OPERATOR")?;
+                let delegator_address = parse_address(&delegator, "DELEGATOR")?;
+                let can_delegate = client
+                    .can_delegate(operator_address, delegator_address)
+                    .await
+                    .map_err(|e| eyre!(e.to_string()))?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string(&serde_json::json!({
+                            "operator": format!("{operator_address:?}"),
+                            "delegator": format!("{delegator_address:?}"),
+                            "can_delegate": can_delegate
+                        }))?
+                    );
+                } else {
+                    println!("Operator: {operator_address:?}");
+                    println!("Delegator: {delegator_address:?}");
+                    println!("Can Delegate: {can_delegate}");
+                }
+            }
             OperatorCommands::ScheduleExit {
                 network,
                 service_id,
@@ -2344,9 +2661,7 @@ fn commitment_to_abi(arg: SecurityCommitmentArg) -> ITangleTypes::AssetSecurityC
 }
 
 /// Parse a list of commitment strings into ABI-compatible commitment structures.
-fn parse_commitments(
-    commitments: &[String],
-) -> Result<Vec<ITangleTypes::AssetSecurityCommitment>> {
+fn parse_commitments(commitments: &[String]) -> Result<Vec<ITangleTypes::AssetSecurityCommitment>> {
     commitments
         .iter()
         .map(|s| {
@@ -2644,91 +2959,103 @@ fn init_tracing_subscriber() {
 }
 #[derive(Subcommand, Debug)]
 enum JobsCommands {
-    /// List job definitions for a blueprint.
+    /// List all jobs defined by a blueprint.
+    ///
+    /// Shows job indices, names, input schemas, and output types.
     List {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID to list jobs for.
         #[arg(long)]
         blueprint_id: u64,
-        /// Emit JSON output.
+        /// Output as JSON instead of formatted table.
         #[arg(long)]
         json: bool,
     },
-    /// Show metadata for a specific job call.
+    /// Show details for a submitted job call.
+    ///
+    /// Displays inputs, outputs, status, and result data.
     Show {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID the service belongs to.
         #[arg(long)]
         blueprint_id: u64,
-        /// Service identifier.
+        /// Service ID the job was submitted to.
         #[arg(long)]
         service_id: u64,
-        /// Call identifier to inspect.
+        /// Call ID returned when the job was submitted.
         #[arg(long)]
         call_id: u64,
-        /// Emit JSON output.
+        /// Output as JSON instead of formatted display.
         #[arg(long)]
         json: bool,
     },
-    /// Submit a job invocation to a service.
+    /// Submit a job to a running service.
+    ///
+    /// Invokes a job on the service operators. Inputs can be provided as:
+    /// - Raw hex bytes (--payload-hex)
+    /// - Binary file (--payload-file)
+    /// - Structured JSON matching the job schema (--params-file)
+    /// - Interactive prompts (--prompt)
     Submit {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID the service belongs to.
         #[arg(long)]
         blueprint_id: u64,
-        /// Service identifier.
+        /// Service ID to submit the job to.
         #[arg(long)]
         service_id: u64,
-        /// Job index exported by the blueprint router.
+        /// Job index (0-based) as defined in the blueprint.
         #[arg(long)]
         job: u8,
-        /// Hex-encoded ABI payload for the job inputs.
+        /// Job inputs as hex-encoded bytes (without 0x prefix).
         #[arg(long = "payload-hex", value_name = "HEX")]
         payload_hex: Option<String>,
-        /// File containing raw bytes to use as job inputs.
+        /// File containing raw job input bytes.
         #[arg(long = "payload-file", value_name = "FILE")]
         payload_file: Option<PathBuf>,
-        /// JSON file containing structured inputs that match the job schema.
+        /// JSON file with structured inputs matching the job schema.
         #[arg(
             long = "params-file",
             value_name = "FILE",
             conflicts_with_all = ["payload_hex", "payload_file"]
         )]
         params_file: Option<PathBuf>,
-        /// Prompt for each argument interactively using the job schema.
+        /// Interactively prompt for each job input.
         #[arg(
             long,
             conflicts_with_all = ["payload_hex", "payload_file", "params_file"],
             action = clap::ArgAction::SetTrue
         )]
         prompt: bool,
-        /// Wait for a result after submitting.
+        /// Wait for job result after submission.
         #[arg(long)]
         watch: bool,
-        /// Timeout (seconds) when waiting for a result.
+        /// Timeout in seconds when watching for result.
         #[arg(long, default_value_t = 60)]
         timeout_secs: u64,
-        /// Emit transaction logs as JSON.
+        /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Wait for a job result using a call identifier.
+    /// Wait for a job result by call ID.
+    ///
+    /// Polls for job completion and displays the result when available.
     Watch {
         #[command(flatten)]
         network: TangleClientArgs,
-        /// Blueprint identifier.
+        /// Blueprint ID the service belongs to.
         #[arg(long)]
         blueprint_id: u64,
-        /// Service identifier.
+        /// Service ID the job was submitted to.
         #[arg(long)]
         service_id: u64,
-        /// Call identifier returned by `jobs submit`.
+        /// Call ID from the job submission.
         #[arg(long)]
         call_id: u64,
-        /// Timeout (seconds) before bailing.
+        /// Timeout in seconds before giving up.
         #[arg(long, default_value_t = 60)]
         timeout_secs: u64,
     },

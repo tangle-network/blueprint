@@ -796,11 +796,7 @@ fn decode_tlv_schema(bytes: &[u8]) -> Result<Vec<SchemaParam>> {
     Ok(params)
 }
 
-fn decode_tlv_field(
-    bytes: &[u8],
-    cursor: usize,
-    field_idx: usize,
-) -> Result<(SchemaParam, usize)> {
+fn decode_tlv_field(bytes: &[u8], cursor: usize, field_idx: usize) -> Result<(SchemaParam, usize)> {
     if cursor + 5 > bytes.len() {
         return Err(eyre!("TLV field {} truncated", field_idx));
     }
