@@ -1,0 +1,10 @@
+[package]
+name = "blueprint-tangle-extra"
+version = "0.0.0"
+edition = "2021"
+publish = false
+# Placeholder for backwards compatibility with old commits
+# This package was renamed to blueprint-tangle-evm-extra
+
+[lib]
+path = "src/lib.rs"
