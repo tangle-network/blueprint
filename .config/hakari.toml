@@ -23,11 +23,7 @@ platforms = [
     # "x86_64-pc-windows-msvc",
 ]
 
-[final-excludes]
-third-party = [
-    { name = "subxt" },
-    { name = "tangle-subxt" },
-]
+# No third-party excludes needed after EVM-only migration
 
 # Write out exact versions rather than a semver range. (Defaults to false.)
 # exact-versions = true
