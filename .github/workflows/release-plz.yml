@@ -13,8 +13,28 @@ env:
   RELEASE_PLZ_LOG: TRACE
 
 jobs:
+  check-release-enabled:
+    name: Check if releases are enabled
+    runs-on: ubuntu-22.04
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check release-plz.toml
+        id: check
+        run: |
+          if grep -q "^release = false" release-plz.toml 2>/dev/null; then
+            echo "enabled=false" >> $GITHUB_OUTPUT
+            echo "Releases disabled in release-plz.toml"
+          else
+            echo "enabled=true" >> $GITHUB_OUTPUT
+            echo "Releases enabled"
+          fi
+
   release-plz:
     name: Release-plz
+    needs: check-release-enabled
+    if: needs.check-release-enabled.outputs.enabled == 'true'
     runs-on: ubuntu-22.04
     steps:
       # Generating a GitHub token, so that PRs and tags created by
