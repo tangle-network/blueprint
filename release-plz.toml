@@ -6,6 +6,15 @@ publish_no_verify = true   # add `--no-verify` to `cargo publish`
 publish_timeout = "10m"    # set a timeout for `cargo publish`
 semver_check = false
 
+# TEMPORARY: v2 Migration
+# release-plz compares packages against old commits via git log. Old commits
+# reference crates/tangle-extra which was renamed to crates/tangle-evm-extra.
+# This breaks cargo when release-plz checks out old commits.
+#
+# To fix: Bump all versions (e.g., 0.2.0-alpha.1), create tags, remove this line.
+# See: https://github.com/tangle-network/blueprint/issues/XXX
+release = false
+
 [changelog]
 commit_preprocessors = [
     # Allow shortened crate names
