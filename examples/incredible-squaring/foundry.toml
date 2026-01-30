@@ -12,11 +12,19 @@ via_ir = true
 optimizer = true
 optimizer_runs = 200
 
-# Use soldeer-managed dependencies for v2 development
+# Use soldeer-managed dependencies
 remappings = [
-    "@tnt-core/=dependencies/tnt-core-0.5.0/src/v2/",
+    "@tnt-core/=dependencies/tnt-core-0.8.0/src/",
     "@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.1.0/",
     "forge-std/=dependencies/forge-std-1.9.4/src/"
 ]
+
+[soldeer]
+recursive_deps = true
+remappings_location = "txt"
+remappings_version = false
+
+[dependencies]
+tnt-core = "0.8.0"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

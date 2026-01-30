@@ -697,6 +697,13 @@ fn encode_compact_value(value: &DynSolValue, buffer: &mut Vec<u8>) {
                 encode_compact_value(field, buffer);
             }
         }
+        DynSolValue::CustomStruct { tuple, .. } => {
+            // Custom structs: encode like tuples
+            encode_compact_length(tuple.len(), buffer);
+            for field in tuple {
+                encode_compact_value(field, buffer);
+            }
+        }
         DynSolValue::Function(f) => buffer.extend_from_slice(f.0.as_slice()),
     }
 }
