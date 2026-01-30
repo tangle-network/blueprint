@@ -224,14 +224,14 @@ jobs:
       # TODO: nextest doesn't support doc tests yet (https://github.com/nextest-rs/nextest/issues/16)
       # Because blueprint-manage spawns many workers, we should run tests with test-threads=1 to avoid conflicts
       - name: tests
-        shell: bash
         run: |
           export PKG="${{ matrix.package }}"
           CARGO_METADATA=$(cargo metadata --no-deps --format-version 1)
           export CARGO_METADATA
-          HAS_LIB=$(python3 -c '
+          HAS_LIB=$(python3 - <<'PY'
 import json
 import os
+
 data = json.loads(os.environ["CARGO_METADATA"])
 pkg = os.environ["PKG"]
 for package in data["packages"]:
@@ -240,7 +240,8 @@ for package in data["packages"]:
         break
 else:
     print("false")
-')
+PY
+          )
           if [[ "$PKG" == "blueprint-manager" ]]; then
             cargo nextest run --test-threads=1 --no-tests pass --package "$PKG" ${{ env.cargo_nextest_args }}
           else
