@@ -228,7 +228,7 @@ jobs:
           export PKG="${{ matrix.package }}"
           CARGO_METADATA=$(cargo metadata --no-deps --format-version 1)
           export CARGO_METADATA
-          HAS_LIB=$(python3 - <<'PY'
+          HAS_LIB=$(python - <<'PY'
 import json
 import os
 
@@ -241,7 +241,7 @@ for package in data["packages"]:
 else:
     print("false")
 PY
-          )
+)
           if [[ "$PKG" == "blueprint-manager" ]]; then
             cargo nextest run --test-threads=1 --no-tests pass --package "$PKG" ${{ env.cargo_nextest_args }}
           else
