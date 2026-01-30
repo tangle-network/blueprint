@@ -11,6 +11,10 @@ publish_timeout = "10m"    # set a timeout for `cargo publish`
 # * Cutting down on dependencies to reduce build time
 # * Upgraded runners
 semver_check = false
+# Disable releases until v2 migration baseline is established
+# The workspace structure changed significantly (tangle-extra -> tangle-evm-extra, etc.)
+# and release-plz can't compare against old commits
+release = false
 
 [changelog]
 commit_preprocessors = [
