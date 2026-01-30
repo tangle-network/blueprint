@@ -228,18 +228,7 @@ jobs:
           export PKG="${{ matrix.package }}"
           CARGO_METADATA=$(cargo metadata --no-deps --format-version 1)
           export CARGO_METADATA
-          HAS_LIB=$(python3 -c "
-          import json
-          import os
-          data = json.loads(os.environ['CARGO_METADATA'])
-          pkg = os.environ['PKG']
-          for package in data['packages']:
-              if package['name'] == pkg:
-                  print('true' if any('lib' in target['kind'] for target in package['targets']) else 'false')
-                  break
-          else:
-              print('false')
-          ")
+          HAS_LIB=$(python3 -c "import json, os; data = json.loads(os.environ['CARGO_METADATA']); pkg = os.environ['PKG']; result = 'false'; [result := 'true' for p in data['packages'] if p['name'] == pkg and any('lib' in t['kind'] for t in p['targets'])]; print(result)")
           if [[ "$PKG" == "blueprint-manager" ]]; then
             cargo nextest run --test-threads=1 --no-tests pass --package "$PKG" ${{ env.cargo_nextest_args }}
           else
