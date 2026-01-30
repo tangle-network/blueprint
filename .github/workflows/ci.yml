@@ -226,8 +226,8 @@ jobs:
       - name: tests
         run: |
           export PKG="${{ matrix.package }}"
-          export CARGO_METADATA=$(cargo metadata --no-deps --format-version 1)
-          HAS_LIB=$(python3 ./scripts/ci/check-lib-target.py)
+          cargo metadata --no-deps --format-version 1 > /tmp/cargo-metadata.json
+          HAS_LIB=$(python3 ./scripts/ci/check-lib-target.py /tmp/cargo-metadata.json "$PKG")
           if [[ "$PKG" == "blueprint-manager" ]]; then
             cargo nextest run --test-threads=1 --no-tests pass --package "$PKG" ${{ env.cargo_nextest_args }}
           else

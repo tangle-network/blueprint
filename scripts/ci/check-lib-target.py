@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """Check if a Cargo package has a lib target."""
 import json
-import os
 import sys
 
 def main():
-    cargo_metadata = os.environ.get("CARGO_METADATA")
-    pkg = os.environ.get("PKG")
-
-    if not cargo_metadata or not pkg:
+    if len(sys.argv) < 3:
+        print("Usage: check-lib-target.py <metadata-file> <package-name>", file=sys.stderr)
         print("false")
         return
 
-    data = json.loads(cargo_metadata)
+    metadata_file = sys.argv[1]
+    pkg = sys.argv[2]
+
+    try:
+        with open(metadata_file, 'r') as f:
+            data = json.load(f)
+    except (IOError, json.JSONDecodeError) as e:
+        print(f"Error reading metadata: {e}", file=sys.stderr)
+        print("false")
+        return
+
     for package in data["packages"]:
         if package["name"] == pkg:
             has_lib = any("lib" in target["kind"] for target in package["targets"])
