@@ -288,12 +288,7 @@ mod tests {
     #[tokio::test]
     async fn write_doc_and_purge_jobs_modify_state() {
         docs_store().write().await.clear();
-        write_doc(TangleArg((
-            "doc1".into(),
-            "secret".into(),
-            "tenant".into(),
-        )))
-        .await;
+        write_doc(TangleArg(("doc1".into(), "secret".into(), "tenant".into()))).await;
         {
             let guard = docs_store().read().await;
             assert_eq!(guard.get("tenant").unwrap().get("doc1").unwrap(), "secret");

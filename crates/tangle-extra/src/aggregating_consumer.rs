@@ -22,9 +22,7 @@
 use crate::aggregation::AggregationError;
 use crate::extract;
 use alloy_primitives::{Address, Bytes};
-use blueprint_client_tangle::{
-    AggregationConfig, OperatorMetadata, TangleClient, ThresholdType,
-};
+use blueprint_client_tangle::{AggregationConfig, OperatorMetadata, TangleClient, ThresholdType};
 use blueprint_core::JobResult;
 use blueprint_core::error::BoxError;
 use blueprint_std::boxed::Box;
@@ -288,7 +286,7 @@ impl AggregationServiceConfig {
             .collect();
 
         blueprint_core::info!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             "Discovered {} operator aggregation services for blueprint {}",
             urls.len(),
             blueprint_id
@@ -374,10 +372,7 @@ impl AggregatingConsumer {
     /// let consumer1 = AggregatingConsumer::with_cache(client1, cache.clone());
     /// let consumer2 = AggregatingConsumer::with_cache(client2, cache.clone());
     /// ```
-    pub fn with_cache(
-        client: TangleClient,
-        cache: crate::cache::SharedServiceConfigCache,
-    ) -> Self {
+    pub fn with_cache(client: TangleClient, cache: crate::cache::SharedServiceConfigCache) -> Self {
         Self {
             client: Arc::new(client),
             buffer: Mutex::new(VecDeque::new()),
@@ -536,7 +531,7 @@ impl Sink<JobResult> for AggregatingConsumer {
 
     fn start_send(self: Pin<&mut Self>, item: JobResult) -> Result<(), Self::Error> {
         let JobResult::Ok { head, body } = &item else {
-            blueprint_core::trace!(target: "tangle-evm-aggregating-consumer", "Discarding job result with error");
+            blueprint_core::trace!(target: "tangle-aggregating-consumer", "Discarding job result with error");
             return Ok(());
         };
 
@@ -544,7 +539,7 @@ impl Sink<JobResult> for AggregatingConsumer {
             head.metadata.get(extract::CallId::METADATA_KEY),
             head.metadata.get(extract::ServiceId::METADATA_KEY),
         ) else {
-            blueprint_core::trace!(target: "tangle-evm-aggregating-consumer", "Discarding job result with missing metadata");
+            blueprint_core::trace!(target: "tangle-aggregating-consumer", "Discarding job result with missing metadata");
             return Ok(());
         };
 
@@ -559,7 +554,7 @@ impl Sink<JobResult> for AggregatingConsumer {
             .unwrap_or(0);
 
         blueprint_core::debug!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             result = ?item,
             job_index = job_index,
             "Received job result, handling..."
@@ -682,7 +677,7 @@ async fn submit_job_result(
 
     if config.required {
         blueprint_core::info!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             "Job {} for service {} requires aggregation (threshold: {}bps, type: {:?})",
             call_id,
             service_id,
@@ -750,7 +745,7 @@ async fn prepare_aggregation_task(
 
             if weights.is_empty() {
                 blueprint_core::warn!(
-                    target: "tangle-evm-aggregating-consumer",
+                    target: "tangle-aggregating-consumer",
                     service_id,
                     job_index,
                     "No operator weights found for service {}; falling back to count-based threshold",
@@ -779,7 +774,7 @@ async fn prepare_aggregation_task(
 
                 if numeric_stakes.iter().all(|stake| *stake == 0) {
                     blueprint_core::warn!(
-                        target: "tangle-evm-aggregating-consumer",
+                        target: "tangle-aggregating-consumer",
                         service_id,
                         job_index,
                         "Operator weights for service {} are zero; falling back to count-based threshold",
@@ -796,7 +791,7 @@ async fn prepare_aggregation_task(
                     }
                 } else {
                     blueprint_core::trace!(
-                        target: "tangle-evm-aggregating-consumer",
+                        target: "tangle-aggregating-consumer",
                         service_id,
                         job_index,
                         stakes = ?numeric_stakes,
@@ -834,7 +829,7 @@ async fn submit_job_result(
 
     if config.required {
         blueprint_core::warn!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             "Job {} for service {} requires aggregation but 'aggregation' feature not enabled. \
              Enable the feature and configure the aggregation service.",
             call_id,
@@ -872,7 +867,7 @@ async fn submit_aggregated_result(
         prepare_aggregation_task(&cache, &client, service_id, job_index, &config).await?;
 
     blueprint_core::debug!(
-        target: "tangle-evm-aggregating-consumer",
+        target: "tangle-aggregating-consumer",
         service_id,
         call_id,
         job_index,
@@ -882,7 +877,7 @@ async fn submit_aggregated_result(
     );
 
     blueprint_core::debug!(
-        target: "tangle-evm-aggregating-consumer",
+        target: "tangle-aggregating-consumer",
         "Submitting signature to {} aggregation service(s) for service {} call {}",
         agg.clients.len(),
         service_id,
@@ -934,7 +929,7 @@ async fn submit_aggregated_result(
         {
             Ok(response) => {
                 blueprint_core::info!(
-                    target: "tangle-evm-aggregating-consumer",
+                    target: "tangle-aggregating-consumer",
                     "Submitted signature to aggregation service {}: {}/{} signatures (threshold met: {})",
                     idx,
                     response.signatures_collected,
@@ -946,7 +941,7 @@ async fn submit_aggregated_result(
             }
             Err(e) => {
                 blueprint_core::warn!(
-                    target: "tangle-evm-aggregating-consumer",
+                    target: "tangle-aggregating-consumer",
                     "Failed to submit to aggregation service {}: {}",
                     idx,
                     e
@@ -964,7 +959,7 @@ async fn submit_aggregated_result(
     // Check if we should submit to chain
     if !agg.submit_to_chain {
         blueprint_core::debug!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             "submit_to_chain is disabled, not submitting to chain"
         );
         return Ok(());
@@ -979,7 +974,7 @@ async fn submit_aggregated_result(
             try_submit_aggregated_to_chain(client.clone(), &agg, service_id, call_id).await
         {
             blueprint_core::debug!(
-                target: "tangle-evm-aggregating-consumer",
+                target: "tangle-aggregating-consumer",
                 "Failed to submit aggregated result (likely already submitted): {}",
                 e
             );
@@ -987,7 +982,7 @@ async fn submit_aggregated_result(
     } else if agg.wait_for_threshold {
         // Wait for threshold to be met, then submit
         blueprint_core::debug!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             "Waiting for threshold to be met..."
         );
 
@@ -999,7 +994,7 @@ async fn submit_aggregated_result(
             submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result).await
         {
             blueprint_core::debug!(
-                target: "tangle-evm-aggregating-consumer",
+                target: "tangle-aggregating-consumer",
                 "Failed to submit aggregated result (likely already submitted by another operator): {}",
                 e
             );
@@ -1034,7 +1029,7 @@ async fn wait_for_threshold_any_service(
                 }
                 Err(e) => {
                     blueprint_core::trace!(
-                        target: "tangle-evm-aggregating-consumer",
+                        target: "tangle-aggregating-consumer",
                         "Error polling aggregation service: {}",
                         e
                     );
@@ -1086,7 +1081,7 @@ async fn submit_aggregated_to_chain_with_result(
 
     if client.config.dry_run {
         blueprint_core::info!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             "Dry run enabled; skipping aggregated result submission for service {} call {}",
             service_id,
             call_id
@@ -1095,7 +1090,7 @@ async fn submit_aggregated_to_chain_with_result(
     }
 
     blueprint_core::info!(
-        target: "tangle-evm-aggregating-consumer",
+        target: "tangle-aggregating-consumer",
         "Submitting aggregated result to chain for service {} call {}",
         service_id,
         call_id
@@ -1127,7 +1122,7 @@ async fn submit_aggregated_to_chain_with_result(
     }
 
     blueprint_core::info!(
-        target: "tangle-evm-aggregating-consumer",
+        target: "tangle-aggregating-consumer",
         "Successfully submitted aggregated result for service {} call {}",
         service_id,
         call_id
@@ -1144,7 +1139,7 @@ async fn submit_direct_result(
     output: Bytes,
 ) -> Result<(), AggregatingConsumerError> {
     blueprint_core::debug!(
-        target: "tangle-evm-aggregating-consumer",
+        target: "tangle-aggregating-consumer",
         "Submitting direct result for service {} call {}",
         service_id,
         call_id
@@ -1152,7 +1147,7 @@ async fn submit_direct_result(
 
     if client.config.dry_run {
         blueprint_core::info!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             "Dry run enabled; skipping direct result submission for service {} call {}",
             service_id,
             call_id
@@ -1169,7 +1164,7 @@ async fn submit_direct_result(
 
     if result.success {
         blueprint_core::info!(
-            target: "tangle-evm-aggregating-consumer",
+            target: "tangle-aggregating-consumer",
             "Successfully submitted direct result for service {} call {}: tx_hash={:?}",
             service_id,
             call_id,

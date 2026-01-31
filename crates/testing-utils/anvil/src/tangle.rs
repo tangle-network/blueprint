@@ -13,9 +13,7 @@ use blueprint_chain_setup_anvil::{
     snapshot::{default_snapshot_path, snapshot_state_json_from_path},
     start_anvil_container,
 };
-use blueprint_client_tangle::{
-    ServiceStatus, TangleClient, TangleClientConfig, TangleSettings,
-};
+use blueprint_client_tangle::{ServiceStatus, TangleClient, TangleClientConfig, TangleSettings};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
 use blueprint_keystore::backends::Backend;

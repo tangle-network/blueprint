@@ -164,8 +164,7 @@ async fn setup_runner_test(test_name: &str) -> Result<Option<RunnerTestHarness>>
 async fn blueprint_runner_processes_jobs_on_tangle() -> Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
     run_anvil_test("blueprint_runner_processes_jobs_on_tangle", async {
-        let Some(harness) =
-            setup_runner_test("blueprint_runner_processes_jobs_on_tangle").await?
+        let Some(harness) = setup_runner_test("blueprint_runner_processes_jobs_on_tangle").await?
         else {
             return Ok(());
         };
@@ -213,8 +212,7 @@ async fn blueprint_runner_processes_jobs_on_tangle() -> Result<()> {
 async fn minimal_runner_processes_jobs_on_tangle() -> Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
     run_anvil_test("minimal_runner_processes_jobs_on_tangle", async {
-        let Some(harness) =
-            setup_runner_test("minimal_runner_processes_jobs_on_tangle").await?
+        let Some(harness) = setup_runner_test("minimal_runner_processes_jobs_on_tangle").await?
         else {
             return Ok(());
         };
@@ -285,7 +283,7 @@ async fn run_minimal_runner_loop(
                     Ok(job_call) => job_call,
                     Err(err) => {
                         blueprint_core::error!(
-                            target: "tangle-evm-minimal-runner",
+                            target: "tangle-minimal-runner",
                             error = ?err,
                             "Producer error in minimal loop"
                         );
@@ -302,7 +300,7 @@ async fn run_minimal_runner_loop(
                     .get("tangle.service_id")
                     .and_then(|value| u64::try_from(value).ok());
                 blueprint_core::info!(
-                    target: "tangle-evm-minimal-runner",
+                    target: "tangle-minimal-runner",
                     job_id = ?job_call.job_id(),
                     block_number = ?block_number,
                     service_id = ?service_id,
@@ -316,14 +314,14 @@ async fn run_minimal_runner_loop(
                             match first {
                                 JobResult::Ok { head, .. } => {
                                     blueprint_core::info!(
-                                        target: "tangle-evm-minimal-runner",
+                                        target: "tangle-minimal-runner",
                                         metadata = ?head.metadata,
                                         "First job result metadata"
                                     );
                                 }
                                 JobResult::Err(error) => {
                                     blueprint_core::error!(
-                                        target: "tangle-evm-minimal-runner",
+                                        target: "tangle-minimal-runner",
                                         ?error,
                                         "Job result returned error"
                                     );
@@ -337,7 +335,7 @@ async fn run_minimal_runner_loop(
                         }
                         let mut result_stream = stream::iter(results.into_iter().map(Ok));
                         blueprint_core::info!(
-                            target: "tangle-evm-minimal-runner",
+                            target: "tangle-minimal-runner",
                             result_count = result_len,
                             "Router produced results"
                         );
@@ -353,7 +351,7 @@ async fn run_minimal_runner_loop(
                     Ok(None) => {}
                     Err(err) => {
                         blueprint_core::error!(
-                            target: "tangle-evm-minimal-runner",
+                            target: "tangle-minimal-runner",
                             error = ?err,
                             "Router failed to process job"
                         );

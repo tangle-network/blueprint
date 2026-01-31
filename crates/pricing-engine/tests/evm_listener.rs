@@ -244,9 +244,7 @@ mod evm_listener_tests {
         Ok(())
     }
 
-    async fn create_test_client(
-        deployment: &SeededTangleTestnet,
-    ) -> Result<Arc<TangleClient>> {
+    async fn create_test_client(deployment: &SeededTangleTestnet) -> Result<Arc<TangleClient>> {
         let keystore = Keystore::new(KeystoreConfig::new().in_memory(true))?;
         let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
         let secret = K256SigningKey::from_bytes(&secret_bytes)

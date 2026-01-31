@@ -14,9 +14,7 @@ use blueprint_anvil_testing_utils::{
     missing_tnt_core_artifacts,
 };
 use blueprint_client_tangle::contracts::ITangle::{addPermittedCallerCall, submitJobCall};
-use blueprint_client_tangle::{
-    ServiceStatus, TangleClient, TangleClientConfig, TangleSettings,
-};
+use blueprint_client_tangle::{ServiceStatus, TangleClient, TangleClientConfig, TangleSettings};
 use blueprint_core::extract::FromJobCall;
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};

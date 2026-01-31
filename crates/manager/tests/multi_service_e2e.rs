@@ -21,9 +21,7 @@ use blueprint_anvil_testing_utils::{
     SeededTangleTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
 use blueprint_client_tangle::contracts::ITangle::addPermittedCallerCall;
-use blueprint_client_tangle::{
-    ServiceStatus, TangleClient, TangleClientConfig, TangleSettings,
-};
+use blueprint_client_tangle::{ServiceStatus, TangleClient, TangleClientConfig, TangleSettings};
 use blueprint_core::Job;
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
@@ -370,9 +368,7 @@ async fn create_client(
     .test_mode(true);
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(ks))?;
-    Ok(Arc::new(
-        TangleClient::with_keystore(cfg, keystore).await?,
-    ))
+    Ok(Arc::new(TangleClient::with_keystore(cfg, keystore).await?))
 }
 
 fn seed_key(path: &Path, hex_key: &str) -> Result<()> {

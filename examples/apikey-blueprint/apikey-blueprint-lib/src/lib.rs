@@ -91,10 +91,7 @@ pub async fn purchase_api_key(
 pub fn router() -> BlueprintRouter {
     BlueprintRouter::new()
         .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleLayer))
-        .route(
-            PURCHASE_API_KEY_JOB_ID,
-            purchase_api_key.layer(TangleLayer),
-        )
+        .route(PURCHASE_API_KEY_JOB_ID, purchase_api_key.layer(TangleLayer))
 }
 
 #[derive(Clone)]
@@ -250,12 +247,7 @@ mod tests {
     #[tokio::test]
     async fn write_resource_records_data() {
         resource_store().write().await.clear();
-        write_resource(TangleArg((
-            "doc".into(),
-            "payload".into(),
-            Address::ZERO,
-        )))
-        .await;
+        write_resource(TangleArg(("doc".into(), "payload".into(), Address::ZERO))).await;
 
         let guard = resource_store().read().await;
         assert_eq!(

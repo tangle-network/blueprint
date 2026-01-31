@@ -190,17 +190,16 @@ async fn test_protocol_type_conversion() {
     use blueprint_runner::config::ProtocolSettings;
 
     // Test Tangle EVM conversion
-    let tangle_settings = ProtocolSettings::Tangle(
-        blueprint_runner::tangle::config::TangleProtocolSettings {
+    let tangle_settings =
+        ProtocolSettings::Tangle(blueprint_runner::tangle::config::TangleProtocolSettings {
             blueprint_id: 1,
             service_id: Some(0),
             tangle_contract: alloy_primitives::Address::ZERO,
             restaking_contract: alloy_primitives::Address::ZERO,
             status_registry_contract: alloy_primitives::Address::ZERO,
-        },
-    );
+        });
     let protocol_type: ProtocolType = (&tangle_settings).into();
-    assert!(matches!(protocol_type, ProtocolType::TangleEvm));
+    assert!(matches!(protocol_type, ProtocolType::Tangle));
 
     // Test EigenLayer conversion
     let eigenlayer_settings = ProtocolSettings::Eigenlayer(
@@ -212,5 +211,5 @@ async fn test_protocol_type_conversion() {
     // Test None defaults to Tangle EVM
     let none_settings = ProtocolSettings::None;
     let protocol_type: ProtocolType = (&none_settings).into();
-    assert!(matches!(protocol_type, ProtocolType::TangleEvm));
+    assert!(matches!(protocol_type, ProtocolType::Tangle));
 }

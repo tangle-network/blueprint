@@ -1,9 +1,7 @@
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
 use crate::protocol::types::{ProtocolEvent, TangleProtocolEvent};
-use blueprint_client_tangle::{
-    TangleClient, TangleClientConfig, TangleEvent, TangleSettings,
-};
+use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleEvent, TangleSettings};
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_runner::config::BlueprintEnvironment;
 

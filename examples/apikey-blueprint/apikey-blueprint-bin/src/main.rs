@@ -49,10 +49,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         .router(
             Router::new()
                 .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleLayer))
-                .route(
-                    PURCHASE_API_KEY_JOB_ID,
-                    purchase_api_key.layer(TangleLayer),
-                ),
+                .route(PURCHASE_API_KEY_JOB_ID, purchase_api_key.layer(TangleLayer)),
         )
         .background_service(ApiKeyProtectedService)
         .producer(tangle_producer)

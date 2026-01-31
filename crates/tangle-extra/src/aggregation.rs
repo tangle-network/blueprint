@@ -224,7 +224,7 @@ impl AggregatedResult {
     /// This calls `submitAggregatedResult` on the Tangle contract.
     pub async fn submit(&self, client: &Arc<TangleClient>) -> Result<(), AggregationError> {
         blueprint_core::debug!(
-            target: "tangle-evm-aggregation",
+            target: "tangle-aggregation",
             "Submitting aggregated result for service {} call {} with {} signers",
             self.service_id,
             self.call_id,
@@ -247,7 +247,7 @@ impl AggregatedResult {
 
         if result.success {
             blueprint_core::info!(
-                target: "tangle-evm-aggregation",
+                target: "tangle-aggregation",
                 "Successfully submitted aggregated result for service {} call {} with {} signers: tx_hash={:?}",
                 self.service_id,
                 self.call_id,

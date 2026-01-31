@@ -336,8 +336,7 @@ async fn test_verified_square_job_flow() -> Result<()> {
         bytes::Bytes::from(abi_encoded_input),
     );
 
-    let TangleArg(x2): TangleArg<u64> =
-        TangleArg::from_job_call(job_call_op2, &()).await?;
+    let TangleArg(x2): TangleArg<u64> = TangleArg::from_job_call(job_call_op2, &()).await?;
     let result_op2: TangleResult<u64> = verified_square(TangleArg(x2)).await;
     assert_eq!(*result_op2, 64);
 

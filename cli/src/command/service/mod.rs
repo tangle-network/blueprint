@@ -37,10 +37,7 @@ pub async fn approve_service_with_commitments(
 }
 
 /// Reject a pending service request.
-pub async fn reject_service(
-    client: &TangleClient,
-    request_id: u64,
-) -> Result<TransactionResult> {
+pub async fn reject_service(client: &TangleClient, request_id: u64) -> Result<TransactionResult> {
     client.reject_service(request_id).await.map_err(Into::into)
 }
 

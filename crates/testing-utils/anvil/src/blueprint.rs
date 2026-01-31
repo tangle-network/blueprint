@@ -5,17 +5,14 @@
 //! operators use in production. Example blueprints can plug into this harness to
 //! run end-to-end tests without reimplementing the boilerplate every time.
 
-use crate::{
-    LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID, SeededTangleTestnet, start_tangle_testnet,
-};
+use crate::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID, SeededTangleTestnet, start_tangle_testnet};
 use alloy_primitives::{Address, Bytes};
 use alloy_rpc_types::Filter;
 #[cfg(feature = "aggregation")]
 use anyhow::anyhow;
 use anyhow::{Context, Result};
 use blueprint_client_tangle::{
-    JobSubmissionResult, TangleClient, TangleClientConfig, TangleSettings,
-    contracts::ITangle,
+    JobSubmissionResult, TangleClient, TangleClientConfig, TangleSettings, contracts::ITangle,
 };
 use blueprint_core::error::BoxError;
 use blueprint_core::{JobResult, error};

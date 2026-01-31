@@ -109,10 +109,7 @@ impl TangleEventHandler {
         }
 
         if let Some(evt) = client.client().latest_event().await {
-            info!(
-                "Tangle client initialized at block {}",
-                evt.block_number
-            );
+            info!("Tangle client initialized at block {}", evt.block_number);
         }
         Ok(())
     }

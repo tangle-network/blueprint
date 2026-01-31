@@ -1205,8 +1205,7 @@ async fn capture_registration_inputs(env: &BlueprintEnvironment) -> Result<Vec<u
 }
 
 const SERVICE_ID_METADATA_KEYS: &[&str] = &["tangle.service_id", "X-TANGLE-SERVICE-ID"];
-const BLOCK_NUMBER_METADATA_KEYS: &[&str] =
-    &["tangle.block_number", "X-TANGLE-BLOCK-NUMBER"];
+const BLOCK_NUMBER_METADATA_KEYS: &[&str] = &["tangle.block_number", "X-TANGLE-BLOCK-NUMBER"];
 
 fn read_metadata_u64(metadata: &MetadataMap<MetadataValue>, keys: &[&str]) -> Option<u64> {
     keys.iter().find_map(|key| {

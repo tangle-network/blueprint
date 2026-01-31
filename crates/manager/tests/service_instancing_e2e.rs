@@ -25,9 +25,7 @@ use blueprint_anvil_testing_utils::{
 };
 use blueprint_chain_setup::anvil::keys::ANVIL_PRIVATE_KEYS;
 use blueprint_client_tangle::contracts::ITangle::addPermittedCallerCall;
-use blueprint_client_tangle::{
-    ServiceStatus, TangleClient, TangleClientConfig, TangleSettings,
-};
+use blueprint_client_tangle::{ServiceStatus, TangleClient, TangleClientConfig, TangleSettings};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
 use blueprint_keystore::backends::Backend;

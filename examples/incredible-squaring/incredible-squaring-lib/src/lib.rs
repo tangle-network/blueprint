@@ -197,10 +197,7 @@ pub fn router() -> Router {
     Router::new()
         // Local execution jobs
         .route(XSQUARE_JOB_ID, square.layer(TangleLayer))
-        .route(
-            VERIFIED_XSQUARE_JOB_ID,
-            verified_square.layer(TangleLayer),
-        )
+        .route(VERIFIED_XSQUARE_JOB_ID, verified_square.layer(TangleLayer))
         .route(
             CONSENSUS_XSQUARE_JOB_ID,
             consensus_square.layer(TangleLayer),

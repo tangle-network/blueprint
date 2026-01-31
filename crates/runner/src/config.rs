@@ -158,9 +158,7 @@ impl ProtocolSettings {
     /// `self` is not [`ProtocolSettings::Tangle`]
     #[cfg(feature = "tangle")]
     #[allow(clippy::match_wildcard_for_single_variants)]
-    pub fn tangle(
-        &self,
-    ) -> Result<&crate::tangle::config::TangleProtocolSettings, ConfigError> {
+    pub fn tangle(&self) -> Result<&crate::tangle::config::TangleProtocolSettings, ConfigError> {
         match self {
             Self::Tangle(settings) => Ok(settings),
             _ => Err(ConfigError::UnexpectedProtocol("Tangle")),

@@ -128,7 +128,7 @@ pub struct BlueprintEnvVars {
     pub registration_mode: bool,
     pub registration_capture_only: bool,
     pub bridge_socket_path: Option<PathBuf>,
-    /// Tangle EVM contract addresses (only set for TangleEvm protocol)
+    /// Tangle EVM contract addresses (only set for Tangle protocol)
     pub tangle_contract: Option<Address>,
     pub restaking_contract: Option<Address>,
     pub status_registry_contract: Option<Address>,
@@ -153,7 +153,7 @@ impl BlueprintEnvVars {
             .iter()
             .fold(String::new(), |acc, bootnode| format!("{acc} {bootnode}"));
 
-        // Extract contract addresses from protocol settings if using TangleEvm
+        // Extract contract addresses from protocol settings if using Tangle
         let (tangle_contract, restaking_contract, status_registry_contract) =
             if let Ok(settings) = env.protocol_settings.tangle() {
                 (
@@ -230,7 +230,7 @@ impl BlueprintEnvVars {
             ("BOOTNODES".to_string(), bootnodes.clone()),
         ];
 
-        // Add TangleEvm contract addresses if present
+        // Add Tangle contract addresses if present
         if let Some(addr) = tangle_contract {
             env_vars.push(("TANGLE_CONTRACT".to_string(), format!("{addr}")));
         }

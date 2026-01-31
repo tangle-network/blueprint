@@ -113,10 +113,7 @@ fn ensure_default_bool(define: &mut Vec<String>, key: &str, default: bool) {
     define.push(format!("{key}={}", default));
 }
 
-fn missing_required_template_variables(
-    define: &[String],
-    is_tangle: bool,
-) -> Vec<&'static str> {
+fn missing_required_template_variables(define: &[String], is_tangle: bool) -> Vec<&'static str> {
     let provided = build_define_map(define);
     let mut missing = Vec::new();
 
