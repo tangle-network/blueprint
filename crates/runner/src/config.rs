@@ -44,7 +44,10 @@ pub trait ProtocolSettingsT: Sized + 'static {
 /// The protocol on which a blueprint will be executed.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(
-    feature = "std",
+    all(
+        feature = "std",
+        any(feature = "tangle-evm", feature = "eigenlayer", feature = "symbiotic")
+    ),
     derive(clap::ValueEnum),
     clap(rename_all = "lowercase")
 )]
@@ -913,7 +916,14 @@ pub struct BlueprintSettings {
     #[arg(long, env)]
     pub keystore_password: Option<String>,
     /// The protocol to use
-    #[arg(long, value_enum, env)]
+    #[cfg_attr(
+        any(feature = "tangle-evm", feature = "eigenlayer", feature = "symbiotic"),
+        arg(long, value_enum, env)
+    )]
+    #[cfg_attr(
+        not(any(feature = "tangle-evm", feature = "eigenlayer", feature = "symbiotic")),
+        arg(skip)
+    )]
     pub protocol: Option<Protocol>,
     #[arg(long, env)]
     pub bridge_socket_path: Option<PathBuf>,
