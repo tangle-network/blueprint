@@ -12,7 +12,7 @@ commands used in CI, and a minimal client snippet for submitting jobs.
 ## 2. Generate a local operator key
 
 Use the CLI to mint an ECDSA keypair and store it on disk. The Blueprint
-runner and `TangleEvmClient` can both read this format.
+runner and `TangleClient` can both read this format.
 
 ```bash
 cargo tangle key --algo ecdsa --keystore ./local-operator-keys --name anvil-operator
@@ -68,23 +68,23 @@ Behind the scenes `BlueprintHarness` performs the following:
    into the LocalTestnet fixture.
 3. Builds a `BlueprintEnvironment` + `Router` pair and launches
    `BlueprintRunner`.
-4. Uses `TangleEvmClient::submit_job` and waits for `JobResultSubmitted`.
+4. Uses `TangleClient::submit_job` and waits for `JobResultSubmitted`.
 
 Swap in your own router to exercise custom jobs.
 
-## 5. Submit jobs manually with `TangleEvmClient`
+## 5. Submit jobs manually with `TangleClient`
 
-The `TangleEvmClient` can be reused for local scripts as well:
+The `TangleClient` can be reused for local scripts as well:
 
 ```rust
 use alloy_primitives::{Address, Bytes};
-use blueprint_client_tangle_evm::{TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings};
+use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
 use hello_tangle_blueprint::DocumentRequest;
 use std::str::FromStr;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let settings = TangleEvmSettings {
+    let settings = TangleSettings {
         blueprint_id: 0,
         service_id: Some(0),
         tangle_contract: Address::from_str("0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9")?,
@@ -92,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
         status_registry_contract: Address::from_str("0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9")?,
     };
 
-    let config = TangleEvmClientConfig::new(
+    let config = TangleClientConfig::new(
         "http://127.0.0.1:8545".parse()?,
         "ws://127.0.0.1:8546".parse()?,
         std::env::var("BLUEPRINT_KEYSTORE_URI")?,
@@ -100,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .test_mode(true);
 
-    let client = TangleEvmClient::new(config).await?;
+    let client = TangleClient::new(config).await?;
     let payload = DocumentRequest {
         docId: "doc-1".into(),
         contents: "hello world".into(),

@@ -10,8 +10,8 @@ pub mod error;
 pub mod source;
 pub mod types;
 
-/// Required template keys for v2 Tangle EVM templates
-const TANGLE_EVM_REQUIRED_KEYS: [&str; 2] = ["project-description", "project-authors"];
+/// Required template keys for Tangle templates
+const TANGLE_REQUIRED_KEYS: [&str; 2] = ["project-description", "project-authors"];
 
 /// Required template keys for EigenLayer templates (more complex)
 const EIGENLAYER_REQUIRED_KEYS: [&str; 6] = [
@@ -115,13 +115,13 @@ fn ensure_default_bool(define: &mut Vec<String>, key: &str, default: bool) {
 
 fn missing_required_template_variables(
     define: &[String],
-    is_tangle_evm: bool,
+    is_tangle: bool,
 ) -> Vec<&'static str> {
     let provided = build_define_map(define);
     let mut missing = Vec::new();
 
-    let required_keys: &[&str] = if is_tangle_evm {
-        &TANGLE_EVM_REQUIRED_KEYS
+    let required_keys: &[&str] = if is_tangle {
+        &TANGLE_REQUIRED_KEYS
     } else {
         &EIGENLAYER_REQUIRED_KEYS
     };
@@ -133,7 +133,7 @@ fn missing_required_template_variables(
     }
 
     // Container fields only required for EigenLayer templates
-    if !is_tangle_evm && container_fields_required(&provided) {
+    if !is_tangle && container_fields_required(&provided) {
         for key in CONTAINER_TEMPLATE_KEYS {
             if !provided.contains_key(key) {
                 missing.push(key);
@@ -214,8 +214,8 @@ pub fn new_blueprint(
         }
     });
 
-    // Determine if this is a Tangle EVM template (simpler requirements)
-    let is_tangle_evm = matches!(blueprint_variant, None | Some(BlueprintVariant::Tangle));
+    // Determine if this is a Tangle template (simpler requirements)
+    let is_tangle = matches!(blueprint_variant, None | Some(BlueprintVariant::Tangle));
 
     template_variables.merge_into(&mut define);
     ensure_default_bool(&mut define, "flakes", true);
@@ -227,7 +227,7 @@ pub fn new_blueprint(
         println!(
             "Skipping prompts; all template variables must be provided via CLI flags when using --skip-prompts."
         );
-        let missing = missing_required_template_variables(&define, is_tangle_evm);
+        let missing = missing_required_template_variables(&define, is_tangle);
         if !missing.is_empty() {
             let missing_list = missing.join(", ");
             return Err(Error::MissingTemplateVariables(missing_list));

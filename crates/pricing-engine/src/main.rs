@@ -1,6 +1,6 @@
 use alloy_primitives::Address;
 use alloy_provider::{Provider, ProviderBuilder};
-use blueprint_client_tangle_evm::{TangleEvmClientConfig, TangleEvmSettings};
+use blueprint_client_tangle::{TangleClientConfig, TangleSettings};
 use blueprint_core::info;
 use clap::Parser;
 use std::path::PathBuf;
@@ -108,7 +108,7 @@ pub async fn run_app(cli: Cli) -> Result<()> {
         ));
     }
 
-    let evm_settings = TangleEvmSettings {
+    let evm_settings = TangleSettings {
         blueprint_id: cli.blueprint_id,
         service_id: cli.service_id,
         tangle_contract,
@@ -129,7 +129,7 @@ pub async fn run_app(cli: Cli) -> Result<()> {
         ))
     })?;
 
-    let evm_config = TangleEvmClientConfig::new(
+    let evm_config = TangleClientConfig::new(
         http_rpc_endpoint,
         ws_rpc_endpoint,
         config.keystore_path.to_string_lossy().to_string(),

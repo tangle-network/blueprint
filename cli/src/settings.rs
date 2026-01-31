@@ -8,7 +8,7 @@ use blueprint_manager::config::SourceType;
 use blueprint_runner::config::{Protocol, ProtocolSettings};
 use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_runner::error::ConfigError;
-use blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings;
+use blueprint_runner::tangle::config::TangleProtocolSettings;
 use dotenv::from_path;
 
 pub fn load_protocol_settings(
@@ -47,7 +47,7 @@ pub fn load_protocol_settings(
             };
             Ok(ProtocolSettings::Eigenlayer(addresses))
         }
-        Protocol::TangleEvm => {
+        Protocol::Tangle => {
             let blueprint_id = std::env::var("BLUEPRINT_ID")
                 .map_err(|_| ConfigError::Other("Missing BLUEPRINT_ID".into()))?
                 .parse()
@@ -59,7 +59,7 @@ pub fn load_protocol_settings(
             let restaking_contract = env_var("RESTAKING_CONTRACT")?;
             let status_registry_contract = env_var("STATUS_REGISTRY_CONTRACT")?;
 
-            Ok(ProtocolSettings::TangleEvm(TangleEvmProtocolSettings {
+            Ok(ProtocolSettings::Tangle(TangleProtocolSettings {
                 blueprint_id,
                 service_id,
                 tangle_contract,

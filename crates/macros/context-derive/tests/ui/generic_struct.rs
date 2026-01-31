@@ -1,10 +1,10 @@
-use blueprint_context_derive::{EVMProviderContext, KeystoreContext, TangleEvmClientContext};
+use blueprint_context_derive::{EVMProviderContext, KeystoreContext, TangleClientContext};
 use blueprint_sdk::contexts::instrumented_evm_client::EvmInstrumentedClientContext as _;
 use blueprint_sdk::contexts::keystore::KeystoreContext as _;
-use blueprint_sdk::contexts::tangle_evm::TangleEvmClientContext as _;
+use blueprint_sdk::contexts::tangle::TangleClientContext as _;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
 
-#[derive(KeystoreContext, EVMProviderContext, TangleEvmClientContext)]
+#[derive(KeystoreContext, EVMProviderContext, TangleClientContext)]
 #[allow(dead_code)]
 struct MyContext<T: Send + Sync, U: Send + Sync> {
     foo: T,
@@ -26,7 +26,7 @@ fn main() {
         };
         let _keystore = ctx.keystore();
         let _evm_provider = ctx.evm_client();
-        let _tangle_client = ctx.tangle_evm_client().await.unwrap();
+        let _tangle_client = ctx.tangle_client().await.unwrap();
     };
 
     drop(body);

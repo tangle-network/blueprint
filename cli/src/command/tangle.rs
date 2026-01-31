@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use alloy_primitives::Address;
-use blueprint_client_tangle_evm::{TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings};
-use blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings;
+use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
+use blueprint_runner::tangle::config::TangleProtocolSettings;
 use blueprint_testing_utils::anvil::{
-    SeededTangleEvmTestnet, TangleEvmHarness,
-    tangle_evm::{LOCAL_SERVICE_ID, insert_default_operator_key},
+    SeededTangleTestnet, TangleHarness,
+    tangle::{LOCAL_SERVICE_ID, insert_default_operator_key},
 };
 use clap::Args;
 use color_eyre::eyre::{Result, eyre};
@@ -17,7 +17,7 @@ use url::Url;
 use crate::command::run::tangle::RunOpts;
 use blueprint_manager::config::SourceType;
 
-/// Shared CLI arguments for connecting to the Tangle EVM stack.
+/// Shared CLI arguments for connecting to the Tangle stack.
 #[derive(Args, Debug, Clone)]
 pub struct TangleClientArgs {
     /// HTTP RPC endpoint.
@@ -57,9 +57,9 @@ impl TangleClientArgs {
         &self,
         blueprint_id: u64,
         service_id: Option<u64>,
-    ) -> Result<TangleEvmClientConfig> {
+    ) -> Result<TangleClientConfig> {
         let (tangle, restaking, status) = self.parse_addresses()?;
-        let settings = TangleEvmSettings {
+        let settings = TangleSettings {
             blueprint_id,
             service_id,
             tangle_contract: tangle,
@@ -67,7 +67,7 @@ impl TangleClientArgs {
             status_registry_contract: status,
         };
 
-        Ok(TangleEvmClientConfig::new(
+        Ok(TangleClientConfig::new(
             self.http_rpc_url.clone(),
             self.ws_rpc_url.clone(),
             self.keystore_path.display().to_string(),
@@ -75,14 +75,14 @@ impl TangleClientArgs {
         ))
     }
 
-    /// Connect a `TangleEvmClient` using these arguments.
+    /// Connect a `TangleClient` using these arguments.
     pub async fn connect(
         &self,
         blueprint_id: u64,
         service_id: Option<u64>,
-    ) -> Result<TangleEvmClient> {
+    ) -> Result<TangleClient> {
         let config = self.client_config(blueprint_id, service_id)?;
-        TangleEvmClient::new(config)
+        TangleClient::new(config)
             .await
             .map_err(|e| eyre!(e.to_string()))
     }
@@ -144,7 +144,7 @@ impl From<PreferredSourceArg> for SourceType {
 /// In-memory devnet stack backed by the seeded Anvil harness.
 #[derive(Debug)]
 pub struct DevnetStack {
-    harness: SeededTangleEvmTestnet,
+    harness: SeededTangleTestnet,
     _temp_dir: TempDir,
     keystore_dir: PathBuf,
     data_dir: PathBuf,
@@ -153,7 +153,7 @@ pub struct DevnetStack {
 impl DevnetStack {
     /// Spawn a deterministic local stack.
     pub async fn spawn(include_anvil_logs: bool) -> Result<Self> {
-        let harness = TangleEvmHarness::builder()
+        let harness = TangleHarness::builder()
             .include_anvil_logs(include_anvil_logs)
             .spawn()
             .await
@@ -236,7 +236,7 @@ impl Drop for DevnetStack {
 
 pub fn run_opts_from_stack(
     stack: &DevnetStack,
-    settings: &TangleEvmProtocolSettings,
+    settings: &TangleProtocolSettings,
     allow_unchecked_attestations: bool,
     method: SpawnMethod,
 ) -> RunOpts {

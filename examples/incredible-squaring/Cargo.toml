@@ -13,8 +13,8 @@ incredible-squaring-blueprint-lib = { path = "incredible-squaring-lib" }
 
 blueprint-sdk = { version = "0.1.0-alpha.22", path = "../../crates/sdk", default-features = false }
 blueprint-anvil-testing-utils = { version = "0.1.0-alpha.21", path = "../../crates/testing-utils/anvil", default-features = false }
-blueprint-client-tangle-evm = { version = "0.1.0", path = "../../crates/clients/tangle-evm", default-features = false, features = ["std"] }
-blueprint-tangle-evm-extra = { version = "0.1.0", path = "../../crates/tangle-evm-extra", features = ["std"] }
+blueprint-client-tangle = { version = "0.1.0", path = "../../crates/clients/tangle", default-features = false, features = ["std"] }
+blueprint-tangle-extra = { version = "0.1.0", path = "../../crates/tangle-extra", features = ["std"] }
 blueprint-tangle-aggregation-svc = { version = "0.1.0", path = "../../crates/tangle-aggregation-svc", default-features = false }
 blueprint-crypto-bn254 = { version = "0.1.0-alpha.9", path = "../../crates/crypto/bn254", default-features = false }
 blueprint-crypto-core = { version = "0.1.0-alpha.9", path = "../../crates/crypto/core", default-features = false }

@@ -3,7 +3,7 @@ use alloy_dyn_abi::{DynSolType, DynSolValue, Specifier};
 use alloy_json_abi::Param;
 use alloy_primitives::{Address, Bytes, Function, I256, U256, hex};
 use alloy_sol_types::Word;
-use blueprint_client_tangle_evm::TangleEvmClient;
+use blueprint_client_tangle::TangleClient;
 use color_eyre::eyre::{Context, Result, ensure, eyre};
 use dialoguer::{Input, console::style};
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ use std::str::FromStr;
 
 /// Load the on-chain job schema for the specified blueprint/job pair.
 pub async fn load_job_schema(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     blueprint_id: u64,
     job_index: u8,
 ) -> Result<JobSchema> {
@@ -25,7 +25,7 @@ pub async fn load_job_schema(
 
 /// Fetch and decode the blueprint definition stored on-chain.
 pub async fn fetch_blueprint_definition(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     blueprint_id: u64,
 ) -> Result<BlueprintDefinition> {
     let raw_definition = client
@@ -427,7 +427,7 @@ pub struct JobCallDetails {
 }
 
 /// Fetch and summarize all jobs defined under a blueprint.
-pub async fn list_jobs(client: &TangleEvmClient, blueprint_id: u64) -> Result<Vec<JobSummary>> {
+pub async fn list_jobs(client: &TangleClient, blueprint_id: u64) -> Result<Vec<JobSummary>> {
     let definition = fetch_blueprint_definition(client, blueprint_id).await?;
     let mut jobs = Vec::with_capacity(definition.jobs.len());
     for (index, job) in definition.jobs.iter().enumerate() {
@@ -509,7 +509,7 @@ pub fn print_job_summaries(jobs: &[JobSummary], json_output: bool) {
 
 /// Load metadata for a job call, including job definition context.
 pub async fn load_job_call_details(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     blueprint_id: u64,
     service_id: u64,
     call_id: u64,

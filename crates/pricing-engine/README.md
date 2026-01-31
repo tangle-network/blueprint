@@ -9,7 +9,7 @@ The pricing engine watches the Tangle v2 EVM contracts for blueprint/service eve
    - `init_operator_signer` ensures a `k256` key exists in the keystore and derives the operator’s Ethereum address.
    - The CLI arguments (or environment variables) provide the HTTP/WS RPC URLs plus the `ITangle`, `MultiAssetDelegation`, and `OperatorStatusRegistry` contract addresses.
 2. **Event ingestion**
-   - `EvmEventListener` polls `ITangle::ServiceActivated` / `ServiceTerminated` logs via `blueprint-client-tangle-evm`.
+   - `EvmEventListener` polls `ITangle::ServiceActivated` / `ServiceTerminated` logs via `blueprint-client-tangle`.
    - For each activation we enqueue a benchmarking task so the cache always has a recent profile per blueprint.
 3. **RPC handling**
    - `GetPriceRequest` includes PoW (`proof_of_work` + `challenge_timestamp`), TTL, and security requirements.

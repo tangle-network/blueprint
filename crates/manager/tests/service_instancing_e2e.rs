@@ -21,12 +21,12 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolCall, SolValue};
 use anyhow::{Context, Result, ensure};
 use blueprint_anvil_testing_utils::{
-    SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
+    SeededTangleTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
 use blueprint_chain_setup::anvil::keys::ANVIL_PRIVATE_KEYS;
-use blueprint_client_tangle_evm::contracts::ITangle::addPermittedCallerCall;
-use blueprint_client_tangle_evm::{
-    ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
+use blueprint_client_tangle::contracts::ITangle::addPermittedCallerCall;
+use blueprint_client_tangle::{
+    ServiceStatus, TangleClient, TangleClientConfig, TangleSettings,
 };
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
@@ -49,14 +49,14 @@ const ANVIL_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// Test harness for multi-service scenarios
 struct MultiServiceHarness {
-    deployment: SeededTangleEvmTestnet,
-    operator1_client: Arc<TangleEvmClient>,
-    owner_client: Arc<TangleEvmClient>,
+    deployment: SeededTangleTestnet,
+    operator1_client: Arc<TangleClient>,
+    owner_client: Arc<TangleClient>,
     _temp_dir: TempDir,
 }
 
 impl MultiServiceHarness {
-    async fn new(deployment: SeededTangleEvmTestnet) -> Result<Self> {
+    async fn new(deployment: SeededTangleTestnet) -> Result<Self> {
         let temp = TempDir::new().context("failed to create tempdir")?;
 
         // Operator 1 keystore
@@ -398,15 +398,15 @@ async fn test_operator_weights_in_service() -> Result<()> {
 // =============================================================================
 
 async fn create_client(
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
     keystore_path: &Path,
     service_id: Option<u64>,
-) -> Result<Arc<TangleEvmClient>> {
-    let config = TangleEvmClientConfig::new(
+) -> Result<Arc<TangleClient>> {
+    let config = TangleClientConfig::new(
         deployment.http_endpoint().clone(),
         deployment.ws_endpoint().clone(),
         keystore_path.display().to_string(),
-        TangleEvmSettings {
+        TangleSettings {
             blueprint_id: BLUEPRINT_ID,
             service_id,
             tangle_contract: deployment.tangle_contract,
@@ -418,7 +418,7 @@ async fn create_client(
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(keystore_path))?;
     Ok(Arc::new(
-        TangleEvmClient::with_keystore(config, keystore).await?,
+        TangleClient::with_keystore(config, keystore).await?,
     ))
 }
 
@@ -464,7 +464,7 @@ where
         .with_context(|| format!("{name} timed out after {:?}", ANVIL_TEST_TIMEOUT))?
 }
 
-async fn boot_testnet(test_name: &str) -> Result<Option<SeededTangleEvmTestnet>> {
+async fn boot_testnet(test_name: &str) -> Result<Option<SeededTangleTestnet>> {
     match harness_builder_from_env().spawn().await {
         Ok(deployment) => Ok(Some(deployment)),
         Err(err) => {

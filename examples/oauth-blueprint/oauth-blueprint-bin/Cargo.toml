@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 oauth-blueprint-lib = { path = "../oauth-blueprint-lib" }
-blueprint-sdk = { path = "../../../crates/sdk", features = ["std", "tangle-evm"] }
+blueprint-sdk = { path = "../../../crates/sdk", features = ["std", "tangle"] }
 tokio = { version = "^1", features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

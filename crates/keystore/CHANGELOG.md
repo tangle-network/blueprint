@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- drop Substrate keystore backend and legacy `tangle` feature flag in favor of the new `tangle-evm` stack
+- drop Substrate keystore backend and legacy `tangle` feature flag in favor of the new `tangle` stack (EVM-only)
 
 ## [0.1.0-alpha.15](https://github.com/tangle-network/blueprint/compare/blueprint-keystore-v0.1.0-alpha.14...blueprint-keystore-v0.1.0-alpha.15) - 2025-10-02
 

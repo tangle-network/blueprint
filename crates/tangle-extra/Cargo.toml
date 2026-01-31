@@ -1,13 +1,80 @@
 [package]
 name = "blueprint-tangle-extra"
-version = "0.0.0"
-edition = "2021"
-publish = false
-# Placeholder for backwards compatibility with old commits
-# This package was renamed to blueprint-tangle-evm-extra
-
-[lib]
-path = "src/lib.rs"
+version = "0.1.0"
+description = "Producer/Consumer extras for Tangle blueprints"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+blueprint-core.workspace = true
+blueprint-std.workspace = true
+blueprint-client-tangle.workspace = true
+blueprint-tangle-aggregation-svc = { path = "../tangle-aggregation-svc", features = ["client"], optional = true }
+blueprint-crypto-bn254 = { path = "../crypto/bn254", optional = true }
+blueprint-crypto-core = { path = "../crypto/core", optional = true }
+
+# P2P aggregation dependencies
+blueprint-networking = { workspace = true, optional = true }
+blueprint-networking-agg-sig-gossip-extension = { path = "../networking/extensions/agg-sig-gossip", optional = true }
+blueprint-crypto = { workspace = true, optional = true }
+libp2p = { workspace = true, features = ["identify"], optional = true }
+
+# Keeper dependencies (optional)
+blueprint-keystore = { workspace = true, features = ["evm"], optional = true }
+alloy = { workspace = true, features = ["sol-types", "contract", "provider-http", "signer-local", "network"], optional = true }
+
+alloy-primitives.workspace = true
+alloy-sol-types.workspace = true
+alloy-rpc-types = { workspace = true }
+
+bytes.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+pin-project-lite.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+tower.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+alloy-provider = { workspace = true }
+alloy-signer-local = { workspace = true }
+alloy-network = { workspace = true }
+blueprint-anvil-testing-utils = { path = "../testing-utils/anvil" }
+blueprint-keystore = { workspace = true, features = ["evm"] }
+blueprint-crypto = { workspace = true, features = ["k256"] }
+blueprint-chain-setup-anvil = { path = "../chain-setup/anvil" }
+tempfile = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+anyhow = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+    "blueprint-core/std",
+    "blueprint-std/std",
+    "blueprint-client-tangle/std",
+]
+aggregation = ["blueprint-tangle-aggregation-svc", "blueprint-crypto-bn254", "blueprint-crypto-core"]
+p2p-aggregation = [
+    "blueprint-networking",
+    "blueprint-networking-agg-sig-gossip-extension",
+    "blueprint-crypto/aggregation",
+    "blueprint-crypto-bn254",
+    "blueprint-crypto-core",
+    "libp2p",
+]
+# Lifecycle automation keepers for epoch/round/stream management
+keepers = ["blueprint-keystore", "blueprint-crypto/k256", "alloy"]

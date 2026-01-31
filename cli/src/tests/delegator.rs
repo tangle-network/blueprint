@@ -10,7 +10,7 @@ use blueprint_crypto::{
     k256::{K256Ecdsa, K256SigningKey},
 };
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
-use blueprint_testing_utils::anvil::{seed_operator_key, tangle_evm::LOCAL_BLUEPRINT_ID};
+use blueprint_testing_utils::anvil::{seed_operator_key, tangle::LOCAL_BLUEPRINT_ID};
 use color_eyre::eyre::{Result, eyre};
 use hex::FromHex;
 use serde_json::Value;

@@ -18,11 +18,11 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolCall, SolValue};
 use anyhow::{Context, Result, anyhow, ensure};
 use blueprint_anvil_testing_utils::{
-    SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
+    SeededTangleTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
-use blueprint_client_tangle_evm::contracts::ITangle::addPermittedCallerCall;
-use blueprint_client_tangle_evm::{
-    ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
+use blueprint_client_tangle::contracts::ITangle::addPermittedCallerCall;
+use blueprint_client_tangle::{
+    ServiceStatus, TangleClient, TangleClientConfig, TangleSettings,
 };
 use blueprint_core::Job;
 use blueprint_crypto::BytesEncoding;
@@ -30,9 +30,9 @@ use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_router::Router;
-use blueprint_tangle_evm_extra::extract::{CallId, ServiceId};
-use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
-use blueprint_tangle_evm_extra::{TangleEvmLayer, TangleEvmProducer};
+use blueprint_tangle_extra::extract::{CallId, ServiceId};
+use blueprint_tangle_extra::extract::{TangleArg, TangleResult};
+use blueprint_tangle_extra::{TangleLayer, TangleProducer};
 use futures_util::StreamExt;
 use futures_util::future::poll_fn;
 use futures_util::pin_mut;
@@ -84,9 +84,9 @@ async fn test_multiple_services_process_jobs_independently() -> Result<()> {
         // Run processor for service 0
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let (result_tx, result_rx) = oneshot::channel::<Result<Vec<u8>>>();
-        let producer_0 = TangleEvmProducer::new((*client_0).clone(), service_id_0)
+        let producer_0 = TangleProducer::new((*client_0).clone(), service_id_0)
             .with_poll_interval(Duration::from_millis(50));
-        let router_0 = Router::new().route(JOB_INDEX, multiply_job.layer(TangleEvmLayer));
+        let router_0 = Router::new().route(JOB_INDEX, multiply_job.layer(TangleLayer));
 
         let runner_client = Arc::clone(&client_0);
         let runner = tokio::spawn(async move {
@@ -267,8 +267,8 @@ async fn test_result_submission_updates_job_state() -> Result<()> {
 // Job Handler
 // =============================================================================
 
-async fn multiply_job(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
-    TangleEvmResult(x * 2)
+async fn multiply_job(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+    TangleResult(x * 2)
 }
 
 // =============================================================================
@@ -276,9 +276,9 @@ async fn multiply_job(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64
 // =============================================================================
 
 async fn run_processor(
-    producer: TangleEvmProducer,
+    producer: TangleProducer,
     mut router: Router,
-    client: Arc<TangleEvmClient>,
+    client: Arc<TangleClient>,
     mut shutdown: oneshot::Receiver<()>,
     mut result_tx: Option<oneshot::Sender<Result<Vec<u8>>>>,
 ) -> Result<()> {
@@ -351,15 +351,15 @@ async fn run_processor(
 // =============================================================================
 
 async fn create_client(
-    d: &SeededTangleEvmTestnet,
+    d: &SeededTangleTestnet,
     ks: &Path,
     svc_id: Option<u64>,
-) -> Result<Arc<TangleEvmClient>> {
-    let cfg = TangleEvmClientConfig::new(
+) -> Result<Arc<TangleClient>> {
+    let cfg = TangleClientConfig::new(
         d.http_endpoint().clone(),
         d.ws_endpoint().clone(),
         ks.display().to_string(),
-        TangleEvmSettings {
+        TangleSettings {
             blueprint_id: BLUEPRINT_ID,
             service_id: svc_id,
             tangle_contract: d.tangle_contract,
@@ -371,7 +371,7 @@ async fn create_client(
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(ks))?;
     Ok(Arc::new(
-        TangleEvmClient::with_keystore(cfg, keystore).await?,
+        TangleClient::with_keystore(cfg, keystore).await?,
     ))
 }
 
@@ -383,7 +383,7 @@ fn seed_key(path: &Path, hex_key: &str) -> Result<()> {
     Ok(())
 }
 
-async fn grant_caller(d: &SeededTangleEvmTestnet, caller: Address) -> Result<()> {
+async fn grant_caller(d: &SeededTangleTestnet, caller: Address) -> Result<()> {
     let signer = PrivateKeySigner::from_str(OWNER_KEY)?;
     let wallet = EthereumWallet::from(signer);
     let provider = ProviderBuilder::new()
@@ -402,7 +402,7 @@ async fn grant_caller(d: &SeededTangleEvmTestnet, caller: Address) -> Result<()>
     Ok(())
 }
 
-async fn boot_testnet(name: &str) -> Result<Option<SeededTangleEvmTestnet>> {
+async fn boot_testnet(name: &str) -> Result<Option<SeededTangleTestnet>> {
     match harness_builder_from_env().spawn().await {
         Ok(d) => Ok(Some(d)),
         Err(e) if missing_tnt_core_artifacts(&e) => {
@@ -414,7 +414,7 @@ async fn boot_testnet(name: &str) -> Result<Option<SeededTangleEvmTestnet>> {
 }
 
 async fn submit_result_with_retry(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     service_id: u64,
     call_id: u64,
     body: &[u8],
@@ -443,7 +443,7 @@ async fn submit_result_with_retry(
     }
 }
 
-async fn wait_for_job_completion(client: TangleEvmClient, call_id: u64) -> Result<()> {
+async fn wait_for_job_completion(client: TangleClient, call_id: u64) -> Result<()> {
     timeout(Duration::from_secs(30), async {
         loop {
             let call = client.get_job_call(0, call_id).await?;

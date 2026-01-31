@@ -1,6 +1,6 @@
 //! CLI tests for operator commands.
 //!
-//! Tests use the TangleEvmHarness which pre-registers operators 1 and 2.
+//! Tests use the TangleHarness which pre-registers operators 1 and 2.
 //! Account 3 (delegator) has TNT tokens for testing new operator registration.
 
 use std::fs;
@@ -11,7 +11,7 @@ use blueprint_crypto::{
 };
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_testing_utils::anvil::seed_operator_key;
-use blueprint_testing_utils::anvil::tangle_evm::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID};
+use blueprint_testing_utils::anvil::tangle::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID};
 use color_eyre::eyre::{Result, eyre};
 use hex::FromHex;
 use serde_json::Value;

@@ -68,12 +68,12 @@ pub enum RunnerError {
     Consumer(BoxError),
 
     // Protocols
-    /// [Tangle EVM] protocol errors (v2)
+    /// [Tangle] protocol errors
     ///
     /// [Tangle]: https://tangle.tools
-    #[cfg(feature = "tangle-evm")]
-    #[error("Tangle EVM error: {0}")]
-    TangleEvm(#[from] crate::tangle_evm::error::TangleEvmError),
+    #[cfg(feature = "tangle")]
+    #[error("Tangle error: {0}")]
+    Tangle(#[from] crate::tangle::error::TangleError),
 
     /// [Eigenlayer] protocol errors
     ///

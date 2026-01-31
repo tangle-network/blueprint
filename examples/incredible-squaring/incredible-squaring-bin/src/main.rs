@@ -1,7 +1,7 @@
 //! Incredible Squaring Blueprint Binary
 //!
 //! This is the main entry point for the incredible squaring blueprint.
-//! It sets up the EVM-based producer/consumer pattern for Tangle v2.
+//! It sets up the EVM-based producer/consumer pattern for Tangle.
 //!
 //! ## Job Matrix (Execution × Aggregation)
 //!
@@ -13,11 +13,11 @@
 //! | FaaS      | Single (1)  | 3      | `square_faas` |
 //! | FaaS      | Multi (2)   | 4      | `verified_square_faas` |
 
-use blueprint_sdk::contexts::tangle_evm::TangleEvmClientContext;
+use blueprint_sdk::contexts::tangle::TangleClientContext;
 use blueprint_sdk::runner::BlueprintRunner;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
-use blueprint_sdk::runner::tangle_evm::config::TangleEvmConfig;
-use blueprint_sdk::tangle_evm::{TangleEvmConsumer, TangleEvmProducer};
+use blueprint_sdk::runner::tangle::config::TangleConfig;
+use blueprint_sdk::tangle::{TangleConsumer, TangleProducer};
 use blueprint_sdk::{error, info};
 use incredible_squaring_blueprint_lib::{
     CONSENSUS_XSQUARE_JOB_ID, FooBackgroundService, VERIFIED_XSQUARE_FAAS_JOB_ID,
@@ -36,35 +36,35 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
     // Initialize logging - can be configured via RUST_LOG environment variable
     setup_log();
 
-    info!("Starting the incredible squaring blueprint (EVM v2)!");
+    info!("Starting the incredible squaring blueprint!");
 
     // Load the blueprint environment
     let env = BlueprintEnvironment::load()?;
 
-    // Get Tangle EVM client from context
+    // Get Tangle client from context
     let tangle_client = env
-        .tangle_evm_client()
+        .tangle_client()
         .await
         .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
 
     // Get service ID from protocol settings
     let service_id = env
         .protocol_settings
-        .tangle_evm()
+        .tangle()
         .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?
         .service_id
         .ok_or_else(|| blueprint_sdk::Error::Other("No service ID configured".to_string()))?;
 
-    // Create the EVM producer to listen for JobSubmitted events
-    let tangle_producer = TangleEvmProducer::new(tangle_client.clone(), service_id);
+    // Create the producer to listen for JobSubmitted events
+    let tangle_producer = TangleProducer::new(tangle_client.clone(), service_id);
 
-    // Create the EVM consumer to submit results back to the contract
-    let tangle_consumer = TangleEvmConsumer::new(tangle_client.clone());
+    // Create the consumer to submit results back to the contract
+    let tangle_consumer = TangleConsumer::new(tangle_client.clone());
 
-    // Use the EVM config for the runner
-    let tangle_config = TangleEvmConfig::default();
+    // Use the Tangle config for the runner
+    let tangle_config = TangleConfig::default();
 
-    info!("Connected to Tangle EVM. Service ID: {}", service_id);
+    info!("Connected to Tangle. Service ID: {}", service_id);
     info!("Registered jobs (Execution × Aggregation matrix):");
     info!("  Local execution:");
     info!("    - Job {}: square (1 result)", XSQUARE_JOB_ID);
@@ -88,12 +88,12 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
         .background_service(FooBackgroundService)
         // Add the producer
         //
-        // The TangleEvmProducer polls for JobSubmitted events from the Tangle Jobs contract
+        // The TangleProducer polls for JobSubmitted events from the Tangle Jobs contract
         // and converts them to JobCall streams for processing.
         .producer(tangle_producer)
         // Add the consumer
         //
-        // The TangleEvmConsumer receives JobResults and submits them back to the
+        // The TangleConsumer receives JobResults and submits them back to the
         // Tangle contract via the submitResult function.
         .consumer(tangle_consumer)
         // Custom shutdown handlers

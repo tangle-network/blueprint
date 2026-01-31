@@ -155,7 +155,7 @@ impl BlueprintEnvVars {
 
         // Extract contract addresses from protocol settings if using TangleEvm
         let (tangle_contract, restaking_contract, status_registry_contract) =
-            if let Ok(settings) = env.protocol_settings.tangle_evm() {
+            if let Ok(settings) = env.protocol_settings.tangle() {
                 (
                     Some(settings.tangle_contract),
                     Some(settings.restaking_contract),

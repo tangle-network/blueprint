@@ -209,7 +209,7 @@ jobs:
 
       - name: Determine nextest profile and features
         run: |
-          SERIAL_CRATES=("blueprint-tangle-evm-extra" "blueprint-client-tangle-evm" "blueprint-client-evm" "blueprint-networking" "blueprint-qos" "cargo-tangle" "blueprint-manager")
+          SERIAL_CRATES=("blueprint-tangle-extra" "blueprint-client-tangle" "blueprint-client-evm" "blueprint-networking" "blueprint-qos" "cargo-tangle" "blueprint-manager")
           PROFILE=ci
 
           for crate in "${SERIAL_CRATES[@]}"; do
@@ -239,8 +239,8 @@ jobs:
             echo "Skipping doc tests for $PKG (no lib target)"
           fi
 
-  tangle-evm-integration:
-    name: Tangle EVM Integration
+  tangle-integration:
+    name: Tangle Integration
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -287,20 +287,20 @@ jobs:
         with:
           version: "19.1.7"
 
-      - name: Run Tangle EVM integration tests
+      - name: Run Tangle integration tests
         env:
           PRICING_ENGINE_E2E_FEATURES: "pricing-engine-e2e-tests"
         run: |
-          # Core Tangle EVM tests
+          # Core Tangle tests
           cargo test -p blueprint-pricing-engine --features ${PRICING_ENGINE_E2E_FEATURES} --test evm_listener -- --nocapture
-          cargo test -p blueprint-manager --test tangle_evm_runner -- --nocapture
+          cargo test -p blueprint-manager --test tangle_runner -- --nocapture
           cargo test -p hello-tangle-blueprint --test anvil -- --nocapture
           # QoS and heartbeat integration
           cargo test -p blueprint-qos --test blueprint_integration_test -- --nocapture --test-threads=1
           # Client integration tests
-          cargo test -p blueprint-client-tangle-evm --test integration -- --nocapture --test-threads=1
+          cargo test -p blueprint-client-tangle --test integration -- --nocapture --test-threads=1
           # Producer/consumer flow tests
-          cargo test -p blueprint-tangle-evm-extra --test anvil_integration -- --nocapture --test-threads=1
+          cargo test -p blueprint-tangle-extra --test anvil_integration -- --nocapture --test-threads=1
 
   qos-integration:
     name: QoS & Heartbeat Integration

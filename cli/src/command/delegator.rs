@@ -1,5 +1,5 @@
 use alloy_primitives::{Address, U256};
-use blueprint_client_tangle_evm::{
+use blueprint_client_tangle::{
     AssetInfo, AssetKind, BlueprintSelectionMode, DelegationRecord, DepositInfo, LockInfo,
     PendingUnstake, PendingWithdrawal, RestakingMetadata,
 };

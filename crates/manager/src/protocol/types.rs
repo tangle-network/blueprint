@@ -1,13 +1,13 @@
 /// Common types used across the protocol abstraction layer
-use blueprint_client_tangle_evm::TangleEvmEvent;
+use blueprint_client_tangle::TangleEvent;
 use blueprint_runner::config::{Protocol, ProtocolSettings};
 use serde::{Deserialize, Serialize};
 
 /// The type of protocol
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ProtocolType {
-    /// Tangle EVM Network
-    TangleEvm,
+    /// Tangle Network
+    Tangle,
     /// EigenLayer AVS
     Eigenlayer,
 }
@@ -15,7 +15,7 @@ pub enum ProtocolType {
 impl From<Protocol> for ProtocolType {
     fn from(protocol: Protocol) -> Self {
         match protocol {
-            Protocol::TangleEvm => ProtocolType::TangleEvm,
+            Protocol::Tangle => ProtocolType::Tangle,
             Protocol::Eigenlayer => ProtocolType::Eigenlayer,
             _ => unreachable!("Protocol not supported"),
         }
@@ -25,7 +25,7 @@ impl From<Protocol> for ProtocolType {
 impl From<ProtocolType> for Protocol {
     fn from(protocol_type: ProtocolType) -> Self {
         match protocol_type {
-            ProtocolType::TangleEvm => Protocol::TangleEvm,
+            ProtocolType::Tangle => Protocol::Tangle,
             ProtocolType::Eigenlayer => Protocol::Eigenlayer,
         }
     }
@@ -35,7 +35,7 @@ impl From<&ProtocolSettings> for ProtocolType {
     fn from(settings: &ProtocolSettings) -> Self {
         match settings {
             ProtocolSettings::Eigenlayer(_) => ProtocolType::Eigenlayer,
-            _ => ProtocolType::TangleEvm,
+            _ => ProtocolType::Tangle,
         }
     }
 }
@@ -46,15 +46,15 @@ impl From<&ProtocolSettings> for ProtocolType {
 /// Protocol-specific handlers extract the data they need.
 #[derive(Debug, Clone)]
 pub enum ProtocolEvent {
-    /// A Tangle EVM network event
-    TangleEvm(TangleEvmProtocolEvent),
+    /// A Tangle network event
+    Tangle(TangleProtocolEvent),
     /// An EigenLayer event (new tasks, responses, etc.)
     Eigenlayer(EigenlayerProtocolEvent),
 }
 
-/// Tangle EVM-specific event data
+/// Tangle-specific event data
 #[derive(Debug, Clone)]
-pub struct TangleEvmProtocolEvent {
+pub struct TangleProtocolEvent {
     /// Block number
     pub block_number: u64,
     /// Block hash
@@ -64,7 +64,7 @@ pub struct TangleEvmProtocolEvent {
     /// Logs in the block
     pub logs: Vec<alloy_rpc_types::Log>,
     /// Full event details
-    pub inner: TangleEvmEvent,
+    pub inner: TangleEvent,
 }
 
 /// EigenLayer-specific event data
@@ -79,11 +79,11 @@ pub struct EigenlayerProtocolEvent {
 }
 
 impl ProtocolEvent {
-    /// Extract Tangle EVM event data if this is a Tangle EVM event
+    /// Extract Tangle event data if this is a Tangle event
     #[must_use]
-    pub fn as_tangle_evm(&self) -> Option<&TangleEvmProtocolEvent> {
+    pub fn as_tangle(&self) -> Option<&TangleProtocolEvent> {
         match self {
-            ProtocolEvent::TangleEvm(evt) => Some(evt),
+            ProtocolEvent::Tangle(evt) => Some(evt),
             _ => None,
         }
     }
@@ -101,7 +101,7 @@ impl ProtocolEvent {
     #[must_use]
     pub fn block_number(&self) -> u64 {
         match self {
-            ProtocolEvent::TangleEvm(evt) => evt.block_number,
+            ProtocolEvent::Tangle(evt) => evt.block_number,
             ProtocolEvent::Eigenlayer(evt) => evt.block_number,
         }
     }

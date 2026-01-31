@@ -190,8 +190,8 @@ async fn test_protocol_type_conversion() {
     use blueprint_runner::config::ProtocolSettings;
 
     // Test Tangle EVM conversion
-    let tangle_settings = ProtocolSettings::TangleEvm(
-        blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings {
+    let tangle_settings = ProtocolSettings::Tangle(
+        blueprint_runner::tangle::config::TangleProtocolSettings {
             blueprint_id: 1,
             service_id: Some(0),
             tangle_contract: alloy_primitives::Address::ZERO,

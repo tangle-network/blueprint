@@ -1,10 +1,10 @@
-use blueprint_client_tangle_evm::TangleEvmClient;
-use blueprint_client_tangle_evm::services::BlueprintInfo;
+use blueprint_client_tangle::TangleClient;
+use blueprint_client_tangle::services::BlueprintInfo;
 use color_eyre::Result;
 use dialoguer::console::style;
 
 /// Fetch all registered blueprints.
-pub async fn list_blueprints(client: &TangleEvmClient) -> Result<Vec<(u64, BlueprintInfo)>> {
+pub async fn list_blueprints(client: &TangleClient) -> Result<Vec<(u64, BlueprintInfo)>> {
     client
         .list_blueprints()
         .await

@@ -40,9 +40,9 @@ tools for networking and testing.
 * [`blueprint-build-utils`] - Utilities for simplifying build-time tasks (e.g., building contracts, installing dependencies)
 * [`blueprint-chain-setup`] - (**Meta-crate**) Utilities for setting local testnets
     * [`blueprint-chain-setup-anvil`] - Utilities for setting up [Anvil] testnets
-* [`blueprint-clients`] - (**Meta-crate**) Clients for interacting with Tangle EVM, [Eigenlayer], and other networks
+* [`blueprint-clients`] - (**Meta-crate**) Clients for interacting with Tangle, [Eigenlayer], and other networks
     * [`blueprint-client-core`] - Core client primitives and traits
-    * [`blueprint-client-tangle-evm`] - Client for interacting with the Tangle v2 EVM contracts
+    * [`blueprint-client-tangle`] - Client for interacting with the Tangle EVM contracts
     * [`blueprint-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
     * [`blueprint-client-evm`] - Client for interacting with the EVM Network
 * [`blueprint-contexts`] - Extensions for adding functionality to custom blueprint context types
@@ -77,8 +77,7 @@ tools for networking and testing.
     * [`blueprint-store-local-database`] - A local JSON key-value database
 * [`blueprint-remote-providers`] - Remote cloud provider integrations (AWS, GCP, Azure, etc.)
 * [`blueprint-tangle-aggregation-svc`] - Tangle aggregation service for BLS signature aggregation
-* [`blueprint-tangle-evm-extra`] - Tangle v2 EVM-specific producers, consumers, and extractors
-* [`blueprint-tangle-extra`] - Tangle-specific extensions and utilities
+* [`blueprint-tangle-extra`] - Tangle-specific producers, consumers, and extractors
 * [`blueprint-evm-extra`] - EVM specific extensions for blueprints
 * [`blueprint-eigenlayer-extra`] - Eigenlayer specific extensions for blueprints
 * [`blueprint-faas`] - FaaS (Function-as-a-Service) execution support
@@ -95,7 +94,7 @@ tools for networking and testing.
 [`blueprint-chain-setup-anvil`]: https://docs.rs/blueprint-chain-setup-anvil
 [`blueprint-clients`]: https://docs.rs/blueprint-clients
 [`blueprint-client-core`]: https://docs.rs/blueprint-client-core
-[`blueprint-client-tangle-evm`]: https://docs.rs/blueprint-client-tangle-evm
+[`blueprint-client-tangle`]: https://docs.rs/blueprint-client-tangle
 [`blueprint-client-eigenlayer`]: https://docs.rs/blueprint-client-eigenlayer
 [`blueprint-client-evm`]: https://docs.rs/blueprint-client-evm
 [`blueprint-contexts`]: https://docs.rs/blueprint-contexts
@@ -128,7 +127,7 @@ tools for networking and testing.
 [`blueprint-std`]: https://docs.rs/blueprint-std
 [`blueprint-stores`]: https://docs.rs/blueprint-stores
 [`blueprint-store-local-database`]: https://docs.rs/blueprint-store-local-database
-[`blueprint-tangle-evm-extra`]: https://docs.rs/blueprint-tangle-evm-extra
+[`blueprint-tangle-extra`]: https://docs.rs/blueprint-tangle-extra
 [`blueprint-evm-extra`]: https://docs.rs/blueprint-evm-extra
 [`blueprint-eigenlayer-extra`]: https://docs.rs/blueprint-eigenlayer-extra
 [`blueprint-faas`]: https://docs.rs/blueprint-faas
@@ -206,7 +205,7 @@ STATUS_REGISTRY_CONTRACT=0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9
 EOF
 
 # Register the operator with the on-chain contracts (optional)
-cargo tangle blueprint register-tangle-evm \
+cargo tangle blueprint register-tangle \
   --http-rpc-url https://rpc.tangle.tools \
   --ws-rpc-url wss://rpc.tangle.tools \
   --keystore-path ./keystore \
@@ -224,7 +223,7 @@ cargo tangle blueprint preregister \
 
 # Run the blueprint manager against local Anvil (or a real RPC)
 cargo tangle blueprint run \
-  --protocol tangle-evm \
+  --protocol tangle \
   --http-rpc-url http://127.0.0.1:8545 \
   --ws-rpc-url ws://127.0.0.1:8546 \
   --keystore-path ./keystore \
@@ -265,17 +264,17 @@ At minimum the manifest requires `metadata_uri`, `manager`, at least one job, an
 
 ### 🧪 Testing Locally
 
-The `blueprint-anvil-testing-utils` crate exposes `harness_builder_from_env` for `TangleEvmHarness`, which replays the `LocalTestnet.s.sol` broadcast so every integration test runs against deterministic contract state. Useful commands:
+The `blueprint-anvil-testing-utils` crate exposes `harness_builder_from_env` for `TangleHarness`, which replays the `LocalTestnet.s.sol` broadcast so every integration test runs against deterministic contract state. Useful commands:
 
 ```bash
 # Client integration tests (Anvil-backed)
-cargo test -p blueprint-client-tangle-evm --test anvil
+cargo test -p blueprint-client-tangle --test anvil
 
 # Pricing engine QoS listener
 cargo test -p blueprint-pricing-engine --test evm_listener
 
 # Blueprint runner end-to-end harness
-cargo test -p blueprint-manager --test tangle_evm_runner
+cargo test -p blueprint-manager --test tangle_runner
 
 # Example blueprint harness (router + runner wired together)
 cargo test -p hello-tangle-blueprint --test anvil
@@ -286,7 +285,7 @@ Each suite boots its own Anvil container via `testcontainers`, so Docker is requ
 > **Note:** The harness loads `crates/chain-setup/anvil/snapshots/localtestnet-state.json` and falls back to the bundled `localtestnet-broadcast.json` if the snapshot is missing or fails validation. Refresh fixtures with `scripts/fetch-localtestnet-fixtures.sh`, and set `RUN_TNT_E2E=1` to opt into the longer suites.
 
 For a keystore-to-runner walkthrough (keys, env vars, harness commands, and manual
-`TangleEvmClient` snippets) see [`docs/operators/anvil.md`](docs/operators/anvil.md).
+`TangleClient` snippets) see [`docs/operators/anvil.md`](docs/operators/anvil.md).
 
 For additional commands, advanced configurations, and complete CLI usage, see the [official CLI reference](https://docs.tangle.tools/developers/cli/reference).
 

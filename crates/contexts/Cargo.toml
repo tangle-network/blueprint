@@ -21,14 +21,14 @@ blueprint-keystore = { workspace = true, optional = true }
 
 proc-macro2 = { workspace = true, optional = true }
 
-blueprint-client-tangle-evm = { path = "../clients/tangle-evm", optional = true }
+blueprint-client-tangle = { path = "../clients/tangle", optional = true }
 
 [features]
 default = ["std", "keystore"]
-std = ["blueprint-runner/std", "blueprint-std/std", "blueprint-clients/std", "blueprint-keystore?/std", "blueprint-networking?/std", "blueprint-client-tangle-evm?/std"]
+std = ["blueprint-runner/std", "blueprint-std/std", "blueprint-clients/std", "blueprint-keystore?/std", "blueprint-networking?/std", "blueprint-client-tangle?/std"]
 
 evm = ["blueprint-clients/evm"]
 eigenlayer = ["blueprint-clients/eigenlayer"]
 networking = ["dep:blueprint-networking", "dep:proc-macro2"]
 keystore = ["dep:blueprint-keystore"]
-tangle-evm = ["dep:blueprint-client-tangle-evm", "blueprint-runner/tangle-evm", "keystore"]
+tangle = ["dep:blueprint-client-tangle", "blueprint-runner/tangle", "keystore"]

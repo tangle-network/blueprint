@@ -6,13 +6,13 @@ use crate::tests::util::{
     run_cli_command, spawn_harness,
 };
 use alloy_primitives::Bytes;
-use blueprint_client_tangle_evm::{TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings};
+use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::K256SigningKey;
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_testing_utils::anvil::{
-    TangleEvmHarness, insert_default_operator_key, tangle_evm::LOCAL_BLUEPRINT_ID,
-    tangle_evm::LOCAL_SERVICE_ID,
+    TangleHarness, insert_default_operator_key, tangle::LOCAL_BLUEPRINT_ID,
+    tangle::LOCAL_SERVICE_ID,
 };
 use color_eyre::eyre::{Result, eyre};
 use hex::FromHex;
@@ -474,18 +474,18 @@ async fn jobs_submit_and_watch_result_roundtrip() -> Result<()> {
 }
 
 async fn build_operator_client(
-    harness: &TangleEvmHarness,
+    harness: &TangleHarness,
     blueprint_id: u64,
     service_id: u64,
-) -> Result<TangleEvmClient> {
-    let settings = TangleEvmSettings {
+) -> Result<TangleClient> {
+    let settings = TangleSettings {
         blueprint_id,
         service_id: Some(service_id),
         tangle_contract: harness.tangle_contract,
         restaking_contract: harness.restaking_contract,
         status_registry_contract: harness.status_registry_contract,
     };
-    let config = TangleEvmClientConfig::new(
+    let config = TangleClientConfig::new(
         harness.http_endpoint().clone(),
         harness.ws_endpoint().clone(),
         "memory://operator-client",
@@ -495,7 +495,7 @@ async fn build_operator_client(
 
     let keystore = Keystore::new(KeystoreConfig::new().in_memory(true))?;
     insert_default_operator_key(&keystore).map_err(|e| eyre!(e))?;
-    TangleEvmClient::with_keystore(config, keystore)
+    TangleClient::with_keystore(config, keystore)
         .await
         .map_err(|e| eyre!(e.to_string()))
 }

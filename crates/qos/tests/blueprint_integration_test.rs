@@ -6,7 +6,7 @@ use alloy_provider::ProviderBuilder;
 use alloy_sol_types::SolValue;
 use anyhow::{Context, Result, ensure};
 use blueprint_anvil_testing_utils::{
-    BlueprintHarness, SeededTangleEvmTestnet, missing_tnt_core_artifacts, seed_operator_key,
+    BlueprintHarness, SeededTangleTestnet, missing_tnt_core_artifacts, seed_operator_key,
 };
 use blueprint_core::{Job, info, warn};
 use blueprint_qos::heartbeat::HeartbeatConfig;
@@ -19,7 +19,7 @@ use blueprint_qos::service::QosMetricsService;
 use blueprint_qos::service_builder::QoSServiceBuilder;
 use blueprint_qos::{QoSConfig, default_qos_config};
 use blueprint_router::Router;
-use blueprint_tangle_evm_extra::layers::TangleEvmLayer;
+use blueprint_tangle_extra::layers::TangleLayer;
 use tempfile::TempDir;
 use tokio::process::Command;
 use tokio::time::{sleep, timeout};
@@ -37,7 +37,7 @@ const METRICS_WAIT_MS: u64 = 500;
 const MAX_METRICS_RETRIES: u32 = 10;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_qos_integration_on_tangle_evm() -> Result<()> {
+async fn test_qos_integration_on_tangle() -> Result<()> {
     init_tracing();
     run_anvil_test("qos_blueprint_integration", async {
         let harness = match BlueprintHarness::builder(router())
@@ -48,7 +48,7 @@ async fn test_qos_integration_on_tangle_evm() -> Result<()> {
             Ok(harness) => harness,
             Err(err) => {
                 if missing_tnt_core_artifacts(&err) {
-                    eprintln!("Skipping test_qos_integration_on_tangle_evm: {err}");
+                    eprintln!("Skipping test_qos_integration_on_tangle: {err}");
                     return Ok(());
                 }
                 return Err(err);
@@ -214,7 +214,7 @@ async fn test_qos_integration_on_tangle_evm() -> Result<()> {
 }
 
 fn router() -> Router<()> {
-    Router::new().route(XSQUARE_JOB_ID, square.layer(TangleEvmLayer))
+    Router::new().route(XSQUARE_JOB_ID, square.layer(TangleLayer))
 }
 
 fn base_qos_config(service_id: u64, blueprint_id: u64, status_registry: Address) -> QoSConfig {
@@ -338,7 +338,7 @@ async fn verify_qos_metrics(service_id: u64, blueprint_id: u64, addr: &str) -> R
 }
 
 async fn verify_heartbeat_on_chain(
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
     operator: Address,
     service_id: u64,
 ) -> Result<()> {

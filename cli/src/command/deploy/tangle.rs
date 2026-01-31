@@ -8,11 +8,11 @@ use crate::command::signer::KEYSTORE_PATH_ENV;
 use crate::command::tangle::{DevnetStack, SpawnMethod, parse_address, run_opts_from_stack};
 use crate::settings::load_protocol_settings;
 use alloy_primitives::Address;
-use blueprint_client_tangle_evm::{
-    TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings, TransactionResult,
+use blueprint_client_tangle::{
+    TangleClient, TangleClientConfig, TangleSettings, TransactionResult,
 };
 use blueprint_runner::config::Protocol;
-use blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings;
+use blueprint_runner::tangle::config::TangleProtocolSettings;
 use clap::{Args, ValueEnum};
 use color_eyre::eyre::{Result, eyre};
 use std::env;
@@ -193,10 +193,10 @@ impl TangleDeployArgs {
 }
 
 pub async fn execute(args: TangleDeployArgs) -> Result<()> {
-    let protocol_settings = load_protocol_settings(Protocol::TangleEvm, &args.settings_file)
+    let protocol_settings = load_protocol_settings(Protocol::Tangle, &args.settings_file)
         .map_err(|e| eyre!(e.to_string()))?;
     let tangle_settings = protocol_settings
-        .tangle_evm()
+        .tangle()
         .map_err(|e| eyre!("failed to load Tangle settings: {e}"))?;
     let tangle_settings = tangle_settings.clone();
 
@@ -377,7 +377,7 @@ fn parse_cli_binary(value: &str) -> Result<BinaryArtifactSpec> {
 #[derive(Debug)]
 struct DevnetDeployment {
     stack: DevnetStack,
-    settings: TangleEvmProtocolSettings,
+    settings: TangleProtocolSettings,
     allow_unchecked_attestations: bool,
     spawn_method: SpawnMethod,
     shutdown_after: Option<Duration>,
@@ -386,7 +386,7 @@ struct DevnetDeployment {
 impl DevnetDeployment {
     fn new(
         stack: DevnetStack,
-        settings: TangleEvmProtocolSettings,
+        settings: TangleProtocolSettings,
         allow_unchecked_attestations: bool,
         spawn_method: SpawnMethod,
         shutdown_after: Option<Duration>,
@@ -494,7 +494,7 @@ struct NetworkDeploymentConfig {
 }
 
 impl NetworkDeploymentConfig {
-    fn from_args(args: &TangleDeployArgs, settings: &TangleEvmProtocolSettings) -> Result<Self> {
+    fn from_args(args: &TangleDeployArgs, settings: &TangleProtocolSettings) -> Result<Self> {
         let http_rpc_url = infer_url(
             args.http_rpc_url.clone(),
             HTTP_RPC_URL_ENV,
@@ -531,7 +531,7 @@ impl NetworkDeploymentConfig {
         })
     }
 
-    async fn connect_client(&self) -> Result<TangleEvmClient> {
+    async fn connect_client(&self) -> Result<TangleClient> {
         if !self.keystore_path.exists() {
             return Err(eyre!(
                 "Keystore {} not found; pass --keystore-path or set {KEYSTORE_PATH_ENV}",
@@ -539,20 +539,20 @@ impl NetworkDeploymentConfig {
             ));
         }
 
-        let settings = TangleEvmSettings {
+        let settings = TangleSettings {
             blueprint_id: 0,
             service_id: None,
             tangle_contract: self.tangle_contract,
             restaking_contract: self.restaking_contract,
             status_registry_contract: self.status_registry_contract,
         };
-        let config = TangleEvmClientConfig::new(
+        let config = TangleClientConfig::new(
             self.http_rpc_url.clone(),
             self.ws_rpc_url.clone(),
             self.keystore_path.display().to_string(),
             settings,
         );
-        TangleEvmClient::new(config)
+        TangleClient::new(config)
             .await
             .map_err(|e| eyre!(e.to_string()))
     }

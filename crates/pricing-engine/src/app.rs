@@ -1,4 +1,4 @@
-use blueprint_client_tangle_evm::{TangleEvmClient, TangleEvmClientConfig};
+use blueprint_client_tangle::{TangleClient, TangleClientConfig};
 use blueprint_core::{error, info};
 use blueprint_crypto::k256::K256Ecdsa;
 use std::path::PathBuf;
@@ -20,10 +20,10 @@ use blueprint_keystore::backends::Backend;
 
 /// Start the blockchain event listener if the feature is enabled
 pub async fn start_blockchain_listener(
-    evm_config: TangleEvmClientConfig,
+    evm_config: TangleClientConfig,
     event_tx: mpsc::Sender<BlockchainEvent>,
 ) -> Option<tokio::task::JoinHandle<()>> {
-    match TangleEvmClient::new(evm_config).await {
+    match TangleClient::new(evm_config).await {
         Ok(client) => {
             let listener = EvmEventListener::new(Arc::new(client), event_tx);
             Some(tokio::spawn(async move {

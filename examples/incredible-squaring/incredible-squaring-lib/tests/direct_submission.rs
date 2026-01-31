@@ -8,7 +8,7 @@
 //! 1. Job is triggered on-chain
 //! 2. All running operators receive the job event
 //! 3. Each operator computes the result independently
-//! 4. Each operator submits their result directly via TangleEvmConsumer
+//! 4. Each operator submits their result directly via TangleConsumer
 //! 5. Contract receives N individual results from N operators
 //!
 //! Use cases:
@@ -17,7 +17,7 @@
 //! - Simple jobs where aggregation overhead isn't justified
 
 use alloy_sol_types::SolValue;
-use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_sdk::{IntoJobResult, JobResult};
 use color_eyre::Result;
@@ -53,21 +53,21 @@ impl SimulatedOperator {
     }
 
     /// Compute the square job result
-    async fn compute_square(&self, input: u64) -> TangleEvmResult<u64> {
+    async fn compute_square(&self, input: u64) -> TangleResult<u64> {
         println!("Operator {} computing square({})", self.id, input);
-        square(TangleEvmArg(input)).await
+        square(TangleArg(input)).await
     }
 
     /// Compute the verified_square job result
-    async fn compute_verified_square(&self, input: u64) -> TangleEvmResult<u64> {
+    async fn compute_verified_square(&self, input: u64) -> TangleResult<u64> {
         println!("Operator {} computing verified_square({})", self.id, input);
-        verified_square(TangleEvmArg(input)).await
+        verified_square(TangleArg(input)).await
     }
 
     /// Compute the consensus_square job result
-    async fn compute_consensus_square(&self, input: u64) -> TangleEvmResult<u64> {
+    async fn compute_consensus_square(&self, input: u64) -> TangleResult<u64> {
         println!("Operator {} computing consensus_square({})", self.id, input);
-        consensus_square(TangleEvmArg(input)).await
+        consensus_square(TangleArg(input)).await
     }
 }
 
@@ -118,7 +118,7 @@ async fn test_multi_operator_direct_submission_square() -> Result<()> {
             operator.id
         );
 
-        // Convert to JobResult (what TangleEvmConsumer would receive)
+        // Convert to JobResult (what TangleConsumer would receive)
         let job_result = result.into_job_result();
         assert!(job_result.is_some(), "Should produce a job result");
 

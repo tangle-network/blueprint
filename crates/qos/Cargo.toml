@@ -60,7 +60,7 @@ alloy-signer-local = { workspace = true }
 anyhow = { workspace = true }
 blueprint-anvil-testing-utils = { workspace = true }
 blueprint-router = { workspace = true }
-blueprint-tangle-evm-extra = { workspace = true }
+blueprint-tangle-extra = { workspace = true }
 hex = { workspace = true }
 
 [build-dependencies]

@@ -218,12 +218,12 @@ pub enum MaliciousEvidence<S: AggregatableSignature> {
 }
 ```
 
-## Integration with blueprint-tangle-evm-extra
+## Integration with blueprint-tangle-extra
 
-This crate is typically used through `blueprint-tangle-evm-extra`:
+This crate is typically used through `blueprint-tangle-extra`:
 
 ```rust
-use blueprint_tangle_evm_extra::{P2PGossipConfig, AggregationStrategy};
+use blueprint_tangle_extra::{P2PGossipConfig, AggregationStrategy};
 
 let config = P2PGossipConfig::new(network_handle, participant_keys)
     .with_threshold_percentage(67);

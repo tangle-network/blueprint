@@ -12,8 +12,8 @@ use axum::{
 use blueprint_sdk::macros::debug_job;
 use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::tangle_evm::TangleEvmLayer;
-use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_sdk::tangle::TangleLayer;
+use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
 use blueprint_sdk::{Job, Router as BlueprintRouter};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
@@ -40,14 +40,14 @@ sol! {
 
 #[debug_job]
 pub async fn write_doc(
-    TangleEvmArg((doc_id, content, account)): TangleEvmArg<(String, String, String)>,
-) -> TangleEvmResult<WriteDocResult> {
+    TangleArg((doc_id, content, account)): TangleArg<(String, String, String)>,
+) -> TangleResult<WriteDocResult> {
     let store = docs_store();
     let mut guard = store.write().await;
     let entry = guard.entry(account.clone()).or_default();
     entry.insert(doc_id.clone(), content);
 
-    TangleEvmResult(WriteDocResult {
+    TangleResult(WriteDocResult {
         ok: true,
         docId: doc_id,
         account,
@@ -56,13 +56,13 @@ pub async fn write_doc(
 
 #[debug_job]
 pub async fn admin_purge(
-    TangleEvmArg(target_account): TangleEvmArg<String>,
-) -> TangleEvmResult<AdminPurgeResult> {
+    TangleArg(target_account): TangleArg<String>,
+) -> TangleResult<AdminPurgeResult> {
     let store = docs_store();
     let mut guard = store.write().await;
     let removed = guard.remove(&target_account).is_some();
 
-    TangleEvmResult(AdminPurgeResult {
+    TangleResult(AdminPurgeResult {
         purged: removed,
         target: target_account,
     })
@@ -72,8 +72,8 @@ pub async fn admin_purge(
 #[must_use]
 pub fn router() -> BlueprintRouter {
     BlueprintRouter::new()
-        .route(WRITE_DOC_JOB_ID, write_doc.layer(TangleEvmLayer))
-        .route(ADMIN_PURGE_JOB_ID, admin_purge.layer(TangleEvmLayer))
+        .route(WRITE_DOC_JOB_ID, write_doc.layer(TangleLayer))
+        .route(ADMIN_PURGE_JOB_ID, admin_purge.layer(TangleLayer))
 }
 
 // ===== Off-chain OAuth-protected HTTP API =====
@@ -288,7 +288,7 @@ mod tests {
     #[tokio::test]
     async fn write_doc_and_purge_jobs_modify_state() {
         docs_store().write().await.clear();
-        write_doc(TangleEvmArg((
+        write_doc(TangleArg((
             "doc1".into(),
             "secret".into(),
             "tenant".into(),
@@ -299,7 +299,7 @@ mod tests {
             assert_eq!(guard.get("tenant").unwrap().get("doc1").unwrap(), "secret");
         }
 
-        admin_purge(TangleEvmArg("tenant".into())).await;
+        admin_purge(TangleArg("tenant".into())).await;
         let guard = docs_store().read().await;
         assert!(guard.get("tenant").is_none());
     }

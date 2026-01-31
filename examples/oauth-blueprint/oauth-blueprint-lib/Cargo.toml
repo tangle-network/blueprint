@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 alloy-sol-types = { workspace = true }
 axum = { version = "0.8", default-features = false, features = ["http2", "json", "tokio"] }
-blueprint-sdk = { path = "../../../crates/sdk", default-features = false, features = ["std", "tracing", "macros", "tangle-evm"] }
+blueprint-sdk = { path = "../../../crates/sdk", default-features = false, features = ["std", "tracing", "macros", "tangle"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "^1", default-features = false, features = ["rt", "macros"] }
@@ -21,7 +21,7 @@ alloy-provider = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-signer-local = { workspace = true }
 anyhow = "1"
-blueprint-client-tangle-evm = { path = "../../../crates/clients/tangle-evm" }
+blueprint-client-tangle = { path = "../../../crates/clients/tangle" }
 blueprint-anvil-testing-utils = { path = "../../../crates/testing-utils/anvil" }
 once_cell = { workspace = true }
 tracing-subscriber = { workspace = true }

@@ -10,7 +10,7 @@ Create, run, and operate blueprints on the Tangle EVM and EigenLayer.
   - [Installation](#installation)
     - [Feature flags](#feature-flags)
   - [Creating a New Blueprint](#creating-a-new-blueprint)
-  - [Running a Blueprint on Tangle EVM](#running-a-blueprint-on-tangle-evm)
+  - [Running a Blueprint on Tangle](#running-a-blueprint-on-tangle)
   - [Registering an Operator](#registering-an-operator)
   - [Service Lifecycle Commands](#service-lifecycle-commands)
   - [Cloud Deployment](#cloud-deployment)
@@ -28,8 +28,8 @@ Create, run, and operate blueprints on the Tangle EVM and EigenLayer.
 The CLI bundles every workflow needed for the EVM-only SDK:
 
 - `cargo tangle blueprint create` scaffolds a new blueprint from the templates.
-- `cargo tangle blueprint run --protocol tangle-evm` boots a manager connected to the Tangle v2 contracts.
-- `cargo tangle blueprint register-tangle-evm` registers an operator against `ITangle`, `MultiAssetDelegation`, and `OperatorStatusRegistry`.
+- `cargo tangle blueprint run --protocol tangle` boots a manager connected to the Tangle v2 contracts.
+- `cargo tangle blueprint register-tangle` registers an operator against `ITangle`, `MultiAssetDelegation`, and `OperatorStatusRegistry`.
 - `cargo tangle key *` manages local and remote k256 keys via `blueprint-keystore`.
 
 All Substrate helpers have been removed; the CLI now targets EVM-first flows only.
@@ -73,9 +73,9 @@ cargo build --features vm-debug
 cargo tangle blueprint create --name my_blueprint
 ```
 
-The scaffold asks for a source template, optional variables, and whether to skip prompts. The generated workspace already depends on `blueprint-sdk` with the `tangle-evm` feature.
+The scaffold asks for a source template, optional variables, and whether to skip prompts. The generated workspace already depends on `blueprint-sdk` with the `tangle` feature.
 
-## Running a Blueprint on Tangle EVM
+## Running a Blueprint on Tangle
 
 The runner expects RPC URLs, a keystore, and the EVM contract coordinates. You can provide them via CLI flags or a `settings.env` file that the command loads before boot.
 
@@ -86,7 +86,7 @@ TANGLE_CONTRACT=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 \
 RESTAKING_CONTRACT=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
 STATUS_REGISTRY_CONTRACT=0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9 \
 cargo tangle blueprint run \
-  --protocol tangle-evm \
+  --protocol tangle \
   --http-rpc-url http://127.0.0.1:8545 \
   --ws-rpc-url ws://127.0.0.1:8546 \
   --keystore-path ./keystore \
@@ -105,10 +105,10 @@ The CLI automatically ensures an ECDSA key exists under `--keystore-path` and de
 
 ## Registering an Operator
 
-`register-tangle-evm` performs the on-chain registration + announcement flow in one command:
+`register-tangle` performs the on-chain registration + announcement flow in one command:
 
 ```bash
-cargo tangle blueprint register-tangle-evm \
+cargo tangle blueprint register-tangle \
   --http-rpc-url https://rpc.tangle.tools \
   --ws-rpc-url wss://rpc.tangle.tools \
   --keystore-path ./keystore \
@@ -173,7 +173,7 @@ cargo tangle blueprint service list --json
 cargo tangle blueprint service requests --json
 ```
 
-Both commands read via `TangleEvmClient::{list_services,list_service_requests}` and print either friendly tables or JSON for automation.
+Both commands read via `TangleClient::{list_services,list_service_requests}` and print either friendly tables or JSON for automation.
 
 ## Cloud Deployment
 
@@ -266,7 +266,7 @@ cargo tangle key generate --key-type ecdsa --output ./keystore
 cargo tangle key import --key-type ecdsa \
   --secret 0x0123... \
   --keystore-path ./keystore \
-  --protocol tangle-evm
+  --protocol tangle
 
 # List local keys
 cargo tangle key list --keystore-path ./keystore

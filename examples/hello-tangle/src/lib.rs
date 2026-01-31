@@ -1,7 +1,7 @@
 use alloy_primitives::Address;
 use alloy_sol_types::sol;
 use blueprint_router::Router;
-use blueprint_tangle_evm_extra::extract::{Caller, TangleEvmArg, TangleEvmResult};
+use blueprint_tangle_extra::extract::{Caller, TangleArg, TangleResult};
 use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -34,14 +34,14 @@ fn store() -> &'static DocumentStore {
 /// Minimal job that persists a document and returns a receipt.
 pub async fn create_document(
     Caller(caller): Caller,
-    TangleEvmArg(request): TangleEvmArg<DocumentRequest>,
-) -> TangleEvmResult<DocumentReceipt> {
+    TangleArg(request): TangleArg<DocumentRequest>,
+) -> TangleResult<DocumentReceipt> {
     let mut docs = store().write().await;
     docs.insert(request.docId.clone(), request.contents.clone());
 
     let caller_address = Address::from_slice(&caller);
 
-    TangleEvmResult(DocumentReceipt {
+    TangleResult(DocumentReceipt {
         docId: request.docId,
         contents: request.contents,
         operator: format!("{caller_address:#x}"),

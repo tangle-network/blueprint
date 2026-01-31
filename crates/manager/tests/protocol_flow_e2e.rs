@@ -20,13 +20,13 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolCall, SolValue};
 use anyhow::{Context, Result, ensure};
 use blueprint_anvil_testing_utils::{
-    SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
+    SeededTangleTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
-use blueprint_client_tangle_evm::contracts::ITangle::{
+use blueprint_client_tangle::contracts::ITangle::{
     JobResultSubmitted, JobSubmitted, addPermittedCallerCall,
 };
-use blueprint_client_tangle_evm::{
-    JobSubmissionResult, ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
+use blueprint_client_tangle::{
+    JobSubmissionResult, ServiceStatus, TangleClient, TangleClientConfig, TangleSettings,
     TransactionResult,
 };
 use blueprint_crypto::BytesEncoding;
@@ -365,7 +365,7 @@ async fn test_job_call_state_is_queryable() -> Result<()> {
 // Helpers
 // =============================================================================
 
-async fn setup_client(d: &SeededTangleEvmTestnet, base: &Path) -> Result<Arc<TangleEvmClient>> {
+async fn setup_client(d: &SeededTangleTestnet, base: &Path) -> Result<Arc<TangleClient>> {
     let ks_path = base.join("keystore");
     std::fs::create_dir_all(&ks_path)?;
 
@@ -374,11 +374,11 @@ async fn setup_client(d: &SeededTangleEvmTestnet, base: &Path) -> Result<Arc<Tan
     let key = K256SigningKey::from_bytes(&bytes)?;
     ks.insert::<K256Ecdsa>(&key)?;
 
-    let cfg = TangleEvmClientConfig::new(
+    let cfg = TangleClientConfig::new(
         d.http_endpoint().clone(),
         d.ws_endpoint().clone(),
         ks_path.display().to_string(),
-        TangleEvmSettings {
+        TangleSettings {
             blueprint_id: BLUEPRINT_ID,
             service_id: Some(SERVICE_ID),
             tangle_contract: d.tangle_contract,
@@ -388,10 +388,10 @@ async fn setup_client(d: &SeededTangleEvmTestnet, base: &Path) -> Result<Arc<Tan
     )
     .test_mode(true);
 
-    Ok(Arc::new(TangleEvmClient::with_keystore(cfg, ks).await?))
+    Ok(Arc::new(TangleClient::with_keystore(cfg, ks).await?))
 }
 
-async fn grant_caller(d: &SeededTangleEvmTestnet, caller: Address) -> Result<()> {
+async fn grant_caller(d: &SeededTangleTestnet, caller: Address) -> Result<()> {
     let signer = PrivateKeySigner::from_str(OWNER_KEY)?;
     let wallet = EthereumWallet::from(signer);
     let provider = ProviderBuilder::new()
@@ -410,7 +410,7 @@ async fn grant_caller(d: &SeededTangleEvmTestnet, caller: Address) -> Result<()>
     Ok(())
 }
 
-async fn boot_testnet(name: &str) -> Result<Option<SeededTangleEvmTestnet>> {
+async fn boot_testnet(name: &str) -> Result<Option<SeededTangleTestnet>> {
     match harness_builder_from_env().spawn().await {
         Ok(d) => Ok(Some(d)),
         Err(e) if missing_tnt_core_artifacts(&e) => {
@@ -422,7 +422,7 @@ async fn boot_testnet(name: &str) -> Result<Option<SeededTangleEvmTestnet>> {
 }
 
 async fn submit_job_with_retry(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     service_id: u64,
     job_index: u8,
     inputs: Bytes,
@@ -448,7 +448,7 @@ async fn submit_job_with_retry(
 }
 
 async fn submit_result_with_retry(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     service_id: u64,
     call_id: u64,
     output: Bytes,

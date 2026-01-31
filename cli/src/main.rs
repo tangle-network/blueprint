@@ -4,8 +4,8 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use alloy_primitives::{Address, Bytes, U256};
-use blueprint_client_tangle_evm::{
-    BlueprintSelectionMode, DelegationMode, TangleEvmClient, TransactionResult,
+use blueprint_client_tangle::{
+    BlueprintSelectionMode, DelegationMode, TangleClient, TransactionResult,
     contracts::ITangleTypes,
 };
 use blueprint_crypto::k256::K256Ecdsa;
@@ -171,8 +171,8 @@ enum BlueprintCommands {
     /// Requires keys in the keystore and protocol settings in settings.env.
     #[command(visible_alias = "r")]
     Run {
-        /// Target protocol: tangle-evm or eigenlayer.
-        #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
+        /// Target protocol: tangle or eigenlayer.
+        #[arg(short = 'p', long, value_enum, default_value = "tangle")]
         protocol: Protocol,
         /// HTTP RPC endpoint for the EVM chain.
         #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:8545")]
@@ -221,8 +221,8 @@ enum BlueprintCommands {
     /// for this blueprint. Useful for offline signing workflows.
     #[command(visible_alias = "pre")]
     Preregister {
-        /// Target protocol: tangle-evm or eigenlayer.
-        #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
+        /// Target protocol: tangle or eigenlayer.
+        #[arg(short = 'p', long, value_enum, default_value = "tangle")]
         protocol: Protocol,
         /// HTTP RPC endpoint for the EVM chain.
         #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:8545")]
@@ -345,7 +345,7 @@ enum KeyCommands {
         #[arg(short = 'k', long)]
         keystore_path: PathBuf,
         /// Target protocol for key organization.
-        #[arg(short = 'p', long, value_enum, default_value = "tangle-evm")]
+        #[arg(short = 'p', long, value_enum, default_value = "tangle")]
         protocol: Protocol,
     },
     /// Export a key from the keystore by its public key.
@@ -1281,8 +1281,8 @@ async fn main() -> Result<()> {
                         )
                         .await?;
                     }
-                    Protocol::TangleEvm => {
-                        let settings = protocol_settings.tangle_evm().map_err(|e| eyre!("{e}"))?;
+                    Protocol::Tangle => {
+                        let settings = protocol_settings.tangle().map_err(|e| eyre!("{e}"))?;
 
                         let run_opts = RunOpts {
                             http_rpc_url,
@@ -1351,7 +1351,7 @@ async fn main() -> Result<()> {
                 no_vm,
                 save_runtime_prefs,
             } => {
-                if protocol != Protocol::TangleEvm {
+                if protocol != Protocol::Tangle {
                     return Err(eyre!(
                         "Preregistration is only supported for the Tangle EVM protocol"
                     ));
@@ -1360,7 +1360,7 @@ async fn main() -> Result<()> {
                 let settings_file =
                     settings_file.unwrap_or_else(|| PathBuf::from("./settings.env"));
                 let protocol_settings = load_protocol_settings(protocol, &settings_file)?;
-                let settings = protocol_settings.tangle_evm().map_err(|e| eyre!("{e}"))?;
+                let settings = protocol_settings.tangle().map_err(|e| eyre!("{e}"))?;
 
                 let keystore_path = keystore_path.unwrap_or_else(|| PathBuf::from("./keystore"));
                 ensure_keys(&keystore_path, &[SupportedKey::Ecdsa])?;
@@ -2745,7 +2745,7 @@ mod tests {
 
 async fn ensure_schema_loaded(
     cache: &mut Option<JobSchema>,
-    client: &TangleEvmClient,
+    client: &TangleClient,
     blueprint_id: u64,
     job_index: u8,
 ) -> Result<()> {
@@ -2919,7 +2919,7 @@ fn ensure_keys(path: &PathBuf, required: &[SupportedKey]) -> Result<()> {
         );
         let inputs = prompt_for_keys(missing)?;
         for (kind, secret) in inputs {
-            import_key(Protocol::TangleEvm, kind, &secret, path)?;
+            import_key(Protocol::Tangle, kind, &secret, path)?;
         }
     }
 

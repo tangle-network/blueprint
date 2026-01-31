@@ -14,14 +14,14 @@ workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
-blueprint-runner = { workspace = true, features = ["networking", "tangle-evm", "eigenlayer"] }
+blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-chain-setup = { workspace = true, features = ["anvil", "std"] }
 blueprint-testing-utils = { workspace = true, features = ["anvil", "eigenlayer"] }
 blueprint-eigenlayer-extra = { workspace = true }
 blueprint-contexts = { workspace = true }
-blueprint-clients = { workspace = true, features = ["tangle-evm", "eigenlayer", "evm", "std"] }
-blueprint-client-tangle-evm = { workspace = true, features = ["std"] }
+blueprint-clients = { workspace = true, features = ["tangle", "eigenlayer", "evm", "std"] }
+blueprint-client-tangle = { workspace = true, features = ["std"] }
 blueprint-remote-providers = { workspace = true, optional = true }
 blueprint-crypto = { workspace = true, features = [
     "k256",

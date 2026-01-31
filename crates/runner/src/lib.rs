@@ -18,8 +18,8 @@ pub mod metrics_server;
 pub mod eigenlayer;
 #[cfg(feature = "symbiotic")]
 mod symbiotic;
-#[cfg(feature = "tangle-evm")]
-pub mod tangle_evm;
+#[cfg(feature = "tangle")]
+pub mod tangle;
 
 use crate::error::RunnerError;
 use crate::error::{JobCallError, ProducerError};
@@ -93,7 +93,7 @@ impl BlueprintConfig for () {}
 
 #[cfg(feature = "tls")]
 fn resolve_service_id(env: &BlueprintEnvironment) -> Result<u64, crate::error::ConfigError> {
-    match env.protocol_settings.tangle_evm() {
+    match env.protocol_settings.tangle() {
         Ok(settings) => settings
             .service_id
             .ok_or(crate::error::ConfigError::MissingServiceId),
@@ -494,14 +494,14 @@ where
         let builder_task_qos_arc = qos_service_arc.clone();
         let http_rpc_endpoint = self.env.http_rpc_endpoint.to_string();
         let keystore_uri = self.env.keystore_uri.clone();
-        #[cfg(feature = "tangle-evm")]
+        #[cfg(feature = "tangle")]
         let status_registry_address = self
             .env
             .protocol_settings
-            .tangle_evm()
+            .tangle()
             .map(|settings| settings.status_registry_contract)
             .ok();
-        #[cfg(not(feature = "tangle-evm"))]
+        #[cfg(not(feature = "tangle"))]
         let status_registry_address = None;
         tokio::spawn(async move {
             blueprint_core::debug!(target: "blueprint-runner", "QoS Builder Task (Task 1): Initializing QoS Service...");
@@ -1204,9 +1204,9 @@ async fn capture_registration_inputs(env: &BlueprintEnvironment) -> Result<Vec<u
     }
 }
 
-const SERVICE_ID_METADATA_KEYS: &[&str] = &["tangle_evm.service_id", "X-TANGLE-EVM-SERVICE-ID"];
+const SERVICE_ID_METADATA_KEYS: &[&str] = &["tangle.service_id", "X-TANGLE-SERVICE-ID"];
 const BLOCK_NUMBER_METADATA_KEYS: &[&str] =
-    &["tangle_evm.block_number", "X-TANGLE-EVM-BLOCK-NUMBER"];
+    &["tangle.block_number", "X-TANGLE-BLOCK-NUMBER"];
 
 fn read_metadata_u64(metadata: &MetadataMap<MetadataValue>, keys: &[&str]) -> Option<u64> {
     keys.iter().find_map(|key| {

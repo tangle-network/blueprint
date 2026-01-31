@@ -36,7 +36,7 @@ blueprint-macros = { workspace = true, optional = true }
 blueprint-context-derive = { workspace = true, optional = true }
 
 # Tangle-specific extras
-blueprint-tangle-evm-extra = { workspace = true, optional = true }
+blueprint-tangle-extra = { workspace = true, optional = true }
 
 # Eigenlayer and EVM-specific extras
 blueprint-evm-extra = { workspace = true, optional = true }
@@ -93,7 +93,7 @@ std = [
     "blueprint-context-derive?/std",
     "blueprint-auth/std",
     # Extras
-    "blueprint-tangle-evm-extra?/std",
+    "blueprint-tangle-extra?/std",
     "blueprint-evm-extra?/std",
     "blueprint-eigenlayer-extra?/std",
     "blueprint-chain-setup/std",
@@ -126,27 +126,27 @@ evm = [
 ## Enable Tangle EVM (v2) support
 ##
 ## This enables the EVM-native implementation for Tangle v2 contracts.
-tangle-evm = [
-    "dep:blueprint-tangle-evm-extra",
+tangle = [
+    "dep:blueprint-tangle-extra",
     "dep:alloy",
-    "blueprint-clients/tangle-evm",
-    "blueprint-contexts/tangle-evm",
-    "blueprint-context-derive?/tangle-evm",
-    "blueprint-runner/tangle-evm",
+    "blueprint-clients/tangle",
+    "blueprint-contexts/tangle",
+    "blueprint-context-derive?/tangle",
+    "blueprint-runner/tangle",
     "blueprint-testing-utils?/anvil",
     "blueprint-chain-setup?/anvil",
 ]
 
 ## Enable Tangle EVM with HTTP-based BLS aggregation service
-tangle-evm-aggregation = [
-    "tangle-evm",
-    "blueprint-tangle-evm-extra/aggregation",
+tangle-aggregation = [
+    "tangle",
+    "blueprint-tangle-extra/aggregation",
 ]
 
 ## Enable Tangle EVM with P2P gossip-based BLS aggregation
-tangle-evm-p2p-aggregation = [
-    "tangle-evm",
-    "blueprint-tangle-evm-extra/p2p-aggregation",
+tangle-p2p-aggregation = [
+    "tangle",
+    "blueprint-tangle-extra/p2p-aggregation",
     "agg-sig-gossip",
 ]
 
@@ -227,5 +227,5 @@ remote-providers = ["dep:blueprint-remote-providers"]
 faas = ["blueprint-runner/faas"]
 
 [package.metadata.docs.rs]
-features = ["tangle-evm", "tangle-evm-aggregation", "tangle-evm-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
+features = ["tangle", "tangle-aggregation", "tangle-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
 rustdoc-args = ["--cfg", "docsrs"]

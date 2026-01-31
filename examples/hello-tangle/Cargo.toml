@@ -9,7 +9,7 @@ publish = false
 alloy-sol-types = { workspace = true }
 alloy-primitives = { workspace = true }
 blueprint-router = { workspace = true }
-blueprint-tangle-evm-extra = { workspace = true }
+blueprint-tangle-extra = { workspace = true }
 once_cell = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 

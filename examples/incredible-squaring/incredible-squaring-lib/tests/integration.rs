@@ -843,7 +843,7 @@ async fn test_full_e2e_aggregation_flow() -> Result<()> {
     init_test();
     println!("\n=== Full E2E Aggregation Flow ===\n");
 
-    use blueprint_sdk::tangle_evm::extract::TangleEvmResult;
+    use blueprint_sdk::tangle::extract::TangleResult;
 
     let service = AggregationService::new(ServiceConfig::default());
 
@@ -861,11 +861,11 @@ async fn test_full_e2e_aggregation_flow() -> Result<()> {
 
     // Step 1: Operators compute results
     println!("\nStep 1: Compute results...");
-    let results: Vec<TangleEvmResult<u64>> = (0..3)
+    let results: Vec<TangleResult<u64>> = (0..3)
         .map(|i| {
             let result = input * input;
             println!("  Operator {}: square({}) = {}", i, input, result);
-            TangleEvmResult(result)
+            TangleResult(result)
         })
         .collect();
 

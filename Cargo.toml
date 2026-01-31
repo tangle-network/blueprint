@@ -15,8 +15,6 @@ members = [
     "examples/hello-tangle",
     "workspace-hack",
 ]
-# Exclude placeholder packages (kept for release-plz backwards compatibility)
-exclude = ["crates/tangle-extra"]
 
 [workspace.package]
 authors = ["Tangle Network"]
@@ -157,7 +155,7 @@ blueprint-router = { version = "0.1.0-alpha.6", path = "crates/router", default-
 blueprint-runner = { version = "0.1.0-alpha.20", path = "crates/runner", default-features = false }
 
 # Extras
-blueprint-tangle-evm-extra = { version = "0.1.0", path = "crates/tangle-evm-extra", features = ["std"] }
+blueprint-tangle-extra = { version = "0.1.0", path = "crates/tangle-extra", features = ["std"] }
 blueprint-evm-extra = { version = "0.1.0-alpha.8", path = "crates/evm-extra", default-features = false }
 blueprint-eigenlayer-extra = { version = "0.1.0-alpha.13", path = "crates/eigenlayer-extra", default-features = false }
 blueprint-producers-extra = { version = "0.1.0-alpha.6", path = "crates/producers-extra", default-features = false }
@@ -194,7 +192,7 @@ blueprint-clients = { version = "0.1.0-alpha.21", path = "./crates/clients", def
 blueprint-client-core = { version = "0.1.0-alpha.4", path = "./crates/clients/core", default-features = false }
 blueprint-client-eigenlayer = { version = "0.1.0-alpha.20", path = "./crates/clients/eigenlayer", default-features = false }
 blueprint-client-evm = { version = "0.1.0-alpha.7", path = "./crates/clients/evm", default-features = false }
-blueprint-client-tangle-evm = { version = "0.1.0", path = "./crates/clients/tangle-evm", default-features = false, features = ["std"] }
+blueprint-client-tangle = { version = "0.1.0", path = "./crates/clients/tangle", default-features = false, features = ["std"] }
 blueprint-contexts = { version = "0.1.0-alpha.21", path = "./crates/contexts", default-features = false }
 
 # Pricing Engine
@@ -400,7 +398,7 @@ alloy = { version = "1.0.35", default-features = false }
 alloy-primitives = { version = "1.2.1", default-features = false }
 alloy-json-abi = { version = "1.2.1", default-features = false }
 alloy-json-rpc = { version = "1.0.35", default-features = false }
-alloy-dyn-abi = { version = "1.2.1", default-features = false }
+alloy-dyn-abi = { version = "1.2.1", default-features = false, features = ["eip712"] }
 alloy-sol-types = { version = "1.2.1", default-features = false }
 alloy-rlp = { version = "0.3.12", default-features = false }
 alloy-rpc-client = { version = "1.0.35", default-features = false }

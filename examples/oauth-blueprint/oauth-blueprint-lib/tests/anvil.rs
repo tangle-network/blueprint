@@ -6,7 +6,7 @@ use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::{SolCall, SolValue};
 use anyhow::{Context, Result, bail};
 use blueprint_anvil_testing_utils::{BlueprintHarness, missing_tnt_core_artifacts};
-use blueprint_client_tangle_evm::contracts::ITangle::addPermittedCallerCall;
+use blueprint_client_tangle::contracts::ITangle::addPermittedCallerCall;
 use oauth_blueprint_lib::{
     ADMIN_PURGE_JOB_ID, AdminPurgeResult, WRITE_DOC_JOB_ID, WriteDocResult, reset_state_for_tests,
     router,

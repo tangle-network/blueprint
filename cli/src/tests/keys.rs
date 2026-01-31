@@ -54,7 +54,7 @@ fn test_key_import_export() -> Result<()> {
         let (_public, secret) = generate_key(key_type, Some(&keystore_path), None, true)?;
         let secret = secret.expect("secret missing");
 
-        let imported_public = import_key(Protocol::TangleEvm, key_type, &secret, keystore_path)?;
+        let imported_public = import_key(Protocol::Tangle, key_type, &secret, keystore_path)?;
         assert!(!imported_public.is_empty());
 
         let exported_secret = export_key(key_type, &imported_public, keystore_path)?;
