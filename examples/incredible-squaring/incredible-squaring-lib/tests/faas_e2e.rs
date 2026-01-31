@@ -76,8 +76,10 @@ async fn test_faas_and_local_execution_e2e() -> Result<()> {
     eprintln!("[TEST] FaaS server started at {}", server_url);
 
     // Configure FaaS executor for XSQUARE_FAAS_JOB_ID
-    let faas_executor = HttpFaasExecutor::new(&server_url)
-        .with_job_endpoint(u32::from(XSQUARE_FAAS_JOB_ID), format!("{}/square", server_url));
+    let faas_executor = HttpFaasExecutor::new(&server_url).with_job_endpoint(
+        u32::from(XSQUARE_FAAS_JOB_ID),
+        format!("{}/square", server_url),
+    );
 
     // Build harness with both local and FaaS jobs
     let harness = match BlueprintHarness::builder(router())
@@ -97,7 +99,10 @@ async fn test_faas_and_local_execution_e2e() -> Result<()> {
         }
     };
 
-    eprintln!("[TEST] Harness spawned, service_id={}", harness.service_id());
+    eprintln!(
+        "[TEST] Harness spawned, service_id={}",
+        harness.service_id()
+    );
 
     // Test 1: LOCAL execution (Job 0 - XSQUARE_JOB_ID)
     eprintln!("[TEST] Testing LOCAL execution (job {})", XSQUARE_JOB_ID);
@@ -114,8 +119,8 @@ async fn test_faas_and_local_execution_e2e() -> Result<()> {
         .await
         .context("failed to get local job result")?;
 
-    let decoded_local =
-        u64::abi_decode(&result_local).map_err(|e| anyhow::anyhow!("failed to decode local result: {e}"))?;
+    let decoded_local = u64::abi_decode(&result_local)
+        .map_err(|e| anyhow::anyhow!("failed to decode local result: {e}"))?;
     assert_eq!(
         decoded_local,
         input_local * input_local,
@@ -144,8 +149,8 @@ async fn test_faas_and_local_execution_e2e() -> Result<()> {
         .await
         .context("failed to get FaaS job result")?;
 
-    let decoded_faas =
-        u64::abi_decode(&result_faas).map_err(|e| anyhow::anyhow!("failed to decode FaaS result: {e}"))?;
+    let decoded_faas = u64::abi_decode(&result_faas)
+        .map_err(|e| anyhow::anyhow!("failed to decode FaaS result: {e}"))?;
     assert_eq!(
         decoded_faas,
         input_faas * input_faas,

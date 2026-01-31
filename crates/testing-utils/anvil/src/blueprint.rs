@@ -65,7 +65,10 @@ pub struct BlueprintHarnessBuilder {
     #[cfg(feature = "aggregation")]
     aggregating_consumer: Option<AggregatingConsumerHarnessConfig>,
     #[cfg(feature = "faas")]
-    faas_executors: Vec<(u32, std::sync::Arc<dyn blueprint_runner::faas::FaasExecutor>)>,
+    faas_executors: Vec<(
+        u32,
+        std::sync::Arc<dyn blueprint_runner::faas::FaasExecutor>,
+    )>,
 }
 
 impl BlueprintHarnessBuilder {
