@@ -41,6 +41,7 @@ tools for networking and testing.
 * [`blueprint-chain-setup`] - (**Meta-crate**) Utilities for setting local testnets
     * [`blueprint-chain-setup-anvil`] - Utilities for setting up [Anvil] testnets
 * [`blueprint-clients`] - (**Meta-crate**) Clients for interacting with Tangle EVM, [Eigenlayer], and other networks
+    * [`blueprint-client-core`] - Core client primitives and traits
     * [`blueprint-client-tangle-evm`] - Client for interacting with the Tangle v2 EVM contracts
     * [`blueprint-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
     * [`blueprint-client-evm`] - Client for interacting with the EVM Network
@@ -52,24 +53,36 @@ tools for networking and testing.
     * [`blueprint-crypto-bls`] - Utilities for working with BLS signatures and keys
     * [`blueprint-crypto-bn254`] - Utilities for working with BN254 signatures and keys
     * [`blueprint-crypto-ed25519`] - Utilities for working with Ed25519 signatures and keys
+    * [`blueprint-crypto-hashing`] - Cryptographic hashing utilities
     * [`blueprint-crypto-k256`] - Utilities for working with [secp256k1] signatures and keys
     * [`blueprint-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
 * [`blueprint-keystore`] - Flexible keystore implementation, supporting local and remote signers
 * [`blueprint-macros`] - Utility macros for simplifying blueprint development
 * [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
+    * [`blueprint-manager-bridge`] - IPC bridge for manager-blueprint communication
 * [`blueprint-metrics`] (**Meta-crate**) Utilities for collecting metrics
     * [`blueprint-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
 * [`blueprint-networking`] - P2P networking support for blueprints
     * [`blueprint-networking-round-based-extension`] - A networking compatibility layer for [round-based] MPC protocols
+    * [`blueprint-networking-agg-sig-gossip`] - Aggregated signature gossip extension
+    * [`blueprint-networking-gossip-primitives`] - Gossip protocol primitives
+* [`blueprint-pricing-engine`] - Pricing engine for computing resource costs
 * [`blueprint-producers-extra`] - Additional protocol-independent event producers
+* [`blueprint-profiling`] - Profiling utilities for performance analysis
+* [`blueprint-qos`] - Quality of Service monitoring and metrics
 * [`blueprint-router`] - A job router for dynamically scheduling jobs
 * [`blueprint-runner`] - The blueprint job runner, executing jobs in a protocol-specific manner
 * [`blueprint-std`] - Standard library extensions, for use within the SDK
 * [`blueprint-stores`] - (**Meta-crate**) Storage providers for blueprints
     * [`blueprint-store-local-database`] - A local JSON key-value database
+* [`blueprint-remote-providers`] - Remote cloud provider integrations (AWS, GCP, Azure, etc.)
+* [`blueprint-tangle-aggregation-svc`] - Tangle aggregation service for BLS signature aggregation
 * [`blueprint-tangle-evm-extra`] - Tangle v2 EVM-specific producers, consumers, and extractors
+* [`blueprint-tangle-extra`] - Tangle-specific extensions and utilities
 * [`blueprint-evm-extra`] - EVM specific extensions for blueprints
 * [`blueprint-eigenlayer-extra`] - Eigenlayer specific extensions for blueprints
+* [`blueprint-faas`] - FaaS (Function-as-a-Service) execution support
+* [`blueprint-auth`] - Authentication and authorization utilities
 * [`blueprint-testing-utils`] - (**Meta-crate**) Utilities for testing blueprints
     * [`blueprint-core-testing-utils`] - Core testing utility primitives
     * [`blueprint-anvil-testing-utils`] - Utilities for creating and interacting with Anvil testnets
@@ -81,6 +94,7 @@ tools for networking and testing.
 [`blueprint-chain-setup`]: https://docs.rs/blueprint-chain-setup
 [`blueprint-chain-setup-anvil`]: https://docs.rs/blueprint-chain-setup-anvil
 [`blueprint-clients`]: https://docs.rs/blueprint-clients
+[`blueprint-client-core`]: https://docs.rs/blueprint-client-core
 [`blueprint-client-tangle-evm`]: https://docs.rs/blueprint-client-tangle-evm
 [`blueprint-client-eigenlayer`]: https://docs.rs/blueprint-client-eigenlayer
 [`blueprint-client-evm`]: https://docs.rs/blueprint-client-evm
@@ -92,16 +106,23 @@ tools for networking and testing.
 [`blueprint-crypto-bls`]: https://docs.rs/blueprint-crypto-bls
 [`blueprint-crypto-bn254`]: https://docs.rs/blueprint-crypto-bn254
 [`blueprint-crypto-ed25519`]: https://docs.rs/blueprint-crypto-ed25519
+[`blueprint-crypto-hashing`]: https://docs.rs/blueprint-crypto-hashing
 [`blueprint-crypto-k256`]: https://docs.rs/blueprint-crypto-k256
 [`blueprint-crypto-sr25519`]: https://docs.rs/blueprint-crypto-sr25519
 [`blueprint-keystore`]: https://docs.rs/blueprint-keystore
 [`blueprint-macros`]: https://docs.rs/blueprint-macros
 [`blueprint-manager`]: https://docs.rs/blueprint-manager
+[`blueprint-manager-bridge`]: https://docs.rs/blueprint-manager-bridge
 [`blueprint-metrics`]: https://docs.rs/blueprint-metrics
 [`blueprint-metrics-rpc-calls`]: https://docs.rs/blueprint-metrics-rpc-calls
 [`blueprint-networking`]: https://docs.rs/blueprint-networking
 [`blueprint-networking-round-based-extension`]: https://docs.rs/blueprint-networking-round-based-extension
+[`blueprint-networking-agg-sig-gossip`]: https://docs.rs/blueprint-networking-agg-sig-gossip
+[`blueprint-networking-gossip-primitives`]: https://docs.rs/blueprint-networking-gossip-primitives
+[`blueprint-pricing-engine`]: https://docs.rs/blueprint-pricing-engine
 [`blueprint-producers-extra`]: https://docs.rs/blueprint-producers-extra
+[`blueprint-profiling`]: https://docs.rs/blueprint-profiling
+[`blueprint-qos`]: https://docs.rs/blueprint-qos
 [`blueprint-router`]: https://docs.rs/blueprint-router
 [`blueprint-runner`]: https://docs.rs/blueprint-runner
 [`blueprint-std`]: https://docs.rs/blueprint-std
@@ -110,6 +131,11 @@ tools for networking and testing.
 [`blueprint-tangle-evm-extra`]: https://docs.rs/blueprint-tangle-evm-extra
 [`blueprint-evm-extra`]: https://docs.rs/blueprint-evm-extra
 [`blueprint-eigenlayer-extra`]: https://docs.rs/blueprint-eigenlayer-extra
+[`blueprint-faas`]: https://docs.rs/blueprint-faas
+[`blueprint-auth`]: https://docs.rs/blueprint-auth
+[`blueprint-remote-providers`]: https://docs.rs/blueprint-remote-providers
+[`blueprint-tangle-aggregation-svc`]: https://docs.rs/blueprint-tangle-aggregation-svc
+[`blueprint-tangle-extra`]: https://docs.rs/blueprint-tangle-extra
 [`blueprint-testing-utils`]: https://docs.rs/blueprint-testing-utils
 [`blueprint-core-testing-utils`]: https://docs.rs/blueprint-core-testing-utils
 [`blueprint-anvil-testing-utils`]: https://docs.rs/blueprint-anvil-testing-utils
@@ -196,13 +222,6 @@ cargo tangle blueprint preregister \
   --keystore-path ./keystore \
   --settings-file ./settings.env
 
-The preregistration flow mirrors the production pipeline: the CLI boots the manager
-in `REGISTRATION_MODE_ON`, launches the blueprint with `REGISTRATION_CAPTURE_ONLY=1`,
-and waits for it to emit `registration_inputs.bin` under
-`./data/blueprint-<id>-*/`. Each blueprint can use the helper
-`blueprint_sdk::registration::write_registration_inputs` to persist its TLV payload
-when `BlueprintEnvironment::registration_mode()` returns `true`.
-
 # Run the blueprint manager against local Anvil (or a real RPC)
 cargo tangle blueprint run \
   --protocol tangle-evm \
@@ -210,6 +229,14 @@ cargo tangle blueprint run \
   --ws-rpc-url ws://127.0.0.1:8546 \
   --keystore-path ./keystore \
   --settings-file ./settings.env
+```
+
+The preregistration flow mirrors the production pipeline: the CLI boots the manager
+in `REGISTRATION_MODE_ON`, launches the blueprint with `REGISTRATION_CAPTURE_ONLY=1`,
+and waits for it to emit `registration_inputs.bin` under
+`./data/blueprint-<id>-*/`. Each blueprint can use the helper
+`blueprint_sdk::registration::write_registration_inputs` to persist its TLV payload
+when `BlueprintEnvironment::registration_mode()` returns `true`.
 
 #### Runtime Preferences
 
@@ -222,6 +249,8 @@ Every CLI action that submits a transaction now reports `tx_submitted` / `tx_con
 lines (or JSON objects when `--json` is used), making it easy to track hashes and block
 confirmations in logs or CI pipelines.
 
+And your blueprint is ready to go!
+
 ### Deploying to Testnet/Mainnet
 
 When targeting real Tangle networks, provide a blueprint definition manifest that mirrors the on-chain schema. The file can be JSON, YAML, or TOML and must describe the blueprint metadata, jobs, and artifact sources (container images or native binaries). Once authored, pass it via `--definition`:
@@ -233,9 +262,6 @@ cargo tangle blueprint deploy tangle \
 ```
 
 At minimum the manifest requires `metadata_uri`, `manager`, at least one job, and one source. Fields such as schemas or blueprint-specific config are optional and default to empty values. See `MIGRATION_EVM_ONLY.md` for a detailed example.
-```
-
-And your blueprint is ready to go!
 
 ### 🧪 Testing Locally
 
