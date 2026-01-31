@@ -28,3 +28,6 @@ tokio = { workspace = true, features = ["full"] }
 default = ["std", "tracing"]
 std = ["futures-util/std"]
 tracing = []
+
+[lints]
+workspace = true

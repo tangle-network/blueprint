@@ -30,3 +30,6 @@ sr25519-schnorrkel = []
 bls = []
 zebra = []
 clap = ["dep:clap"]
+
+[lints]
+workspace = true

@@ -52,3 +52,6 @@ aggregation = [
 	"blueprint-crypto-bls/aggregation",
 	"blueprint-crypto-bn254/aggregation",
 ]
+
+[lints]
+workspace = true

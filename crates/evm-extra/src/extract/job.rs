@@ -1,7 +1,7 @@
 //! Job-specific extractors for EVM
 //!
 //! Provides extractors for job-related data from EVM events, including
-//! ServiceId, CallId, JobIndex, and Caller (as EVM Address).
+//! `ServiceId`, `CallId`, `JobIndex`, and `Caller` (as EVM Address).
 
 use alloy_primitives::Address;
 use blueprint_core::{

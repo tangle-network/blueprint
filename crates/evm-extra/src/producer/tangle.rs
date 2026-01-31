@@ -2,7 +2,7 @@
 //!
 //! This module provides a producer that specifically listens for Tangle's `JobSubmitted`
 //! events from the Jobs contract and converts them to `JobCall`s with proper metadata
-//! (service_id, call_id, job_index, caller, inputs).
+//! (`service_id`, `call_id`, `job_index`, `caller`, `inputs`).
 
 use alloc::collections::VecDeque;
 use alloy_primitives::Address;
@@ -141,7 +141,7 @@ impl core::fmt::Debug for ProducerState {
 /// A producer that polls for Tangle `JobSubmitted` events and converts them to `JobCall`s.
 ///
 /// This producer specifically listens for the `JobSubmitted` event from the Tangle Jobs contract
-/// and extracts all job metadata (service_id, call_id, job_index, caller, inputs) into the
+/// and extracts all job metadata (`service_id`, `call_id`, `job_index`, `caller`, `inputs`) into the
 /// `JobCall` metadata and extensions.
 #[derive(Debug)]
 pub struct TangleProducer<P: Provider> {
@@ -334,7 +334,7 @@ impl<P: Provider + 'static> Stream for TangleProducer<P> {
     }
 }
 
-/// Converts JobSubmitted logs to JobCalls with proper metadata
+/// Converts `JobSubmitted` logs to `JobCalls` with proper metadata
 fn logs_to_tangle_job_calls(logs: Vec<Log>) -> Vec<JobCall> {
     let mut job_calls = Vec::new();
 
@@ -368,7 +368,7 @@ fn logs_to_tangle_job_calls(logs: Vec<Log>) -> Vec<JobCall> {
         // Insert job-specific metadata
         metadata.insert(ServiceId::METADATA_KEY, data.serviceId);
         metadata.insert(CallId::METADATA_KEY, data.callId);
-        metadata.insert(JobIndex::METADATA_KEY, data.jobIndex as u64);
+        metadata.insert(JobIndex::METADATA_KEY, u64::from(data.jobIndex));
         metadata.insert(Caller::METADATA_KEY, data.caller.as_slice());
 
         // Build extensions - store inputs and full log
@@ -377,7 +377,7 @@ fn logs_to_tangle_job_calls(logs: Vec<Log>) -> Vec<JobCall> {
         extensions.insert(vec![log.clone()]);
 
         // Create job call with job_index as the ID and inputs as body
-        let parts = Parts::new(data.jobIndex as u32)
+        let parts = Parts::new(u32::from(data.jobIndex))
             .with_metadata(metadata)
             .with_extensions(extensions);
 

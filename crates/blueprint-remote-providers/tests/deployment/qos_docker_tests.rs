@@ -301,7 +301,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
               
         // Simulate squaring jobs for metrics
         if counter % 3 == 0 {
-            let _ = square(blueprint_sdk::tangle::extract::TangleArg(counter)).await;
+            let _ = square(blueprint_sdk::tangle_evm::extract::TangleEvmArg(counter)).await;
         }
     }
 }

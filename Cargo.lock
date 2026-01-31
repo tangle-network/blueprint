@@ -3259,6 +3259,7 @@ dependencies = [
  "nftables",
  "nix 0.30.1",
  "prometheus",
+ "rand 0.8.5",
  "reqwest 0.12.25",
  "rtnetlink 0.16.0",
  "rustls 0.23.35",

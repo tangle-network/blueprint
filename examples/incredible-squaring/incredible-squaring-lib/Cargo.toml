@@ -17,7 +17,7 @@ axum = { workspace = true, features = ["http1", "tokio"] }
 blueprint-sdk = { workspace = true, features = ["testing", "tangle-evm"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 color-eyre = { workspace = true }
-blueprint-anvil-testing-utils = { workspace = true, features = ["aggregation"] }
+blueprint-anvil-testing-utils = { workspace = true, features = ["aggregation", "faas"] }
 blueprint-client-tangle-evm = { workspace = true }
 alloy-sol-types = { workspace = true }
 alloy-primitives = { workspace = true }
@@ -51,3 +51,6 @@ faas = []
 [package.metadata.blueprint]
 manager = { Evm = "ExperimentalBlueprint" }
 master_revision = "Latest"
+
+[lints]
+workspace = true

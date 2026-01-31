@@ -50,3 +50,4 @@ tonic = { workspace = true }
 default = ["tracing"]
 tracing = ["blueprint-core/tracing"]
 aggregation = ["blueprint-tangle-evm-extra/aggregation"]
+faas = ["blueprint-runner/faas"]

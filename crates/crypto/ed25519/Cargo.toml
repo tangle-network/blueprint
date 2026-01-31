@@ -31,3 +31,6 @@ std = [
 	"serde_bytes/std",
 	"ed25519-zebra/std",
 ]
+
+[lints]
+workspace = true

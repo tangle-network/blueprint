@@ -34,3 +34,6 @@ std = [
     "blueprint-keystore/std",
     "tokio/full",
 ]
+
+[lints]
+workspace = true

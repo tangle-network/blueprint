@@ -64,6 +64,8 @@ pub struct BlueprintHarnessBuilder {
     faulty_count: usize,
     #[cfg(feature = "aggregation")]
     aggregating_consumer: Option<AggregatingConsumerHarnessConfig>,
+    #[cfg(feature = "faas")]
+    faas_executors: Vec<(u32, std::sync::Arc<dyn blueprint_runner::faas::FaasExecutor>)>,
 }
 
 impl BlueprintHarnessBuilder {
@@ -80,6 +82,8 @@ impl BlueprintHarnessBuilder {
             faulty_count: 0,
             #[cfg(feature = "aggregation")]
             aggregating_consumer: None,
+            #[cfg(feature = "faas")]
+            faas_executors: Vec::new(),
         }
     }
 
@@ -127,6 +131,32 @@ impl BlueprintHarnessBuilder {
     #[must_use]
     pub fn aggregating_consumer(mut self, config: AggregatingConsumerHarnessConfig) -> Self {
         self.aggregating_consumer = Some(config);
+        self
+    }
+
+    /// Register a job to use FaaS execution.
+    ///
+    /// This allows testing FaaS-delegated jobs alongside local jobs in the same test environment.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use blueprint_runner::faas::HttpFaasExecutor;
+    ///
+    /// let harness = BlueprintHarness::builder(router)
+    ///     .with_faas_executor(1, HttpFaasExecutor::new("http://localhost:8080"))
+    ///     .spawn()
+    ///     .await?;
+    /// ```
+    #[cfg(feature = "faas")]
+    #[must_use]
+    pub fn with_faas_executor(
+        mut self,
+        job_id: u32,
+        executor: impl blueprint_runner::faas::FaasExecutor + 'static,
+    ) -> Self {
+        self.faas_executors
+            .push((job_id, std::sync::Arc::new(executor)));
         self
     }
 
@@ -467,6 +497,8 @@ impl BlueprintHarness {
             faulty_count,
             #[cfg(feature = "aggregation")]
             aggregating_consumer,
+            #[cfg(feature = "faas")]
+            faas_executors,
         } = builder;
 
         let deployment = start_tangle_evm_testnet(include_anvil_logs)
@@ -538,14 +570,21 @@ impl BlueprintHarness {
             TangleEvmProducer::from_block((*runner_client).clone(), runner_service_id, start_block)
                 .with_poll_interval(poll_interval);
 
+        #[cfg(feature = "faas")]
+        let runner_faas_executors = faas_executors;
+
         let runner_task = tokio::spawn(async move {
-            if let Err(err) = BlueprintRunner::builder(HarnessConfig, runner_env)
+            let mut builder = BlueprintRunner::builder(HarnessConfig, runner_env)
                 .router(runner_router)
                 .producer(producer)
-                .consumer(consumer)
-                .run()
-                .await
-            {
+                .consumer(consumer);
+
+            #[cfg(feature = "faas")]
+            for (job_id, executor) in runner_faas_executors {
+                builder = builder.with_faas_executor(job_id, executor);
+            }
+
+            if let Err(err) = builder.run().await {
                 error!("Blueprint runner exited unexpectedly: {err}");
             }
         });

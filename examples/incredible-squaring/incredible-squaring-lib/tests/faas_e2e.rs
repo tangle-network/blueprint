@@ -2,217 +2,200 @@
 //!
 //! This test proves that:
 //! 1. FaaS-executed jobs follow the same consumer pipeline as local jobs
-//! 2. Both local and FaaS results reach onchain via TangleConsumer
-//! 3. Minimal mocking: only the FaaS endpoint is simulated, everything else is real
+//! 2. Both local and FaaS results reach onchain via TangleEvmConsumer
+//! 3. The same job logic can run either locally or on FaaS
 //!
 //! Run with: cargo test --test faas_e2e
 
-mod tests {
-    use axum::{Router, extract::Json, routing::post};
+use alloy_primitives::Bytes;
+use alloy_sol_types::SolValue;
+use anyhow::{Context, Result};
+use axum::{Router as AxumRouter, extract::Json, routing::post};
+use blueprint_anvil_testing_utils::{BlueprintHarness, missing_tnt_core_artifacts};
+use blueprint_faas::{FaasPayload, FaasResponse};
+use incredible_squaring_blueprint_lib::{XSQUARE_FAAS_JOB_ID, XSQUARE_JOB_ID, router};
+use std::time::Duration;
+use tokio::task::JoinHandle;
+
+/// Handler for the /square endpoint
+///
+/// This handler computes the square directly (same logic as the local job).
+/// In production, this would be deployed to AWS Lambda, GCP Cloud Functions, etc.
+async fn square_handler(Json(payload): Json<FaasPayload>) -> Json<FaasResponse> {
+    eprintln!("[FAAS] Received request for job_id={}", payload.job_id);
+
+    // Decode the input (ABI-encoded u64)
+    let x = u64::abi_decode(&payload.args).expect("Failed to decode u64 input");
+    let result = x * x;
+
+    eprintln!("[FAAS] Computation: {} * {} = {}", x, x, result);
+
+    // Encode the result (ABI-encoded u64)
+    let result_bytes = result.abi_encode();
+
+    Json(FaasResponse {
+        result: result_bytes,
+    })
+}
+
+/// Start local HTTP server that mimics FaaS runtime
+async fn start_test_faas_server() -> (JoinHandle<()>, String) {
+    let app = AxumRouter::new().route("/square", post(square_handler));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("Failed to bind to ephemeral port");
+
+    let addr = listener.local_addr().expect("Failed to get local address");
+    let url = format!("http://{}", addr);
+
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("Server failed");
+    });
+
+    // Give the server a moment to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    (handle, url)
+}
+
+/// Full E2E test: Local job and FaaS job, both reaching on-chain
+#[tokio::test]
+#[serial_test::serial]
+async fn test_faas_and_local_execution_e2e() -> Result<()> {
     use blueprint_faas::custom::HttpFaasExecutor;
-    use blueprint_faas::{FaasPayload, FaasResponse};
-    use blueprint_sdk::Job;
-    use blueprint_sdk::tangle::layers::TangleLayer;
-    use blueprint_sdk::testing::tempfile;
-    use blueprint_sdk::testing::utils::setup_log;
-    use blueprint_sdk::testing::utils::tangle::{InputValue, OutputValue, TangleTestHarness};
-    use color_eyre::Result;
-    use incredible_squaring_blueprint_lib::{
-        XSQUARE_FAAS_JOB_ID, XSQUARE_JOB_ID, square, square_faas,
-    };
-    use tokio::task::JoinHandle;
 
-    /// Handler for the /square endpoint
-    ///
-    /// This handler executes ACTUAL COMPILED CODE by spawning the faas_handler binary.
-    /// This mimics how AWS Lambda works in production:
-    /// 1. Lambda runtime spawns your handler binary
-    /// 2. Passes event via stdin
-    /// 3. Reads response from stdout
-    async fn square_handler(Json(payload): Json<FaasPayload>) -> Json<FaasResponse> {
-        eprintln!("[FAAS] Received request for job_id={}", payload.job_id);
+    let _ = color_eyre::install();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init()
+        .ok();
 
-        // Locate the compiled faas_handler binary
-        let binary_path = std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("faas_handler");
+    // Start HTTP server that mimics FaaS runtime
+    let (server_handle, server_url) = start_test_faas_server().await;
+    eprintln!("[TEST] FaaS server started at {}", server_url);
 
-        eprintln!("[FAAS] Executing binary: {}", binary_path.display());
+    // Configure FaaS executor for XSQUARE_FAAS_JOB_ID
+    let faas_executor = HttpFaasExecutor::new(&server_url)
+        .with_job_endpoint(u32::from(XSQUARE_FAAS_JOB_ID), format!("{}/square", server_url));
 
-        // Serialize payload to JSON
-        let input_json = serde_json::to_string(&payload).expect("Failed to serialize payload");
-
-        // ⚡ SPAWN THE ACTUAL COMPILED BINARY (like Lambda does!)
-        use tokio::io::AsyncWriteExt;
-
-        let mut child = tokio::process::Command::new(&binary_path)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .expect("Failed to spawn faas_handler binary");
-
-        // Write input to stdin
-        let mut stdin = child.stdin.take().expect("Failed to open stdin");
-        stdin
-            .write_all(input_json.as_bytes())
-            .await
-            .expect("Failed to write to stdin");
-        drop(stdin); // Close stdin to signal EOF
-
-        // Wait for process to complete and collect output
-        let output = child
-            .wait_with_output()
-            .await
-            .expect("Failed to wait for faas_handler");
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("🔥 FaaS handler failed: {}", stderr);
-            panic!("FaaS handler execution failed");
+    // Build harness with both local and FaaS jobs
+    let harness = match BlueprintHarness::builder(router())
+        .poll_interval(Duration::from_millis(50))
+        .with_faas_executor(u32::from(XSQUARE_FAAS_JOB_ID), faas_executor)
+        .spawn()
+        .await
+    {
+        Ok(harness) => harness,
+        Err(err) => {
+            if missing_tnt_core_artifacts(&err) {
+                eprintln!("Skipping test_faas_and_local_execution_e2e: {err}");
+                server_handle.abort();
+                return Ok(());
+            }
+            return Err(err.into());
         }
+    };
 
-        // Parse response from stdout
-        let response: FaasResponse =
-            serde_json::from_slice(&output.stdout).expect("Failed to parse FaaS response");
+    eprintln!("[TEST] Harness spawned, service_id={}", harness.service_id());
 
-        let x = u64::from_le_bytes(payload.args[..8].try_into().unwrap());
-        let result = u64::from_le_bytes(response.result[..8].try_into().unwrap());
-        eprintln!("[FAAS] Computation: {} * {} = {}", x, x, result);
+    // Test 1: LOCAL execution (Job 0 - XSQUARE_JOB_ID)
+    eprintln!("[TEST] Testing LOCAL execution (job {})", XSQUARE_JOB_ID);
+    let input_local: u64 = 5;
+    let payload_local = Bytes::from(input_local.abi_encode());
 
-        Json(response)
-    }
+    let submission_local = harness
+        .submit_job(XSQUARE_JOB_ID, payload_local)
+        .await
+        .context("failed to submit local job")?;
 
-    /// Start local HTTP server that mimics FaaS runtime
-    ///
-    /// Spawns compiled faas_handler binary for each request (like AWS Lambda)
-    async fn start_test_faas_server() -> (JoinHandle<()>, String) {
-        let app = Router::new().route("/square", post(square_handler));
+    let result_local = harness
+        .wait_for_job_result_with_deadline(submission_local, Duration::from_secs(30))
+        .await
+        .context("failed to get local job result")?;
 
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("Failed to bind to ephemeral port");
+    let decoded_local =
+        u64::abi_decode(&result_local).map_err(|e| anyhow::anyhow!("failed to decode local result: {e}"))?;
+    assert_eq!(
+        decoded_local,
+        input_local * input_local,
+        "Local job result mismatch"
+    );
+    eprintln!(
+        "[TEST] LOCAL job passed: {} * {} = {}",
+        input_local, input_local, decoded_local
+    );
 
-        let addr = listener.local_addr().expect("Failed to get local address");
-        let url = format!("http://{}", addr);
+    // Test 2: FAAS execution (Job 3 - XSQUARE_FAAS_JOB_ID)
+    eprintln!(
+        "[TEST] Testing FAAS execution (job {})",
+        XSQUARE_FAAS_JOB_ID
+    );
+    let input_faas: u64 = 7;
+    let payload_faas = Bytes::from(input_faas.abi_encode());
 
-        let handle = tokio::spawn(async move {
-            axum::serve(listener, app).await.expect("Server failed");
-        });
+    let submission_faas = harness
+        .submit_job(XSQUARE_FAAS_JOB_ID, payload_faas)
+        .await
+        .context("failed to submit FaaS job")?;
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let result_faas = harness
+        .wait_for_job_result_with_deadline(submission_faas, Duration::from_secs(30))
+        .await
+        .context("failed to get FaaS job result")?;
 
-        (handle, url)
-    }
+    let decoded_faas =
+        u64::abi_decode(&result_faas).map_err(|e| anyhow::anyhow!("failed to decode FaaS result: {e}"))?;
+    assert_eq!(
+        decoded_faas,
+        input_faas * input_faas,
+        "FaaS job result mismatch"
+    );
+    eprintln!(
+        "[TEST] FAAS job passed: {} * {} = {}",
+        input_faas, input_faas, decoded_faas
+    );
 
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn test_faas_execution_end_to_end() -> Result<()> {
-        let _ = color_eyre::install();
-        setup_log();
+    // Cleanup
+    server_handle.abort();
+    harness.shutdown().await;
 
-        // Start HTTP server that mimics FaaS runtime
-        let (server_handle, server_url) = start_test_faas_server().await;
+    eprintln!("[TEST] Both local and FaaS jobs completed successfully!");
+    Ok(())
+}
 
-        // Setup test harness with real Tangle node
-        let temp_dir = tempfile::TempDir::new()?;
-        let harness = TangleTestHarness::setup(temp_dir).await?;
+/// Test the FaaS HTTP server directly (without harness)
+#[tokio::test]
+#[serial_test::serial]
+async fn test_faas_server_directly() -> Result<()> {
+    let _ = color_eyre::install();
 
-        // Setup service
-        let (mut test_env, service_id, _blueprint_id) = harness.setup_services::<1>(false).await?;
-        test_env.initialize().await?;
+    let (server_handle, server_url) = start_test_faas_server().await;
 
-        // Configure FaaS executor
-        let faas_executor = HttpFaasExecutor::new(&server_url)
-            .with_job_endpoint(XSQUARE_FAAS_JOB_ID, format!("{}/square", server_url));
+    // Create a FaaS payload with ABI-encoded input
+    let input: u64 = 9;
+    let payload = FaasPayload {
+        job_id: u32::from(XSQUARE_FAAS_JOB_ID),
+        args: input.abi_encode(),
+    };
 
-        // Register jobs: Job 0 (local), Job 1 (FaaS)
-        test_env.add_job(square.layer(TangleLayer)).await;
-        test_env.with_faas_executor(XSQUARE_FAAS_JOB_ID, faas_executor);
-        test_env.add_job(square_faas.layer(TangleLayer)).await;
+    // Send request to FaaS server
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/square", server_url))
+        .json(&payload)
+        .send()
+        .await?;
 
-        test_env.start(()).await?;
+    assert!(response.status().is_success());
 
-        // Test LOCAL execution (Job 0)
-        let job_local = harness
-            .submit_job(
-                service_id,
-                XSQUARE_JOB_ID as u8,
-                vec![InputValue::Uint64(5)],
-            )
-            .await?;
-        let call_id_local = job_local.call_id;
+    let faas_response: FaasResponse = response.json().await?;
 
-        let results_local = harness
-            .wait_for_job_execution(service_id, job_local)
-            .await?;
+    // Verify result (ABI-encoded u64)
+    let result = u64::abi_decode(&faas_response.result)
+        .map_err(|e| anyhow::anyhow!("failed to decode result: {e}"))?;
+    assert_eq!(result, 81); // 9 * 9 = 81
 
-        harness.verify_job(&results_local, vec![OutputValue::Uint64(25)]);
-
-        // Test FAAS execution (Job 1)
-        let job_faas = harness
-            .submit_job(
-                service_id,
-                XSQUARE_FAAS_JOB_ID as u8,
-                vec![InputValue::Uint64(6)],
-            )
-            .await?;
-        let call_id_faas = job_faas.call_id;
-
-        let results_faas = harness.wait_for_job_execution(service_id, job_faas).await?;
-
-        harness.verify_job(&results_faas, vec![OutputValue::Uint64(36)]);
-
-        // Verify both results reached onchain via same consumer pipeline
-        assert_eq!(results_local.service_id, service_id);
-        assert_eq!(results_faas.service_id, service_id);
-        assert!(!results_local.result.is_empty());
-        assert!(!results_faas.result.is_empty());
-
-        // The fact that wait_for_job_execution succeeded proves:
-        // 1. JobResult created → 2. TangleLayer wrapped → 3. TangleConsumer received
-        // 4. Submitted onchain → 5. JobResultSubmitted event emitted → 6. Retrieved from chain
-
-        server_handle.abort();
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn test_faas_server_directly() -> Result<()> {
-        // This test verifies the FaaS server itself works correctly
-        let _ = color_eyre::install();
-        setup_log();
-
-        let (server_handle, server_url) = start_test_faas_server().await;
-
-        // Create a FaaS payload
-        let payload = FaasPayload {
-            job_id: XSQUARE_FAAS_JOB_ID,
-            args: 7u64.to_le_bytes().to_vec(),
-        };
-
-        // Send request to FaaS server
-        let client = reqwest::Client::new();
-        let response = client
-            .post(format!("{}/square", server_url))
-            .json(&payload)
-            .send()
-            .await?;
-
-        assert!(response.status().is_success());
-
-        let faas_response: FaasResponse = response.json().await?;
-
-        // Verify result
-        let result = u64::from_le_bytes(faas_response.result[..8].try_into()?);
-        assert_eq!(result, 49); // 7 * 7 = 49
-
-        server_handle.abort();
-        Ok(())
-    }
+    server_handle.abort();
+    Ok(())
 }

@@ -53,3 +53,6 @@ client = ["reqwest"]
 tokio-test = "0.4"
 reqwest = { workspace = true, features = ["json"] }
 tempfile = "3.10"
+
+[lints]
+workspace = true

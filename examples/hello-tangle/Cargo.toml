@@ -17,3 +17,6 @@ tokio = { workspace = true, features = ["sync"] }
 anyhow = { workspace = true }
 blueprint-anvil-testing-utils = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

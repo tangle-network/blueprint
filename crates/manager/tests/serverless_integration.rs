@@ -7,6 +7,9 @@
 //! - `FaaS` compatibility determination
 //!
 //! NO MOCKS - All tests validate real computation and decision-making logic.
+//!
+//! Requires the `remote-providers` feature to be enabled.
+#![cfg(feature = "remote-providers")]
 
 /// Test that blueprint analyzer correctly identifies FaaS-compatible jobs
 /// based on REAL resource constraints and timing requirements.

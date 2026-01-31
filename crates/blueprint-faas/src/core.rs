@@ -228,6 +228,53 @@ impl Default for FaasConfig {
 /// Type-erased FaaS executor for runtime polymorphism
 pub type DynFaasExecutor = Arc<dyn FaasExecutor>;
 
+/// Blanket implementation for `Arc<T>` where `T: FaasExecutor`.
+///
+/// This allows `Arc<dyn FaasExecutor>` to be passed directly to
+/// `BlueprintRunner::with_faas_executor()`.
+#[async_trait::async_trait]
+impl<T: FaasExecutor + ?Sized> FaasExecutor for Arc<T> {
+    async fn invoke(&self, job_call: JobCall) -> Result<JobResult, FaasError> {
+        (**self).invoke(job_call).await
+    }
+
+    async fn invoke_with_metrics(
+        &self,
+        job_call: JobCall,
+    ) -> Result<(JobResult, FaasMetrics), FaasError> {
+        (**self).invoke_with_metrics(job_call).await
+    }
+
+    async fn deploy_job(
+        &self,
+        job_id: u32,
+        binary: &[u8],
+        config: &FaasConfig,
+    ) -> Result<FaasDeployment, FaasError> {
+        (**self).deploy_job(job_id, binary, config).await
+    }
+
+    async fn health_check(&self, job_id: u32) -> Result<bool, FaasError> {
+        (**self).health_check(job_id).await
+    }
+
+    async fn warm(&self, job_id: u32) -> Result<(), FaasError> {
+        (**self).warm(job_id).await
+    }
+
+    async fn get_deployment(&self, job_id: u32) -> Result<FaasDeployment, FaasError> {
+        (**self).get_deployment(job_id).await
+    }
+
+    async fn undeploy_job(&self, job_id: u32) -> Result<(), FaasError> {
+        (**self).undeploy_job(job_id).await
+    }
+
+    fn provider_name(&self) -> &str {
+        (**self).provider_name()
+    }
+}
+
 /// Registry of FaaS executors by job ID
 #[derive(Default)]
 pub struct FaasRegistry {

@@ -33,3 +33,6 @@ std = [
 	"serde_bytes/std",
 	"k256/std",
 ]
+
+[lints]
+workspace = true

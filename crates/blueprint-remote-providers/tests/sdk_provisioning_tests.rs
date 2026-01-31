@@ -3,11 +3,7 @@
 //! Tests VM provisioning using official cloud provider SDKs (AWS, GCP)
 //! with replay clients for deterministic testing.
 
-use blueprint_remote_providers::{
-    // providers::aws::provisioner::AwsProvisioner,
-    // providers::gcp::provisioner::GcpProvisioner,
-    core::resources::ResourceSpec,
-};
+use blueprint_remote_providers::core::resources::ResourceSpec;
 use serial_test::serial;
 use std::time::Duration;
 use tokio::time::timeout;

@@ -20,3 +20,6 @@ serde_json.workspace = true
 incredible-squaring-blueprint-lib.workspace = true
 blueprint-sdk = { workspace = true, features = ["macros", "build", "testing"] }
 blueprint-profiling.workspace = true
+
+[lints]
+workspace = true

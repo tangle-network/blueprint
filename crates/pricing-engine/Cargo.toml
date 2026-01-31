@@ -91,3 +91,6 @@ protobuf-src = "2.1"
 default = ["std"]
 std = []
 pricing-engine-e2e-tests = []
+
+[lints]
+workspace = true

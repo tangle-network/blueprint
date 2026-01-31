@@ -1,7 +1,7 @@
 //! Event producers for EVM
 //!
 //! Provides both polling and subscription-based producers for EVM events.
-//! Includes a specialized `TangleProducer` for listening to Tangle JobSubmitted events.
+//! Includes a specialized `TangleProducer` for listening to Tangle `JobSubmitted` events.
 
 mod polling;
 mod tangle;

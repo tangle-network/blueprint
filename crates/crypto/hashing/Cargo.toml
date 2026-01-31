@@ -26,3 +26,6 @@ std = [
 sha2-hasher = ["sha2"]
 sha3-hasher = ["sha3"]
 blake3-hasher = ["blake3"]
+
+[lints]
+workspace = true

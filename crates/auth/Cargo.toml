@@ -90,3 +90,6 @@ tracing = []
 name = "auth-server"
 path = "src/main.rs"
 required-features = ["standalone"]
+
+[lints]
+workspace = true

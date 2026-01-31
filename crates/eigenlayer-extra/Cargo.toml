@@ -63,3 +63,6 @@ tempfile = "3.0"
 [features]
 default = ["std"]
 std = []
+
+[lints]
+workspace = true

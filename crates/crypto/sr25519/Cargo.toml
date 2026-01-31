@@ -31,3 +31,6 @@ std = [
 	"serde_bytes/std",
 	"schnorrkel/std",
 ]
+
+[lints]
+workspace = true

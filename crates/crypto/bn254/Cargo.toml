@@ -45,3 +45,6 @@ std = [
 	"sha2/std",
 ]
 aggregation = []
+
+[lints]
+workspace = true

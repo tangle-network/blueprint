@@ -38,3 +38,6 @@ std = [
 	"tnt-bls/std",
 ]
 aggregation = ["sha2", "tnt-bls/std"]
+
+[lints]
+workspace = true
