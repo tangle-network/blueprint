@@ -328,7 +328,7 @@ jobs:
           # QoS and heartbeat integration
           cargo test -p blueprint-qos --test blueprint_integration_test -- --nocapture --test-threads=1
           # Client integration tests
-          cargo test -p blueprint-client-tangle --test integration -- --nocapture --test-threads=1
+          cargo test -p blueprint-client-tangle --test anvil -- --nocapture --test-threads=1
           # Producer/consumer flow tests
           cargo test -p blueprint-tangle-extra --test anvil_integration -- --nocapture --test-threads=1
 
