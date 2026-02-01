@@ -64,9 +64,18 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+        continue-on-error: true
 
-      - name: Verify Forge installation
-        run: forge --version
+      - name: Retry Foundry installation if needed
+        run: |
+          if ! command -v forge &> /dev/null; then
+            echo "Foundry not found, retrying installation..."
+            curl -L https://foundry.paradigm.xyz | bash
+            ~/.foundry/bin/foundryup --version stable
+          fi
+          forge --version
 
       - name: install rust
         uses: actions-rs/toolchain@v1
@@ -180,9 +189,18 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+        continue-on-error: true
 
-      - name: Verify Forge installation
-        run: forge --version
+      - name: Retry Foundry installation if needed
+        run: |
+          if ! command -v forge &> /dev/null; then
+            echo "Foundry not found, retrying installation..."
+            curl -L https://foundry.paradigm.xyz | bash
+            ~/.foundry/bin/foundryup --version stable
+          fi
+          forge --version
 
       - name: install rust
         uses: dtolnay/rust-toolchain@nightly
@@ -264,6 +282,18 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+        continue-on-error: true
+
+      - name: Retry Foundry installation if needed
+        run: |
+          if ! command -v forge &> /dev/null; then
+            echo "Foundry not found, retrying installation..."
+            curl -L https://foundry.paradigm.xyz | bash
+            ~/.foundry/bin/foundryup --version stable
+          fi
+          forge --version
 
       - name: Warm up Foundry image
         run: docker pull ghcr.io/foundry-rs/foundry:latest
@@ -326,6 +356,18 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+        continue-on-error: true
+
+      - name: Retry Foundry installation if needed
+        run: |
+          if ! command -v forge &> /dev/null; then
+            echo "Foundry not found, retrying installation..."
+            curl -L https://foundry.paradigm.xyz | bash
+            ~/.foundry/bin/foundryup --version stable
+          fi
+          forge --version
 
       - name: Warm up Foundry image
         run: docker pull ghcr.io/foundry-rs/foundry:latest
@@ -378,6 +420,18 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+        continue-on-error: true
+
+      - name: Retry Foundry installation if needed
+        run: |
+          if ! command -v forge &> /dev/null; then
+            echo "Foundry not found, retrying installation..."
+            curl -L https://foundry.paradigm.xyz | bash
+            ~/.foundry/bin/foundryup --version stable
+          fi
+          forge --version
 
       - name: Warm up Foundry image
         run: docker pull ghcr.io/foundry-rs/foundry:latest
@@ -420,6 +474,18 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+        continue-on-error: true
+
+      - name: Retry Foundry installation if needed
+        run: |
+          if ! command -v forge &> /dev/null; then
+            echo "Foundry not found, retrying installation..."
+            curl -L https://foundry.paradigm.xyz | bash
+            ~/.foundry/bin/foundryup --version stable
+          fi
+          forge --version
 
       - name: install rust
         uses: dtolnay/rust-toolchain@nightly
@@ -470,6 +536,18 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+        continue-on-error: true
+
+      - name: Retry Foundry installation if needed
+        run: |
+          if ! command -v forge &> /dev/null; then
+            echo "Foundry not found, retrying installation..."
+            curl -L https://foundry.paradigm.xyz | bash
+            ~/.foundry/bin/foundryup --version stable
+          fi
+          forge --version
 
       - name: Warm up Foundry image
         run: docker pull ghcr.io/foundry-rs/foundry:latest
