@@ -28,97 +28,121 @@ pub struct AnvilTestnet {
 }
 
 /// Start an Anvil container for testing with contract state loaded.
+/// Includes retry logic for transient Docker errors (e.g., image pull failures).
 #[allow(clippy::missing_panics_doc)] // TODO(serial): Return errors, not panics
 pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool) -> AnvilTestnet {
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY_MS: u64 = 2000;
+
     let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
-    let container = if let Some(state_json) = state_json {
-        // Create a temporary directory and write the state file
-        let state_path = temp_dir.path().join("state.json");
-        fs::write(&state_path, state_json).expect("Failed to write state file");
+    let state_path = temp_dir.path().join("state.json");
 
-        GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
-            .with_wait_for(WaitFor::message_on_stdout("Listening on"))
-            .with_exposed_port(8545.tcp())
-            .with_entrypoint("anvil")
-            .with_mount(testcontainers::core::Mount::bind_mount(
-                state_path.to_str().unwrap(),
-                "/state.json",
-            ))
-            .with_cmd([
-                "--host",
-                "0.0.0.0",
-                "--load-state",
-                "/state.json",
-                "--base-fee",
-                "0",
-                "--gas-price",
-                "0",
-                "--gas-limit",
-                "100000000",
-                "--code-size-limit",
-                "100000",
-                "--hardfork",
-                "cancun",
-            ])
-            .start()
-            .await
-            .expect("Error starting anvil container")
-    } else {
-        GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
-            .with_wait_for(WaitFor::message_on_stdout("Listening on"))
-            .with_exposed_port(8545.tcp())
-            .with_entrypoint("anvil")
-            .with_cmd([
-                "--host",
-                "0.0.0.0",
-                "--base-fee",
-                "0",
-                "--gas-price",
-                "0",
-                "--gas-limit",
-                "100000000",
-                "--code-size-limit",
-                "100000",
-                "--hardfork",
-                "cancun",
-            ])
-            .start()
-            .await
-            .expect("Error starting anvil container")
-    };
+    if let Some(json) = state_json {
+        fs::write(&state_path, json).expect("Failed to write state file");
+    }
 
-    if include_logs {
-        let reader = container.stdout(true);
-        tokio::task::spawn(async move {
-            let mut reader = reader;
-            let mut buffer = String::new();
-            while reader.read_line(&mut buffer).await.unwrap() > 0 {
-                info!("{:?}", buffer);
-                buffer.clear();
+    let mut last_error = String::new();
+    for attempt in 1..=MAX_RETRIES {
+        let result = if state_json.is_some() {
+            GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
+                .with_wait_for(WaitFor::message_on_stdout("Listening on"))
+                .with_exposed_port(8545.tcp())
+                .with_entrypoint("anvil")
+                .with_mount(testcontainers::core::Mount::bind_mount(
+                    state_path.to_str().unwrap(),
+                    "/state.json",
+                ))
+                .with_cmd([
+                    "--host",
+                    "0.0.0.0",
+                    "--load-state",
+                    "/state.json",
+                    "--base-fee",
+                    "0",
+                    "--gas-price",
+                    "0",
+                    "--gas-limit",
+                    "100000000",
+                    "--code-size-limit",
+                    "100000",
+                    "--hardfork",
+                    "cancun",
+                ])
+                .start()
+                .await
+        } else {
+            GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
+                .with_wait_for(WaitFor::message_on_stdout("Listening on"))
+                .with_exposed_port(8545.tcp())
+                .with_entrypoint("anvil")
+                .with_cmd([
+                    "--host",
+                    "0.0.0.0",
+                    "--base-fee",
+                    "0",
+                    "--gas-price",
+                    "0",
+                    "--gas-limit",
+                    "100000000",
+                    "--code-size-limit",
+                    "100000",
+                    "--hardfork",
+                    "cancun",
+                ])
+                .start()
+                .await
+        };
+
+        match result {
+            Ok(container) => {
+                if include_logs {
+                    let reader = container.stdout(true);
+                    tokio::task::spawn(async move {
+                        let mut reader = reader;
+                        let mut buffer = String::new();
+                        while reader.read_line(&mut buffer).await.unwrap_or(0) > 0 {
+                            info!("{:?}", buffer);
+                            buffer.clear();
+                        }
+                    });
+                }
+
+                mine_anvil_blocks(&container, 200).await;
+
+                let port = container
+                    .ports()
+                    .await
+                    .unwrap()
+                    .map_to_host_port_ipv4(8545)
+                    .unwrap();
+
+                let http_endpoint = format!("http://localhost:{port}").parse().unwrap();
+                println!("Anvil HTTP endpoint: {http_endpoint}");
+                let ws_endpoint = format!("ws://localhost:{port}").parse().unwrap();
+                println!("Anvil WS endpoint: {ws_endpoint}");
+
+                return AnvilTestnet {
+                    container,
+                    http_endpoint,
+                    ws_endpoint,
+                    temp_dir,
+                };
             }
-        });
+            Err(e) => {
+                last_error = format!("{e}");
+                if attempt < MAX_RETRIES {
+                    error!(
+                        "Anvil container start attempt {attempt}/{MAX_RETRIES} failed: {e}. Retrying in {RETRY_DELAY_MS}ms..."
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                }
+            }
+        }
     }
 
-    mine_anvil_blocks(&container, 200).await;
-
-    let port = container
-        .ports()
-        .await
-        .unwrap()
-        .map_to_host_port_ipv4(8545)
-        .unwrap();
-
-    let http_endpoint = format!("http://localhost:{port}").parse().unwrap();
-    println!("Anvil HTTP endpoint: {http_endpoint}");
-    let ws_endpoint = format!("ws://localhost:{port}").parse().unwrap();
-    println!("Anvil WS endpoint: {ws_endpoint}");
-
-    AnvilTestnet {
-        container,
-        http_endpoint,
-        ws_endpoint,
-        temp_dir,
-    }
+    panic!(
+        "Failed to start Anvil container after {MAX_RETRIES} attempts. Last error: {last_error}"
+    );
 }
 
 /// Mine Anvil blocks.
