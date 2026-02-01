@@ -364,6 +364,8 @@ mod tests {
         ) -> Result<ProvisionedInstance> {
             self.provision_calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            // Update the shared status to Running so subsequent health checks pass
+            *self.status.lock().unwrap() = InstanceStatus::Running;
             Ok(ProvisionedInstance {
                 id: self.provision_id.clone(),
                 provider: CloudProvider::AWS,
