@@ -13,8 +13,8 @@ use axum::{
 use blueprint_sdk::macros::debug_job;
 use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::tangle_evm::TangleEvmLayer;
-use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_sdk::tangle::TangleLayer;
+use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
 use blueprint_sdk::{Job, Router as BlueprintRouter};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -41,8 +41,8 @@ sol! {
 
 #[debug_job]
 pub async fn write_resource(
-    TangleEvmArg((resource_id, data, account)): TangleEvmArg<(String, String, Address)>,
-) -> TangleEvmResult<WriteResourceResult> {
+    TangleArg((resource_id, data, account)): TangleArg<(String, String, Address)>,
+) -> TangleResult<WriteResourceResult> {
     let account_hex = format_address(account);
     let store = resource_store();
     let mut guard = store.write().await;
@@ -51,7 +51,7 @@ pub async fn write_resource(
         .or_default()
         .insert(resource_id.clone(), data.clone());
 
-    TangleEvmResult(WriteResourceResult {
+    TangleResult(WriteResourceResult {
         ok: true,
         resourceId: resource_id,
         account: account_hex,
@@ -60,8 +60,8 @@ pub async fn write_resource(
 
 #[debug_job]
 pub async fn purchase_api_key(
-    TangleEvmArg((tier, account)): TangleEvmArg<(String, Address)>,
-) -> TangleEvmResult<PurchaseApiKeyResult> {
+    TangleArg((tier, account)): TangleArg<(String, Address)>,
+) -> TangleResult<PurchaseApiKeyResult> {
     let api_key = format!("sk_{}_{}", tier, uuid::Uuid::new_v4());
 
     let mut hasher = Sha256::new();
@@ -80,7 +80,7 @@ pub async fn purchase_api_key(
         }),
     );
 
-    TangleEvmResult(PurchaseApiKeyResult {
+    TangleResult(PurchaseApiKeyResult {
         ok: true,
         apiKeyHash: hash,
     })
@@ -90,11 +90,8 @@ pub async fn purchase_api_key(
 #[must_use]
 pub fn router() -> BlueprintRouter {
     BlueprintRouter::new()
-        .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleEvmLayer))
-        .route(
-            PURCHASE_API_KEY_JOB_ID,
-            purchase_api_key.layer(TangleEvmLayer),
-        )
+        .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleLayer))
+        .route(PURCHASE_API_KEY_JOB_ID, purchase_api_key.layer(TangleLayer))
 }
 
 #[derive(Clone)]
@@ -238,7 +235,7 @@ mod tests {
     #[tokio::test]
     async fn purchase_and_use_api_key() {
         api_key_store().write().await.clear();
-        let result = purchase_api_key(TangleEvmArg(("pro".into(), Address::ZERO))).await;
+        let result = purchase_api_key(TangleArg(("pro".into(), Address::ZERO))).await;
         assert!(result.ok);
         let api_key_hash = result.apiKeyHash.clone();
 
@@ -250,12 +247,7 @@ mod tests {
     #[tokio::test]
     async fn write_resource_records_data() {
         resource_store().write().await.clear();
-        write_resource(TangleEvmArg((
-            "doc".into(),
-            "payload".into(),
-            Address::ZERO,
-        )))
-        .await;
+        write_resource(TangleArg(("doc".into(), "payload".into(), Address::ZERO))).await;
 
         let guard = resource_store().read().await;
         assert_eq!(

@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 blueprint-client-eigenlayer = { workspace = true, optional = true }
 blueprint-client-evm = { workspace = true, optional = true }
-blueprint-client-tangle-evm = { workspace = true, optional = true }
+blueprint-client-tangle = { workspace = true, optional = true }
 blueprint-client-core = { workspace = true }
 blueprint-std.workspace = true
 
@@ -26,11 +26,11 @@ default = ["std"]
 std = [
 	"blueprint-client-eigenlayer?/std",
 	"blueprint-client-evm?/std",
-	"blueprint-client-tangle-evm?/std",
+	"blueprint-client-tangle?/std",
 	"blueprint-std/std",
 	"thiserror/std",
 ]
 
 eigenlayer = ["dep:blueprint-client-eigenlayer"]
 evm = ["dep:blueprint-client-evm"]
-tangle-evm = ["dep:blueprint-client-tangle-evm"]
+tangle = ["dep:blueprint-client-tangle"]

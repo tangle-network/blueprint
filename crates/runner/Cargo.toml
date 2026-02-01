@@ -59,7 +59,7 @@ eigensdk = { workspace = true, features = [
 ], optional = true }
 
 # Tangle EVM (v2)
-blueprint-client-tangle-evm = { workspace = true, optional = true }
+blueprint-client-tangle = { workspace = true, optional = true }
 alloy-provider = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -110,8 +110,8 @@ symbiotic = []
 ## Enable Tangle EVM (v2) support
 ##
 ## This is the EVM-native implementation for Tangle v2 contracts.
-tangle-evm = [
-    "dep:blueprint-client-tangle-evm",
+tangle = [
+    "dep:blueprint-client-tangle",
     "dep:alloy-primitives",
     "dep:alloy-provider",
     "dep:alloy-signer-local",

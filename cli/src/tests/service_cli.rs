@@ -6,8 +6,8 @@ use blueprint_crypto::{
 };
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_testing_utils::anvil::{
-    TangleEvmHarness, seed_operator_key,
-    tangle_evm::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID},
+    TangleHarness, seed_operator_key,
+    tangle::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID},
 };
 use color_eyre::eyre::{Result, eyre};
 use hex::FromHex;
@@ -23,7 +23,7 @@ use crate::{
     },
 };
 use alloy_primitives::{Address, U256};
-use blueprint_client_tangle_evm::{MembershipModel, PricingModel};
+use blueprint_client_tangle::{MembershipModel, PricingModel};
 
 const OPERATOR1_ADDRESS: &str = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const OPERATOR2_ADDRESS: &str = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
@@ -95,7 +95,7 @@ struct RequestDefaults {
 }
 
 async fn resolve_request_defaults(
-    harness: &TangleEvmHarness,
+    harness: &TangleHarness,
     keystore_path: &Path,
 ) -> Result<Option<RequestDefaults>> {
     let client_args = TangleClientArgs {

@@ -24,8 +24,8 @@
 
 use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::error::RunnerError;
-use blueprint_sdk::tangle_evm::TangleEvmLayer;
-use blueprint_sdk::tangle_evm::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_sdk::tangle::TangleLayer;
+use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
 use blueprint_sdk::{Job, Router};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Receiver;
@@ -79,9 +79,9 @@ pub const VERIFIED_XSQUARE_FAAS_JOB_ID: u8 = 4;
 /// # Returns
 ///
 /// Returns the square of the input value as ABI-encoded output
-pub async fn square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     let result = x * x;
-    TangleEvmResult(result)
+    TangleResult(result)
 }
 
 /// Square a number via FaaS (serverless execution)
@@ -103,9 +103,9 @@ pub async fn square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> 
 /// # Returns
 ///
 /// Returns the square of the input value
-pub async fn square_faas(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+pub async fn square_faas(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     let result = x * x;
-    TangleEvmResult(result)
+    TangleResult(result)
 }
 
 /// Square a number with verification (requires 2 operators)
@@ -128,9 +128,9 @@ pub async fn square_faas(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<
 /// # Returns
 ///
 /// Returns the square of the input value
-pub async fn verified_square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+pub async fn verified_square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     let result = x * x;
-    TangleEvmResult(result)
+    TangleResult(result)
 }
 
 /// Square a number with consensus (requires 3 operators)
@@ -153,9 +153,9 @@ pub async fn verified_square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmRes
 /// # Returns
 ///
 /// Returns the square of the input value
-pub async fn consensus_square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+pub async fn consensus_square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     let result = x * x;
-    TangleEvmResult(result)
+    TangleResult(result)
 }
 
 /// Square a number via FaaS with verification (requires 2 operators)
@@ -179,9 +179,9 @@ pub async fn consensus_square(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmRe
 /// # Returns
 ///
 /// Returns the square of the input value
-pub async fn verified_square_faas(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
+pub async fn verified_square_faas(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
     let result = x * x;
-    TangleEvmResult(result)
+    TangleResult(result)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -196,20 +196,17 @@ pub async fn verified_square_faas(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleE
 pub fn router() -> Router {
     Router::new()
         // Local execution jobs
-        .route(XSQUARE_JOB_ID, square.layer(TangleEvmLayer))
-        .route(
-            VERIFIED_XSQUARE_JOB_ID,
-            verified_square.layer(TangleEvmLayer),
-        )
+        .route(XSQUARE_JOB_ID, square.layer(TangleLayer))
+        .route(VERIFIED_XSQUARE_JOB_ID, verified_square.layer(TangleLayer))
         .route(
             CONSENSUS_XSQUARE_JOB_ID,
-            consensus_square.layer(TangleEvmLayer),
+            consensus_square.layer(TangleLayer),
         )
         // FaaS execution jobs
-        .route(XSQUARE_FAAS_JOB_ID, square_faas.layer(TangleEvmLayer))
+        .route(XSQUARE_FAAS_JOB_ID, square_faas.layer(TangleLayer))
         .route(
             VERIFIED_XSQUARE_FAAS_JOB_ID,
-            verified_square_faas.layer(TangleEvmLayer),
+            verified_square_faas.layer(TangleLayer),
         )
 }
 

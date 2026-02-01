@@ -61,7 +61,7 @@ ripemd = { workspace = true, optional = true }
 tempfile = { workspace = true }
 
 [features]
-default = ["std", "tangle-evm", "eigenlayer-full", "all-remote-signers"]
+default = ["std", "tangle", "eigenlayer-full", "all-remote-signers"]
 
 # Core features
 std = [
@@ -100,7 +100,7 @@ bn254 = ["dep:ark-bn254", "dep:ark-ec", "dep:ark-ff", "dep:ark-serialize", "blue
 # Protocol features
 evm = ["ecdsa", "dep:alloy-primitives", "dep:alloy-signer", "dep:alloy-signer-local", "dep:alloy-network"]
 
-tangle-evm = ["evm"]
+tangle = ["evm"]
 
 eigenlayer = ["evm", "dep:eigensdk", "dep:rust-bls-bn254", "bn254"]
 

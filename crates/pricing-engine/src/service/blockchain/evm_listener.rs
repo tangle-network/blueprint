@@ -9,8 +9,8 @@ use alloy_rpc_types::{Filter, Log};
 use alloy_sol_types::SolEvent;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use blueprint_client_tangle_evm::{
-    TangleEvmClient,
+use blueprint_client_tangle::{
+    TangleClient,
     contracts::{ITangle, ITangleTypes},
 };
 use blueprint_core::{info, warn};
@@ -27,25 +27,25 @@ pub trait EvmEventClient: Send + Sync {
 }
 
 #[async_trait]
-impl EvmEventClient for Arc<TangleEvmClient> {
+impl EvmEventClient for Arc<TangleClient> {
     fn contract_address(&self) -> Address {
         self.config.settings.tangle_contract
     }
 
     async fn get_logs(&self, filter: &Filter) -> Result<Vec<Log>> {
-        TangleEvmClient::get_logs(self, filter)
+        TangleClient::get_logs(self, filter)
             .await
             .map_err(|e| anyhow!(e.to_string()))
     }
 
     async fn get_service(&self, service_id: u64) -> Result<ITangleTypes::Service> {
-        TangleEvmClient::get_service(self, service_id)
+        TangleClient::get_service(self, service_id)
             .await
             .map_err(|e| anyhow!(e.to_string()))
     }
 }
 
-pub struct EvmEventListener<C = Arc<TangleEvmClient>>
+pub struct EvmEventListener<C = Arc<TangleClient>>
 where
     C: EvmEventClient + Clone + Send + Sync + 'static,
 {
@@ -55,8 +55,8 @@ where
     poll_interval: Duration,
 }
 
-impl EvmEventListener<Arc<TangleEvmClient>> {
-    pub fn new(client: Arc<TangleEvmClient>, event_tx: Sender<BlockchainEvent>) -> Self {
+impl EvmEventListener<Arc<TangleClient>> {
+    pub fn new(client: Arc<TangleClient>, event_tx: Sender<BlockchainEvent>) -> Self {
         Self::with_client(client, event_tx)
     }
 }

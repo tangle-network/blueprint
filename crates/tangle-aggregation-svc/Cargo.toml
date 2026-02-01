@@ -34,7 +34,7 @@ alloy-network = { workspace = true }
 alloy-contract = { workspace = true }
 
 # Tangle client
-blueprint-client-tangle-evm = { path = "../clients/tangle-evm" }
+blueprint-client-tangle = { path = "../clients/tangle" }
 
 # HTTP client (for client module)
 reqwest = { workspace = true, features = ["json"], optional = true }

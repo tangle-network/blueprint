@@ -125,7 +125,7 @@ where
         let this = self.get_mut();
 
         let JobResult::Ok { head, body } = &item else {
-            blueprint_core::trace!(target: "tangle-evm-consumer", "Discarding job result with error");
+            blueprint_core::trace!(target: "tangle-consumer", "Discarding job result with error");
             return Ok(());
         };
 
@@ -135,23 +135,23 @@ where
             head.metadata.get(CallId::METADATA_KEY),
         ) else {
             blueprint_core::trace!(
-                target: "tangle-evm-consumer",
+                target: "tangle-consumer",
                 "Discarding job result with missing metadata (not a Tangle job)"
             );
             return Ok(());
         };
 
         let service_id: u64 = service_id_raw.try_into().map_err(|_| {
-            blueprint_core::error!(target: "tangle-evm-consumer", "Invalid service_id in metadata");
+            blueprint_core::error!(target: "tangle-consumer", "Invalid service_id in metadata");
             "Invalid service_id"
         })?;
         let call_id: u64 = call_id_raw.try_into().map_err(|_| {
-            blueprint_core::error!(target: "tangle-evm-consumer", "Invalid call_id in metadata");
+            blueprint_core::error!(target: "tangle-consumer", "Invalid call_id in metadata");
             "Invalid call_id"
         })?;
 
         blueprint_core::debug!(
-            target: "tangle-evm-consumer",
+            target: "tangle-consumer",
             service_id,
             call_id,
             output_len = body.len(),
@@ -182,7 +182,7 @@ where
                     };
 
                     blueprint_core::debug!(
-                        target: "tangle-evm-consumer",
+                        target: "tangle-consumer",
                         service_id = derived.service_id,
                         call_id = derived.call_id,
                         "Submitting result to Jobs contract"
@@ -201,7 +201,7 @@ where
                 State::ProcessingTransaction(fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(tx_hash)) => {
                         blueprint_core::info!(
-                            target: "tangle-evm-consumer",
+                            target: "tangle-consumer",
                             %tx_hash,
                             "Successfully submitted job result"
                         );
@@ -209,7 +209,7 @@ where
                     }
                     Poll::Ready(Err(err)) => {
                         blueprint_core::error!(
-                            target: "tangle-evm-consumer",
+                            target: "tangle-consumer",
                             ?err,
                             "Failed to submit job result"
                         );
@@ -262,7 +262,7 @@ where
         .input(calldata.into());
 
     blueprint_core::trace!(
-        target: "tangle-evm-consumer",
+        target: "tangle-consumer",
         service_id,
         call_id,
         contract = %contract_address,
@@ -274,7 +274,7 @@ where
         Ok(pending_tx) => pending_tx.get_receipt().await,
         Err(err) => {
             blueprint_core::error!(
-                target: "tangle-evm-consumer",
+                target: "tangle-consumer",
                 ?err,
                 service_id,
                 call_id,
@@ -288,7 +288,7 @@ where
         Ok(receipt) => receipt,
         Err(err) => {
             blueprint_core::error!(
-                target: "tangle-evm-consumer",
+                target: "tangle-consumer",
                 ?err,
                 service_id,
                 call_id,
@@ -301,7 +301,7 @@ where
     };
 
     blueprint_core::info!(
-        target: "tangle-evm-consumer",
+        target: "tangle-consumer",
         status = %receipt.status(),
         block_hash = ?receipt.block_hash(),
         block_number = ?receipt.block_number(),

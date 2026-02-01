@@ -6,7 +6,7 @@ The Incredible Squaring blueprint showcases a complete Tangle v2 EVM workflow:
 - Job `1` (`verified_square`) requires two matching operator results.
 - Job `2` (`consensus_square`) requires a three-operator quorum and is the canonical “BLS aggregation” demo.
 
-The Rust crate wires these jobs into `TangleEvmLayer`, exposes a `Router` for the runner, and includes tests that cover
+The Rust crate wires these jobs into `TangleLayer`, exposes a `Router` for the runner, and includes tests that cover
 direct submission, aggregation logic, and full Anvil-backed end-to-end flows.
 
 ## Requirements
@@ -56,7 +56,7 @@ All tests run entirely in Rust (no JS runners) and are wired to `blueprint-sdk`�
 To manually run the operator binary against a seeded Anvil deployment:
 
 ```bash
-export PROTOCOL=tangle-evm
+export PROTOCOL=tangle
 export BLUEPRINT_ID=0
 export SERVICE_ID=0
 export TANGLE_CONTRACT=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
@@ -73,6 +73,6 @@ RUST_LOG=info cargo run -p incredible-squaring-blueprint-bin -- run \
 ```
 
 The CLI flags configure the runner side (`BlueprintEnvironment`) while the env vars feed
-`TangleEvmProtocolSettings`. Point the RPC URLs at your local Anvil deployment, ensure the keystore contains
-the operator key you registered on-chain, and the runner will automatically connect via `TangleEvmProducer` /
-`TangleEvmConsumer`.
+`TangleProtocolSettings`. Point the RPC URLs at your local Anvil deployment, ensure the keystore contains
+the operator key you registered on-chain, and the runner will automatically connect via `TangleProducer` /
+`TangleConsumer`.

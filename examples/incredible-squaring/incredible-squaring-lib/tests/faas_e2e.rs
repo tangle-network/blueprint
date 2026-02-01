@@ -2,7 +2,7 @@
 //!
 //! This test proves that:
 //! 1. FaaS-executed jobs follow the same consumer pipeline as local jobs
-//! 2. Both local and FaaS results reach onchain via TangleEvmConsumer
+//! 2. Both local and FaaS results reach onchain via TangleConsumer
 //! 3. The same job logic can run either locally or on FaaS
 //!
 //! Run with: cargo test --test faas_e2e

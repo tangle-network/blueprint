@@ -6,7 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 incredible-squaring-blueprint-lib.workspace = true
-blueprint-sdk = { workspace = true, features = ["std", "tangle-evm"] }
+blueprint-sdk = { workspace = true, features = ["std", "tangle"] }
 blueprint-faas = { workspace = true, features = ["custom"], optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tower.workspace = true

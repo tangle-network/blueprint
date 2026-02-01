@@ -5,7 +5,7 @@ use alloy_primitives::Bytes;
 use alloy_sol_types::SolValue;
 use anyhow::{Context, Result, ensure};
 use blueprint_anvil_testing_utils::{
-    BlueprintHarness, SeededTangleEvmTestnet, missing_tnt_core_artifacts,
+    BlueprintHarness, SeededTangleTestnet, missing_tnt_core_artifacts,
 };
 use blueprint_core::{Job, info, warn};
 use blueprint_qos::heartbeat::HeartbeatConfig;
@@ -16,7 +16,7 @@ use blueprint_qos::service_builder::QoSServiceBuilder;
 use blueprint_qos::unified_service::QoSService;
 use blueprint_qos::{GrafanaServerConfig, LokiServerConfig, PrometheusServerConfig, QoSConfig};
 use blueprint_router::Router;
-use blueprint_tangle_evm_extra::layers::TangleEvmLayer;
+use blueprint_tangle_extra::layers::TangleLayer;
 use prometheus::{IntGauge, Opts, Registry};
 use tokio::process::Command;
 use tokio::time::sleep;
@@ -201,13 +201,13 @@ async fn test_qos_metrics_demo() -> Result<()> {
 }
 
 fn router() -> Router<()> {
-    Router::new().route(XSQUARE_JOB_ID, square.layer(TangleEvmLayer))
+    Router::new().route(XSQUARE_JOB_ID, square.layer(TangleLayer))
 }
 
 fn demo_qos_config(
     service_id: u64,
     blueprint_id: u64,
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
 ) -> QoSConfig {
     let mut config = QoSConfig::default();
     config.service_id = Some(service_id);

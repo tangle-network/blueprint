@@ -5,17 +5,14 @@
 //! operators use in production. Example blueprints can plug into this harness to
 //! run end-to-end tests without reimplementing the boilerplate every time.
 
-use crate::{
-    LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID, SeededTangleEvmTestnet, start_tangle_evm_testnet,
-};
+use crate::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID, SeededTangleTestnet, start_tangle_testnet};
 use alloy_primitives::{Address, Bytes};
 use alloy_rpc_types::Filter;
 #[cfg(feature = "aggregation")]
 use anyhow::anyhow;
 use anyhow::{Context, Result};
-use blueprint_client_tangle_evm::{
-    JobSubmissionResult, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
-    contracts::ITangle,
+use blueprint_client_tangle::{
+    JobSubmissionResult, TangleClient, TangleClientConfig, TangleSettings, contracts::ITangle,
 };
 use blueprint_core::error::BoxError;
 use blueprint_core::{JobResult, error};
@@ -26,15 +23,15 @@ use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_router::Router;
 use blueprint_runner::config::{BlueprintEnvironment, ProtocolSettings};
 use blueprint_runner::error::RunnerError;
-use blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings;
+use blueprint_runner::tangle::config::TangleProtocolSettings;
 use blueprint_runner::{BlueprintConfig, BlueprintRunner};
 use blueprint_std::collections::VecDeque;
 #[cfg(feature = "aggregation")]
-use blueprint_tangle_evm_extra::{
+use blueprint_tangle_extra::{
     AggregatingConsumer, AggregationServiceConfig,
     cache::{SharedServiceConfigCache, shared_cache},
 };
-use blueprint_tangle_evm_extra::{TangleEvmConsumer, TangleEvmProducer};
+use blueprint_tangle_extra::{TangleConsumer, TangleProducer};
 use core::pin::Pin;
 use futures_util::{Sink, SinkExt};
 use hex::FromHex;
@@ -97,7 +94,7 @@ impl BlueprintHarnessBuilder {
         self
     }
 
-    /// Override the default poll interval used by the [`TangleEvmProducer`].
+    /// Override the default poll interval used by the [`TangleProducer`].
     #[must_use]
     pub fn poll_interval(mut self, poll_interval: Duration) -> Self {
         self.poll_interval = poll_interval;
@@ -206,7 +203,7 @@ impl AggregatingConsumerHarnessConfig {
 
     pub(crate) async fn prepare_for_client(
         &mut self,
-        client: &TangleEvmClient,
+        client: &TangleClient,
         service_id: u64,
     ) -> Result<()> {
         if self.auto_operator_index {
@@ -468,13 +465,13 @@ impl Sink<JobResult> for MultiOperatorConsumer {
 /// End-to-end harness that wires a [`Router`] into a [`BlueprintRunner`]
 /// backed by an Anvil testnet seeded with the `LocalTestnet.s.sol` contracts.
 pub struct BlueprintHarness {
-    client: Arc<TangleEvmClient>,
-    event_client: Arc<TangleEvmClient>,
-    caller_client: Arc<TangleEvmClient>,
+    client: Arc<TangleClient>,
+    event_client: Arc<TangleClient>,
+    caller_client: Arc<TangleClient>,
     local_results: Arc<Mutex<VecDeque<Vec<u8>>>>,
     local_notify: Arc<Notify>,
     env: BlueprintEnvironment,
-    deployment: SeededTangleEvmTestnet,
+    deployment: SeededTangleTestnet,
     temp_dir: Option<TempDir>,
     runner_task: Option<JoinHandle<()>>,
     operator_tasks: Vec<JoinHandle<()>>,
@@ -504,7 +501,7 @@ impl BlueprintHarness {
             faas_executors,
         } = builder;
 
-        let deployment = start_tangle_evm_testnet(include_anvil_logs)
+        let deployment = start_tangle_testnet(include_anvil_logs)
             .await
             .context("failed to boot seeded Tangle EVM testnet")?;
 
@@ -570,7 +567,7 @@ impl BlueprintHarness {
             .unwrap_or_default()
             .saturating_sub(1);
         let producer =
-            TangleEvmProducer::from_block((*runner_client).clone(), runner_service_id, start_block)
+            TangleProducer::from_block((*runner_client).clone(), runner_service_id, start_block)
                 .with_poll_interval(poll_interval);
 
         #[cfg(feature = "faas")]
@@ -616,19 +613,19 @@ impl BlueprintHarness {
 
     /// Access the underlying Anvil deployment.
     #[must_use]
-    pub fn deployment(&self) -> &SeededTangleEvmTestnet {
+    pub fn deployment(&self) -> &SeededTangleTestnet {
         &self.deployment
     }
 
     /// Return a clone of the underlying client.
     #[must_use]
-    pub fn client(&self) -> Arc<TangleEvmClient> {
+    pub fn client(&self) -> Arc<TangleClient> {
         Arc::clone(&self.client)
     }
 
     /// Return a clone of the service owner client.
     #[must_use]
-    pub fn caller_client(&self) -> Arc<TangleEvmClient> {
+    pub fn caller_client(&self) -> Arc<TangleClient> {
         Arc::clone(&self.caller_client)
     }
 
@@ -806,7 +803,7 @@ impl BlueprintHarness {
     }
 
     async fn wait_for_job_result_on_chain_internal(
-        client: Arc<TangleEvmClient>,
+        client: Arc<TangleClient>,
         submission: JobSubmissionResult,
         service_id: u64,
     ) -> Result<Vec<u8>> {
@@ -854,7 +851,7 @@ impl Drop for BlueprintHarness {
 }
 
 fn build_environment(
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
     keystore_path: &Path,
     data_dir: &Path,
     blueprint_id: u64,
@@ -865,7 +862,7 @@ fn build_environment(
     env.ws_rpc_endpoint = deployment.ws_endpoint().clone();
     env.keystore_uri = keystore_path.display().to_string();
     env.data_dir = PathBuf::from(data_dir);
-    env.protocol_settings = ProtocolSettings::TangleEvm(TangleEvmProtocolSettings {
+    env.protocol_settings = ProtocolSettings::Tangle(TangleProtocolSettings {
         blueprint_id,
         service_id: Some(service_id),
         tangle_contract: deployment.tangle_contract,
@@ -877,16 +874,16 @@ fn build_environment(
 }
 
 async fn create_client(
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
     keystore_path: &Path,
     blueprint_id: u64,
     service_id: u64,
-) -> Result<Arc<TangleEvmClient>> {
-    let config = TangleEvmClientConfig::new(
+) -> Result<Arc<TangleClient>> {
+    let config = TangleClientConfig::new(
         deployment.http_endpoint().clone(),
         deployment.ws_endpoint().clone(),
         keystore_path.display().to_string(),
-        TangleEvmSettings {
+        TangleSettings {
             blueprint_id,
             service_id: Some(service_id),
             tangle_contract: deployment.tangle_contract,
@@ -898,15 +895,15 @@ async fn create_client(
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(keystore_path))?;
     Ok(Arc::new(
-        TangleEvmClient::with_keystore(config, keystore).await?,
+        TangleClient::with_keystore(config, keystore).await?,
     ))
 }
 
 async fn create_service_owner_client(
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
     blueprint_id: u64,
     service_id: u64,
-) -> Result<Arc<TangleEvmClient>> {
+) -> Result<Arc<TangleClient>> {
     create_ephemeral_operator_client(
         deployment,
         blueprint_id,
@@ -917,16 +914,16 @@ async fn create_service_owner_client(
 }
 
 async fn create_ephemeral_operator_client(
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
     blueprint_id: u64,
     service_id: u64,
     private_key_hex: &str,
-) -> Result<Arc<TangleEvmClient>> {
-    let config = TangleEvmClientConfig::new(
+) -> Result<Arc<TangleClient>> {
+    let config = TangleClientConfig::new(
         deployment.http_endpoint().clone(),
         deployment.ws_endpoint().clone(),
         "memory://service-owner",
-        TangleEvmSettings {
+        TangleSettings {
             blueprint_id,
             service_id: Some(service_id),
             tangle_contract: deployment.tangle_contract,
@@ -946,7 +943,7 @@ async fn create_ephemeral_operator_client(
     };
 
     Ok(Arc::new(
-        TangleEvmClient::with_keystore(config, keystore).await?,
+        TangleClient::with_keystore(config, keystore).await?,
     ))
 }
 
@@ -961,7 +958,7 @@ pub fn seed_operator_key(path: &Path) -> Result<()> {
 
 async fn build_operator_runtimes(
     specs: &[OperatorSpec],
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
     blueprint_id: u64,
     service_id: u64,
     local_results: Arc<Mutex<VecDeque<Vec<u8>>>>,
@@ -1027,7 +1024,7 @@ async fn operator_sink_task(
 }
 
 async fn build_operator_sink(
-    client: Arc<TangleEvmClient>,
+    client: Arc<TangleClient>,
     service_id: u64,
     spec: &OperatorSpec,
 ) -> Result<BoxedConsumer> {
@@ -1044,7 +1041,7 @@ async fn build_operator_sink(
     #[cfg(not(feature = "aggregation"))]
     let _ = service_id;
 
-    Ok(Box::pin(TangleEvmConsumer::new((*client).clone())))
+    Ok(Box::pin(TangleConsumer::new((*client).clone())))
 }
 
 #[derive(Clone, Copy, Default)]

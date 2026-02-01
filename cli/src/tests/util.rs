@@ -1,5 +1,5 @@
 use assert_cmd::Command;
-use blueprint_testing_utils::anvil::{TangleEvmHarness, missing_tnt_core_artifacts};
+use blueprint_testing_utils::anvil::{TangleHarness, missing_tnt_core_artifacts};
 use color_eyre::eyre::{Result, eyre};
 use serde_json::Value;
 use std::{
@@ -95,7 +95,7 @@ pub fn is_e2e_enabled() -> bool {
 }
 
 /// Build the standard network arguments expected by cargo-tangle CLI tests.
-pub fn network_cli_args(harness: &TangleEvmHarness, keystore_path: &Path) -> Vec<String> {
+pub fn network_cli_args(harness: &TangleHarness, keystore_path: &Path) -> Vec<String> {
     vec![
         "--http-rpc-url".into(),
         harness.http_endpoint().as_str().to_string(),
@@ -135,8 +135,8 @@ pub fn run_cli_command(args: &[String]) -> Result<CliCommandOutput> {
 }
 
 /// Spawn the default Anvil harness or skip the test when artifacts are missing.
-pub async fn spawn_harness(test_name: &str) -> Result<Option<TangleEvmHarness>> {
-    match TangleEvmHarness::builder()
+pub async fn spawn_harness(test_name: &str) -> Result<Option<TangleHarness>> {
+    match TangleHarness::builder()
         .include_anvil_logs(false)
         .spawn()
         .await

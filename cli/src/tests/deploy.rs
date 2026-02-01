@@ -1,8 +1,8 @@
 use std::fs;
 
 use blueprint_testing_utils::anvil::{
-    TangleEvmHarness, missing_tnt_core_artifacts,
-    tangle_evm::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID},
+    TangleHarness, missing_tnt_core_artifacts,
+    tangle::{LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID},
 };
 use color_eyre::eyre::{Result, eyre};
 use tempfile::TempDir;
@@ -16,7 +16,7 @@ async fn deploys_blueprint_to_devnet() -> Result<()> {
         return Ok(());
     }
 
-    let harness = match TangleEvmHarness::builder()
+    let harness = match TangleHarness::builder()
         .include_anvil_logs(false)
         .spawn()
         .await

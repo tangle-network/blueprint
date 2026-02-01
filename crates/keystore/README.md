@@ -43,11 +43,11 @@ A flexible and secure keystore implementation supporting multiple key types, sto
   - Includes Alloy primitives for EVM compatibility
   - Required for all EVM-based chains
 
-- `tangle-evm` - Tangle EVM protocol support
+- `tangle` - Tangle EVM protocol support
 
   - Alias for the EVM stack used by Tangle contracts
   - Enables the same key material as other EVM chains
-  - Required for Tangle EVM operators
+  - Required for Tangle operators
 
 - `eigenlayer` - EigenLayer protocol support
 
@@ -113,7 +113,7 @@ blueprint-keystore = { version = "0.1", features = ["std", "ecdsa", "remote", "a
 For full functionality:
 
 ```toml
-blueprint-keystore = { version = "0.1", features = ["std", "tangle-evm", "eigenlayer-full", "all-remote-signers"] }
+blueprint-keystore = { version = "0.1", features = ["std", "tangle", "eigenlayer-full", "all-remote-signers"] }
 ```
 
 ## Feature Dependencies
@@ -123,4 +123,4 @@ blueprint-keystore = { version = "0.1", features = ["std", "tangle-evm", "eigenl
 - `ledger-browser` requires `remote` and `evm`
 - `ledger-node` requires `remote` and `evm`
 - `eigenlayer` requires `evm` and `bn254`
-- `tangle-evm` requires `evm`
+- `tangle` requires `evm`

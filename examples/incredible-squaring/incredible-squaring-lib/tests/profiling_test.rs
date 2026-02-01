@@ -6,7 +6,7 @@
 //! read by the Blueprint Manager to make deployment decisions (FaaS vs VM sizing).
 
 use blueprint_profiling::{BlueprintProfiles, JobProfile, ProfileConfig, ProfileRunner};
-use blueprint_sdk::tangle_evm::extract::TangleEvmArg;
+use blueprint_sdk::tangle::extract::TangleArg;
 use incredible_squaring_blueprint_lib::square;
 use std::time::Duration;
 
@@ -26,7 +26,7 @@ async fn test_profile_square_job() {
             let x = 12345u64;
 
             // Call the actual job
-            let result = square(TangleEvmArg(x)).await;
+            let result = square(TangleArg(x)).await;
 
             // Verify correctness
             assert_eq!(result.0, x * x);
@@ -184,7 +184,7 @@ async fn test_profiling_varying_inputs() {
             // Use a large input value to test varying workloads
             let x = 1_000_000u64;
 
-            let result = square(TangleEvmArg(x)).await;
+            let result = square(TangleArg(x)).await;
             assert_eq!(result.0, x.wrapping_mul(x));
 
             Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())

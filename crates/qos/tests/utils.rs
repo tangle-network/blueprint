@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use blueprint_qos::error::Error as QosError;
 use blueprint_qos::heartbeat::{HeartbeatConsumer, HeartbeatStatus};
 use blueprint_qos::proto::qos_metrics_client::QosMetricsClient;
-use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
+use blueprint_tangle_extra::extract::{TangleArg, TangleResult};
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
@@ -14,8 +14,8 @@ use tonic::transport::Channel;
 pub const XSQUARE_JOB_ID: u8 = 0;
 
 /// Minimal job handler used by the integration tests.
-pub async fn square(TangleEvmArg(value): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
-    TangleEvmResult(value * value)
+pub async fn square(TangleArg(value): TangleArg<u64>) -> TangleResult<u64> {
+    TangleResult(value * value)
 }
 
 /// Mock heartbeat consumer that records every heartbeat locally.

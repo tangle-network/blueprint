@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-blueprint-sdk = { workspace = true, features = ["std", "tangle-evm", "macros"] }
+blueprint-sdk = { workspace = true, features = ["std", "tangle", "macros"] }
 tokio = { workspace = true, features = ["sync"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -14,17 +14,17 @@ serde_bytes = "0.11"
 [dev-dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true, features = ["http1", "tokio"] }
-blueprint-sdk = { workspace = true, features = ["testing", "tangle-evm"] }
+blueprint-sdk = { workspace = true, features = ["testing", "tangle"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 color-eyre = { workspace = true }
 blueprint-anvil-testing-utils = { workspace = true, features = ["aggregation", "faas"] }
-blueprint-client-tangle-evm = { workspace = true }
+blueprint-client-tangle = { workspace = true }
 alloy-sol-types = { workspace = true }
 alloy-primitives = { workspace = true }
 bytes = { workspace = true }
 # Aggregation service for integration tests
 blueprint-tangle-aggregation-svc = { workspace = true }
-blueprint-tangle-evm-extra = { workspace = true, features = ["aggregation"] }
+blueprint-tangle-extra = { workspace = true, features = ["aggregation"] }
 # Crypto for BLS keys
 blueprint-crypto-bn254 = { workspace = true }
 blueprint-crypto-core = { workspace = true }

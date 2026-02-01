@@ -18,10 +18,10 @@ blueprint-std = { workspace = true }
 tokio = { workspace = true }
 blueprint-core-testing-utils = { workspace = true }
 blueprint-chain-setup-anvil = { workspace = true }
-blueprint-runner = { workspace = true, features = ["tangle-evm"] }
+blueprint-runner = { workspace = true, features = ["tangle"] }
 blueprint-router = { workspace = true }
-blueprint-client-tangle-evm = { workspace = true, features = ["std"] }
-blueprint-tangle-evm-extra = { workspace = true }
+blueprint-client-tangle = { workspace = true, features = ["std"] }
+blueprint-tangle-extra = { workspace = true }
 blueprint-keystore = { workspace = true }
 blueprint-crypto = { workspace = true, features = ["k256"] }
 blueprint-manager-bridge = { workspace = true }
@@ -49,5 +49,5 @@ tonic = { workspace = true }
 [features]
 default = ["tracing"]
 tracing = ["blueprint-core/tracing"]
-aggregation = ["blueprint-tangle-evm-extra/aggregation"]
+aggregation = ["blueprint-tangle-extra/aggregation"]
 faas = ["blueprint-runner/faas"]

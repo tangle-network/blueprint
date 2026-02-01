@@ -5,7 +5,7 @@ use alloy_primitives::{Address, keccak256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::TransactionRequest;
 use alloy_sol_types::SolCall;
-use blueprint_client_tangle_evm::{IOperatorStatusRegistry, OperatorStatusSnapshot};
+use blueprint_client_tangle::{IOperatorStatusRegistry, OperatorStatusSnapshot};
 use blueprint_crypto::k256::K256SigningKey;
 use color_eyre::eyre::{Result, eyre};
 use dialoguer::console::style;

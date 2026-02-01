@@ -24,7 +24,7 @@ blueprint-crypto-core = { workspace = true }
 blueprint-keystore = { workspace = true, features = ["ecdsa", "evm"] }
 blueprint-networking = { workspace = true }
 blueprint-std = { workspace = true }
-blueprint-client-tangle-evm = { workspace = true }
+blueprint-client-tangle = { workspace = true }
 
 # Misc dependencies
 clap = { workspace = true, features = ["derive", "env"] }

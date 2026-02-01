@@ -182,7 +182,7 @@ impl<P: Provider> TangleProducer<P> {
             .to_block(initial_start_block + config.step);
 
         blueprint_core::trace!(
-            target: "tangle-evm-producer",
+            target: "tangle-producer",
             contract = %config.contract_address,
             start_block = initial_start_block,
             step = config.step,
@@ -227,7 +227,7 @@ impl<P: Provider + 'static> Stream for TangleProducer<P> {
                 ProducerState::Idle(ref mut fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(()) => {
                         blueprint_core::trace!(
-                            target: "tangle-evm-producer",
+                            target: "tangle-producer",
                             "Polling interval elapsed, fetching current block number"
                         );
                         let provider = this.provider.clone();
@@ -249,7 +249,7 @@ impl<P: Provider + 'static> Stream for TangleProducer<P> {
                         let next_to_block = proposed_to_block.min(safe_block);
 
                         blueprint_core::trace!(
-                            target: "tangle-evm-producer",
+                            target: "tangle-producer",
                             current_block,
                             safe_block,
                             next_from_block,
@@ -259,7 +259,7 @@ impl<P: Provider + 'static> Stream for TangleProducer<P> {
 
                         if next_from_block > safe_block {
                             blueprint_core::trace!(
-                                target: "tangle-evm-producer",
+                                target: "tangle-producer",
                                 "No new blocks to process yet, waiting"
                             );
                             *state = ProducerState::Idle(Box::pin(tokio::time::sleep(
@@ -276,7 +276,7 @@ impl<P: Provider + 'static> Stream for TangleProducer<P> {
                             .to_block(next_to_block);
 
                         blueprint_core::trace!(
-                            target: "tangle-evm-producer",
+                            target: "tangle-producer",
                             from_block = next_from_block,
                             to_block = next_to_block,
                             "Fetching JobSubmitted events"
@@ -289,7 +289,7 @@ impl<P: Provider + 'static> Stream for TangleProducer<P> {
                     }
                     Poll::Ready(Err(e)) => {
                         blueprint_core::error!(
-                            target: "tangle-evm-producer",
+                            target: "tangle-producer",
                             error = ?e,
                             "Failed to fetch current block number"
                         );
@@ -303,7 +303,7 @@ impl<P: Provider + 'static> Stream for TangleProducer<P> {
                 ProducerState::FetchingLogs(ref mut fut) => match fut.as_mut().poll(cx) {
                     Poll::Ready(Ok(logs)) => {
                         blueprint_core::trace!(
-                            target: "tangle-evm-producer",
+                            target: "tangle-producer",
                             logs_count = logs.len(),
                             "Successfully fetched JobSubmitted events"
                         );
@@ -318,7 +318,7 @@ impl<P: Provider + 'static> Stream for TangleProducer<P> {
                     }
                     Poll::Ready(Err(e)) => {
                         blueprint_core::error!(
-                            target: "tangle-evm-producer",
+                            target: "tangle-producer",
                             error = ?e,
                             "Failed to fetch logs"
                         );
@@ -387,7 +387,7 @@ fn logs_to_tangle_job_calls(logs: Vec<Log>) -> Vec<JobCall> {
         ));
 
         blueprint_core::trace!(
-            target: "tangle-evm-producer",
+            target: "tangle-producer",
             service_id = data.serviceId,
             call_id = data.callId,
             job_index = data.jobIndex,

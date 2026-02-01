@@ -2,7 +2,7 @@ use crate::command::tangle::parse_address;
 use alloy_json_abi::Param;
 use alloy_primitives::{Address, Bytes, FixedBytes, U256};
 use alloy_sol_types::{SolType, SolValue};
-use blueprint_client_tangle_evm::contracts::ITangleTypes;
+use blueprint_client_tangle::contracts::ITangleTypes;
 use color_eyre::eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use serde_json;

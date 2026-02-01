@@ -1,6 +1,6 @@
 use alloy_primitives::{Address, B256, ChainId, U256, keccak256};
 use alloy_sol_types::{SolType, SolValue};
-use blueprint_client_tangle_evm::contracts::ITangleTypes;
+use blueprint_client_tangle::contracts::ITangleTypes;
 use blueprint_crypto::KeyType;
 use blueprint_crypto::k256::{K256Ecdsa, K256Signature, K256SigningKey, K256VerifyingKey};
 use rust_decimal::Decimal;

@@ -38,7 +38,7 @@ This document tracks the testing status of all `cargo-tangle` CLI commands. Use 
 | `blueprint create` | Scaffold a new blueprint project from a template | ✅ | `--name`, `--skip-prompts`, `--project-description`, `--project-authors` | | E2E Step 1 |
 | `blueprint deploy tangle` | Deploy a blueprint definition to Tangle network | ✅ | `--network testnet`, `--definition`, `--settings-file` | | E2E Step 7 |
 | `blueprint deploy eigenlayer` | Deploy a blueprint to EigenLayer AVS | ❌ | | | |
-| `blueprint run` | Start the operator manager to run a blueprint | ✅ | `-p tangle-evm`, `-k`, `-f`, `-d` | | E2E Step 11 |
+| `blueprint run` | Start the operator manager to run a blueprint | ✅ | `-p tangle`, `-k`, `-f`, `-d` | | E2E Step 11 |
 | `blueprint preregister` | Generate registration data without submitting on-chain | ❌ | | | |
 | `blueprint register` | Register an operator for a specific blueprint | ✅ | `--http-rpc-url`, `--ws-rpc-url`, `--keystore-path`, `--tangle-contract`, `--restaking-contract`, `--status-registry-contract`, `--blueprint-id`, `--rpc-endpoint` | | E2E Step 8 |
 
@@ -71,7 +71,7 @@ cargo tangle blueprint register \
 
 # Run operator (Step 11)
 cargo tangle blueprint run \
-  -p tangle-evm \
+  -p tangle \
   -k ./operator-keystore \
   -f ./settings.env \
   -d ./data
@@ -84,7 +84,7 @@ cargo tangle blueprint run \
 | Command | Description | Status | Tested Options | Notes | Reference |
 |---------|-------------|--------|----------------|-------|-----------|
 | `key generate` | Create a new cryptographic key pair | 🔇 | | Low priority for E2E | |
-| `key import` | Import an existing private key into the keystore | ✅ | `--key-type ecdsa`, `--secret`, `--keystore-path`, `--protocol tangle-evm` | | E2E Steps 5, 9 |
+| `key import` | Import an existing private key into the keystore | ✅ | `--key-type ecdsa`, `--secret`, `--keystore-path`, `--protocol tangle` | | E2E Steps 5, 9 |
 | `key export` | Export a key from the keystore | 🔇 | | Low priority for E2E | |
 | `key list` | Show all keys stored in the keystore | 🔇 | | Low priority for E2E | |
 | `key generate-mnemonic` | Generate a BIP39 mnemonic seed phrase | 🔇 | | Low priority for E2E | |
@@ -97,14 +97,14 @@ cargo tangle key import \
   --key-type ecdsa \
   --secret 59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d \
   --keystore-path ./operator-keystore \
-  --protocol tangle-evm
+  --protocol tangle
 
 # Import user key (Step 9)
 cargo tangle key import \
   --key-type ecdsa \
   --secret 5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a \
   --keystore-path ./user-keystore \
-  --protocol tangle-evm
+  --protocol tangle
 ```
 
 ---

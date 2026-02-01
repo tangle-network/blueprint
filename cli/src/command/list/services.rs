@@ -1,11 +1,11 @@
-use blueprint_client_tangle_evm::TangleEvmClient;
-use blueprint_client_tangle_evm::services::ServiceInfo;
+use blueprint_client_tangle::TangleClient;
+use blueprint_client_tangle::services::ServiceInfo;
 use color_eyre::Result;
 use dialoguer::console::style;
 use serde_json::json;
 
 /// Fetch all services registered on-chain.
-pub async fn list_services(client: &TangleEvmClient) -> Result<Vec<(u64, ServiceInfo)>> {
+pub async fn list_services(client: &TangleClient) -> Result<Vec<(u64, ServiceInfo)>> {
     client
         .list_services()
         .await

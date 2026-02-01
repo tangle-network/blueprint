@@ -1,12 +1,12 @@
 use alloy_primitives::{Address, Bytes, U256};
-use blueprint_client_tangle_evm::{
-    TangleEvmClient, TransactionResult, contracts::ITangleTypes, services::ServiceRequestParams,
+use blueprint_client_tangle::{
+    TangleClient, TransactionResult, contracts::ITangleTypes, services::ServiceRequestParams,
 };
 use color_eyre::eyre::Result;
 
 /// Submit a service request.
 pub async fn request_service(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     params: ServiceRequestParams,
 ) -> Result<(TransactionResult, u64)> {
     client.request_service(params).await.map_err(Into::into)
@@ -14,7 +14,7 @@ pub async fn request_service(
 
 /// Approve a pending service request.
 pub async fn approve_service(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     request_id: u64,
     restaking_percent: u8,
 ) -> Result<TransactionResult> {
@@ -26,7 +26,7 @@ pub async fn approve_service(
 
 /// Approve a pending request with explicit security commitments.
 pub async fn approve_service_with_commitments(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     request_id: u64,
     commitments: Vec<ITangleTypes::AssetSecurityCommitment>,
 ) -> Result<TransactionResult> {
@@ -37,16 +37,13 @@ pub async fn approve_service_with_commitments(
 }
 
 /// Reject a pending service request.
-pub async fn reject_service(
-    client: &TangleEvmClient,
-    request_id: u64,
-) -> Result<TransactionResult> {
+pub async fn reject_service(client: &TangleClient, request_id: u64) -> Result<TransactionResult> {
     client.reject_service(request_id).await.map_err(Into::into)
 }
 
 /// Join a dynamic service.
 pub async fn join_service(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     service_id: u64,
     exposure_bps: u16,
 ) -> Result<TransactionResult> {
@@ -57,7 +54,7 @@ pub async fn join_service(
 }
 
 /// Leave a dynamic service (legacy immediate exit path).
-pub async fn leave_service(client: &TangleEvmClient, service_id: u64) -> Result<TransactionResult> {
+pub async fn leave_service(client: &TangleClient, service_id: u64) -> Result<TransactionResult> {
     client.leave_service(service_id).await.map_err(Into::into)
 }
 

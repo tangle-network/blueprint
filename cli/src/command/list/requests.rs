@@ -1,11 +1,11 @@
-use blueprint_client_tangle_evm::TangleEvmClient;
-use blueprint_client_tangle_evm::services::ServiceRequestInfo;
+use blueprint_client_tangle::TangleClient;
+use blueprint_client_tangle::services::ServiceRequestInfo;
 use color_eyre::Result;
 use dialoguer::console::style;
 use serde_json::json;
 
 /// Fetch all service requests currently recorded on-chain.
-pub async fn list_requests(client: &TangleEvmClient) -> Result<Vec<ServiceRequestInfo>> {
+pub async fn list_requests(client: &TangleClient) -> Result<Vec<ServiceRequestInfo>> {
     let requests = client
         .list_service_requests()
         .await

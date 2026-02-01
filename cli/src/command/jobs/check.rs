@@ -1,13 +1,13 @@
 use std::time::Duration;
 
-use blueprint_client_tangle_evm::TangleEvmClient;
-use blueprint_client_tangle_evm::contracts::ITangle;
+use blueprint_client_tangle::TangleClient;
+use blueprint_client_tangle::contracts::ITangle;
 use color_eyre::eyre::{Result, eyre};
 use tokio::time::timeout;
 
 /// Wait for a `JobResultSubmitted` event matching the provided identifiers.
 pub async fn wait_for_job_result(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     service_id: u64,
     call_id: u64,
     timeout_duration: Duration,

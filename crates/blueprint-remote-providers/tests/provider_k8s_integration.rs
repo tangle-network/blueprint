@@ -105,27 +105,42 @@ async fn ensure_test_cluster(cluster_name: &str) {
         }
     }
 
-    // Remove stale lock file if it exists (common in CI)
-    if let Ok(home) = std::env::var("HOME") {
-        let lock_path = format!("{home}/.kube/config.lock");
-        let _ = AsyncCommand::new("rm")
-            .args(["-f", &lock_path])
+    // Export kubeconfig with retry logic for lock contention
+    let mut export_attempts = 0;
+    let max_export_attempts = 5;
+    loop {
+        // Remove stale lock file if it exists (common in CI)
+        if let Ok(home) = std::env::var("HOME") {
+            let lock_path = format!("{home}/.kube/config.lock");
+            let _ = AsyncCommand::new("rm")
+                .args(["-f", &lock_path])
+                .output()
+                .await;
+        }
+
+        let export = AsyncCommand::new("kind")
+            .args(["export", "kubeconfig", "--name", cluster_name])
             .output()
-            .await;
-    }
+            .await
+            .expect("Failed to run kind export kubeconfig");
 
-    // Export kubeconfig
-    let export = AsyncCommand::new("kind")
-        .args(["export", "kubeconfig", "--name", cluster_name])
-        .output()
-        .await
-        .expect("Failed to export kubeconfig");
+        if export.status.success() {
+            break;
+        }
 
-    if !export.status.success() {
-        panic!(
-            "Failed to export kubeconfig: {}",
-            String::from_utf8_lossy(&export.stderr)
-        );
+        export_attempts += 1;
+        let stderr = String::from_utf8_lossy(&export.stderr);
+        if export_attempts < max_export_attempts && stderr.contains("lock") {
+            println!("Kubeconfig export attempt {export_attempts} failed due to lock, retrying...");
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        } else if export_attempts >= max_export_attempts {
+            panic!(
+                "Failed to export kubeconfig after {max_export_attempts} attempts: {}",
+                stderr
+            );
+        } else {
+            panic!("Failed to export kubeconfig: {}", stderr);
+        }
     }
 }
 

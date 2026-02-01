@@ -1,10 +1,10 @@
 use alloy_primitives::Bytes;
-use blueprint_client_tangle_evm::{JobSubmissionResult, TangleEvmClient};
+use blueprint_client_tangle::{JobSubmissionResult, TangleClient};
 use color_eyre::Result;
 
 /// Submit a job invocation to the configured service.
 pub async fn submit_job(
-    client: &TangleEvmClient,
+    client: &TangleClient,
     service_id: u64,
     job_index: u8,
     inputs: Bytes,

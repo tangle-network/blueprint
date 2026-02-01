@@ -19,9 +19,9 @@ path = "src/main.rs"
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
 tracing = { workspace = true }
-blueprint-runner = { workspace = true, features = ["networking", "tangle-evm", "eigenlayer", "std"] }
-blueprint-clients = { workspace = true, features = ["std", "tangle-evm"] }
-blueprint-client-tangle-evm = { workspace = true }
+blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer", "std"] }
+blueprint-clients = { workspace = true, features = ["std", "tangle"] }
+blueprint-client-tangle = { workspace = true }
 blueprint-crypto = { workspace = true, features = ["std"] }
 blueprint-keystore = { workspace = true, features = ["std", "evm", "eigenlayer"] }
 blueprint-std = { workspace = true, features = ["std"] }
@@ -160,7 +160,7 @@ tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 blueprint-anvil-testing-utils = { workspace = true }
 blueprint-router = { workspace = true }
-blueprint-tangle-evm-extra = { workspace = true }
+blueprint-tangle-extra = { workspace = true }
 xz2 = "0.1"
 serial_test = { workspace = true }
 rand = { workspace = true }

@@ -8,7 +8,7 @@ semver_check = false
 
 # TEMPORARY: v2 Migration
 # release-plz compares packages against old commits via git log. Old commits
-# reference crates/tangle-extra which was renamed to crates/tangle-evm-extra.
+# reference crates/tangle-extra which was renamed during migrations.
 # This breaks cargo when release-plz checks out old commits.
 #
 # To fix: Bump all versions (e.g., 0.2.0-alpha.1), create tags, remove this line.

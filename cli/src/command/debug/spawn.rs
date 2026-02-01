@@ -23,10 +23,10 @@ pub struct SpawnArgs {
 }
 
 pub async fn execute(args: SpawnArgs) -> Result<()> {
-    let settings = load_protocol_settings(Protocol::TangleEvm, &args.settings_file)
+    let settings = load_protocol_settings(Protocol::Tangle, &args.settings_file)
         .map_err(|e| eyre!(e.to_string()))?;
     let tangle_settings = settings
-        .tangle_evm()
+        .tangle()
         .map_err(|e| eyre!("failed to load Tangle settings: {e}"))?;
 
     let stack = DevnetStack::spawn(args.include_anvil_logs).await?;

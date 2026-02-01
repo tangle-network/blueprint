@@ -24,21 +24,19 @@ use alloy_sol_types::SolCall;
 use alloy_sol_types::SolValue;
 use anyhow::{Context, Result, anyhow, ensure};
 use blueprint_anvil_testing_utils::{
-    SeededTangleEvmTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
+    SeededTangleTestnet, harness_builder_from_env, missing_tnt_core_artifacts,
 };
-use blueprint_client_tangle_evm::contracts::ITangle;
-use blueprint_client_tangle_evm::contracts::ITangle::addPermittedCallerCall;
-use blueprint_client_tangle_evm::{
-    ServiceStatus, TangleEvmClient, TangleEvmClientConfig, TangleEvmSettings,
-};
+use blueprint_client_tangle::contracts::ITangle;
+use blueprint_client_tangle::contracts::ITangle::addPermittedCallerCall;
+use blueprint_client_tangle::{ServiceStatus, TangleClient, TangleClientConfig, TangleSettings};
 use blueprint_core::Job;
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_router::Router;
-use blueprint_tangle_evm_extra::extract::{TangleEvmArg, TangleEvmResult};
-use blueprint_tangle_evm_extra::{TangleEvmConsumer, TangleEvmLayer, TangleEvmProducer};
+use blueprint_tangle_extra::extract::{TangleArg, TangleResult};
+use blueprint_tangle_extra::{TangleConsumer, TangleLayer, TangleProducer};
 use futures_util::future::poll_fn;
 use futures_util::pin_mut;
 use futures_util::{SinkExt, StreamExt, stream};
@@ -62,14 +60,14 @@ const ANVIL_TEST_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Complete service lifecycle test harness
 struct LifecycleTestHarness {
-    deployment: SeededTangleEvmTestnet,
-    operator_client: Arc<TangleEvmClient>,
-    owner_client: Arc<TangleEvmClient>,
+    deployment: SeededTangleTestnet,
+    operator_client: Arc<TangleClient>,
+    owner_client: Arc<TangleClient>,
     _temp_dir: TempDir,
 }
 
 impl LifecycleTestHarness {
-    async fn new(deployment: SeededTangleEvmTestnet) -> Result<Self> {
+    async fn new(deployment: SeededTangleTestnet) -> Result<Self> {
         let temp = TempDir::new().context("failed to create tempdir")?;
         let keystore_path = temp.path().join("keystore");
         std::fs::create_dir_all(&keystore_path)?;
@@ -192,10 +190,10 @@ async fn test_full_service_lifecycle() -> Result<()> {
             .unwrap_or_default()
             .saturating_sub(1);
         let producer =
-            TangleEvmProducer::from_block((*runner_client).clone(), SERVICE_ID, start_block)
+            TangleProducer::from_block((*runner_client).clone(), SERVICE_ID, start_block)
                 .with_poll_interval(Duration::from_millis(100));
-        let consumer = TangleEvmConsumer::new((*runner_client).clone());
-        let router = Router::new().route(JOB_INDEX, square_job.layer(TangleEvmLayer));
+        let consumer = TangleConsumer::new((*runner_client).clone());
+        let router = Router::new().route(JOB_INDEX, square_job.layer(TangleLayer));
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let (result_tx, result_rx) = oneshot::channel();
@@ -352,14 +350,14 @@ async fn test_service_operator_weights() -> Result<()> {
 
 // Helper functions
 
-async fn square_job(TangleEvmArg(x): TangleEvmArg<u64>) -> TangleEvmResult<u64> {
-    TangleEvmResult(x * x)
+async fn square_job(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+    TangleResult(x * x)
 }
 
 async fn run_minimal_runner_loop(
-    producer: TangleEvmProducer,
+    producer: TangleProducer,
     mut router: Router,
-    mut consumer: TangleEvmConsumer,
+    mut consumer: TangleConsumer,
     mut shutdown_rx: oneshot::Receiver<()>,
     mut result_tx: Option<oneshot::Sender<Vec<u8>>>,
 ) -> Result<()> {
@@ -403,7 +401,7 @@ async fn run_minimal_runner_loop(
     Ok(())
 }
 
-async fn wait_for_job_completion(client: TangleEvmClient, call_id: u64) -> Result<()> {
+async fn wait_for_job_completion(client: TangleClient, call_id: u64) -> Result<()> {
     use tokio::time::sleep;
 
     timeout(Duration::from_secs(120), async {
@@ -423,7 +421,7 @@ async fn wait_for_job_completion(client: TangleEvmClient, call_id: u64) -> Resul
 }
 
 async fn wait_for_job_result_on_chain(
-    client: TangleEvmClient,
+    client: TangleClient,
     call_id: u64,
     start_block: Option<u64>,
 ) -> Result<Vec<u8>> {
@@ -460,16 +458,16 @@ async fn wait_for_job_result_on_chain(
 }
 
 async fn create_client(
-    deployment: &SeededTangleEvmTestnet,
+    deployment: &SeededTangleTestnet,
     keystore_path: &Path,
     blueprint_id: u64,
     service_id: Option<u64>,
-) -> Result<Arc<TangleEvmClient>> {
-    let config = TangleEvmClientConfig::new(
+) -> Result<Arc<TangleClient>> {
+    let config = TangleClientConfig::new(
         deployment.http_endpoint().clone(),
         deployment.ws_endpoint().clone(),
         keystore_path.display().to_string(),
-        TangleEvmSettings {
+        TangleSettings {
             blueprint_id,
             service_id,
             tangle_contract: deployment.tangle_contract,
@@ -481,7 +479,7 @@ async fn create_client(
 
     let keystore = Keystore::new(KeystoreConfig::new().fs_root(keystore_path))?;
     Ok(Arc::new(
-        TangleEvmClient::with_keystore(config, keystore).await?,
+        TangleClient::with_keystore(config, keystore).await?,
     ))
 }
 
@@ -545,7 +543,7 @@ where
         .with_context(|| format!("{name} timed out after {:?}", ANVIL_TEST_TIMEOUT))?
 }
 
-async fn boot_testnet(test_name: &str) -> Result<Option<SeededTangleEvmTestnet>> {
+async fn boot_testnet(test_name: &str) -> Result<Option<SeededTangleTestnet>> {
     match harness_builder_from_env().spawn().await {
         Ok(deployment) => Ok(Some(deployment)),
         Err(err) => {

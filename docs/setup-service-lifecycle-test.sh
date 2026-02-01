@@ -293,7 +293,7 @@ cargo tangle key import \
   --key-type ecdsa \
   --secret 59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d \
   --keystore-path ./operator-keystore \
-  --protocol tangle-evm
+  --protocol tangle
 log_success "Operator 1 keystore created (0x70997970C51812dc3A010C7d01b50e0d17dc79C8)"
 
 # Operator 2 keystore (Anvil account 3)
@@ -302,7 +302,7 @@ cargo tangle key import \
   --key-type ecdsa \
   --secret 7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6 \
   --keystore-path ./operator2-keystore \
-  --protocol tangle-evm
+  --protocol tangle
 log_success "Operator 2 keystore created (0x90F79bf6EB2c4f870365E785982E1f101E93b906)"
 
 # User keystore (Anvil account 2)
@@ -311,7 +311,7 @@ cargo tangle key import \
   --key-type ecdsa \
   --secret 5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a \
   --keystore-path ./user-keystore \
-  --protocol tangle-evm
+  --protocol tangle
 log_success "User keystore created (0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC)"
 
 # ============================================================================

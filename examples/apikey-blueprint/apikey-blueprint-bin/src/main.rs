@@ -2,12 +2,12 @@ use apikey_blueprint_lib::{
     ApiKeyProtectedService, PURCHASE_API_KEY_JOB_ID, WRITE_RESOURCE_JOB_ID, purchase_api_key,
     write_resource,
 };
-use blueprint_sdk::contexts::tangle_evm::TangleEvmClientContext;
+use blueprint_sdk::contexts::tangle::TangleClientContext;
 use blueprint_sdk::registration;
 use blueprint_sdk::runner::BlueprintRunner;
 use blueprint_sdk::runner::config::BlueprintEnvironment;
-use blueprint_sdk::runner::tangle_evm::config::TangleEvmConfig;
-use blueprint_sdk::tangle_evm::{TangleEvmConsumer, TangleEvmLayer, TangleEvmProducer};
+use blueprint_sdk::runner::tangle::config::TangleConfig;
+use blueprint_sdk::tangle::{TangleConsumer, TangleLayer, TangleProducer};
 use blueprint_sdk::{Job, Router, error, info};
 
 #[tokio::main]
@@ -16,7 +16,7 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
 
     let env = BlueprintEnvironment::load()?;
     let tangle_client = env
-        .tangle_evm_client()
+        .tangle_client()
         .await
         .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?;
 
@@ -34,25 +34,22 @@ async fn main() -> Result<(), blueprint_sdk::Error> {
 
     let service_id = env
         .protocol_settings
-        .tangle_evm()
+        .tangle()
         .map_err(|e| blueprint_sdk::Error::Other(e.to_string()))?
         .service_id
         .ok_or_else(|| blueprint_sdk::Error::Other("SERVICE_ID missing".into()))?;
 
     info!("Starting API key blueprint for service {service_id}");
 
-    let tangle_producer = TangleEvmProducer::new(tangle_client.clone(), service_id);
-    let tangle_consumer = TangleEvmConsumer::new(tangle_client);
-    let tangle_config = TangleEvmConfig::default();
+    let tangle_producer = TangleProducer::new(tangle_client.clone(), service_id);
+    let tangle_consumer = TangleConsumer::new(tangle_client);
+    let tangle_config = TangleConfig::default();
 
     let result = BlueprintRunner::builder(tangle_config, env)
         .router(
             Router::new()
-                .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleEvmLayer))
-                .route(
-                    PURCHASE_API_KEY_JOB_ID,
-                    purchase_api_key.layer(TangleEvmLayer),
-                ),
+                .route(WRITE_RESOURCE_JOB_ID, write_resource.layer(TangleLayer))
+                .route(PURCHASE_API_KEY_JOB_ID, purchase_api_key.layer(TangleLayer)),
         )
         .background_service(ApiKeyProtectedService)
         .producer(tangle_producer)

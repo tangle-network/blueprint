@@ -4,7 +4,7 @@ use blueprint_manager::config::{
 };
 use blueprint_manager::executor::run_blueprint_manager;
 use blueprint_runner::config::{BlueprintEnvironment, ProtocolSettings};
-use blueprint_runner::tangle_evm::config::TangleEvmProtocolSettings;
+use blueprint_runner::tangle::config::TangleProtocolSettings;
 use color_eyre::eyre::Result;
 use dialoguer::console::style;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -42,7 +42,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
     blueprint_config.registration_mode = opts.registration_mode;
     blueprint_config.registration_capture_only = opts.registration_capture_only;
     blueprint_config.dry_run = opts.dry_run;
-    blueprint_config.protocol_settings = ProtocolSettings::TangleEvm(TangleEvmProtocolSettings {
+    blueprint_config.protocol_settings = ProtocolSettings::Tangle(TangleProtocolSettings {
         blueprint_id: opts.blueprint_id,
         service_id: opts.service_id,
         tangle_contract: opts.tangle_contract,

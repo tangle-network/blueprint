@@ -72,7 +72,7 @@ pub enum Error {
     #[error(transparent)]
     Request(#[from] reqwest::Error),
     #[error(transparent)]
-    TangleEvmClient(#[from] blueprint_client_tangle_evm::Error),
+    TangleClient(#[from] blueprint_client_tangle::Error),
     #[error(transparent)]
     Auth(#[from] blueprint_auth::Error),
     #[error(transparent)]

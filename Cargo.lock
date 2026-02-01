@@ -1001,7 +1001,7 @@ dependencies = [
  "anyhow",
  "axum",
  "blueprint-anvil-testing-utils",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-sdk",
  "once_cell",
  "serde",
@@ -2588,7 +2588,7 @@ dependencies = [
  "alloy-transport",
  "anyhow",
  "blueprint-chain-setup-anvil",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-core",
  "blueprint-core-testing-utils",
  "blueprint-crypto",
@@ -2597,7 +2597,7 @@ dependencies = [
  "blueprint-router",
  "blueprint-runner",
  "blueprint-std",
- "blueprint-tangle-evm-extra",
+ "blueprint-tangle-extra",
  "futures-util",
  "hex",
  "serde",
@@ -2776,7 +2776,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-client-tangle-evm"
+name = "blueprint-client-tangle"
 version = "0.1.0"
 dependencies = [
  "alloy-contract",
@@ -2816,7 +2816,7 @@ dependencies = [
  "blueprint-client-core",
  "blueprint-client-eigenlayer",
  "blueprint-client-evm",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-std",
  "thiserror 2.0.17",
 ]
@@ -2842,7 +2842,7 @@ dependencies = [
 name = "blueprint-contexts"
 version = "0.1.0-alpha.21"
 dependencies = [
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-clients",
  "blueprint-keystore",
  "blueprint-networking",
@@ -3214,7 +3214,7 @@ dependencies = [
  "blueprint-anvil-testing-utils",
  "blueprint-auth",
  "blueprint-chain-setup",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-clients",
  "blueprint-core",
  "blueprint-crypto",
@@ -3228,7 +3228,7 @@ dependencies = [
  "blueprint-router",
  "blueprint-runner",
  "blueprint-std",
- "blueprint-tangle-evm-extra",
+ "blueprint-tangle-extra",
  "blueprint-testing-utils",
  "capctl",
  "cargo-dist-schema",
@@ -3411,7 +3411,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "blueprint-anvil-testing-utils",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-core",
@@ -3503,7 +3503,7 @@ dependencies = [
  "blueprint-remote-providers",
  "blueprint-router",
  "blueprint-std",
- "blueprint-tangle-evm-extra",
+ "blueprint-tangle-extra",
  "bollard",
  "futures",
  "hex",
@@ -3619,7 +3619,7 @@ dependencies = [
  "alloy-signer-local",
  "async-trait",
  "blueprint-auth",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-evm-extra",
@@ -3682,7 +3682,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-std",
  "blueprint-stores",
- "blueprint-tangle-evm-extra",
+ "blueprint-tangle-extra",
  "blueprint-testing-utils",
  "document-features",
  "eigensdk",
@@ -3737,7 +3737,7 @@ dependencies = [
  "ark-ec",
  "ark-serialize 0.5.0",
  "axum",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-crypto-bn254",
  "blueprint-crypto-core",
  "hex",
@@ -3755,7 +3755,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "blueprint-tangle-evm-extra"
+name = "blueprint-tangle-extra"
 version = "0.1.0"
 dependencies = [
  "alloy",
@@ -3768,7 +3768,7 @@ dependencies = [
  "anyhow",
  "blueprint-anvil-testing-utils",
  "blueprint-chain-setup-anvil",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-crypto-bn254",
@@ -4064,7 +4064,7 @@ dependencies = [
  "assert_cmd",
  "bip39",
  "blueprint-chain-setup",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-clients",
  "blueprint-contexts",
  "blueprint-core",
@@ -6951,7 +6951,7 @@ dependencies = [
  "anyhow",
  "blueprint-anvil-testing-utils",
  "blueprint-router",
- "blueprint-tangle-evm-extra",
+ "blueprint-tangle-extra",
  "once_cell",
  "tokio",
 ]
@@ -7653,14 +7653,14 @@ dependencies = [
  "ark-serialize 0.5.0",
  "axum",
  "blueprint-anvil-testing-utils",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-crypto-bn254",
  "blueprint-crypto-core",
  "blueprint-faas",
  "blueprint-profiling",
  "blueprint-sdk",
  "blueprint-tangle-aggregation-svc",
- "blueprint-tangle-evm-extra",
+ "blueprint-tangle-extra",
  "bytes",
  "color-eyre",
  "hex",
@@ -10128,7 +10128,7 @@ dependencies = [
  "anyhow",
  "axum",
  "blueprint-anvil-testing-utils",
- "blueprint-client-tangle-evm",
+ "blueprint-client-tangle",
  "blueprint-sdk",
  "color-eyre",
  "once_cell",
