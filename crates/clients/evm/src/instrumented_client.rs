@@ -848,10 +848,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_suggest_gas_tip_cap() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test_suggest_gas_tip_cap: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
@@ -866,10 +863,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_gas_price() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -882,10 +876,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_status() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -898,10 +889,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_chain_id() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -916,10 +904,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_balance_at() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -938,10 +923,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscribe_new_head() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
 
         let instrumented_client = InstrumentedClient::new_ws(testnet.ws_endpoint)
             .await
@@ -953,10 +935,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscribe_filter_logs() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new_ws(testnet.ws_endpoint)
@@ -973,10 +952,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_block_by_hash() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1000,10 +976,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_block_by_number() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1026,10 +999,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_transaction_count() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1060,10 +1030,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_transaction_methods() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
             .await
             .unwrap();
@@ -1117,10 +1084,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_estimate_gas() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1154,10 +1118,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_call_contract_and_pending_call_contract() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1202,10 +1163,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_filter_logs() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1222,10 +1180,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_storage_at() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1249,10 +1204,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_block_number() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1284,10 +1236,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_code_at() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1306,10 +1255,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fee_history() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1347,10 +1293,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_header_by_hash() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1376,10 +1319,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_header_by_number() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1404,10 +1344,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_nonce_at() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1426,10 +1363,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pending_balance_at() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1449,10 +1383,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pending_code_at() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1469,10 +1400,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pending_nonce_at() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1489,10 +1417,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pending_storage_at() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
@@ -1514,10 +1439,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pending_transaction_count() {
-        let Some(testnet) = try_start_default_anvil_testnet(false).await else {
-            eprintln!("Skipping test: Docker not available");
-            return;
-        };
+        let testnet = start_default_anvil_testnet(false).await;
         let provider = get_provider_http(testnet.http_endpoint.clone());
 
         let instrumented_client = InstrumentedClient::new(testnet.http_endpoint.clone())
