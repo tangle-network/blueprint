@@ -100,8 +100,12 @@ pub trait MetricsProvider: Send + Sync {
     fn get_system_metrics_history(&self) -> impl Future<Output = Vec<SystemMetrics>> + Send;
     /// Get the historical blueprint metrics
     fn get_blueprint_metrics_history(&self) -> impl Future<Output = Vec<BlueprintMetrics>> + Send;
-    /// Add a custom metric
+    /// Add a custom metric (string-valued, for Prometheus/observability)
     fn add_custom_metric(&self, key: String, value: String) -> impl Future<Output = ()> + Send;
+    /// Add a numeric metric for on-chain submission via heartbeat
+    fn add_on_chain_metric(&self, key: String, value: u64) -> impl Future<Output = ()> + Send;
+    /// Drain and return all pending on-chain metrics
+    fn get_on_chain_metrics(&self) -> impl Future<Output = Vec<(String, u64)>> + Send;
     /// Set the blueprint status
     fn set_blueprint_status(
         &self,

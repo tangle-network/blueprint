@@ -201,6 +201,15 @@ impl MetricsProvider for RemoteMetricsProvider {
             .as_secs();
     }
 
+    async fn add_on_chain_metric(&self, _key: String, _value: u64) {
+        // Remote providers don't submit on-chain metrics directly
+    }
+
+    async fn get_on_chain_metrics(&self) -> Vec<(String, u64)> {
+        // Remote providers don't have on-chain metrics
+        Vec::new()
+    }
+
     async fn set_blueprint_status(&self, status_code: u32, status_message: Option<String>) {
         let mut status = self.status.write().await;
         status.status_code = status_code;

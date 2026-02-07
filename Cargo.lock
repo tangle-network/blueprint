@@ -3495,7 +3495,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "bincode",
  "blueprint-anvil-testing-utils",
  "blueprint-core",
  "blueprint-crypto",
@@ -13394,8 +13393,6 @@ dependencies = [
 [[package]]
 name = "tnt-core-bindings"
 version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dfc89a536fd39de9136b27c49453815ba22cc77ce428bbf991061375c7e84d3"
 dependencies = [
  "alloy",
  "alloy-contract",

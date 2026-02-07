@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use crate::error::Result;
 use crate::metrics::opentelemetry::{OpenTelemetryConfig, OpenTelemetryExporter};
 use crate::metrics::prometheus::PrometheusCollector;
+use crate::heartbeat::MetricsSource;
 use crate::metrics::types::{
     BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
 };
@@ -33,8 +34,11 @@ pub struct EnhancedMetricsProvider {
     /// Blueprint status
     blueprint_status: Arc<RwLock<BlueprintStatus>>,
 
-    /// Custom metrics
+    /// Custom metrics (string-valued, for Prometheus/observability)
     custom_metrics: Arc<RwLock<std::collections::HashMap<String, String>>>,
+
+    /// On-chain metrics (u64-valued, for heartbeat submission)
+    on_chain_metrics: Arc<RwLock<std::collections::HashMap<String, u64>>>,
 
     /// Prometheus collector
     prometheus_collector: Arc<PrometheusCollector>,
@@ -114,6 +118,7 @@ impl EnhancedMetricsProvider {
             blueprint_metrics: Arc::new(RwLock::new(Vec::new())),
             blueprint_status: Arc::new(RwLock::new(blueprint_status)),
             custom_metrics: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            on_chain_metrics: Arc::new(RwLock::new(std::collections::HashMap::new())),
             prometheus_collector,
             opentelemetry_exporter,
             prometheus_server: Arc::new(RwLock::new(None)),
@@ -413,6 +418,17 @@ impl MetricsProvider for EnhancedMetricsProvider {
             .await;
     }
 
+    async fn add_on_chain_metric(&self, key: String, value: u64) {
+        let mut metrics = self.on_chain_metrics.write().await;
+        metrics.insert(key, value);
+    }
+
+    async fn get_on_chain_metrics(&self) -> Vec<(String, u64)> {
+        let mut metrics = self.on_chain_metrics.write().await;
+        let result: Vec<(String, u64)> = metrics.drain().collect();
+        result
+    }
+
     /// Sets the `BlueprintStatus`.
     ///
     /// # Parameters
@@ -505,5 +521,13 @@ impl MetricsProvider for EnhancedMetricsProvider {
 
         info!("Started metrics collection");
         Ok(())
+    }
+}
+
+impl MetricsSource for EnhancedMetricsProvider {
+    fn get_custom_metrics(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Vec<(String, u64)>> + Send + '_>> {
+        Box::pin(async { self.get_on_chain_metrics().await })
     }
 }
