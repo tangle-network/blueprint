@@ -9,4 +9,7 @@ pub enum Error {
     /// Errors serializing or deserializing the database
     #[error(transparent)]
     Serialization(#[from] serde_json::Error),
+    /// Internal mutex was poisoned by a panicking thread
+    #[error("database mutex poisoned")]
+    Poisoned,
 }
