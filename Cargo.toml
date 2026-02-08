@@ -455,5 +455,3 @@ debug = true
 inherits = "release"
 lto = "thin"
 
-[patch.crates-io]
-tnt-core-bindings = { path = "../tnt-core/bindings" }

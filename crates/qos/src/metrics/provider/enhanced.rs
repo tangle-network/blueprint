@@ -6,9 +6,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 use crate::error::Result;
+use crate::heartbeat::MetricsSource;
 use crate::metrics::opentelemetry::{OpenTelemetryConfig, OpenTelemetryExporter};
 use crate::metrics::prometheus::PrometheusCollector;
-use crate::heartbeat::MetricsSource;
 use crate::metrics::types::{
     BlueprintMetrics, BlueprintStatus, MetricsConfig, MetricsProvider, SystemMetrics,
 };
