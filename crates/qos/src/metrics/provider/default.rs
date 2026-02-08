@@ -169,17 +169,18 @@ impl MetricsProvider for DefaultMetricsProvider {
         }
     }
     async fn add_on_chain_metric(&self, key: String, value: u64) {
-        if let Ok(mut metrics) = self.on_chain_metrics.try_write() {
-            metrics.insert(key, value);
-        }
+        let mut metrics = self.on_chain_metrics.write().await;
+        metrics.insert(key, value);
     }
 
     async fn get_on_chain_metrics(&self) -> Vec<(String, u64)> {
-        if let Ok(mut metrics) = self.on_chain_metrics.try_write() {
-            metrics.drain().collect()
-        } else {
-            Vec::new()
-        }
+        let metrics = self.on_chain_metrics.read().await;
+        metrics.iter().map(|(k, v)| (k.clone(), *v)).collect()
+    }
+
+    async fn clear_on_chain_metrics(&self) {
+        let mut metrics = self.on_chain_metrics.write().await;
+        metrics.clear();
     }
 
     /// Sets the current `BlueprintStatus`.

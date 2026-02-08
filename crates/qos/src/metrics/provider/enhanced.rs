@@ -424,9 +424,13 @@ impl MetricsProvider for EnhancedMetricsProvider {
     }
 
     async fn get_on_chain_metrics(&self) -> Vec<(String, u64)> {
+        let metrics = self.on_chain_metrics.read().await;
+        metrics.iter().map(|(k, v)| (k.clone(), *v)).collect()
+    }
+
+    async fn clear_on_chain_metrics(&self) {
         let mut metrics = self.on_chain_metrics.write().await;
-        let result: Vec<(String, u64)> = metrics.drain().collect();
-        result
+        metrics.clear();
     }
 
     /// Sets the `BlueprintStatus`.
@@ -529,5 +533,11 @@ impl MetricsSource for EnhancedMetricsProvider {
         &self,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Vec<(String, u64)>> + Send + '_>> {
         Box::pin(async { self.get_on_chain_metrics().await })
+    }
+
+    fn clear_custom_metrics(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(async { self.clear_on_chain_metrics().await })
     }
 }

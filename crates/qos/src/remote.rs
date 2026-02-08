@@ -210,6 +210,10 @@ impl MetricsProvider for RemoteMetricsProvider {
         Vec::new()
     }
 
+    async fn clear_on_chain_metrics(&self) {
+        // Remote providers don't have on-chain metrics to clear
+    }
+
     async fn set_blueprint_status(&self, status_code: u32, status_message: Option<String>) {
         let mut status = self.status.write().await;
         status.status_code = status_code;

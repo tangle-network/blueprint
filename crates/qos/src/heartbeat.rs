@@ -90,9 +90,12 @@ pub trait HeartbeatConsumer: Send + Sync + 'static {
 /// Bridge trait for providing on-chain metrics to the heartbeat system.
 ///
 /// The `MetricsProvider` trait uses RPITIT which is not dyn-compatible.
-/// This trait provides a dyn-compatible bridge for draining on-chain metrics.
+/// This trait provides a dyn-compatible bridge for reading on-chain metrics.
 pub trait MetricsSource: Send + Sync + 'static {
+    /// Read all pending on-chain metrics (non-destructive).
     fn get_custom_metrics(&self) -> Pin<Box<dyn Future<Output = Vec<(String, u64)>> + Send + '_>>;
+    /// Clear on-chain metrics after successful submission.
+    fn clear_custom_metrics(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }
 
 /// Configuration required to execute blockchain transactions for heartbeats.
@@ -234,7 +237,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         let heartbeat_call = submitHeartbeatCall {
             serviceId: status.service_id,
             blueprintId: status.blueprint_id,
-            statusCode: status.status_code as u8,
+            statusCode: u8::try_from(status.status_code).unwrap_or(u8::MAX),
             metrics: metrics_bytes.into(),
             signature: signature.into(),
         };
@@ -262,6 +265,10 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
                 tx = %receipt.transaction_hash,
                 "Heartbeat transaction finalized successfully"
             );
+            // Clear metrics only after confirmed on-chain submission
+            if let Some(ref source) = metrics_source {
+                source.clear_custom_metrics().await;
+            }
         } else {
             warn!(
                 service_id = config_service_id,

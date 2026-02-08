@@ -104,8 +104,10 @@ pub trait MetricsProvider: Send + Sync {
     fn add_custom_metric(&self, key: String, value: String) -> impl Future<Output = ()> + Send;
     /// Add a numeric metric for on-chain submission via heartbeat
     fn add_on_chain_metric(&self, key: String, value: u64) -> impl Future<Output = ()> + Send;
-    /// Drain and return all pending on-chain metrics
+    /// Return all pending on-chain metrics (non-destructive read)
     fn get_on_chain_metrics(&self) -> impl Future<Output = Vec<(String, u64)>> + Send;
+    /// Clear on-chain metrics after successful submission
+    fn clear_on_chain_metrics(&self) -> impl Future<Output = ()> + Send;
     /// Set the blueprint status
     fn set_blueprint_status(
         &self,
