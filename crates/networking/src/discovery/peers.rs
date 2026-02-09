@@ -297,10 +297,23 @@ impl<K: KeyType> PeerManager<K> {
         }
     }
 
-    /// Check if a peer is banned
+    /// Check if a peer is banned (expired bans are removed inline)
     #[must_use]
     pub fn is_banned(&self, peer_id: &PeerId) -> bool {
-        self.banned_peers.contains_key(peer_id)
+        match self.banned_peers.get(peer_id) {
+            Some(entry) => {
+                if let Some(expiry) = *entry {
+                    if Instant::now() >= expiry {
+                        // Ban expired — remove it and treat as not banned
+                        drop(entry);
+                        self.banned_peers.remove(peer_id);
+                        return false;
+                    }
+                }
+                true
+            }
+            None => false,
+        }
     }
 
     /// Log a successful interaction with a peer

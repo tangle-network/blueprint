@@ -71,6 +71,8 @@ pub struct NetworkServiceHandle<K: KeyType> {
     pub peer_manager: Arc<PeerManager<K>>,
     /// The local verification key used to identify this node in the whitelist
     pub local_verification_key: Option<VerificationIdentifierKey<K>>,
+    /// Shutdown signal sender — signals the background service to stop
+    pub(crate) shutdown_tx: Option<tokio::sync::watch::Sender<bool>>,
 }
 
 impl<K: KeyType> Clone for NetworkServiceHandle<K> {
@@ -83,6 +85,7 @@ impl<K: KeyType> Clone for NetworkServiceHandle<K> {
             receiver: NetworkReceiver::new(self.receiver.protocol_message_receiver.clone()),
             peer_manager: self.peer_manager.clone(),
             local_verification_key: self.local_verification_key.clone(),
+            shutdown_tx: self.shutdown_tx.clone(),
         }
     }
 }
@@ -105,6 +108,14 @@ impl<K: KeyType> NetworkServiceHandle<K> {
             receiver: NetworkReceiver::new(protocol_message_receiver),
             peer_manager,
             local_verification_key: None,
+            shutdown_tx: None,
+        }
+    }
+
+    /// Signal the background network service to shut down.
+    pub fn shutdown(&self) {
+        if let Some(tx) = &self.shutdown_tx {
+            let _ = tx.send(true);
         }
     }
 
@@ -185,8 +196,14 @@ impl<K: KeyType> NetworkServiceHandle<K> {
     pub fn get_listen_addr(&self) -> Option<Multiaddr> {
         // Get the first peer info for our local peer ID
         if let Some(peer_info) = self.peer_manager.get_peer_info(&self.local_peer_id) {
-            // Return the first address from our peer info
-            peer_info.addresses.iter().next().cloned()
+            // Prefer a localhost (127.0.0.1) address for reliability
+            let localhost_addr = peer_info.addresses.iter().find(|addr| {
+                addr.iter()
+                    .any(|p| matches!(p, libp2p::multiaddr::Protocol::Ip4(ip) if ip.is_loopback()))
+            });
+            localhost_addr
+                .or_else(|| peer_info.addresses.iter().next())
+                .cloned()
         } else {
             None
         }

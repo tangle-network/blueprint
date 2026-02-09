@@ -310,6 +310,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSServiceBuilder<C> {
                 keystore_uri: keystore,
                 status_registry_address: status_registry,
                 dry_run: self.dry_run,
+                metrics_source: None,
             })
         } else {
             None

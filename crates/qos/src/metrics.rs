@@ -1,3 +1,4 @@
+pub mod abi;
 pub mod opentelemetry;
 pub mod prometheus;
 pub mod provider;

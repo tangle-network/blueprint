@@ -125,11 +125,16 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
             } => {
                 debug!(%peer, "Received handshake response");
 
-                // Verify we have a pending outbound handshake
-                if !self.outbound_handshakes.contains_key(&peer) {
-                    warn!(%peer, "Received unexpected handshake response");
+                // If the peer is already verified, there's nothing to do.
+                if self.peer_manager.is_peer_verified(&peer) {
+                    debug!(%peer, "Handshake response arrived after peer already verified");
                     return;
                 }
+
+                // Remove outbound entry if present (may be absent when the
+                // response is to a retry handshake which doesn't track in
+                // outbound_handshakes).
+                self.outbound_handshakes.remove(&peer);
 
                 if !self.peer_manager.is_key_whitelisted(&verification_id_key) {
                     warn!(%peer, ?verification_id_key, "Received handshake response from unwhitelisted peer");
@@ -251,7 +256,10 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
 
         for peer_id in expired_inbound {
             self.inbound_handshakes.remove(&peer_id);
-            self.handle_handshake_failure(&peer_id, "Inbound handshake timeout");
+            // Timeouts are expected during peer discovery; don't count them
+            // toward the ban threshold. Only real verification failures
+            // (invalid signatures) should trigger banning.
+            debug!(%peer_id, "Inbound handshake timed out");
         }
 
         // Check outbound handshakes
@@ -266,7 +274,7 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
 
         for peer_id in expired_outbound {
             self.outbound_handshakes.remove(&peer_id);
-            self.handle_handshake_failure(&peer_id, "Outbound handshake timeout");
+            debug!(%peer_id, "Outbound handshake timed out");
         }
     }
 

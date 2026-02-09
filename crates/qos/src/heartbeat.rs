@@ -11,6 +11,7 @@ use blueprint_keystore::{Keystore, KeystoreConfig};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::{
+    future::Future,
     pin::Pin,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -86,6 +87,17 @@ pub trait HeartbeatConsumer: Send + Sync + 'static {
     ) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'static>>;
 }
 
+/// Bridge trait for providing on-chain metrics to the heartbeat system.
+///
+/// The `MetricsProvider` trait uses RPITIT which is not dyn-compatible.
+/// This trait provides a dyn-compatible bridge for reading on-chain metrics.
+pub trait MetricsSource: Send + Sync + 'static {
+    /// Read all pending on-chain metrics (non-destructive).
+    fn get_custom_metrics(&self) -> Pin<Box<dyn Future<Output = Vec<(String, u64)>> + Send + '_>>;
+    /// Clear on-chain metrics after successful submission.
+    fn clear_custom_metrics(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
+}
+
 /// Configuration required to execute blockchain transactions for heartbeats.
 #[derive(Clone)]
 struct HeartbeatRuntimeConfig {
@@ -103,6 +115,7 @@ struct HeartbeatTaskContext<C: HeartbeatConsumer + Send + Sync + 'static> {
     runtime: Arc<HeartbeatRuntimeConfig>,
     instance_service_id: u64,
     instance_blueprint_id: u64,
+    metrics_source: Option<Arc<dyn MetricsSource>>,
 }
 
 impl<C: HeartbeatConsumer + Send + Sync + 'static> Clone for HeartbeatTaskContext<C> {
@@ -115,6 +128,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> Clone for HeartbeatTaskContex
             runtime: Arc::clone(&self.runtime),
             instance_service_id: self.instance_service_id,
             instance_blueprint_id: self.instance_blueprint_id,
+            metrics_source: self.metrics_source.clone(),
         }
     }
 }
@@ -130,6 +144,7 @@ pub struct HeartbeatService<C: HeartbeatConsumer + Send + Sync + 'static> {
     runtime: Arc<HeartbeatRuntimeConfig>,
     service_id: u64,
     blueprint_id: u64,
+    metrics_source: Option<Arc<dyn MetricsSource>>,
 }
 
 impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
@@ -142,6 +157,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
             runtime,
             instance_service_id,
             instance_blueprint_id,
+            metrics_source,
         } = args;
 
         let status = HeartbeatStatus {
@@ -190,12 +206,22 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
             .map_err(|e| Error::Other(format!("Failed to get operator ECDSA secret key: {e}")))?;
 
         let mut signing_key = operator_ecdsa_secret.clone();
-        let metrics_bytes = bincode::serialize(&status)
-            .map_err(|e| Error::Other(format!("Failed to serialize heartbeat status: {e}")))?;
+        let custom_metrics = if let Some(ref source) = metrics_source {
+            source.get_custom_metrics().await
+        } else {
+            vec![]
+        };
+        let metrics_bytes = if custom_metrics.is_empty() {
+            vec![]
+        } else {
+            crate::metrics::abi::encode_metric_pairs(&custom_metrics)
+        };
+        let status_code = u8::try_from(status.status_code).unwrap_or(u8::MAX);
         let signature = sign_heartbeat_payload(
             &mut signing_key,
             status.service_id,
             status.blueprint_id,
+            status_code,
             &metrics_bytes,
         )?;
 
@@ -213,7 +239,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         let heartbeat_call = submitHeartbeatCall {
             serviceId: status.service_id,
             blueprintId: status.blueprint_id,
-            statusCode: status.status_code as u8,
+            statusCode: status_code,
             metrics: metrics_bytes.into(),
             signature: signature.into(),
         };
@@ -241,6 +267,10 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
                 tx = %receipt.transaction_hash,
                 "Heartbeat transaction finalized successfully"
             );
+            // Clear metrics only after confirmed on-chain submission
+            if let Some(ref source) = metrics_source {
+                source.clear_custom_metrics().await;
+            }
         } else {
             warn!(
                 service_id = config_service_id,
@@ -263,6 +293,31 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         dry_run: bool,
         service_id: u64,
         blueprint_id: u64,
+    ) -> Result<Self> {
+        Self::with_metrics_source(
+            config,
+            consumer,
+            http_rpc_endpoint,
+            keystore_uri,
+            status_registry_address,
+            dry_run,
+            service_id,
+            blueprint_id,
+            None,
+        )
+    }
+
+    /// Creates a new heartbeat service with metrics source for on-chain metric submission.
+    pub fn with_metrics_source(
+        config: HeartbeatConfig,
+        consumer: Arc<C>,
+        http_rpc_endpoint: String,
+        keystore_uri: String,
+        status_registry_address: Address,
+        dry_run: bool,
+        service_id: u64,
+        blueprint_id: u64,
+        metrics_source: Option<Arc<dyn MetricsSource>>,
     ) -> Result<Self> {
         if http_rpc_endpoint.is_empty() {
             return Err(Error::Other(
@@ -290,6 +345,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
             }),
             service_id,
             blueprint_id,
+            metrics_source,
         })
     }
 
@@ -333,6 +389,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
             runtime: Arc::clone(&self.runtime),
             instance_service_id: self.service_id,
             instance_blueprint_id: self.blueprint_id,
+            metrics_source: self.metrics_source.clone(),
         };
 
         let interval_ms = self.config.interval_secs * 1000;
@@ -397,15 +454,19 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> Drop for HeartbeatService<C> 
     }
 }
 
+/// Sign heartbeat payload: keccak256(abi.encodePacked(serviceId, blueprintId, statusCode, metrics))
+/// with Ethereum signed message prefix. Must match OperatorStatusRegistry.sol verification.
 fn sign_heartbeat_payload(
     signing_key: &mut K256SigningKey,
     service_id: u64,
     blueprint_id: u64,
+    status_code: u8,
     metrics: &[u8],
 ) -> Result<Vec<u8>> {
-    let mut payload = Vec::with_capacity(16 + metrics.len());
+    let mut payload = Vec::with_capacity(17 + metrics.len());
     payload.extend_from_slice(&service_id.to_be_bytes());
     payload.extend_from_slice(&blueprint_id.to_be_bytes());
+    payload.push(status_code);
     payload.extend_from_slice(metrics);
 
     let message_hash = keccak256(&payload);

@@ -1,7 +1,7 @@
 use crate::{
     QoSConfig,
     error::{self as qos_error, Result},
-    heartbeat::{HeartbeatConsumer, HeartbeatService},
+    heartbeat::{HeartbeatConsumer, HeartbeatService, MetricsSource},
     logging::grafana::{
         CreateDataSourceRequest, Dashboard, GrafanaClient, LokiJsonData, PrometheusJsonData,
     },
@@ -27,6 +27,7 @@ pub struct HeartbeatContext<C: HeartbeatConsumer + Send + Sync + 'static> {
     pub keystore_uri: String,
     pub status_registry_address: Address,
     pub dry_run: bool,
+    pub metrics_source: Option<Arc<dyn MetricsSource>>,
 }
 
 /// Unified Quality of Service (`QoS`) service that integrates heartbeat monitoring, metrics collection,
@@ -76,27 +77,39 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
         heartbeat_ctx: Option<HeartbeatContext<C>>,
         otel_config: Option<OpenTelemetryConfig>,
     ) -> Result<Self> {
+        // Create metrics service first so we can extract the MetricsSource for heartbeat
+        let metrics_service = match (config.metrics.clone(), otel_config) {
+            (Some(mc), Some(oc)) => Some(Arc::new(MetricsService::with_otel_config(mc, &oc)?)),
+            (Some(mc), None) => Some(Arc::new(MetricsService::new(mc)?)),
+            (None, _) => None,
+        };
+
         let heartbeat_service = match (config.heartbeat.clone(), heartbeat_ctx) {
-            (Some(hc), Some(ctx)) => Some(Arc::new(HeartbeatService::new(
-                hc.clone(),
-                ctx.consumer.clone(),
-                ctx.http_rpc_endpoint,
-                ctx.keystore_uri,
-                ctx.status_registry_address,
-                ctx.dry_run,
-                hc.service_id,
-                hc.blueprint_id,
-            )?)),
+            (Some(hc), Some(mut ctx)) => {
+                // If no metrics_source was provided but we have a metrics service,
+                // use its provider as the metrics source
+                if ctx.metrics_source.is_none() {
+                    if let Some(ms) = &metrics_service {
+                        ctx.metrics_source = Some(ms.provider() as Arc<dyn MetricsSource>);
+                    }
+                }
+                Some(Arc::new(HeartbeatService::with_metrics_source(
+                    hc.clone(),
+                    ctx.consumer.clone(),
+                    ctx.http_rpc_endpoint,
+                    ctx.keystore_uri,
+                    ctx.status_registry_address,
+                    ctx.dry_run,
+                    hc.service_id,
+                    hc.blueprint_id,
+                    ctx.metrics_source,
+                )?))
+            }
             (Some(_), None) => {
                 return Err(qos_error::Error::Other(
                     "Heartbeat configuration provided without runtime context".to_string(),
                 ));
             }
-            (None, _) => None,
-        };
-        let metrics_service = match (config.metrics.clone(), otel_config) {
-            (Some(mc), Some(oc)) => Some(Arc::new(MetricsService::with_otel_config(mc, &oc)?)),
-            (Some(mc), None) => Some(Arc::new(MetricsService::new(mc)?)),
             (None, _) => None,
         };
 

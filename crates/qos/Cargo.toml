@@ -22,7 +22,7 @@ blueprint-remote-providers = { workspace = true, optional = true }
 async-trait = { workspace = true }
 bollard = { workspace = true, features = ["ssl"] }
 tempfile = { workspace = true }
-bincode = { workspace = true }
+
 
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "time", "signal", "macros"] }

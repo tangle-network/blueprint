@@ -270,6 +270,14 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     info!("===========================\n");
 
     info!("Signature aggregation test completed successfully");
+
+    // Shut down all network services so spawned tasks don't leak into the
+    // next serial test and cause mDNS/port contamination.
+    for handle in &handles {
+        handle.shutdown();
+    }
+    // Wait for swarm event loops to exit and mDNS registrations to expire.
+    tokio::time::sleep(Duration::from_secs(2)).await;
 }
 
 // BLS Tests

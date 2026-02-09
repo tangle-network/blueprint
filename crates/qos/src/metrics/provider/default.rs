@@ -12,6 +12,7 @@ pub struct DefaultMetricsProvider {
     blueprint_metrics: Arc<tokio::sync::RwLock<Vec<BlueprintMetrics>>>,
     blueprint_status: Arc<tokio::sync::RwLock<BlueprintStatus>>,
     custom_metrics: Arc<tokio::sync::RwLock<std::collections::HashMap<String, String>>>,
+    on_chain_metrics: Arc<tokio::sync::RwLock<std::collections::HashMap<String, u64>>>,
     config: MetricsConfig,
     start_time: Instant,
 }
@@ -25,6 +26,7 @@ impl DefaultMetricsProvider {
             blueprint_metrics: Arc::new(RwLock::new(Vec::new())),
             blueprint_status: Arc::new(RwLock::new(BlueprintStatus::default())),
             custom_metrics: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            on_chain_metrics: Arc::new(RwLock::new(std::collections::HashMap::new())),
             config,
             start_time: Instant::now(),
         }
@@ -166,6 +168,21 @@ impl MetricsProvider for DefaultMetricsProvider {
             );
         }
     }
+    async fn add_on_chain_metric(&self, key: String, value: u64) {
+        let mut metrics = self.on_chain_metrics.write().await;
+        metrics.insert(key, value);
+    }
+
+    async fn get_on_chain_metrics(&self) -> Vec<(String, u64)> {
+        let metrics = self.on_chain_metrics.read().await;
+        metrics.iter().map(|(k, v)| (k.clone(), *v)).collect()
+    }
+
+    async fn clear_on_chain_metrics(&self) {
+        let mut metrics = self.on_chain_metrics.write().await;
+        metrics.clear();
+    }
+
     /// Sets the current `BlueprintStatus`.
     async fn set_blueprint_status(&self, status_code: u32, status_message: Option<String>) {
         if let Ok(mut status_guard) = self.blueprint_status.try_write() {
