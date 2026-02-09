@@ -133,10 +133,7 @@ where
     /// Returns a clone of all key-value pairs in the database.
     pub fn entries(&self) -> Result<Vec<(String, T)>, Error> {
         let data = self.lock()?;
-        Ok(data
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect())
+        Ok(data.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
     }
 
     /// Finds the first value matching a predicate.
@@ -457,10 +454,7 @@ mod tests {
 
         let mut entries = db.entries().unwrap();
         entries.sort_by_key(|(k, _)| k.clone());
-        assert_eq!(
-            entries,
-            vec![("a".to_string(), 1), ("b".to_string(), 2)]
-        );
+        assert_eq!(entries, vec![("a".to_string(), 1), ("b".to_string(), 2)]);
     }
 
     #[test]
