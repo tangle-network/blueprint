@@ -66,6 +66,10 @@ pub struct BlueprintBehaviourConfig<K: KeyType> {
     pub protocol_message_sender: Sender<ProtocolMessage>,
     /// Whether to use EVM address for handshake verification
     pub using_evm_address_for_handshake_verification: bool,
+    /// Whether to enable mDNS discovery
+    pub enable_mdns: bool,
+    /// Whether to enable Kademlia DHT
+    pub enable_kademlia: bool,
 }
 
 impl<K: KeyType> BlueprintBehaviour<K> {
@@ -91,8 +95,8 @@ impl<K: KeyType> BlueprintBehaviour<K> {
             config.network_name
         );
         let discovery = DiscoveryConfig::new(config.local_key.public(), config.network_name)
-            .mdns(true)
-            .kademlia(true)
+            .mdns(config.enable_mdns)
+            .kademlia(config.enable_kademlia)
             .target_peer_count(config.target_peer_count)
             .build()?;
 

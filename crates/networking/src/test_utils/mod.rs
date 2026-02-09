@@ -413,19 +413,23 @@ pub async fn wait_for_all_handshakes<K: KeyType>(
                 }
             }
 
-            // Wait with exponential backoff + simple jitter based on time
-            // Use nanoseconds from current time as a simple pseudo-random jitter
+            // Only increase backoff when no progress was made this iteration.
+            // Previously, the delay increased unconditionally, causing slow crypto
+            // backends (BN254, W3fBls377) to hit 500ms polling intervals before
+            // verifications could complete, leading to flaky timeouts.
+            if verified_count == last_verified_count {
+                current_delay = Duration::from_secs_f64(
+                    (current_delay.as_secs_f64() * backoff_factor).min(max_delay.as_secs_f64()),
+                );
+            }
+
+            // Wait with jitter based on time
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .subsec_nanos();
             let jitter = Duration::from_millis(u64::from(nanos % 50));
             tokio::time::sleep(current_delay + jitter).await;
-
-            // Increase delay for next iteration (capped at max)
-            current_delay = Duration::from_secs_f64(
-                (current_delay.as_secs_f64() * backoff_factor).min(max_delay.as_secs_f64()),
-            );
         }
     })
     .await;

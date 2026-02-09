@@ -245,6 +245,10 @@ pub struct NetworkService<K: KeyType> {
     bootstrap_peers: HashSet<Multiaddr>,
     /// Channel for receiving allowed keys updates
     allowed_keys_rx: Receiver<AllowedKeys<K>>,
+    /// Shutdown signal sender — kept here until `start()` moves it into the handle
+    shutdown_tx: tokio::sync::watch::Sender<bool>,
+    /// Shutdown signal receiver — cloned into spawned tasks
+    shutdown_rx: tokio::sync::watch::Receiver<bool>,
 }
 
 impl<K: KeyType> NetworkService<K> {
@@ -268,8 +272,8 @@ impl<K: KeyType> NetworkService<K> {
             listen_addr,
             target_peer_count,
             bootstrap_peers,
-            enable_mdns: _,
-            enable_kademlia: _,
+            enable_mdns,
+            enable_kademlia,
             using_evm_address_for_handshake_verification,
             ..
         } = config;
@@ -291,6 +295,8 @@ impl<K: KeyType> NetworkService<K> {
             peer_manager: peer_manager.clone(),
             protocol_message_sender,
             using_evm_address_for_handshake_verification,
+            enable_mdns,
+            enable_kademlia,
         };
         let behaviour = BlueprintBehaviour::new(blueprint_behaviour_config)?;
 
@@ -319,6 +325,8 @@ impl<K: KeyType> NetworkService<K> {
         swarm.listen_on(listen_addr)?;
         let bootstrap_peers = bootstrap_peers.into_iter().collect();
 
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
         Ok(Self {
             swarm,
             local_signing_key: instance_key_pair,
@@ -330,6 +338,8 @@ impl<K: KeyType> NetworkService<K> {
             event_receiver,
             bootstrap_peers,
             allowed_keys_rx,
+            shutdown_tx,
+            shutdown_rx,
         })
     }
 
@@ -342,9 +352,10 @@ impl<K: KeyType> NetworkService<K> {
         let local_peer_id = *self.swarm.local_peer_id();
         let network_sender = self.network_sender.clone();
         let protocol_message_receiver = self.protocol_message_receiver.clone();
+        let shutdown_tx = self.shutdown_tx.clone();
 
         // Create handle with new interface
-        let handle = NetworkServiceHandle::new(
+        let mut handle = NetworkServiceHandle::new(
             local_peer_id,
             self.swarm
                 .behaviour()
@@ -356,6 +367,7 @@ impl<K: KeyType> NetworkService<K> {
             network_sender,
             protocol_message_receiver,
         );
+        handle.shutdown_tx = Some(shutdown_tx);
 
         // Add our own peer ID to the peer manager with all listening addresses
         let mut info = PeerInfo::default();
@@ -367,8 +379,12 @@ impl<K: KeyType> NetworkService<K> {
         // Start allowed keys updater
         let peer_manager = self.peer_manager.clone();
         let allowed_keys_rx = self.allowed_keys_rx.clone();
+        let mut shutdown_keys = self.shutdown_rx.clone();
         tokio::spawn(async move {
-            peer_manager.run_allowed_keys_updater(&allowed_keys_rx);
+            tokio::select! {
+                _ = async { peer_manager.run_allowed_keys_updater(&allowed_keys_rx) } => {}
+                _ = shutdown_keys.changed() => {}
+            }
         });
 
         // Spawn background task
@@ -400,6 +416,8 @@ impl<K: KeyType> NetworkService<K> {
         let mut last_handshake_retry = tokio::time::Instant::now();
         // Retry unverified handshakes every 5 seconds
         const HANDSHAKE_RETRY_INTERVAL: Duration = Duration::from_secs(3);
+
+        let mut shutdown_rx = self.shutdown_rx.clone();
 
         loop {
             // Check if we should retry handshakes for unverified peers
@@ -444,6 +462,11 @@ impl<K: KeyType> NetworkService<K> {
                     {
                         warn!("Failed to handle network message: {}", e);
                     }
+                }
+                // Shutdown signal — break the event loop so resources are freed
+                _ = shutdown_rx.changed() => {
+                    info!("Network service shutting down");
+                    break;
                 }
                 // Add a short timeout to ensure we don't miss the handshake retry check
                 () = tokio::time::sleep(Duration::from_millis(100)) => {}
