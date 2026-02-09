@@ -26,7 +26,7 @@ bincode = { workspace = true }
 
 # Data structures
 hashbrown = { workspace = true }
-lru = "0.12"
+lru = "0.13"
 parking_lot = { workspace = true }
 
 # Networking (optional, for live implementation)

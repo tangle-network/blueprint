@@ -3131,7 +3131,7 @@ dependencies = [
  "futures",
  "hashbrown 0.15.5",
  "libp2p",
- "lru 0.12.5",
+ "lru 0.13.0",
  "parking_lot 0.12.5",
  "rand 0.8.5",
  "serde",
