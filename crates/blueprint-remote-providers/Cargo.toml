@@ -78,7 +78,7 @@ proptest = "1.0"
 mockito = "1.0"
 # Official AWS mocking library
 aws-smithy-mocks-experimental = "0.2"
-aws-smithy-runtime = { version = "1.7", features = ["test-util"] }
+aws-smithy-runtime = { version = "1.10", features = ["test-util"] }
 aws-smithy-types = "1.2"
 http = "1.0"
 # Additional dependencies for integration tests
