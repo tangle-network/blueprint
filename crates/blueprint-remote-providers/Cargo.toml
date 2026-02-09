@@ -86,7 +86,7 @@ chrono = { workspace = true, features = ["serde", "clock"] }
 rand = "0.8"
 tracing-subscriber.workspace = true
 # For regex in wiremock matchers
-regex = "1.10"
+regex = "1.12"
 # For container-based testing
 testcontainers = "0.23"
 # For K8s testing
