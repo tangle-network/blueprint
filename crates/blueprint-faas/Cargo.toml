@@ -40,7 +40,7 @@ gcp_auth = { version = "0.12", optional = true }
 
 # Azure SDK
 azure_core = { version = "0.20", optional = true }
-azure_identity = { version = "0.20", optional = true }
+azure_identity = { version = "0.31", optional = true }
 
 [dev-dependencies]
 serial_test.workspace = true
