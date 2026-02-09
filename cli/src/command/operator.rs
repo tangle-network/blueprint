@@ -98,7 +98,13 @@ pub async fn submit_heartbeat(
     };
 
     let metrics_bytes = payload.encode();
-    let signature = sign_heartbeat_payload(signing_key, service_id, blueprint_id, &metrics_bytes)?;
+    let signature = sign_heartbeat_payload(
+        signing_key,
+        service_id,
+        blueprint_id,
+        status_code,
+        &metrics_bytes,
+    )?;
 
     let local_signer = signing_key
         .alloy_key()
@@ -165,15 +171,19 @@ pub async fn submit_heartbeat(
     Ok(())
 }
 
+/// Sign heartbeat payload: keccak256(abi.encodePacked(serviceId, blueprintId, statusCode, metrics))
+/// with Ethereum signed message prefix. Must match OperatorStatusRegistry.sol verification.
 fn sign_heartbeat_payload(
     signing_key: &mut K256SigningKey,
     service_id: u64,
     blueprint_id: u64,
+    status_code: u8,
     metrics: &[u8],
 ) -> Result<Vec<u8>> {
-    let mut payload = Vec::with_capacity(16 + metrics.len());
+    let mut payload = Vec::with_capacity(17 + metrics.len());
     payload.extend_from_slice(&service_id.to_be_bytes());
     payload.extend_from_slice(&blueprint_id.to_be_bytes());
+    payload.push(status_code);
     payload.extend_from_slice(metrics);
 
     let message_hash = keccak256(&payload);

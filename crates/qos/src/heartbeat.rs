@@ -216,10 +216,12 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         } else {
             crate::metrics::abi::encode_metric_pairs(&custom_metrics)
         };
+        let status_code = u8::try_from(status.status_code).unwrap_or(u8::MAX);
         let signature = sign_heartbeat_payload(
             &mut signing_key,
             status.service_id,
             status.blueprint_id,
+            status_code,
             &metrics_bytes,
         )?;
 
@@ -237,7 +239,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         let heartbeat_call = submitHeartbeatCall {
             serviceId: status.service_id,
             blueprintId: status.blueprint_id,
-            statusCode: u8::try_from(status.status_code).unwrap_or(u8::MAX),
+            statusCode: status_code,
             metrics: metrics_bytes.into(),
             signature: signature.into(),
         };
@@ -452,15 +454,19 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> Drop for HeartbeatService<C> 
     }
 }
 
+/// Sign heartbeat payload: keccak256(abi.encodePacked(serviceId, blueprintId, statusCode, metrics))
+/// with Ethereum signed message prefix. Must match OperatorStatusRegistry.sol verification.
 fn sign_heartbeat_payload(
     signing_key: &mut K256SigningKey,
     service_id: u64,
     blueprint_id: u64,
+    status_code: u8,
     metrics: &[u8],
 ) -> Result<Vec<u8>> {
-    let mut payload = Vec::with_capacity(16 + metrics.len());
+    let mut payload = Vec::with_capacity(17 + metrics.len());
     payload.extend_from_slice(&service_id.to_be_bytes());
     payload.extend_from_slice(&blueprint_id.to_be_bytes());
+    payload.push(status_code);
     payload.extend_from_slice(metrics);
 
     let message_hash = keccak256(&payload);
