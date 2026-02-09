@@ -74,7 +74,7 @@ tempfile.workspace = true
 tokio-test = "0.4"
 wiremock = "0.6"
 serial_test.workspace = true
-proptest = "1.0"
+proptest = "1.10"
 mockito = "1.0"
 # Official AWS mocking library
 aws-smithy-mocks-experimental = "0.2"
