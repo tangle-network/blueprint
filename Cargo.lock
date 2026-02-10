@@ -2439,8 +2439,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90dbd31c98227229239363921e60fcf5e558e43ec69094d46fc4996f08d1d5bc"
 dependencies = [
  "bitcoin_hashes",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand 0.7.3",
+ "rand_core 0.5.1",
 ]
 
 [[package]]
@@ -5187,7 +5187,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5897,7 +5897,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7334,7 +7334,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "socket2 0.6.1",
- "system-configuration 0.6.1",
+ "system-configuration 0.5.1",
  "tokio",
  "tower-service",
  "tracing",
@@ -7833,7 +7833,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9977,7 +9977,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11222,7 +11222,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.1",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11976,7 +11976,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -13147,7 +13147,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -13393,7 +13393,8 @@ dependencies = [
 [[package]]
 name = "tnt-core-bindings"
 version = "0.9.0"
-source = "git+https://github.com/tangle-network/tnt-core.git?branch=drew%2Fqos-custom-metrics-pipeline#db75e7717ddaab01d176ab55c0d9026918063f0e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e73252c2f45a2e543e16605f183e1a717907d7c350e8d15a109782b7abd77a05"
 dependencies = [
  "alloy",
  "alloy-contract",
@@ -13898,7 +13899,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba3beec919fbdf99d719de8eda6adae3281f8a5b71ae40431f44dc7423053d34"
 dependencies = [
  "loki-api",
- "reqwest 0.12.25",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "snap",
@@ -14524,7 +14525,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
