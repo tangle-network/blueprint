@@ -2777,7 +2777,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-tangle"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "alloy-contract",
  "alloy-network",
@@ -3399,7 +3399,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-pricing-engine"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "alloy-network",
  "alloy-primitives",
@@ -3756,7 +3756,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-extra"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "alloy",
  "alloy-network",
@@ -13364,9 +13364,9 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bindings"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e73252c2f45a2e543e16605f183e1a717907d7c350e8d15a109782b7abd77a05"
+checksum = "9e6962f87d3167a91f04623b79aac6cfaed814768923cd63947642ac3ab1fce7"
 dependencies = [
  "alloy",
  "alloy-contract",

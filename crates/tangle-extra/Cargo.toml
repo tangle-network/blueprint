@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-extra"
-version = "0.1.0"
+version = "0.1.1"
 description = "Producer/Consumer extras for Tangle blueprints"
 authors.workspace = true
 edition.workspace = true

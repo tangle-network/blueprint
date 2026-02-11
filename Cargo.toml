@@ -147,7 +147,7 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.1.0-alpha.22", path = "./crates/sdk", default-features = false }
-tnt-core-bindings = "0.9.0"
+tnt-core-bindings = "0.10.0"
 
 # Job system
 blueprint-core = { version = "0.1.0-alpha.5", path = "crates/core", default-features = false }
@@ -155,7 +155,7 @@ blueprint-router = { version = "0.1.0-alpha.6", path = "crates/router", default-
 blueprint-runner = { version = "0.1.0-alpha.20", path = "crates/runner", default-features = false }
 
 # Extras
-blueprint-tangle-extra = { version = "0.1.0", path = "crates/tangle-extra", features = ["std"] }
+blueprint-tangle-extra = { version = "0.1.1", path = "crates/tangle-extra", features = ["std"] }
 blueprint-evm-extra = { version = "0.1.0-alpha.8", path = "crates/evm-extra", default-features = false }
 blueprint-eigenlayer-extra = { version = "0.1.0-alpha.13", path = "crates/eigenlayer-extra", default-features = false }
 blueprint-producers-extra = { version = "0.1.0-alpha.6", path = "crates/producers-extra", default-features = false }
@@ -192,11 +192,11 @@ blueprint-clients = { version = "0.1.0-alpha.21", path = "./crates/clients", def
 blueprint-client-core = { version = "0.1.0-alpha.4", path = "./crates/clients/core", default-features = false }
 blueprint-client-eigenlayer = { version = "0.1.0-alpha.20", path = "./crates/clients/eigenlayer", default-features = false }
 blueprint-client-evm = { version = "0.1.0-alpha.7", path = "./crates/clients/evm", default-features = false }
-blueprint-client-tangle = { version = "0.1.0", path = "./crates/clients/tangle", default-features = false, features = ["std"] }
+blueprint-client-tangle = { version = "0.1.1", path = "./crates/clients/tangle", default-features = false, features = ["std"] }
 blueprint-contexts = { version = "0.1.0-alpha.21", path = "./crates/contexts", default-features = false }
 
 # Pricing Engine
-blueprint-pricing-engine = { version = "0.2.5", path = "./crates/pricing-engine", default-features = false }
+blueprint-pricing-engine = { version = "0.2.6", path = "./crates/pricing-engine", default-features = false }
 
 # Macros
 blueprint-macros = { version = "0.1.0-alpha.7", path = "./crates/macros", default-features = false }
