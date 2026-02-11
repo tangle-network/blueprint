@@ -755,7 +755,7 @@ mod tests {
         data.extend_from_slice(inputs);
         // Pad to 32-byte boundary
         let padding = (32 - (inputs.len() % 32)) % 32;
-        data.extend(core::iter::repeat(0u8).take(padding));
+        data.extend(core::iter::repeat_n(0u8,padding));
 
         data
     }
@@ -1000,7 +1000,7 @@ mod tests {
         // inputs: [0xCA, 0xFE]
         data.extend_from_slice(&U256::from(2u64).to_be_bytes::<32>());
         data.extend_from_slice(&[0xCA, 0xFE]);
-        data.extend(core::iter::repeat(0u8).take(30)); // pad
+        data.extend(core::iter::repeat_n(0u8,30)); // pad
 
         let topics = vec![
             B256::from(JOB_SUBMITTED_SIG),
