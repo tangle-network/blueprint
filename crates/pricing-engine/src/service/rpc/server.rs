@@ -12,17 +12,26 @@ use tokio::sync::Mutex;
 use tonic::{Request, Response, Status, transport::Server};
 
 use crate::pricing_engine::{
-    AssetSecurityCommitment, GetPriceRequest, GetPriceResponse, QuoteDetails,
+    AssetSecurityCommitment, GetJobPriceRequest, GetJobPriceResponse, GetPriceRequest,
+    GetPriceResponse, JobQuoteDetails as ProtoJobQuoteDetails, QuoteDetails,
     ResourcePricing as ProtoResourcePricing,
     pricing_engine_server::{PricingEngine, PricingEngineServer},
 };
+
+/// Per-job pricing configuration: (service_id, job_index) → price in wei
+///
+/// Operators configure per-job prices either statically (TOML config) or dynamically.
+/// If no entry exists for a (service_id, job_index) pair, the RPC returns NOT_FOUND.
+pub type JobPricingConfig = std::collections::HashMap<(u64, u32), alloy_primitives::U256>;
 
 pub struct PricingEngineService {
     config: Arc<OperatorConfig>,
     benchmark_cache: Arc<BenchmarkCache>,
     pricing_config:
         Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
+    job_pricing_config: Arc<Mutex<JobPricingConfig>>,
     signer: Arc<Mutex<OperatorSigner>>,
+    pow_difficulty: u32,
 }
 
 impl PricingEngineService {
@@ -38,7 +47,29 @@ impl PricingEngineService {
             config,
             benchmark_cache,
             pricing_config,
+            job_pricing_config: Arc::new(Mutex::new(JobPricingConfig::new())),
             signer,
+            pow_difficulty: DEFAULT_POW_DIFFICULTY,
+        }
+    }
+
+    /// Create with explicit job pricing config
+    pub fn with_job_pricing(
+        config: Arc<OperatorConfig>,
+        benchmark_cache: Arc<BenchmarkCache>,
+        pricing_config: Arc<
+            Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
+        >,
+        job_pricing_config: Arc<Mutex<JobPricingConfig>>,
+        signer: Arc<Mutex<OperatorSigner>>,
+    ) -> Self {
+        Self {
+            config,
+            benchmark_cache,
+            pricing_config,
+            job_pricing_config,
+            signer,
+            pow_difficulty: DEFAULT_POW_DIFFICULTY,
         }
     }
 }
@@ -85,7 +116,7 @@ impl PricingEngine for PricingEngineService {
         };
 
         let challenge = generate_challenge(blueprint_id, challenge_timestamp);
-        if !verify_proof(&challenge, &proof_of_work, DEFAULT_POW_DIFFICULTY).map_err(|e| {
+        if !verify_proof(&challenge, &proof_of_work, self.pow_difficulty).map_err(|e| {
             warn!("Failed to verify proof of work: {}", e);
             Status::invalid_argument("Invalid proof of work")
         })? {
@@ -183,7 +214,7 @@ impl PricingEngine for PricingEngineService {
         })?;
 
         // Generate proof of work for the response
-        let response_pow = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY)
+        let response_pow = generate_proof(&challenge, self.pow_difficulty)
             .await
             .map_err(|e| {
                 error!("Failed to generate proof of work: {}", e);
@@ -214,6 +245,461 @@ impl PricingEngine for PricingEngineService {
 
         info!("Sending signed quote for blueprint ID: {}", blueprint_id);
         Ok(Response::new(response))
+    }
+
+    async fn get_job_price(
+        &self,
+        request: Request<GetJobPriceRequest>,
+    ) -> Result<Response<GetJobPriceResponse>, Status> {
+        let req = request.into_inner();
+        let service_id = req.service_id;
+        let job_index = req.job_index;
+
+        info!(
+            "Received GetJobPrice request for service {} job index {}",
+            service_id, job_index
+        );
+
+        // Validate challenge timestamp
+        let current_timestamp = Utc::now().timestamp() as u64;
+        let challenge_timestamp = if req.challenge_timestamp > 0 {
+            if req.challenge_timestamp < current_timestamp.saturating_sub(30) {
+                return Err(Status::invalid_argument("Challenge timestamp is too old"));
+            }
+            if req.challenge_timestamp > current_timestamp + 30 {
+                return Err(Status::invalid_argument(
+                    "Challenge timestamp is too far in the future",
+                ));
+            }
+            req.challenge_timestamp
+        } else {
+            return Err(Status::invalid_argument(
+                "Challenge timestamp is missing or invalid",
+            ));
+        };
+
+        // Verify proof of work (use service_id as the challenge seed)
+        let challenge = generate_challenge(service_id, challenge_timestamp);
+        if !verify_proof(&challenge, &req.proof_of_work, self.pow_difficulty).map_err(|e| {
+            warn!("Failed to verify proof of work: {}", e);
+            Status::invalid_argument("Invalid proof of work")
+        })? {
+            return Err(Status::invalid_argument("Invalid proof of work"));
+        }
+
+        // Look up per-job price from config
+        let job_pricing = self.job_pricing_config.lock().await;
+        let price = match job_pricing.get(&(service_id, job_index)) {
+            Some(p) => *p,
+            None => {
+                warn!(
+                    "No job pricing configured for service {} job index {}",
+                    service_id, job_index
+                );
+                return Err(Status::not_found(format!(
+                    "No pricing configured for service {service_id} job index {job_index}"
+                )));
+            }
+        };
+        drop(job_pricing);
+
+        let timestamp = current_timestamp;
+        let expiry = timestamp + self.config.quote_validity_duration_secs;
+
+        let proto_details = ProtoJobQuoteDetails {
+            service_id,
+            job_index,
+            price: price.to_be_bytes_vec(),
+            timestamp,
+            expiry,
+        };
+
+        // Generate proof of work for response
+        let response_pow = generate_proof(&challenge, self.pow_difficulty)
+            .await
+            .map_err(|e| {
+                error!("Failed to generate proof of work: {}", e);
+                Status::internal("Failed to generate proof of work")
+            })?;
+
+        // Sign with EIP-712
+        let signed = self
+            .signer
+            .lock()
+            .await
+            .sign_job_quote(&proto_details, response_pow)
+            .map_err(|e| {
+                error!(
+                    "Failed to sign job quote for service {} job {}: {}",
+                    service_id, job_index, e
+                );
+                Status::internal("Failed to sign job price quote")
+            })?;
+
+        let response = GetJobPriceResponse {
+            quote_details: Some(signed.quote_details),
+            signature: signed.signature.to_bytes().to_vec(),
+            operator_id: signed.operator_id.0.to_vec(),
+            proof_of_work: signed.proof_of_work,
+        };
+
+        info!(
+            "Sending signed job quote for service {} job index {}",
+            service_id, job_index
+        );
+        Ok(Response::new(response))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::signer::QuoteSigningDomain;
+    use alloy_primitives::U256;
+    use blueprint_crypto::k256::K256SigningKey;
+    use blueprint_crypto::{BytesEncoding, KeyType};
+
+    /// Deterministic test key (32 bytes, non-zero)
+    const TEST_KEY: [u8; 32] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27, 28, 29, 30, 31, 32,
+    ];
+
+    fn test_config() -> Arc<OperatorConfig> {
+        Arc::new(OperatorConfig {
+            quote_validity_duration_secs: 300,
+            ..OperatorConfig::default()
+        })
+    }
+
+    fn test_signer() -> Arc<Mutex<OperatorSigner>> {
+        let keypair = K256SigningKey::from_bytes(&TEST_KEY).unwrap();
+        let domain = QuoteSigningDomain {
+            chain_id: 1,
+            verifying_contract: alloy_primitives::Address::ZERO,
+        };
+        let signer = OperatorSigner::new(&OperatorConfig::default(), keypair, domain).unwrap();
+        Arc::new(Mutex::new(signer))
+    }
+
+    fn test_benchmark_cache() -> Arc<BenchmarkCache> {
+        Arc::new(BenchmarkCache::new("/tmp/test_bench_cache").unwrap())
+    }
+
+    fn test_pricing_config()
+    -> Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>
+    {
+        Arc::new(Mutex::new(std::collections::HashMap::new()))
+    }
+
+    fn test_job_pricing_config(entries: Vec<((u64, u32), U256)>) -> Arc<Mutex<JobPricingConfig>> {
+        let mut map = JobPricingConfig::new();
+        for ((sid, idx), price) in entries {
+            map.insert((sid, idx), price);
+        }
+        Arc::new(Mutex::new(map))
+    }
+
+    /// Trivial difficulty for test PoW — avoids 30s+ proof generation on slow CI.
+    const TEST_POW_DIFFICULTY: u32 = 1;
+
+    fn make_service(job_entries: Vec<((u64, u32), U256)>) -> PricingEngineService {
+        let mut svc = PricingEngineService::with_job_pricing(
+            test_config(),
+            test_benchmark_cache(),
+            test_pricing_config(),
+            test_job_pricing_config(job_entries),
+            test_signer(),
+        );
+        svc.pow_difficulty = TEST_POW_DIFFICULTY;
+        svc
+    }
+
+    /// Generate a valid PoW + timestamp for a given service_id.
+    async fn valid_pow(service_id: u64) -> (u64, Vec<u8>) {
+        let timestamp = chrono::Utc::now().timestamp() as u64;
+        let challenge = crate::pow::generate_challenge(service_id, timestamp);
+        let proof = crate::pow::generate_proof(&challenge, TEST_POW_DIFFICULTY)
+            .await
+            .unwrap();
+        (timestamp, proof)
+    }
+
+    // ── Success path ────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_job_price_success() {
+        let price = U256::from(1_000_000u64); // 1M wei
+        let svc = make_service(vec![((42, 0), price)]);
+        let (ts, pow) = valid_pow(42).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 42,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        assert_eq!(details.service_id, 42);
+        assert_eq!(details.job_index, 0);
+        assert_eq!(U256::from_be_slice(&details.price), price);
+        assert!(details.expiry > details.timestamp);
+        assert!(!resp.signature.is_empty());
+        assert!(!resp.operator_id.is_empty());
+        assert!(!resp.proof_of_work.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_different_jobs_different_prices() {
+        let svc = make_service(vec![
+            ((10, 0), U256::from(100u64)),
+            ((10, 1), U256::from(500u64)),
+            ((10, 2), U256::from(999u64)),
+        ]);
+
+        for (idx, expected) in [(0u32, 100u64), (1, 500), (2, 999)] {
+            let (ts, pow) = valid_pow(10).await;
+            let req = Request::new(GetJobPriceRequest {
+                service_id: 10,
+                job_index: idx,
+                proof_of_work: pow,
+                challenge_timestamp: ts,
+            });
+            let resp = svc.get_job_price(req).await.unwrap().into_inner();
+            let details = resp.quote_details.unwrap();
+            assert_eq!(
+                U256::from_be_slice(&details.price),
+                U256::from(expected),
+                "job index {idx} should have price {expected}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_large_price() {
+        // Near-max U256 value
+        let price = U256::MAX / U256::from(2);
+        let svc = make_service(vec![((1, 0), price)]);
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        assert_eq!(U256::from_be_slice(&details.price), price);
+    }
+
+    // ── Missing job pricing ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_job_price_not_found() {
+        let svc = make_service(vec![]); // No pricing configured
+        let (ts, pow) = valid_pow(42).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 42,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        assert!(err.message().contains("No pricing configured"));
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_wrong_job_index() {
+        // Pricing exists for job_index 0 but not 1
+        let svc = make_service(vec![((42, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(42).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 42,
+            job_index: 1,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_wrong_service_id() {
+        let svc = make_service(vec![((42, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(99).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 99,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::NotFound);
+    }
+
+    // ── Timestamp validation ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_job_price_missing_timestamp() {
+        let svc = make_service(vec![((1, 0), U256::from(1u64))]);
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: vec![],
+            challenge_timestamp: 0, // 0 = missing
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("missing"));
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_timestamp_too_old() {
+        let svc = make_service(vec![((1, 0), U256::from(1u64))]);
+        let old_ts = chrono::Utc::now().timestamp() as u64 - 60; // 60s ago
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: vec![],
+            challenge_timestamp: old_ts,
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("too old"));
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_timestamp_too_far_in_future() {
+        let svc = make_service(vec![((1, 0), U256::from(1u64))]);
+        let future_ts = chrono::Utc::now().timestamp() as u64 + 60; // 60s from now
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: vec![],
+            challenge_timestamp: future_ts,
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("future"));
+    }
+
+    // ── Invalid proof of work ───────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_job_price_invalid_pow() {
+        let svc = make_service(vec![((1, 0), U256::from(1u64))]);
+        let ts = chrono::Utc::now().timestamp() as u64;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: vec![0u8; 32], // garbage PoW
+            challenge_timestamp: ts,
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("proof of work"));
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_empty_pow() {
+        let svc = make_service(vec![((1, 0), U256::from(1u64))]);
+        let ts = chrono::Utc::now().timestamp() as u64;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: vec![], // empty PoW
+            challenge_timestamp: ts,
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    // ── Quote expiry validation ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_job_price_expiry_uses_config() {
+        let mut config = OperatorConfig::default();
+        config.quote_validity_duration_secs = 600; // 10 minutes
+
+        let mut svc = PricingEngineService::with_job_pricing(
+            Arc::new(config),
+            test_benchmark_cache(),
+            test_pricing_config(),
+            test_job_pricing_config(vec![((1, 0), U256::from(100u64))]),
+            test_signer(),
+        );
+        svc.pow_difficulty = TEST_POW_DIFFICULTY;
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        // Expiry should be ~600s after timestamp
+        let duration = details.expiry - details.timestamp;
+        assert!(
+            (590..=610).contains(&duration),
+            "expected ~600s validity, got {duration}s"
+        );
+    }
+
+    // ── Signature is valid ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_job_price_signature_verifies() {
+        let keypair = K256SigningKey::from_bytes(&TEST_KEY).unwrap();
+        let domain = QuoteSigningDomain {
+            chain_id: 1,
+            verifying_contract: alloy_primitives::Address::ZERO,
+        };
+        let verifying_key = keypair.verifying_key();
+
+        let svc = make_service(vec![((42, 0), U256::from(500u64))]);
+        let (ts, pow) = valid_pow(42).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 42,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+
+        // Reconstruct the digest and verify the signature
+        let digest = crate::signer::job_quote_digest_eip712(&details, domain);
+        let sig = blueprint_crypto::k256::K256Signature::from_bytes(&resp.signature).unwrap();
+        assert!(
+            blueprint_crypto::k256::K256Ecdsa::verify(&verifying_key, &digest, &sig),
+            "signature should verify with the operator's key"
+        );
     }
 }
 

@@ -44,7 +44,7 @@ pub use pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify
 pub use pricing::{PriceModel, ResourcePricing, calculate_price, load_pricing_from_toml};
 pub use service::blockchain::event::BlockchainEvent;
 pub use service::rpc::server::{PricingEngineService, run_rpc_server};
-pub use signer::{OperatorId, OperatorSigner, SignableQuote, SignedQuote};
+pub use signer::{OperatorId, OperatorSigner, SignableQuote, SignedJobQuote, SignedQuote};
 
 use blueprint_core::info;
 use std::collections::HashMap;

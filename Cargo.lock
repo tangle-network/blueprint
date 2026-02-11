@@ -3418,6 +3418,7 @@ dependencies = [
  "blueprint-keystore",
  "blueprint-networking",
  "blueprint-std",
+ "blueprint-tangle-extra",
  "blueprint-testing-utils",
  "chrono",
  "clap",
@@ -3781,6 +3782,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "hex",
+ "hex-literal",
  "libp2p",
  "pin-project-lite",
  "serde",
@@ -6964,6 +6966,12 @@ checksum = "fda06d18ac606267c40c04e41b9947729bf8b9efe74bd4e82b61a5f26a510b9f"
 dependencies = [
  "arrayvec",
 ]
+
+[[package]]
+name = "hex-literal"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
 
 [[package]]
 name = "hex_fmt"

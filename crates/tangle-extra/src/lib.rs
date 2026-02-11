@@ -59,6 +59,12 @@ pub mod layers;
 pub mod producer;
 pub mod strategy;
 
+/// Per-job RFQ quote signing and verification
+///
+/// Requires the `keepers` feature (provides `blueprint-crypto/k256` and `alloy`).
+#[cfg(feature = "keepers")]
+pub mod job_quote;
+
 /// Lifecycle automation services (keepers)
 ///
 /// Requires the `keepers` feature to be enabled.

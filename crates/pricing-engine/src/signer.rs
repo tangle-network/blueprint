@@ -205,6 +205,85 @@ fn hash_quote_details(quote_details: &ITangleTypes::QuoteDetails) -> B256 {
     )
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Per-Job RFQ Signing
+//
+// The canonical EIP-712 implementation lives in `blueprint_tangle_extra::job_quote`.
+// This module provides thin wrappers that convert proto types → native types
+// and delegate to the canonical implementation.
+// ═══════════════════════════════════════════════════════════════════════════
+
+use blueprint_tangle_extra::job_quote as jq;
+
+/// Signed per-job quote ready for on-chain submission via `submitJobFromQuote`
+#[derive(Debug, Clone)]
+pub struct SignedJobQuote {
+    pub quote_details: crate::pricing_engine::JobQuoteDetails,
+    pub signature: K256Signature,
+    pub operator_id: OperatorId,
+    pub proof_of_work: Vec<u8>,
+}
+
+impl OperatorSigner {
+    /// Sign a per-job quote for the RFQ system.
+    ///
+    /// The EIP-712 digest matches `SignatureLib.computeJobQuoteDigest()` in tnt-core.
+    pub fn sign_job_quote(
+        &mut self,
+        details: &crate::pricing_engine::JobQuoteDetails,
+        proof_of_work: Vec<u8>,
+    ) -> Result<SignedJobQuote> {
+        let digest = job_quote_digest_eip712(details, self.domain);
+        let signature = K256Ecdsa::sign_with_secret(&mut self.keypair, &digest)
+            .map_err(|e| PricingError::Signing(format!("Error signing job quote: {e}")))?;
+
+        Ok(SignedJobQuote {
+            quote_details: details.clone(),
+            signature,
+            operator_id: self.operator_id,
+            proof_of_work,
+        })
+    }
+}
+
+/// Convert proto `JobQuoteDetails` (bytes price) → native `job_quote::JobQuoteDetails` (U256 price).
+fn proto_to_native_job_quote(
+    details: &crate::pricing_engine::JobQuoteDetails,
+) -> jq::JobQuoteDetails {
+    let price = if details.price.is_empty() {
+        U256::ZERO
+    } else {
+        U256::from_be_slice(&details.price)
+    };
+
+    jq::JobQuoteDetails {
+        service_id: details.service_id,
+        job_index: details.job_index as u8,
+        price,
+        timestamp: details.timestamp,
+        expiry: details.expiry,
+    }
+}
+
+/// Convert this crate's `QuoteSigningDomain` to the canonical `job_quote::QuoteSigningDomain`.
+fn to_jq_domain(domain: QuoteSigningDomain) -> jq::QuoteSigningDomain {
+    jq::QuoteSigningDomain {
+        chain_id: domain.chain_id,
+        verifying_contract: domain.verifying_contract,
+    }
+}
+
+/// Compute the full EIP-712 digest for a proto job quote.
+///
+/// Delegates to `blueprint_tangle_extra::job_quote::job_quote_digest_eip712`.
+pub fn job_quote_digest_eip712(
+    details: &crate::pricing_engine::JobQuoteDetails,
+    domain: QuoteSigningDomain,
+) -> [u8; 32] {
+    let native = proto_to_native_job_quote(details);
+    jq::job_quote_digest_eip712(&native, to_jq_domain(domain))
+}
+
 fn build_abi_quote_details(
     details: &pricing_engine::QuoteDetails,
     total_cost: Decimal,

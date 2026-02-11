@@ -87,6 +87,18 @@ pub struct KeeperConfig {
 
     /// Operators to monitor for stream drips (optional, if empty monitors own operator)
     pub monitored_operators: Vec<Address>,
+
+    /// Tangle proxy contract address (for subscription billing)
+    pub tangle_contract: Option<Address>,
+
+    /// Check interval for the billing keeper (default: 60 seconds)
+    pub billing_check_interval: Duration,
+
+    /// How often to rescan for new subscription services (default: 300 seconds)
+    pub billing_rescan_interval: Duration,
+
+    /// Maximum number of services to bill in a single batch (default: 50)
+    pub billing_max_batch_size: usize,
 }
 
 impl KeeperConfig {
@@ -102,6 +114,10 @@ impl KeeperConfig {
             round_check_interval: Duration::from_secs(60),  // 1 minute
             stream_check_interval: Duration::from_secs(600), // 10 minutes
             monitored_operators: Vec::new(),
+            tangle_contract: None,
+            billing_check_interval: Duration::from_secs(60), // 1 minute
+            billing_rescan_interval: Duration::from_secs(300), // 5 minutes
+            billing_max_batch_size: 50,
         }
     }
 
@@ -144,6 +160,30 @@ impl KeeperConfig {
     /// Add operators to monitor for stream drips
     pub fn with_monitored_operators(mut self, operators: Vec<Address>) -> Self {
         self.monitored_operators = operators;
+        self
+    }
+
+    /// Set the Tangle proxy contract address (for subscription billing)
+    pub fn with_tangle_contract(mut self, address: Address) -> Self {
+        self.tangle_contract = Some(address);
+        self
+    }
+
+    /// Set the billing check interval
+    pub fn with_billing_interval(mut self, interval: Duration) -> Self {
+        self.billing_check_interval = interval;
+        self
+    }
+
+    /// Set the billing rescan interval (how often to discover new subscription services)
+    pub fn with_billing_rescan_interval(mut self, interval: Duration) -> Self {
+        self.billing_rescan_interval = interval;
+        self
+    }
+
+    /// Set the maximum batch size for subscription billing
+    pub fn with_billing_max_batch_size(mut self, size: usize) -> Self {
+        self.billing_max_batch_size = size;
         self
     }
 
