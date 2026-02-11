@@ -9,6 +9,7 @@
 //! - [`EpochKeeper`] - Monitors and triggers epoch distributions on InflationPool
 //! - [`RoundKeeper`] - Advances rounds on MultiAssetDelegation when ready
 //! - [`StreamKeeper`] - Drips streaming payments for operators
+//! - [`SubscriptionBillingKeeper`] - Bills subscription services when payment intervals elapse
 //!
 //! ## Usage
 //!
@@ -36,11 +37,13 @@
 //! stream_handle.await?;
 //! ```
 
+mod billing;
 mod epoch;
 mod keeper;
 mod round;
 mod stream;
 
+pub use billing::SubscriptionBillingKeeper;
 pub use epoch::EpochKeeper;
 pub use keeper::{BackgroundKeeper, KeeperConfig, KeeperError, KeeperHandle, KeeperResult};
 pub use round::RoundKeeper;

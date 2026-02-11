@@ -5,8 +5,11 @@ package pricing_engine;
 
 // The pricing service definition.
 service PricingEngine {
-  // Retrieves a signed price quote for a given blueprint.
+  // Retrieves a signed price quote for a given blueprint (service creation RFQ).
   rpc GetPrice (GetPriceRequest) returns (GetPriceResponse);
+
+  // Retrieves a signed per-job price quote (job RFQ).
+  rpc GetJobPrice (GetJobPriceRequest) returns (GetJobPriceResponse);
 }
 
 // Asset type definition
@@ -105,4 +108,46 @@ message ResourcePricing {
   uint64 count = 2;
   // Price per unit in USD with decimal precision (e.g., 0.00005 USD per MB)
   double price_per_unit_rate = 3;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Per-Job RFQ (Job Quote) Messages
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Request message for GetJobPrice RPC
+message GetJobPriceRequest {
+  // The service instance ID the job belongs to
+  uint64 service_id = 1;
+  // The job type index within the blueprint
+  uint32 job_index = 2;
+  // Proof of work to prevent DDOS
+  bytes proof_of_work = 3;
+  // Timestamp used for generating the challenge
+  uint64 challenge_timestamp = 4;
+}
+
+// Response message for GetJobPrice RPC
+message GetJobPriceResponse {
+  // The signed job quote details
+  JobQuoteDetails quote_details = 1;
+  // EIP-712 signature over the quote details
+  bytes signature = 2;
+  // Operator's Ethereum address (20 bytes)
+  bytes operator_id = 3;
+  // Proof of work response for next request
+  bytes proof_of_work = 4;
+}
+
+// Per-job quote details matching tnt-core Types.JobQuoteDetails
+message JobQuoteDetails {
+  // The service instance ID
+  uint64 service_id = 1;
+  // The job type index
+  uint32 job_index = 2;
+  // Price in wei (native token)
+  bytes price = 3;
+  // Timestamp when quote was generated
+  uint64 timestamp = 4;
+  // Expiry timestamp for the quote
+  uint64 expiry = 5;
 }
