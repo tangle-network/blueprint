@@ -31,6 +31,7 @@ pub struct PricingEngineService {
         Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
     job_pricing_config: Arc<Mutex<JobPricingConfig>>,
     signer: Arc<Mutex<OperatorSigner>>,
+    pow_difficulty: u32,
 }
 
 impl PricingEngineService {
@@ -48,6 +49,7 @@ impl PricingEngineService {
             pricing_config,
             job_pricing_config: Arc::new(Mutex::new(JobPricingConfig::new())),
             signer,
+            pow_difficulty: DEFAULT_POW_DIFFICULTY,
         }
     }
 
@@ -67,6 +69,7 @@ impl PricingEngineService {
             pricing_config,
             job_pricing_config,
             signer,
+            pow_difficulty: DEFAULT_POW_DIFFICULTY,
         }
     }
 }
@@ -113,7 +116,7 @@ impl PricingEngine for PricingEngineService {
         };
 
         let challenge = generate_challenge(blueprint_id, challenge_timestamp);
-        if !verify_proof(&challenge, &proof_of_work, DEFAULT_POW_DIFFICULTY).map_err(|e| {
+        if !verify_proof(&challenge, &proof_of_work, self.pow_difficulty).map_err(|e| {
             warn!("Failed to verify proof of work: {}", e);
             Status::invalid_argument("Invalid proof of work")
         })? {
@@ -211,7 +214,7 @@ impl PricingEngine for PricingEngineService {
         })?;
 
         // Generate proof of work for the response
-        let response_pow = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY)
+        let response_pow = generate_proof(&challenge, self.pow_difficulty)
             .await
             .map_err(|e| {
                 error!("Failed to generate proof of work: {}", e);
@@ -277,7 +280,7 @@ impl PricingEngine for PricingEngineService {
 
         // Verify proof of work (use service_id as the challenge seed)
         let challenge = generate_challenge(service_id, challenge_timestamp);
-        if !verify_proof(&challenge, &req.proof_of_work, DEFAULT_POW_DIFFICULTY).map_err(|e| {
+        if !verify_proof(&challenge, &req.proof_of_work, self.pow_difficulty).map_err(|e| {
             warn!("Failed to verify proof of work: {}", e);
             Status::invalid_argument("Invalid proof of work")
         })? {
@@ -312,7 +315,7 @@ impl PricingEngine for PricingEngineService {
         };
 
         // Generate proof of work for response
-        let response_pow = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY)
+        let response_pow = generate_proof(&challenge, self.pow_difficulty)
             .await
             .map_err(|e| {
                 error!("Failed to generate proof of work: {}", e);
@@ -397,21 +400,26 @@ mod tests {
         Arc::new(Mutex::new(map))
     }
 
+    /// Trivial difficulty for test PoW — avoids 30s+ proof generation on slow CI.
+    const TEST_POW_DIFFICULTY: u32 = 1;
+
     fn make_service(job_entries: Vec<((u64, u32), U256)>) -> PricingEngineService {
-        PricingEngineService::with_job_pricing(
+        let mut svc = PricingEngineService::with_job_pricing(
             test_config(),
             test_benchmark_cache(),
             test_pricing_config(),
             test_job_pricing_config(job_entries),
             test_signer(),
-        )
+        );
+        svc.pow_difficulty = TEST_POW_DIFFICULTY;
+        svc
     }
 
-    /// Generate a valid PoW + timestamp for a given service_id
+    /// Generate a valid PoW + timestamp for a given service_id.
     async fn valid_pow(service_id: u64) -> (u64, Vec<u8>) {
         let timestamp = chrono::Utc::now().timestamp() as u64;
         let challenge = crate::pow::generate_challenge(service_id, timestamp);
-        let proof = crate::pow::generate_proof(&challenge, DEFAULT_POW_DIFFICULTY)
+        let proof = crate::pow::generate_proof(&challenge, TEST_POW_DIFFICULTY)
             .await
             .unwrap();
         (timestamp, proof)
@@ -634,13 +642,14 @@ mod tests {
         let mut config = OperatorConfig::default();
         config.quote_validity_duration_secs = 600; // 10 minutes
 
-        let svc = PricingEngineService::with_job_pricing(
+        let mut svc = PricingEngineService::with_job_pricing(
             Arc::new(config),
             test_benchmark_cache(),
             test_pricing_config(),
             test_job_pricing_config(vec![((1, 0), U256::from(100u64))]),
             test_signer(),
         );
+        svc.pow_difficulty = TEST_POW_DIFFICULTY;
         let (ts, pow) = valid_pow(1).await;
 
         let req = Request::new(GetJobPriceRequest {
