@@ -12,7 +12,8 @@ use url::Url;
 use blueprint_pricing_engine_lib::{
     cleanup,
     error::{PricingError, Result},
-    init_benchmark_cache, init_operator_signer, init_pricing_config, load_operator_config,
+    init_benchmark_cache, init_job_pricing_config, init_operator_signer, init_pricing_config,
+    load_operator_config,
     service::blockchain::event::BlockchainEvent,
     service::rpc::server::run_rpc_server,
     signer::QuoteSigningDomain,
@@ -33,7 +34,7 @@ pub struct Cli {
     )]
     pub config: PathBuf,
 
-    /// Path to the pricing configuration file.
+    /// Path to the resource pricing configuration file (service creation quotes).
     #[arg(
         long,
         value_name = "FILE",
@@ -41,6 +42,11 @@ pub struct Cli {
         default_value = "config/default_pricing.toml"
     )]
     pub pricing_config: PathBuf,
+
+    /// Path to the per-job pricing configuration file (job RFQ quotes).
+    /// If not provided, GetJobPrice returns NOT_FOUND for all jobs.
+    #[arg(long, value_name = "FILE", env = "JOB_PRICING_CONFIG_PATH")]
+    pub job_pricing_config: Option<PathBuf>,
 
     /// Tangle node WebSocket URL (only used if 'tangle-listener' feature is enabled).
     #[arg(
@@ -162,6 +168,12 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     )
     .await?;
 
+    // Initialize per-job pricing configuration (optional)
+    let job_pricing_config = match &cli.job_pricing_config {
+        Some(path) => Some(init_job_pricing_config(path).await?),
+        None => None,
+    };
+
     // Initialize operator signer
     let operator_signer = init_operator_signer(
         &config,
@@ -178,8 +190,14 @@ pub async fn run_app(cli: Cli) -> Result<()> {
 
     // Start the gRPC server
     let server_handle = tokio::spawn(async move {
-        if let Err(e) =
-            run_rpc_server(config, benchmark_cache, pricing_config, operator_signer).await
+        if let Err(e) = run_rpc_server(
+            config,
+            benchmark_cache,
+            pricing_config,
+            job_pricing_config,
+            operator_signer,
+        )
+        .await
         {
             blueprint_core::error!("gRPC server error: {}", e);
         }

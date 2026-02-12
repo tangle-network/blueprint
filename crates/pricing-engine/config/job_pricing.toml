@@ -1,0 +1,15 @@
+# Per-job pricing configuration
+#
+# Controls GetJobPrice RFQ quotes. Each section is a service ID.
+# Keys are job indices, values are prices in wei (strings for large numbers).
+#
+# When a consumer calls GetJobPrice(service_id, job_index), the engine
+# looks up the price here and returns a signed EIP-712 quote.
+# If no entry exists, the RPC returns NOT_FOUND.
+
+# Service 1
+[1]
+0 = "1000000000000000"       # Job 0: 0.001 ETH
+1 = "5000000000000000"       # Job 1: 0.005 ETH
+6 = "20000000000000000"      # Job 6: 0.02 ETH (e.g. LLM prompt)
+7 = "250000000000000000"     # Job 7: 0.25 ETH (e.g. agent task)

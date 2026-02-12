@@ -54,27 +54,31 @@ resources = [
 
 Supported resource kinds: `CPU`, `MemoryMB`, `StorageMB`, `NetworkEgressMB`, `NetworkIngressMB`, `GPU`, `Request`, `Invocation`, `ExecutionTimeMS`.
 
-### Per-job pricing (`JobPricingConfig`)
+### Per-job pricing (`config/job_pricing.toml`)
 
-Controls job RFQ quotes. Currently configured programmatically via `PricingEngineService::with_job_pricing()`:
+Controls job RFQ quotes. Each section is a service ID, keys are job indices, values are prices in wei (strings for large numbers):
+
+```toml
+# Service 1
+[1]
+0 = "1000000000000000"       # Job 0: 0.001 ETH
+1 = "5000000000000000"       # Job 1: 0.005 ETH
+6 = "20000000000000000"      # Job 6: 0.02 ETH (e.g. LLM prompt)
+7 = "250000000000000000"     # Job 7: 0.25 ETH (e.g. agent task)
+```
+
+Pass via CLI: `--job-pricing-config config/job_pricing.toml` or env `JOB_PRICING_CONFIG_PATH`. If not provided, `GetJobPrice` returns `NOT_FOUND` for all jobs.
+
+For programmatic use (e.g. dynamic pricing in a custom operator binary), use `PricingEngineService::with_job_pricing()`:
 
 ```rust
-use alloy_primitives::U256;
-
-let mut job_prices = JobPricingConfig::new();
-// (service_id, job_index) → price in wei
-job_prices.insert((1, 0), U256::from(1_000_000_000_000_000u64));  // Job 0: 0.001 ETH
-job_prices.insert((1, 6), U256::from(20_000_000_000_000_000u64)); // Job 6: 0.02 ETH (LLM prompt)
-job_prices.insert((1, 7), U256::from(250_000_000_000_000_000u64)); // Job 7: 0.25 ETH (agent task)
-
+let job_config = load_job_pricing_from_toml(&std::fs::read_to_string("job_pricing.toml")?)?;
 let service = PricingEngineService::with_job_pricing(
     config, benchmark_cache, pricing_config,
-    Arc::new(Mutex::new(job_prices)),
+    Arc::new(Mutex::new(job_config)),
     signer,
 );
 ```
-
-Blueprint developers should wire this into their operator binary's startup, loading prices from their own config format.
 
 ### Operator config (`operator.toml`)
 
@@ -116,6 +120,7 @@ All CLI flags:
 |------|-----|-------------|
 | `--config` | `OPERATOR_CONFIG_PATH` | Path to `operator.toml` |
 | `--pricing-config` | `PRICING_CONFIG_PATH` | Resource pricing table (TOML) |
+| `--job-pricing-config` | `JOB_PRICING_CONFIG_PATH` | Per-job pricing table (TOML) |
 | `--http-rpc-endpoint` | `OPERATOR_HTTP_RPC` | Tangle EVM HTTP RPC endpoint |
 | `--ws-rpc-endpoint` | `OPERATOR_WS_RPC` | Tangle EVM WebSocket endpoint |
 | `--blueprint-id` | `OPERATOR_BLUEPRINT_ID` | Blueprint ID to watch for activations |

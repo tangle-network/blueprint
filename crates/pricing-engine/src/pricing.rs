@@ -269,6 +269,65 @@ pub fn calculate_price(
     })
 }
 
+/// Load per-job pricing from a TOML file.
+///
+/// Format: each section key is a service ID, each key within is a job index,
+/// values are prices in wei (as strings to support large U256 values).
+///
+/// ```toml
+/// [1]
+/// 0 = "1000000000000000"
+/// 6 = "20000000000000000"
+/// ```
+pub fn load_job_pricing_from_toml(
+    content: &str,
+) -> Result<HashMap<(u64, u32), alloy_primitives::U256>> {
+    let parsed: toml::Value = toml::from_str(content)?;
+    let mut config = HashMap::new();
+
+    let table = parsed.as_table().ok_or_else(|| {
+        crate::error::PricingError::Config("job pricing TOML must be a table".to_string())
+    })?;
+
+    for (service_key, jobs) in table {
+        let service_id: u64 = service_key.parse().map_err(|_| {
+            crate::error::PricingError::Config(format!(
+                "invalid service ID in job pricing: {service_key}"
+            ))
+        })?;
+
+        let jobs_table = jobs.as_table().ok_or_else(|| {
+            crate::error::PricingError::Config(format!(
+                "service {service_id}: expected a table of job_index = \"price_wei\""
+            ))
+        })?;
+
+        for (job_key, price_val) in jobs_table {
+            let job_index: u32 = job_key.parse().map_err(|_| {
+                crate::error::PricingError::Config(format!(
+                    "service {service_id}: invalid job index: {job_key}"
+                ))
+            })?;
+
+            let price_str = price_val.as_str().ok_or_else(|| {
+                crate::error::PricingError::Config(format!(
+                    "service {service_id} job {job_index}: price must be a string (wei value)"
+                ))
+            })?;
+
+            let price = alloy_primitives::U256::from_str_radix(price_str, 10).map_err(|_| {
+                crate::error::PricingError::Config(format!(
+                    "service {service_id} job {job_index}: invalid wei value: {price_str}"
+                ))
+            })?;
+
+            config.insert((service_id, job_index), price);
+        }
+    }
+
+    Ok(config)
+}
+
 /// Load pricing from a pricing.toml file
 pub fn load_pricing_from_toml(content: &str) -> Result<HashMap<Option<u64>, Vec<ResourcePricing>>> {
     use std::str::FromStr;
