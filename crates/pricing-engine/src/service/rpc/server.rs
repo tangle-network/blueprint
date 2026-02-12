@@ -710,13 +710,22 @@ pub async fn run_rpc_server(
     pricing_config: Arc<
         Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
     >,
+    job_pricing_config: Option<Arc<Mutex<JobPricingConfig>>>,
     signer: Arc<Mutex<OperatorSigner>>,
 ) -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
     info!("gRPC server listening on {}", addr);
 
-    let pricing_service =
-        PricingEngineService::new(config, benchmark_cache, pricing_config, signer);
+    let pricing_service = match job_pricing_config {
+        Some(jpc) => PricingEngineService::with_job_pricing(
+            config,
+            benchmark_cache,
+            pricing_config,
+            jpc,
+            signer,
+        ),
+        None => PricingEngineService::new(config, benchmark_cache, pricing_config, signer),
+    };
     let server = PricingEngineServer::new(pricing_service);
 
     Server::builder().add_service(server).serve(addr).await?;

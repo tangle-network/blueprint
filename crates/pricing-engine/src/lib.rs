@@ -31,6 +31,7 @@ pub use app::{
     cleanup, init_operator_signer, load_operator_config, spawn_event_processor,
     start_blockchain_listener, wait_for_shutdown,
 };
+pub use service::rpc::server::JobPricingConfig;
 pub use benchmark::cpu::CpuBenchmarkResult;
 pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark, run_benchmark_suite};
 pub use benchmark_cache::BenchmarkCache;
@@ -41,7 +42,10 @@ pub use config::{OperatorConfig, load_config_from_path};
 pub use error::{PricingError, Result};
 pub use handlers::handle_blueprint_update;
 pub use pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
-pub use pricing::{PriceModel, ResourcePricing, calculate_price, load_pricing_from_toml};
+pub use pricing::{
+    PriceModel, ResourcePricing, calculate_price, load_job_pricing_from_toml,
+    load_pricing_from_toml,
+};
 pub use service::blockchain::event::BlockchainEvent;
 pub use service::rpc::server::{PricingEngineService, run_rpc_server};
 pub use signer::{OperatorId, OperatorSigner, SignableQuote, SignedJobQuote, SignedQuote};
@@ -72,4 +76,17 @@ pub async fn init_pricing_config(
         config_path.as_ref().display()
     );
     Ok(Arc::new(Mutex::new(pricing_config)))
+}
+
+pub async fn init_job_pricing_config(
+    config_path: impl AsRef<Path>,
+) -> Result<Arc<Mutex<service::rpc::server::JobPricingConfig>>> {
+    let content = fs::read_to_string(config_path.as_ref())?;
+    let job_config = pricing::load_job_pricing_from_toml(&content)?;
+    info!(
+        "Job pricing configuration loaded from {} ({} entries)",
+        config_path.as_ref().display(),
+        job_config.len()
+    );
+    Ok(Arc::new(Mutex::new(job_config)))
 }
