@@ -31,7 +31,6 @@ pub use app::{
     cleanup, init_operator_signer, load_operator_config, spawn_event_processor,
     start_blockchain_listener, wait_for_shutdown,
 };
-pub use service::rpc::server::JobPricingConfig;
 pub use benchmark::cpu::CpuBenchmarkResult;
 pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark, run_benchmark_suite};
 pub use benchmark_cache::BenchmarkCache;
@@ -47,6 +46,7 @@ pub use pricing::{
     load_pricing_from_toml,
 };
 pub use service::blockchain::event::BlockchainEvent;
+pub use service::rpc::server::JobPricingConfig;
 pub use service::rpc::server::{PricingEngineService, run_rpc_server};
 pub use signer::{OperatorId, OperatorSigner, SignableQuote, SignedJobQuote, SignedQuote};
 
