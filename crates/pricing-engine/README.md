@@ -1,99 +1,201 @@
-# Operator RFQ Pricing Server (Tangle EVM)
+# Operator RFQ Pricing Server
 
-The pricing engine watches the Tangle v2 EVM contracts for blueprint/service events, benchmarks the node, computes prices from the local policy file, and responds to `GetPrice` RPC calls with ITangle-compatible signed quotes. It replaces the legacy Substrate/Tangle stack.
+gRPC server that generates EIP-712 signed price quotes for Tangle services and jobs. Operators run this alongside their blueprint node. Service consumers request quotes via gRPC, then submit them on-chain.
 
-## Runtime Flow
+## Two RFQ Modes
 
-1. **Bootstrap**
-   - `pricing-engine-server` reads `operator.toml`, loads the pricing table, and initialises the RocksDB benchmark cache.
-   - `init_operator_signer` ensures a `k256` key exists in the keystore and derives the operator’s Ethereum address.
-   - The CLI arguments (or environment variables) provide the HTTP/WS RPC URLs plus the `ITangle`, `MultiAssetDelegation`, and `OperatorStatusRegistry` contract addresses.
-2. **Event ingestion**
-   - `EvmEventListener` polls `ITangle::ServiceActivated` / `ServiceTerminated` logs via `blueprint-client-tangle`.
-   - For each activation we enqueue a benchmarking task so the cache always has a recent profile per blueprint.
-3. **RPC handling**
-   - `GetPriceRequest` includes PoW (`proof_of_work` + `challenge_timestamp`), TTL, and security requirements.
-   - `PricingEngineService` verifies PoW, loads the cached benchmark profile, and runs `calculate_price`.
-   - The resulting `QuoteDetails` are converted to both the proto response and the ABI payload expected by `ITangle::createServiceFromQuotes`.
-4. **Signing**
-   - `SignableQuote` hashes the ABI-encoded `ITangleTypes::QuoteDetails` (keccak256) and `OperatorSigner` signs with the EVM key (`K256Ecdsa`).
-   - The response returns the proto `QuoteDetails`, the ECDSA signature (65 bytes), the operator address, and a fresh PoW solution for the client.
+### Service Creation RFQ (`GetPrice`)
 
-## Components
+Used with `createServiceFromQuotes()` on the Tangle contract. The operator quotes a `totalCost` for running an entire service instance for a given TTL.
 
-| Module | Responsibility |
-| --- | --- |
-| `app.rs` | Bootstraps the service, spawns the event listener and RPC server. |
-| `service/blockchain/evm_listener.rs` | Polls Alloy logs for ITangle events and pushes `BlockchainEvent`s. |
-| `benchmark/*` | Runs CPU/memory/storage benchmarks and persists them in `BenchmarkCache`. |
-| `pricing.rs` | Applies the configured resource rates + TTL/security adjustments. |
-| `signer.rs` | Builds ABI-compatible `QuoteDetails`, hashes them, and signs with `k256`. |
-| `service/rpc/server.rs` | Implements the gRPC surface defined in `proto/pricing.proto`. |
-
-## Quote Format
-
-`proto/pricing.proto` now exposes the same structure as `ITangle.SignedQuote`. Security commitments are arrays, matching the Solidity ABI:
-
-```proto
-message QuoteDetails {
-  uint64 blueprint_id = 1;
-  uint64 ttl_blocks = 2;
-  double total_cost_rate = 3;
-  uint64 timestamp = 4;
-  uint64 expiry = 5;
-  repeated ResourcePricing resources = 6;
-  repeated AssetSecurityCommitment security_commitments = 7;
-}
+```
+Consumer → GetPrice(blueprint_id, ttl_blocks) → Operator
+Operator → signs QuoteDetails{totalCost, blueprintId, ttl, securityCommitments}
+Consumer → createServiceFromQuotes(blueprintId, [signedQuotes], config, callers, ttl)
 ```
 
-The signer converts these proto structs into `ITangleTypes::QuoteDetails` with:
+Price is computed from the operator's resource pricing config (`default_pricing.toml`) and node benchmarks. The engine automatically benchmarks CPU/memory/storage/GPU and multiplies by configured rates.
 
-* `totalCost` stored as a scaled `U256` (10⁻⁹ precision via `decimal_to_scaled_amount`).
-* `securityCommitments[i].asset` encoded as `{ kind: ERC20 (1), token: Address }`.
-* `securityCommitments[i].exposureBps` derived from the requested exposure percent (×100).
+### Per-Job RFQ (`GetJobPrice`)
 
-## CLI and Environment
+Used with `submitJobFromQuote()` on the Tangle contract. The operator quotes a specific price for a single job execution.
 
-`pricing-engine-server --help` exposes all runtime inputs. The important env vars:
+```
+Consumer → GetJobPrice(service_id, job_index) → Operator
+Operator → signs JobQuoteDetails{serviceId, jobIndex, price, timestamp, expiry}
+Consumer → submitJobFromQuote(serviceId, jobIndex, inputs, [signedQuotes])
+```
 
-| Flag | Env | Description |
-| --- | --- | --- |
-| `--config` | `OPERATOR_CONFIG_PATH` | Path to `operator.toml`. |
-| `--pricing-config` | `PRICING_CONFIG_PATH` | Resource pricing table (TOML). |
-| `--http-rpc-endpoint` | `OPERATOR_HTTP_RPC` | HTTPS endpoint for the Tangle EVM RPC. |
-| `--ws-rpc-endpoint` | `OPERATOR_WS_RPC` | WebSocket endpoint for real-time logs. |
-| `--blueprint-id` | `OPERATOR_BLUEPRINT_ID` | Blueprint to watch for activations. |
-| `--service-id` | `OPERATOR_SERVICE_ID` | Optional fixed service to benchmark. |
-| `--tangle-contract` | `OPERATOR_TANGLE_CONTRACT` | ITangle contract address. |
-| `--restaking-contract` | `OPERATOR_RESTAKING_CONTRACT` | MultiAssetDelegation contract. |
-| `--status-registry-contract` | `OPERATOR_STATUS_REGISTRY_CONTRACT` | OperatorStatusRegistry contract. |
+Price is looked up from the operator's per-job pricing config: a `(service_id, job_index) → price_in_wei` map.
 
-`operator.toml` controls the local node behaviour (cache paths, RPC bind addr, benchmark cadence, etc.). See the updated sample in `crates/pricing-engine/operator.toml`.
+## Pricing Configuration
 
-## Building and Testing
+### Resource pricing (`default_pricing.toml`)
+
+Controls service creation quotes. Operators set per-resource rates in USD:
+
+```toml
+# Default rates for all blueprints
+[default]
+resources = [
+  { kind = "CPU", count = 1, price_per_unit_rate = 0.001 },
+  { kind = "MemoryMB", count = 1024, price_per_unit_rate = 0.00005 },
+  { kind = "StorageMB", count = 1024, price_per_unit_rate = 0.00002 },
+  { kind = "GPU", count = 1, price_per_unit_rate = 0.005 },
+]
+
+# Override for a specific blueprint ID
+[42]
+resources = [
+  { kind = "CPU", count = 1, price_per_unit_rate = 0.0015 },
+  { kind = "GPU", count = 2, price_per_unit_rate = 0.007 },
+]
+```
+
+Supported resource kinds: `CPU`, `MemoryMB`, `StorageMB`, `NetworkEgressMB`, `NetworkIngressMB`, `GPU`, `Request`, `Invocation`, `ExecutionTimeMS`.
+
+### Per-job pricing (`JobPricingConfig`)
+
+Controls job RFQ quotes. Currently configured programmatically via `PricingEngineService::with_job_pricing()`:
+
+```rust
+use alloy_primitives::U256;
+
+let mut job_prices = JobPricingConfig::new();
+// (service_id, job_index) → price in wei
+job_prices.insert((1, 0), U256::from(1_000_000_000_000_000u64));  // Job 0: 0.001 ETH
+job_prices.insert((1, 6), U256::from(20_000_000_000_000_000u64)); // Job 6: 0.02 ETH (LLM prompt)
+job_prices.insert((1, 7), U256::from(250_000_000_000_000_000u64)); // Job 7: 0.25 ETH (agent task)
+
+let service = PricingEngineService::with_job_pricing(
+    config, benchmark_cache, pricing_config,
+    Arc::new(Mutex::new(job_prices)),
+    signer,
+);
+```
+
+Blueprint developers should wire this into their operator binary's startup, loading prices from their own config format.
+
+### Operator config (`operator.toml`)
+
+```toml
+# RocksDB path for benchmark cache
+database_path = "data/pricing-engine"
+
+# Benchmark settings
+benchmark_duration = 60    # seconds per benchmark run
+benchmark_interval = 5     # seconds between samples
+
+# Operator keystore (k256 keypair for EIP-712 signing)
+keystore_path = "data/keystore"
+
+# gRPC server
+rpc_bind_address = "0.0.0.0"
+rpc_port = 50051
+rpc_timeout = 30           # seconds
+rpc_max_connections = 256
+
+# How long signed quotes remain valid
+quote_validity_duration_secs = 300
+```
+
+## Running
 
 ```bash
-# Format proto + rebuild bindings
-cargo fmt -p blueprint-pricing-engine
-
-# Unit tests (signer + pricing config)
-cargo test -p blueprint-pricing-engine signer_test
-
-# Run the daemon with env vars
 OPERATOR_HTTP_RPC=https://rpc.tangle.tools \
 OPERATOR_WS_RPC=wss://rpc.tangle.tools \
-OPERATOR_TANGLE_CONTRACT=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 \
-OPERATOR_RESTAKING_CONTRACT=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
-OPERATOR_STATUS_REGISTRY_CONTRACT=0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9 \
+OPERATOR_TANGLE_CONTRACT=0x... \
+OPERATOR_RESTAKING_CONTRACT=0x... \
+OPERATOR_STATUS_REGISTRY_CONTRACT=0x... \
 cargo run -p blueprint-pricing-engine --bin pricing-engine-server
 ```
 
-## Security Notes
+All CLI flags:
 
-- Quotes are protected by:
-  - Proof-of-work challenge (`sha2`-based) to prevent RPC abuse.
-  - k256 ECDSA signatures hashed over the ABI payload (keccak256) so they can be submitted directly to `ITangle`.
-  - Explicit TTL (`ttl_blocks`) and expiry timestamp to avoid replays.
-- The keystore lives under `OperatorConfig.keystore_path`. Keys are generated with `blueprint-keystore` and never leave disk.
+| Flag | Env | Description |
+|------|-----|-------------|
+| `--config` | `OPERATOR_CONFIG_PATH` | Path to `operator.toml` |
+| `--pricing-config` | `PRICING_CONFIG_PATH` | Resource pricing table (TOML) |
+| `--http-rpc-endpoint` | `OPERATOR_HTTP_RPC` | Tangle EVM HTTP RPC endpoint |
+| `--ws-rpc-endpoint` | `OPERATOR_WS_RPC` | Tangle EVM WebSocket endpoint |
+| `--blueprint-id` | `OPERATOR_BLUEPRINT_ID` | Blueprint ID to watch for activations |
+| `--service-id` | `OPERATOR_SERVICE_ID` | Optional: fixed service ID to benchmark |
+| `--tangle-contract` | `OPERATOR_TANGLE_CONTRACT` | ITangle proxy contract address |
+| `--restaking-contract` | `OPERATOR_RESTAKING_CONTRACT` | MultiAssetDelegation contract |
+| `--status-registry-contract` | `OPERATOR_STATUS_REGISTRY_CONTRACT` | OperatorStatusRegistry contract |
 
-Keep the contract addresses and keystore directory private; the RPC server does **not** expose signing endpoints beyond `GetPrice`.
+## How It Works Internally
+
+1. **Bootstrap** — reads `operator.toml`, loads pricing table, initializes RocksDB benchmark cache, derives operator Ethereum address from k256 keystore
+2. **Event ingestion** — polls `ITangle::ServiceActivated` / `ServiceTerminated` logs, enqueues benchmarks for each new activation
+3. **Benchmark** — runs CPU/memory/storage/GPU benchmarks, caches profiles per blueprint
+4. **RPC handling** — verifies proof-of-work, computes price (service quotes use benchmarks + resource rates; job quotes use the `JobPricingConfig` map)
+5. **Signing** — hashes ABI-encoded structs with EIP-712 (`TangleQuote` domain, version `1`), signs with k256 ECDSA
+
+## EIP-712 Signing Details
+
+Both quote types use the same EIP-712 domain:
+
+```
+name:              "TangleQuote"
+version:           "1"
+chainId:           <chain_id>
+verifyingContract: <tangle_proxy_address>
+```
+
+**Service quotes** use `QUOTE_TYPEHASH`:
+```
+QuoteDetails(uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,AssetSecurityCommitment[] securityCommitments)
+```
+
+**Job quotes** use `JOB_QUOTE_TYPEHASH`:
+```
+JobQuoteDetails(uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry)
+```
+
+For standalone signing without the full pricing engine, use `JobQuoteSigner` from `blueprint-tangle-extra`:
+
+```rust
+use blueprint_tangle_extra::job_quote::{JobQuoteSigner, JobQuoteDetails, QuoteSigningDomain};
+
+let signer = JobQuoteSigner::new(keypair, QuoteSigningDomain { chain_id, verifying_contract });
+let signed = signer.sign(&JobQuoteDetails {
+    service_id: 1,
+    job_index: 7,
+    price: U256::from(250_000_000_000_000_000u64),
+    timestamp: now,
+    expiry: now + 3600,
+});
+```
+
+## For Blueprint Developers
+
+If your blueprint uses RFQ pricing (instead of or alongside fixed `setJobEventRates`):
+
+1. **Embed or run the pricing engine** — either integrate `PricingEngineService` into your operator binary or run it as a sidecar
+2. **Define job prices** — populate `JobPricingConfig` with `(service_id, job_index) → price` entries based on your blueprint's job types and cost structure
+3. **Expose operator config** — let operators tune prices via your blueprint's config file (model costs, resource multipliers, margins)
+4. **Fixed rates vs RFQ** — you can use both: set `setJobEventRates()` on-chain for standard pricing, and support RFQ for jobs where operators want custom pricing (premium models, large batches, etc.)
+
+The on-chain protocol handles verification, replay protection, payment collection, and distribution. See `tnt-core/docs/PRICING.md` for the full protocol-level pricing reference.
+
+## Testing
+
+```bash
+# Signer roundtrip + EIP-712 compatibility
+cargo test -p blueprint-pricing-engine signer_test
+
+# RPC server unit tests (18 tests covering success, errors, signature verification)
+cargo test -p blueprint-pricing-engine -- server
+
+# All tests
+cargo test -p blueprint-pricing-engine
+```
+
+## Security
+
+- **Proof-of-work** — SHA-256 challenge prevents gRPC abuse
+- **EIP-712 signatures** — quotes are signed with the operator's k256 key and verified on-chain by the Tangle contract
+- **Replay protection** — each quote digest is marked as used on-chain after submission
+- **Expiry** — quotes have explicit `expiry` timestamps; the `maxQuoteAge` protocol parameter (default 1 hour) rejects stale quotes
+- Keystore keys never leave disk. Keep keystore path and contract addresses private.
