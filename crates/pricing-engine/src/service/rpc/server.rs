@@ -117,6 +117,16 @@ impl PricingEngineService {
         self.x402_config = Some(config);
         self
     }
+
+    /// Override the proof-of-work difficulty for testing.
+    ///
+    /// The default difficulty (`DEFAULT_POW_DIFFICULTY = 20`) can take too long
+    /// on slow CI runners, causing challenge timestamps to expire. Use a low
+    /// value (e.g. 1) in integration tests.
+    pub fn with_pow_difficulty(mut self, difficulty: u32) -> Self {
+        self.pow_difficulty = difficulty;
+        self
+    }
 }
 
 #[tonic::async_trait]

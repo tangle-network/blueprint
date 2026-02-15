@@ -42,9 +42,13 @@ mod evm_listener_tests {
     };
     use blueprint_pricing_engine_lib::signer::{OperatorSigner, QuoteSigningDomain, verify_quote};
     use blueprint_pricing_engine_lib::{
-        BenchmarkCache, DEFAULT_POW_DIFFICULTY, PricingEngineService, SignableQuote, SignedQuote,
-        generate_challenge, generate_proof,
+        BenchmarkCache, PricingEngineService, SignableQuote, SignedQuote, generate_challenge,
+        generate_proof,
     };
+
+    /// Low difficulty for integration tests so PoW completes well within the
+    /// 30-second challenge timestamp window, even on slow CI runners.
+    const TEST_POW_DIFFICULTY: u32 = 1;
     use rust_decimal::prelude::FromPrimitive;
     use std::str::FromStr;
     use tokio::net::TcpListener;
@@ -176,7 +180,8 @@ mod evm_listener_tests {
             Arc::clone(&benchmark_cache),
             Arc::clone(&pricing_config),
             Arc::clone(&signer),
-        );
+        )
+        .with_pow_difficulty(TEST_POW_DIFFICULTY);
 
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
@@ -194,7 +199,7 @@ mod evm_listener_tests {
         let mut client = PricingEngineClient::new(channel);
         let challenge_timestamp = chrono::Utc::now().timestamp() as u64;
         let challenge = generate_challenge(blueprint_id, challenge_timestamp);
-        let proof_of_work = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+        let proof_of_work = generate_proof(&challenge, TEST_POW_DIFFICULTY).await?;
 
         let security_requirements = Some(AssetSecurityRequirements {
             asset: Some(Asset {
@@ -384,7 +389,8 @@ mod evm_listener_tests {
                 Arc::clone(&benchmark_cache),
                 Arc::clone(&pricing_config),
                 Arc::clone(&signer),
-            );
+            )
+            .with_pow_difficulty(TEST_POW_DIFFICULTY);
 
             let listener = TcpListener::bind("127.0.0.1:0").await?;
             let grpc_addr = listener.local_addr()?;
@@ -407,7 +413,7 @@ mod evm_listener_tests {
 
             let challenge_timestamp = chrono::Utc::now().timestamp() as u64;
             let challenge = generate_challenge(test_blueprint_id, challenge_timestamp);
-            let proof_of_work = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+            let proof_of_work = generate_proof(&challenge, TEST_POW_DIFFICULTY).await?;
 
             let security_requirements = Some(AssetSecurityRequirements {
                 asset: Some(Asset {
@@ -513,7 +519,8 @@ mod evm_listener_tests {
             Arc::clone(&benchmark_cache),
             Arc::clone(&pricing_config),
             Arc::clone(&signer),
-        );
+        )
+        .with_pow_difficulty(TEST_POW_DIFFICULTY);
 
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
@@ -533,7 +540,7 @@ mod evm_listener_tests {
         // Use a timestamp from 60 seconds ago (should be rejected as too old)
         let expired_timestamp = chrono::Utc::now().timestamp() as u64 - 60;
         let challenge = generate_challenge(blueprint_id, expired_timestamp);
-        let proof_of_work = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+        let proof_of_work = generate_proof(&challenge, TEST_POW_DIFFICULTY).await?;
 
         let request = GetPriceRequest {
             blueprint_id,
@@ -594,7 +601,8 @@ mod evm_listener_tests {
             Arc::clone(&benchmark_cache),
             Arc::clone(&pricing_config),
             Arc::clone(&signer),
-        );
+        )
+        .with_pow_difficulty(TEST_POW_DIFFICULTY);
 
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
@@ -673,7 +681,8 @@ mod evm_listener_tests {
             Arc::clone(&benchmark_cache),
             Arc::clone(&pricing_config),
             Arc::clone(&signer),
-        );
+        )
+        .with_pow_difficulty(TEST_POW_DIFFICULTY);
 
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
@@ -693,7 +702,7 @@ mod evm_listener_tests {
         let unknown_blueprint_id = 99999;
         let challenge_timestamp = chrono::Utc::now().timestamp() as u64;
         let challenge = generate_challenge(unknown_blueprint_id, challenge_timestamp);
-        let proof_of_work = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+        let proof_of_work = generate_proof(&challenge, TEST_POW_DIFFICULTY).await?;
 
         let request = GetPriceRequest {
             blueprint_id: unknown_blueprint_id,
@@ -765,7 +774,7 @@ mod evm_listener_tests {
 
             let challenge_timestamp = chrono::Utc::now().timestamp() as u64;
             let challenge = generate_challenge(BLUEPRINT_ID, challenge_timestamp);
-            let proof_of_work = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+            let proof_of_work = generate_proof(&challenge, TEST_POW_DIFFICULTY).await?;
 
             let request = GetPriceRequest {
                 blueprint_id: BLUEPRINT_ID,
@@ -1161,7 +1170,8 @@ mod evm_listener_tests {
             Arc::clone(&benchmark_cache),
             Arc::clone(&pricing_config),
             Arc::clone(&signer),
-        );
+        )
+        .with_pow_difficulty(TEST_POW_DIFFICULTY);
 
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
@@ -1180,7 +1190,7 @@ mod evm_listener_tests {
 
         let challenge_timestamp = chrono::Utc::now().timestamp() as u64;
         let challenge = generate_challenge(blueprint_id, challenge_timestamp);
-        let proof_of_work = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+        let proof_of_work = generate_proof(&challenge, TEST_POW_DIFFICULTY).await?;
 
         let request = GetPriceRequest {
             blueprint_id,
@@ -1238,7 +1248,8 @@ mod evm_listener_tests {
             Arc::clone(&benchmark_cache),
             Arc::clone(&pricing_config),
             Arc::clone(&signer),
-        );
+        )
+        .with_pow_difficulty(TEST_POW_DIFFICULTY);
 
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
@@ -1257,7 +1268,7 @@ mod evm_listener_tests {
 
         let challenge_timestamp = chrono::Utc::now().timestamp() as u64;
         let challenge = generate_challenge(blueprint_id, challenge_timestamp);
-        let proof_of_work = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+        let proof_of_work = generate_proof(&challenge, TEST_POW_DIFFICULTY).await?;
 
         let request = GetPriceRequest {
             blueprint_id,
@@ -1330,7 +1341,8 @@ mod evm_listener_tests {
             Arc::clone(&benchmark_cache),
             Arc::clone(&pricing_config),
             Arc::clone(&signer),
-        );
+        )
+        .with_pow_difficulty(TEST_POW_DIFFICULTY);
 
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
@@ -1357,7 +1369,7 @@ mod evm_listener_tests {
 
         let challenge_timestamp = chrono::Utc::now().timestamp() as u64;
         let challenge = generate_challenge(blueprint_id, challenge_timestamp);
-        let proof_of_work = generate_proof(&challenge, DEFAULT_POW_DIFFICULTY).await?;
+        let proof_of_work = generate_proof(&challenge, TEST_POW_DIFFICULTY).await?;
 
         let request = GetPriceRequest {
             blueprint_id,
