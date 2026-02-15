@@ -267,11 +267,8 @@ async fn get_job_price(
 
 /// Handle a paid job request.
 ///
-/// This endpoint is called AFTER the x402 middleware has verified and settled
-/// payment. The payment details (chain, token, payer) are available in the
-/// `X-Payment-Response` response header set by the middleware, but are not
-/// directly accessible to the handler. We record the accepted token networks
-/// from our config as metadata.
+/// Called after the x402 middleware has verified and settled payment.
+/// The operator has already been paid on-chain at this point.
 async fn handle_job_request(
     State(state): State<GatewayState>,
     Path((service_id, job_index)): Path<(u64, u32)>,
@@ -311,17 +308,18 @@ async fn handle_job_request(
 
     let call_id = state.call_id_counter.fetch_add(1, Ordering::Relaxed);
 
-    // Determine payment network/token from accepted tokens config.
-    // The x402 middleware verified the payment against one of these tokens.
-    // For single-chain setups this is exact; for multi-chain we record all
-    // accepted networks. Full per-request chain identification requires
-    // x402-axum to pass payment context via request extensions (not yet
-    // supported upstream).
+    // Record which payment network/token was used. This is accounting
+    // metadata only -- it does not affect job execution. The operator
+    // receives payment at their on-chain `pay_to` address regardless.
+    //
+    // For single-token configs this is exact. For multi-token configs we
+    // record all accepted networks. Per-request identification is possible
+    // by parsing the X-Payment request header, but isn't needed since the
+    // operator can reconcile directly from on-chain payment records.
     let (payment_network, payment_token) = if state.config.accepted_tokens.len() == 1 {
         let token = &state.config.accepted_tokens[0];
         (token.network.clone(), token.symbol.clone())
     } else {
-        // Multi-chain: list all accepted networks
         let networks: Vec<&str> = state
             .config
             .accepted_tokens
