@@ -6,9 +6,9 @@
 //! alongside other producers (e.g. `TangleProducer`).
 
 use blueprint_core::error::BoxError;
+use blueprint_core::job::call::Parts;
 use blueprint_core::metadata::{MetadataMap, MetadataValue};
 use blueprint_core::{JobCall, JobId};
-use blueprint_core::job::call::Parts;
 use bytes::Bytes;
 use futures_core::Stream;
 use std::pin::Pin;
@@ -52,14 +52,22 @@ impl VerifiedPayment {
     pub fn into_job_call(self) -> JobCall {
         let mut metadata = MetadataMap::new();
         metadata.insert(X402_ORIGIN_KEY, MetadataValue::from("x402"));
-        metadata.insert(X402_QUOTE_DIGEST_KEY, MetadataValue::from(Bytes::copy_from_slice(&self.quote_digest)));
-        metadata.insert(X402_PAYMENT_NETWORK_KEY, MetadataValue::from(self.payment_network.as_str()));
-        metadata.insert(X402_PAYMENT_TOKEN_KEY, MetadataValue::from(self.payment_token.as_str()));
+        metadata.insert(
+            X402_QUOTE_DIGEST_KEY,
+            MetadataValue::from(Bytes::copy_from_slice(&self.quote_digest)),
+        );
+        metadata.insert(
+            X402_PAYMENT_NETWORK_KEY,
+            MetadataValue::from(self.payment_network.as_str()),
+        );
+        metadata.insert(
+            X402_PAYMENT_TOKEN_KEY,
+            MetadataValue::from(self.payment_token.as_str()),
+        );
         metadata.insert(X402_SERVICE_ID_KEY, MetadataValue::from(self.service_id));
         metadata.insert(X402_CALL_ID_KEY, MetadataValue::from(self.call_id));
 
-        let parts = Parts::new(JobId::from(self.job_index as u64))
-            .with_metadata(metadata);
+        let parts = Parts::new(JobId::from(self.job_index as u64)).with_metadata(metadata);
 
         JobCall::from_parts(parts, self.job_args)
     }

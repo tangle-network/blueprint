@@ -5,14 +5,14 @@
 
 use alloy_primitives::U256;
 use blueprint_runner::BackgroundService;
-use blueprint_x402::producer::{VerifiedPayment, X402Producer, X402_ORIGIN_KEY};
+use blueprint_x402::producer::{VerifiedPayment, X402_ORIGIN_KEY, X402Producer};
 use blueprint_x402::{X402Config, X402Gateway};
 use bytes::Bytes;
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
 use tokio::task::JoinHandle;
 use tower::Service;
-use x402_blueprint::{load_job_pricing, router, PriceOracle, ScaledPriceOracle, StaticPriceOracle};
+use x402_blueprint::{PriceOracle, ScaledPriceOracle, StaticPriceOracle, load_job_pricing, router};
 
 // ---- Shared test infrastructure ----
 
@@ -53,9 +53,11 @@ async fn start_gateway(
 }
 
 fn load_example_pricing() -> HashMap<(u64, u32), U256> {
-    let content =
-        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/config/job_pricing.toml"))
-            .expect("read job_pricing.toml");
+    let content = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/config/job_pricing.toml"
+    ))
+    .expect("read job_pricing.toml");
     load_job_pricing(&content).expect("parse job_pricing.toml")
 }
 

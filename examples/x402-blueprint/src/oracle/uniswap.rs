@@ -100,8 +100,8 @@ impl ExchangeRateProvider for UniswapV3TwapOracle {
         let provider = self.provider.clone();
 
         async move {
-            let config = pool_config
-                .ok_or_else(|| OracleError::NotFound(format!("{base}/{quote}")))?;
+            let config =
+                pool_config.ok_or_else(|| OracleError::NotFound(format!("{base}/{quote}")))?;
 
             let pool = IUniswapV3Pool::new(config.pool, &provider);
 
@@ -151,8 +151,7 @@ fn tick_to_rate(tick: i32, token0_decimals: u8, token1_decimals: u8, base_is_tok
     // Adjust for decimal difference to get human-readable price.
     // human_price = raw_price * 10^(token0_decimals - token1_decimals)
     // This gives "how many token1 per 1 token0" in human units.
-    let decimal_adj =
-        10_f64.powi(i32::from(token0_decimals) - i32::from(token1_decimals));
+    let decimal_adj = 10_f64.powi(i32::from(token0_decimals) - i32::from(token1_decimals));
     let token1_per_token0 = raw_price * decimal_adj;
 
     if base_is_token0 {
@@ -185,9 +184,6 @@ mod tests {
         let rate_base_t1 = tick_to_rate(195_600, 6, 18, false);
         let rate_base_t0 = tick_to_rate(195_600, 6, 18, true);
         let product = rate_base_t0 * rate_base_t1;
-        assert!(
-            (product - 1.0).abs() < 0.01,
-            "product was {product}"
-        );
+        assert!((product - 1.0).abs() < 0.01, "product was {product}");
     }
 }

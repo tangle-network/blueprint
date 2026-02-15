@@ -21,8 +21,8 @@ use blueprint_runner::BackgroundService;
 use blueprint_runner::error::RunnerError;
 use bytes::Bytes;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
@@ -75,10 +75,7 @@ impl X402Gateway {
     pub fn new(
         config: X402Config,
         job_pricing: HashMap<(u64, u32), U256>,
-    ) -> Result<
-        (Self, crate::X402Producer),
-        X402Error,
-    > {
+    ) -> Result<(Self, crate::X402Producer), X402Error> {
         if config.accepted_tokens.is_empty() {
             return Err(X402Error::Config(
                 "at least one accepted_token must be configured".into(),
@@ -86,8 +83,7 @@ impl X402Gateway {
         }
 
         let (producer, payment_tx) = crate::X402Producer::channel();
-        let quote_registry =
-            QuoteRegistry::new(Duration::from_secs(config.quote_ttl_secs));
+        let quote_registry = QuoteRegistry::new(Duration::from_secs(config.quote_ttl_secs));
 
         let gateway = Self {
             config: Arc::new(config),
@@ -150,8 +146,8 @@ impl X402Gateway {
         //   3. Settles payment before passing the request to our handler
         #[cfg(feature = "evm")]
         let job_route = {
-            let x402 = X402Middleware::new(self.config.facilitator_url.as_str())
-                .settle_before_execution();
+            let x402 =
+                X402Middleware::new(self.config.facilitator_url.as_str()).settle_before_execution();
 
             let config = self.config.clone();
             let job_pricing = self.job_pricing.clone();
@@ -171,10 +167,7 @@ impl X402Gateway {
         };
 
         Router::new()
-            .route(
-                "/x402/jobs/{service_id}/{job_index}",
-                job_route,
-            )
+            .route("/x402/jobs/{service_id}/{job_index}", job_route)
             // Health/discovery endpoints are unprotected
             .route("/x402/health", axum::routing::get(health_check))
             .route(
@@ -186,9 +179,7 @@ impl X402Gateway {
 }
 
 impl BackgroundService for X402Gateway {
-    async fn start(
-        &self,
-    ) -> Result<oneshot::Receiver<Result<(), RunnerError>>, RunnerError> {
+    async fn start(&self) -> Result<oneshot::Receiver<Result<(), RunnerError>>, RunnerError> {
         let (tx, rx) = oneshot::channel();
         let router = self.build_router();
         let addr = self.config.bind_address;
@@ -219,9 +210,9 @@ impl BackgroundService for X402Gateway {
 
             if let Err(e) = axum::serve(listener, router).await {
                 tracing::error!(error = %e, "x402 gateway server error");
-                let _ = tx.send(Err(RunnerError::Other(Box::new(
-                    X402Error::Server(e.to_string()),
-                ))));
+                let _ = tx.send(Err(RunnerError::Other(Box::new(X402Error::Server(
+                    e.to_string(),
+                )))));
             }
         });
 
@@ -263,8 +254,7 @@ async fn get_job_price(
         }
     };
 
-    match X402Gateway::settlement_options(&state.config, service_id, job_index, price_wei)
-    {
+    match X402Gateway::settlement_options(&state.config, service_id, job_index, price_wei) {
         Ok(options) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -316,10 +306,9 @@ async fn handle_job_request(
     };
 
     // Register a dynamic quote for tracking
-    let quote_digest =
-        state
-            .quote_registry
-            .insert_dynamic(service_id, job_index, *price_wei);
+    let quote_digest = state
+        .quote_registry
+        .insert_dynamic(service_id, job_index, *price_wei);
 
     // Consume the quote (marks it as paid)
     if state.quote_registry.consume(&quote_digest).is_none() {
@@ -392,14 +381,11 @@ async fn handle_job_request(
 // Need hex encoding for quote digests — use alloy_primitives::hex
 mod hex {
     pub fn encode(bytes: impl AsRef<[u8]>) -> String {
-        bytes
-            .as_ref()
-            .iter()
-            .fold(String::new(), |mut s, b| {
-                use std::fmt::Write;
-                let _ = write!(s, "{b:02x}");
-                s
-            })
+        bytes.as_ref().iter().fold(String::new(), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        })
     }
 }
 
@@ -417,8 +403,8 @@ fn build_evm_price_tags(
     job_pricing: &HashMap<(u64, u32), U256>,
     uri: &http::Uri,
 ) -> Vec<x402_types::proto::v2::PriceTag> {
-    use x402_chain_eip155::chain::{Eip155ChainReference, Eip155TokenDeployment};
     use x402_chain_eip155::V2Eip155Exact;
+    use x402_chain_eip155::chain::{Eip155ChainReference, Eip155TokenDeployment};
 
     // Parse service_id and job_index from URI: /x402/jobs/{service_id}/{job_index}
     let segments: Vec<&str> = uri.path().split('/').collect();

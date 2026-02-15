@@ -47,9 +47,7 @@ impl ExchangeRateProvider for CoinbaseOracle {
         base: &str,
         quote: &str,
     ) -> impl std::future::Future<Output = Result<Decimal, OracleError>> + Send {
-        let url = format!(
-            "https://api.coinbase.com/v2/exchange-rates?currency={base}"
-        );
+        let url = format!("https://api.coinbase.com/v2/exchange-rates?currency={base}");
         let quote_owned = quote.to_owned();
         let client = self.client.clone();
 
@@ -75,13 +73,10 @@ impl ExchangeRateProvider for CoinbaseOracle {
             let rate_str = body["data"]["rates"][&quote_owned]
                 .as_str()
                 .ok_or_else(|| {
-                    OracleError::NotFound(format!(
-                        "no rate for {quote_owned} in Coinbase response"
-                    ))
+                    OracleError::NotFound(format!("no rate for {quote_owned} in Coinbase response"))
                 })?;
 
-            Decimal::from_str(rate_str)
-                .map_err(|e| OracleError::Parse(format!("{rate_str}: {e}")))
+            Decimal::from_str(rate_str).map_err(|e| OracleError::Parse(format!("{rate_str}: {e}")))
         }
     }
 }

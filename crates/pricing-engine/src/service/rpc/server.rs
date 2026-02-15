@@ -787,8 +787,7 @@ fn compute_settlement_options(
         .iter()
         .filter_map(|token| {
             // Convert wei → native units → token units
-            let wei_decimal =
-                rust_decimal::Decimal::from_str_exact(&price_wei.to_string()).ok()?;
+            let wei_decimal = rust_decimal::Decimal::from_str_exact(&price_wei.to_string()).ok()?;
             let native_unit = rust_decimal::Decimal::from(10u64.pow(18));
             let native_amount = wei_decimal / native_unit;
             let token_amount = native_amount * token.rate_per_native_unit;

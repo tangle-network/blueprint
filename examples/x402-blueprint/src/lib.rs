@@ -179,14 +179,8 @@ mod tests {
 1 = "10000000000000000"
 "#;
         let prices = load_job_pricing(toml).unwrap();
-        assert_eq!(
-            prices[&(1, 0)],
-            U256::from(1_000_000_000_000_000u64)
-        );
-        assert_eq!(
-            prices[&(1, 1)],
-            U256::from(10_000_000_000_000_000u64)
-        );
+        assert_eq!(prices[&(1, 0)], U256::from(1_000_000_000_000_000u64));
+        assert_eq!(prices[&(1, 1)], U256::from(10_000_000_000_000_000u64));
     }
 
     #[test]

@@ -56,12 +56,7 @@ impl QuoteRegistry {
     ///
     /// For quotes generated dynamically (not via the RFQ gRPC endpoint),
     /// we derive a digest from the job parameters + timestamp.
-    pub fn insert_dynamic(
-        &self,
-        service_id: u64,
-        job_index: u32,
-        price_wei: U256,
-    ) -> [u8; 32] {
+    pub fn insert_dynamic(&self, service_id: u64, job_index: u32, price_wei: U256) -> [u8; 32] {
         let now = Instant::now();
         let entry = QuoteEntry {
             service_id,

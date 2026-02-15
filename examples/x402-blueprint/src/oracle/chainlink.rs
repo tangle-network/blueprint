@@ -72,8 +72,8 @@ impl ExchangeRateProvider for ChainlinkOracle {
         let provider = self.provider.clone();
 
         async move {
-            let address = feed_address
-                .ok_or_else(|| OracleError::NotFound(format!("{base}/{quote}")))?;
+            let address =
+                feed_address.ok_or_else(|| OracleError::NotFound(format!("{base}/{quote}")))?;
 
             let feed = IAggregatorV3::new(address, &provider);
 

@@ -248,8 +248,14 @@ mod tests {
             service_id: 0,
         };
 
-        assert_eq!(config.accepted_tokens[0].rate_per_native_unit, Decimal::from(3200u32));
+        assert_eq!(
+            config.accepted_tokens[0].rate_per_native_unit,
+            Decimal::from(3200u32)
+        );
         refresh_rates(&mut config, &provider, "ETH").await.unwrap();
-        assert_eq!(config.accepted_tokens[0].rate_per_native_unit, Decimal::from(4000u32));
+        assert_eq!(
+            config.accepted_tokens[0].rate_per_native_unit,
+            Decimal::from(4000u32)
+        );
     }
 }

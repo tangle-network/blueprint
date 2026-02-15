@@ -126,9 +126,8 @@ pub enum ExecutionMode {
 impl X402Config {
     /// Load configuration from a TOML file.
     pub fn from_toml(path: impl AsRef<Path>) -> Result<Self, X402Error> {
-        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| {
-            X402Error::Config(format!("failed to read config file: {e}"))
-        })?;
+        let content = std::fs::read_to_string(path.as_ref())
+            .map_err(|e| X402Error::Config(format!("failed to read config file: {e}")))?;
         toml::from_str(&content).map_err(X402Error::from)
     }
 
@@ -169,15 +168,13 @@ impl X402Config {
         let token_amount = native_amount * token.rate_per_native_unit;
 
         // Apply markup
-        let markup_multiplier = Decimal::ONE
-            + Decimal::from(token.markup_bps) / Decimal::from(10_000u32);
+        let markup_multiplier =
+            Decimal::ONE + Decimal::from(token.markup_bps) / Decimal::from(10_000u32);
         let final_amount = token_amount * markup_multiplier;
 
         // Convert to smallest token units (e.g. 6 decimals for USDC)
         let token_unit = Decimal::from(10u64.pow(u32::from(token.decimals)));
-        let smallest_units = (final_amount * token_unit)
-            .floor()
-            .to_string();
+        let smallest_units = (final_amount * token_unit).floor().to_string();
 
         Ok(smallest_units)
     }
