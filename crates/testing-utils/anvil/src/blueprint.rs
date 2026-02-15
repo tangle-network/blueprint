@@ -43,11 +43,11 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, sleep, timeout};
 
-const OPERATOR1_PRIVATE_KEY: &str =
+pub(crate) const OPERATOR1_PRIVATE_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const OPERATOR2_PRIVATE_KEY: &str =
+pub(crate) const OPERATOR2_PRIVATE_KEY: &str =
     "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
-const SERVICE_OWNER_PRIVATE_KEY: &str =
+pub(crate) const SERVICE_OWNER_PRIVATE_KEY: &str =
     "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 /// Builder for [`BlueprintHarness`].
@@ -59,6 +59,17 @@ pub struct BlueprintHarnessBuilder {
     service_id: u64,
     operator_specs: Option<Vec<OperatorSpec>>,
     faulty_count: usize,
+    env_vars: Vec<(String, String)>,
+    state_dir_env: Option<String>,
+    pre_spawn_hook: Option<
+        Box<
+            dyn FnOnce(
+                    &BlueprintEnvironment,
+                )
+                    -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+                + Send,
+        >,
+    >,
     #[cfg(feature = "aggregation")]
     aggregating_consumer: Option<AggregatingConsumerHarnessConfig>,
     #[cfg(feature = "faas")]
@@ -80,6 +91,9 @@ impl BlueprintHarnessBuilder {
             service_id: LOCAL_SERVICE_ID,
             operator_specs: None,
             faulty_count: 0,
+            env_vars: Vec::new(),
+            state_dir_env: None,
+            pre_spawn_hook: None,
             #[cfg(feature = "aggregation")]
             aggregating_consumer: None,
             #[cfg(feature = "faas")]
@@ -157,6 +171,52 @@ impl BlueprintHarnessBuilder {
     ) -> Self {
         self.faas_executors
             .push((job_id, std::sync::Arc::new(executor)));
+        self
+    }
+
+    /// Set environment variables that will be applied when the harness spawns
+    /// and restored to their original values on [`BlueprintHarness::shutdown`].
+    ///
+    /// This avoids scattering `unsafe { std::env::set_var }` across test code
+    /// and documents which env vars a blueprint depends on.
+    #[must_use]
+    pub fn with_env_vars(mut self, vars: impl IntoIterator<Item = (String, String)>) -> Self {
+        self.env_vars.extend(vars);
+        self
+    }
+
+    /// Set a single environment variable for the harness lifetime.
+    #[must_use]
+    pub fn with_env_var(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env_vars.push((key.into(), value.into()));
+        self
+    }
+
+    /// Point `BLUEPRINT_STATE_DIR` (or a custom env var name) at the harness
+    /// temp directory, isolating [`PersistentStore`] data between test runs.
+    ///
+    /// When the harness shuts down the env var is unset and the temp directory
+    /// is deleted, so parallel test processes never race on the same store
+    /// files.
+    #[must_use]
+    pub fn with_state_dir_env(mut self, env_var_name: impl Into<String>) -> Self {
+        self.state_dir_env = Some(env_var_name.into());
+        self
+    }
+
+    /// Register a callback that runs after Anvil is booted and the
+    /// [`BlueprintEnvironment`] is ready, but before the [`BlueprintRunner`]
+    /// starts consuming jobs.
+    ///
+    /// Use this to pre-seed [`PersistentStore`] entries, deploy extra
+    /// contracts, or configure external services that must be ready before the
+    /// first job arrives.
+    pub fn with_pre_spawn_hook<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: FnOnce(&BlueprintEnvironment) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = Result<()>> + Send + 'static,
+    {
+        self.pre_spawn_hook = Some(Box::new(move |env| Box::pin(hook(env))));
         self
     }
 
@@ -300,12 +360,12 @@ impl OperatorBehavior for DropAllOperator {
 }
 
 #[derive(Clone)]
-enum OperatorSecret {
+pub(crate) enum OperatorSecret {
     Hex(String),
 }
 
 impl OperatorSecret {
-    fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         match self {
             OperatorSecret::Hex(v) => v.as_str(),
         }
@@ -375,25 +435,25 @@ impl<const N: usize, const F: usize> OperatorFleet<N, F> {
         Self { specs }
     }
 
-    fn into_vec(self) -> Vec<OperatorSpec> {
+    pub(crate) fn into_vec(self) -> Vec<OperatorSpec> {
         self.specs.into_iter().collect()
     }
 }
 
-fn default_operator_specs() -> Vec<OperatorSpec> {
+pub(crate) fn default_operator_specs() -> Vec<OperatorSpec> {
     vec![OperatorSpec::honest("operator-0", OPERATOR1_PRIVATE_KEY)]
 }
 
-type BoxedConsumer = Pin<Box<dyn Sink<JobResult, Error = BoxError> + Send>>;
+pub(crate) type BoxedConsumer = Pin<Box<dyn Sink<JobResult, Error = BoxError> + Send>>;
 
-struct MultiOperatorConsumer {
+pub(crate) struct MultiOperatorConsumer {
     senders: Vec<UnboundedSender<JobResult>>,
     local_results: Arc<Mutex<VecDeque<Result<Vec<u8>, String>>>>,
     local_notify: Arc<Notify>,
 }
 
 impl MultiOperatorConsumer {
-    fn new(
+    pub(crate) fn new(
         senders: Vec<UnboundedSender<JobResult>>,
         local_results: Arc<Mutex<VecDeque<Result<Vec<u8>, String>>>>,
         local_notify: Arc<Notify>,
@@ -486,6 +546,8 @@ pub struct BlueprintHarness {
     operator_tasks: Vec<JoinHandle<()>>,
     service_id: u64,
     blueprint_id: u64,
+    /// Original values of env vars set by `with_env_vars`, for restoration on shutdown.
+    saved_env_vars: Vec<(String, Option<String>)>,
 }
 
 impl BlueprintHarness {
@@ -504,6 +566,9 @@ impl BlueprintHarness {
             service_id,
             operator_specs,
             faulty_count,
+            env_vars,
+            state_dir_env,
+            pre_spawn_hook,
             #[cfg(feature = "aggregation")]
             aggregating_consumer,
             #[cfg(feature = "faas")]
@@ -515,6 +580,32 @@ impl BlueprintHarness {
             .context("failed to boot seeded Tangle EVM testnet")?;
 
         let temp_dir = TempDir::new().context("failed to create tempdir for harness")?;
+
+        // Apply env vars, saving originals for restoration on shutdown.
+        let mut saved_env_vars = Vec::new();
+        // State dir env var (points at harness temp dir).
+        if let Some(ref var_name) = state_dir_env {
+            let prev = std::env::var(var_name).ok();
+            saved_env_vars.push((var_name.clone(), prev));
+            let state_path = temp_dir.path().join("blueprint-state");
+            std::fs::create_dir_all(&state_path)?;
+            // SAFETY: harness tests run serially (HARNESS_LOCK) or in their
+            // own process; the env var must be set before PersistentStore
+            // accesses it.
+            unsafe {
+                std::env::set_var(var_name, &state_path);
+            }
+        }
+        for (key, value) in &env_vars {
+            let prev = std::env::var(key).ok();
+            saved_env_vars.push((key.clone(), prev));
+            // SAFETY: same as above — single-threaded harness setup phase,
+            // env vars set before any runner tasks are spawned.
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+
         let keystore_path = temp_dir.path().join("keystore");
         std::fs::create_dir_all(&keystore_path)?;
         seed_operator_key(&keystore_path)?;
@@ -528,6 +619,11 @@ impl BlueprintHarness {
             blueprint_id,
             service_id,
         );
+
+        // Run pre-spawn hook (after Anvil + env are ready, before runner starts).
+        if let Some(hook) = pre_spawn_hook {
+            hook(&env).await.context("pre-spawn hook failed")?;
+        }
 
         let client = create_client(&deployment, &keystore_path, blueprint_id, service_id).await?;
         let event_client =
@@ -583,6 +679,7 @@ impl BlueprintHarness {
         let runner_faas_executors = faas_executors;
 
         let runner_task = tokio::spawn(async move {
+            #[allow(unused_mut)]
             let mut builder = BlueprintRunner::builder(HarnessConfig, runner_env)
                 .router(runner_router)
                 .producer(producer)
@@ -611,6 +708,7 @@ impl BlueprintHarness {
             operator_tasks,
             service_id,
             blueprint_id,
+            saved_env_vars,
         })
     }
 
@@ -792,7 +890,7 @@ impl BlueprintHarness {
         self.local_results.lock().unwrap().pop_front()
     }
 
-    /// Abort the runner task and tear down the harness.
+    /// Abort the runner task, restore env vars, and tear down the harness.
     pub async fn shutdown(mut self) {
         if let Some(handle) = self.abort_runner() {
             let _ = handle.await;
@@ -801,7 +899,20 @@ impl BlueprintHarness {
             task.abort();
             let _ = task.await;
         }
+        self.restore_env_vars();
         let _ = self.temp_dir.take();
+    }
+
+    fn restore_env_vars(&mut self) {
+        for (key, original) in self.saved_env_vars.drain(..) {
+            // SAFETY: called during shutdown/drop after all runner and operator
+            // tasks have been aborted; no concurrent readers of these env vars
+            // remain.
+            match original {
+                Some(val) => unsafe { std::env::set_var(&key, &val) },
+                None => unsafe { std::env::remove_var(&key) },
+            }
+        }
     }
 
     fn abort_runner(&mut self) -> Option<JoinHandle<()>> {
@@ -855,6 +966,7 @@ impl Drop for BlueprintHarness {
         for task in self.operator_tasks.drain(..) {
             task.abort();
         }
+        self.restore_env_vars();
         let _ = self.temp_dir.take();
     }
 }
@@ -922,7 +1034,7 @@ async fn create_service_owner_client(
     .await
 }
 
-async fn create_ephemeral_operator_client(
+pub(crate) async fn create_ephemeral_operator_client(
     deployment: &SeededTangleTestnet,
     blueprint_id: u64,
     service_id: u64,
@@ -965,7 +1077,7 @@ pub fn seed_operator_key(path: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn build_operator_runtimes(
+pub(crate) async fn build_operator_runtimes(
     specs: &[OperatorSpec],
     deployment: &SeededTangleTestnet,
     blueprint_id: u64,
@@ -1005,7 +1117,7 @@ async fn build_operator_runtimes(
     ))
 }
 
-async fn operator_sink_task(
+pub(crate) async fn operator_sink_task(
     label: String,
     behavior: OperatorBehaviorRef,
     mut rx: UnboundedReceiver<JobResult>,
@@ -1032,7 +1144,7 @@ async fn operator_sink_task(
     }
 }
 
-async fn build_operator_sink(
+pub(crate) async fn build_operator_sink(
     client: Arc<TangleClient>,
     service_id: u64,
     spec: &OperatorSpec,
