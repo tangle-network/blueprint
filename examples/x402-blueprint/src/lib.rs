@@ -94,13 +94,17 @@ pub struct ScaledPriceOracle<O> {
 impl<O> ScaledPriceOracle<O> {
     /// Create a scaled oracle. The factor is `numerator / denominator`.
     /// For example, (3, 2) applies a 1.5x multiplier.
-    pub fn new(inner: O, numerator: U256, denominator: U256) -> Self {
-        assert!(!denominator.is_zero(), "denominator must be non-zero");
-        Self {
+    ///
+    /// Returns an error if `denominator` is zero.
+    pub fn new(inner: O, numerator: U256, denominator: U256) -> Result<Self, &'static str> {
+        if denominator.is_zero() {
+            return Err("denominator must be non-zero");
+        }
+        Ok(Self {
             inner,
             numerator,
             denominator,
-        }
+        })
     }
 }
 
@@ -199,7 +203,7 @@ mod tests {
         prices.insert((1, 0), U256::from(1000u64));
         let base = StaticPriceOracle::new(prices);
         // 1.5x multiplier: 3/2
-        let oracle = ScaledPriceOracle::new(base, U256::from(3u64), U256::from(2u64));
+        let oracle = ScaledPriceOracle::new(base, U256::from(3u64), U256::from(2u64)).unwrap();
 
         assert_eq!(oracle.price_wei(1, 0), Some(U256::from(1500u64)));
         assert_eq!(oracle.snapshot()[&(1, 0)], U256::from(1500u64));
@@ -210,8 +214,16 @@ mod tests {
         let mut prices = HashMap::new();
         prices.insert((1, 0), U256::from(500u64));
         let base = StaticPriceOracle::new(prices);
-        let oracle = ScaledPriceOracle::new(base, U256::from(2u64), U256::from(1u64));
+        let oracle = ScaledPriceOracle::new(base, U256::from(2u64), U256::from(1u64)).unwrap();
 
         assert_eq!(oracle.price_wei(1, 0), Some(U256::from(1000u64)));
+    }
+
+    #[test]
+    fn test_scaled_oracle_zero_denominator() {
+        let prices = HashMap::new();
+        let base = StaticPriceOracle::new(prices);
+        let result = ScaledPriceOracle::new(base, U256::from(1u64), U256::ZERO);
+        assert!(result.is_err());
     }
 }

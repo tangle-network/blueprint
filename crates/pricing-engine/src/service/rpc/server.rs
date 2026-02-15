@@ -28,6 +28,12 @@ pub type JobPricingConfig = std::collections::HashMap<(u64, u32), alloy_primitiv
 ///
 /// When set, the RPC server will include settlement options in `GetJobPriceResponse`,
 /// allowing clients to pay via x402 on any supported chain/token.
+///
+/// Note: `X402AcceptedToken` mirrors `blueprint_x402::config::AcceptedToken`.
+/// A cyclic dependency (`runner -> qos -> remote-providers -> pricing-engine`)
+/// prevents importing from `blueprint-x402` directly. If you change the
+/// conversion logic here, update `AcceptedToken::convert_wei_to_amount` in
+/// `crates/x402/src/config.rs` as well.
 #[derive(Debug, Clone)]
 pub struct X402SettlementConfig {
     /// Operator's x402 gateway endpoint URL.
@@ -37,11 +43,14 @@ pub struct X402SettlementConfig {
 }
 
 /// An accepted token for x402 settlement.
+///
+/// Mirrors `blueprint_x402::config::AcceptedToken`. See [`X402SettlementConfig`]
+/// for why this is duplicated.
 #[derive(Debug, Clone)]
 pub struct X402AcceptedToken {
     /// CAIP-2 network identifier, e.g. `"eip155:8453"` for Base.
     pub network: String,
-    /// Token contract/mint address.
+    /// Token contract address on the EVM chain.
     pub asset: String,
     /// Human-readable symbol.
     pub symbol: String,
@@ -789,6 +798,10 @@ struct SettlementOptionInternal {
 }
 
 /// Convert a wei price into settlement options for each accepted token.
+///
+/// Note: this conversion logic is intentionally kept in sync with
+/// `AcceptedToken::convert_wei_to_amount` in `crates/x402/src/config.rs`.
+/// A cyclic dependency prevents importing it directly.
 fn compute_settlement_options(
     accepted_tokens: &[X402AcceptedToken],
     price_wei: alloy_primitives::U256,
@@ -796,7 +809,7 @@ fn compute_settlement_options(
     accepted_tokens
         .iter()
         .filter_map(|token| {
-            // Convert wei → native units → token units
+            // Convert wei -> native units -> token units
             let wei_decimal = rust_decimal::Decimal::from_str_exact(&price_wei.to_string()).ok()?;
             let native_unit = rust_decimal::Decimal::from(10u64.pow(18));
             let native_amount = wei_decimal / native_unit;

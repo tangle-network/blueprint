@@ -110,7 +110,7 @@ impl X402Gateway {
             .accepted_tokens
             .iter()
             .map(|token| {
-                let amount = config.convert_wei_to_token(price_wei, token)?;
+                let amount = token.convert_wei_to_amount(price_wei)?;
                 Ok(SettlementOption {
                     network: token.network.clone(),
                     asset: token.asset.clone(),
@@ -365,16 +365,8 @@ async fn handle_job_request(
         .into_response()
 }
 
-// Need hex encoding for quote digests
-mod hex {
-    pub fn encode(bytes: impl AsRef<[u8]>) -> String {
-        bytes.as_ref().iter().fold(String::new(), |mut s, b| {
-            use std::fmt::Write;
-            let _ = write!(s, "{b:02x}");
-            s
-        })
-    }
-}
+// Re-use alloy's hex encoder for quote digests.
+use alloy_primitives::hex;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EVM Price Tag Construction
@@ -394,8 +386,20 @@ fn build_evm_price_tags(
 
     // Parse service_id and job_index from URI: /x402/jobs/{service_id}/{job_index}
     let segments: Vec<&str> = uri.path().split('/').collect();
-    let service_id: u64 = segments.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
-    let job_index: u32 = segments.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let service_id: u64 = match segments.get(3).and_then(|s| s.parse().ok()) {
+        Some(id) => id,
+        None => {
+            tracing::warn!(uri = %uri, "failed to parse service_id from URI");
+            return vec![];
+        }
+    };
+    let job_index: u32 = match segments.get(4).and_then(|s| s.parse().ok()) {
+        Some(idx) => idx,
+        None => {
+            tracing::warn!(uri = %uri, "failed to parse job_index from URI");
+            return vec![];
+        }
+    };
 
     let price_wei = match job_pricing.get(&(service_id, job_index)) {
         Some(p) => p,
@@ -407,10 +411,56 @@ fn build_evm_price_tags(
         .iter()
         .filter(|t| t.network.starts_with("eip155:"))
         .filter_map(|token| {
-            let amount_str = config.convert_wei_to_token(price_wei, token).ok()?;
-            let chain_id: u64 = token.network.strip_prefix("eip155:")?.parse().ok()?;
-            let address: alloy_primitives::Address = token.asset.parse().ok()?;
-            let pay_to: alloy_primitives::Address = token.pay_to.parse().ok()?;
+            let amount_str = match token.convert_wei_to_amount(price_wei) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!(
+                        token = %token.symbol,
+                        network = %token.network,
+                        error = %e,
+                        "failed to convert wei price to token amount"
+                    );
+                    return None;
+                }
+            };
+
+            let chain_id: u64 = match token.network.strip_prefix("eip155:") {
+                Some(s) => match s.parse() {
+                    Ok(id) => id,
+                    Err(_) => {
+                        tracing::warn!(
+                            network = %token.network,
+                            "invalid chain ID in token network"
+                        );
+                        return None;
+                    }
+                },
+                None => return None,
+            };
+
+            let address: alloy_primitives::Address = match token.asset.parse() {
+                Ok(a) => a,
+                Err(_) => {
+                    tracing::warn!(
+                        token = %token.symbol,
+                        asset = %token.asset,
+                        "invalid asset address"
+                    );
+                    return None;
+                }
+            };
+
+            let pay_to: alloy_primitives::Address = match token.pay_to.parse() {
+                Ok(a) => a,
+                Err(_) => {
+                    tracing::warn!(
+                        token = %token.symbol,
+                        pay_to = %token.pay_to,
+                        "invalid pay_to address"
+                    );
+                    return None;
+                }
+            };
 
             let deployment = Eip155TokenDeployment {
                 chain_reference: Eip155ChainReference::new(chain_id),
@@ -419,7 +469,20 @@ fn build_evm_price_tags(
                 eip712: None,
             };
 
-            let amount: u64 = amount_str.parse().ok()?;
+            // Parse amount as U256 to handle large values (18-decimal tokens
+            // can exceed u64::MAX).
+            let amount = match U256::from_str_radix(&amount_str, 10) {
+                Ok(a) => a,
+                Err(_) => {
+                    tracing::warn!(
+                        token = %token.symbol,
+                        amount = %amount_str,
+                        "failed to parse token amount as U256"
+                    );
+                    return None;
+                }
+            };
+
             Some(V2Eip155Exact::price_tag(pay_to, deployment.amount(amount)))
         })
         .collect()

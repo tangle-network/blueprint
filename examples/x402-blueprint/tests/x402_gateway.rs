@@ -225,7 +225,7 @@ fn test_scaled_oracle_applies_multiplier() {
     let pricing = load_example_pricing();
     let base = StaticPriceOracle::new(pricing);
     // 2x surge pricing
-    let oracle = ScaledPriceOracle::new(base, U256::from(2u64), U256::from(1u64));
+    let oracle = ScaledPriceOracle::new(base, U256::from(2u64), U256::from(1u64)).unwrap();
 
     assert_eq!(
         oracle.price_wei(1, 0),
@@ -244,7 +244,7 @@ async fn test_gateway_with_scaled_pricing() {
     let pricing = load_example_pricing();
     let base = StaticPriceOracle::new(pricing);
     // 1.5x multiplier
-    let oracle = ScaledPriceOracle::new(base, U256::from(3u64), U256::from(2u64));
+    let oracle = ScaledPriceOracle::new(base, U256::from(3u64), U256::from(2u64)).unwrap();
     let scaled_pricing = oracle.snapshot();
 
     let (handle, _producer) = start_gateway(port, scaled_pricing).await;
