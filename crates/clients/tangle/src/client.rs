@@ -2441,10 +2441,7 @@ impl TangleClient {
     }
 
     /// Parse a `JobSubmitted` event from a transaction receipt.
-    fn parse_job_submitted(
-        &self,
-        receipt: &TransactionReceipt,
-    ) -> Result<JobSubmissionResult> {
+    fn parse_job_submitted(&self, receipt: &TransactionReceipt) -> Result<JobSubmissionResult> {
         let tx = TransactionResult {
             tx_hash: receipt.transaction_hash,
             block_number: receipt.block_number,

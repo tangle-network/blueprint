@@ -212,9 +212,7 @@ fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
 
 /// Convert an SDK `SignedJobQuote` to the on-chain `ITangleTypes::SignedJobQuote`
 /// for submission via `TangleClient::submit_job_from_quote`.
-impl From<SignedJobQuote>
-    for blueprint_client_tangle::contracts::ITangleTypes::SignedJobQuote
-{
+impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::SignedJobQuote {
     fn from(quote: SignedJobQuote) -> Self {
         use blueprint_crypto::BytesEncoding;
         Self {
