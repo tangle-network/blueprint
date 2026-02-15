@@ -61,8 +61,15 @@ pub struct BlueprintHarnessBuilder {
     faulty_count: usize,
     env_vars: Vec<(String, String)>,
     state_dir_env: Option<String>,
-    pre_spawn_hook:
-        Option<Box<dyn FnOnce(&BlueprintEnvironment) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> + Send>>,
+    pre_spawn_hook: Option<
+        Box<
+            dyn FnOnce(
+                    &BlueprintEnvironment,
+                )
+                    -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+                + Send,
+        >,
+    >,
     #[cfg(feature = "aggregation")]
     aggregating_consumer: Option<AggregatingConsumerHarnessConfig>,
     #[cfg(feature = "faas")]
@@ -470,13 +477,18 @@ impl Sink<JobResult> for MultiOperatorConsumer {
     }
 
     fn start_send(self: Pin<&mut Self>, item: JobResult) -> Result<(), Self::Error> {
-        println!("blueprint-harness: received job result");
-        if let JobResult::Ok { body, .. } = &item {
-            self.local_results
-                .lock()
-                .unwrap()
-                .push_back(body.clone().to_vec());
-            self.local_notify.notify_waiters();
+        match &item {
+            JobResult::Ok { body, .. } => {
+                println!("blueprint-harness: received job result (ok)");
+                self.local_results
+                    .lock()
+                    .unwrap()
+                    .push_back(body.clone().to_vec());
+                self.local_notify.notify_waiters();
+            }
+            JobResult::Err(e) => {
+                eprintln!("blueprint-harness: received job result (err): {e}");
+            }
         }
         let senders = &mut self.get_mut().senders;
         let mut remaining = Vec::with_capacity(senders.len());
@@ -576,14 +588,18 @@ impl BlueprintHarness {
             // SAFETY: harness tests run serially (HARNESS_LOCK) or in their
             // own process; the env var must be set before PersistentStore
             // accesses it.
-            unsafe { std::env::set_var(var_name, &state_path); }
+            unsafe {
+                std::env::set_var(var_name, &state_path);
+            }
         }
         for (key, value) in &env_vars {
             let prev = std::env::var(key).ok();
             saved_env_vars.push((key.clone(), prev));
             // SAFETY: same as above — single-threaded harness setup phase,
             // env vars set before any runner tasks are spawned.
-            unsafe { std::env::set_var(key, value); }
+            unsafe {
+                std::env::set_var(key, value);
+            }
         }
 
         let keystore_path = temp_dir.path().join("keystore");

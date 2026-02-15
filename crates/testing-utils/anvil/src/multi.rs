@@ -30,10 +30,9 @@
 //! let sub = trading.submit_job(0, payload).await?;
 //! ```
 
-use crate::blueprint::{build_operator_runtimes, OperatorSpec};
-use crate::{
-    LOCAL_BLUEPRINT_ID, SeededTangleTestnet, seed_operator_key, start_tangle_testnet,
-};
+pub use crate::blueprint::{HonestOperator, OperatorBehaviorRef, OperatorFleet};
+use crate::blueprint::{OperatorSpec, build_operator_runtimes};
+use crate::{LOCAL_BLUEPRINT_ID, SeededTangleTestnet, seed_operator_key, start_tangle_testnet};
 use alloy_primitives::Bytes;
 use anyhow::{Context, Result};
 use blueprint_client_tangle::{
@@ -46,12 +45,11 @@ use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_router::Router;
 use blueprint_runner::config::{BlueprintEnvironment, ProtocolSettings};
 use blueprint_runner::error::RunnerError;
-use blueprint_runner::{BlueprintConfig, BlueprintRunner};
 use blueprint_runner::tangle::config::TangleProtocolSettings;
+use blueprint_runner::{BlueprintConfig, BlueprintRunner};
 use blueprint_std::collections::{BTreeMap, VecDeque};
 use blueprint_tangle_extra::TangleProducer;
 use hex::FromHex;
-pub use crate::blueprint::{OperatorFleet, OperatorBehaviorRef, HonestOperator};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
@@ -300,7 +298,10 @@ impl MultiHarness {
             state_dir_env,
         } = builder;
 
-        anyhow::ensure!(!specs.is_empty(), "MultiHarness requires at least one blueprint");
+        anyhow::ensure!(
+            !specs.is_empty(),
+            "MultiHarness requires at least one blueprint"
+        );
 
         let deployment = start_tangle_testnet(include_anvil_logs)
             .await
@@ -318,13 +319,17 @@ impl MultiHarness {
             // SAFETY: test harness runs single-threaded during setup; env vars
             // are set before any runner tasks are spawned and restored on
             // shutdown/drop.
-            unsafe { std::env::set_var(var_name, &state_path); }
+            unsafe {
+                std::env::set_var(var_name, &state_path);
+            }
         }
         for (key, value) in &env_vars {
             let prev = std::env::var(key).ok();
             saved_env_vars.push((key.clone(), prev));
             // SAFETY: same as above — single-threaded harness setup phase.
-            unsafe { std::env::set_var(key, value); }
+            unsafe {
+                std::env::set_var(key, value);
+            }
         }
 
         let mut handles = BTreeMap::new();
@@ -354,12 +359,9 @@ impl MultiHarness {
             )
             .await?;
 
-            let caller_client = create_service_owner_client(
-                &deployment,
-                spec.blueprint_id,
-                spec.service_id,
-            )
-            .await?;
+            let caller_client =
+                create_service_owner_client(&deployment, spec.blueprint_id, spec.service_id)
+                    .await?;
 
             let runner_client = create_client(
                 &deployment,
@@ -372,9 +374,9 @@ impl MultiHarness {
             let local_results = Arc::new(Mutex::new(VecDeque::new()));
             let local_notify = Arc::new(Notify::new());
 
-            let operator_specs = spec.operator_specs.unwrap_or_else(
-                crate::blueprint::default_operator_specs,
-            );
+            let operator_specs = spec
+                .operator_specs
+                .unwrap_or_else(crate::blueprint::default_operator_specs);
 
             blueprint_core::info!(
                 target: "multi-harness",
@@ -402,12 +404,9 @@ impl MultiHarness {
                 .await
                 .context("failed to get block number for producer")?
                 .saturating_sub(1);
-            let producer = TangleProducer::from_block(
-                (*runner_client).clone(),
-                spec.service_id,
-                start_block,
-            )
-            .with_poll_interval(spec.poll_interval);
+            let producer =
+                TangleProducer::from_block((*runner_client).clone(), spec.service_id, start_block)
+                    .with_poll_interval(spec.poll_interval);
 
             let runner_env = env.clone();
             let runner_router = spec.router.clone();
