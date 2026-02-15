@@ -388,14 +388,14 @@ type BoxedConsumer = Pin<Box<dyn Sink<JobResult, Error = BoxError> + Send>>;
 
 struct MultiOperatorConsumer {
     senders: Vec<UnboundedSender<JobResult>>,
-    local_results: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    local_results: Arc<Mutex<VecDeque<Result<Vec<u8>, String>>>>,
     local_notify: Arc<Notify>,
 }
 
 impl MultiOperatorConsumer {
     fn new(
         senders: Vec<UnboundedSender<JobResult>>,
-        local_results: Arc<Mutex<VecDeque<Vec<u8>>>>,
+        local_results: Arc<Mutex<VecDeque<Result<Vec<u8>, String>>>>,
         local_notify: Arc<Notify>,
     ) -> Self {
         Self {
@@ -418,12 +418,21 @@ impl Sink<JobResult> for MultiOperatorConsumer {
 
     fn start_send(self: Pin<&mut Self>, item: JobResult) -> Result<(), Self::Error> {
         println!("blueprint-harness: received job result");
-        if let JobResult::Ok { body, .. } = &item {
-            self.local_results
-                .lock()
-                .unwrap()
-                .push_back(body.clone().to_vec());
-            self.local_notify.notify_waiters();
+        match &item {
+            JobResult::Ok { body, .. } => {
+                self.local_results
+                    .lock()
+                    .unwrap()
+                    .push_back(Ok(body.clone().to_vec()));
+                self.local_notify.notify_waiters();
+            }
+            JobResult::Err(e) => {
+                self.local_results
+                    .lock()
+                    .unwrap()
+                    .push_back(Err(format!("{e}")));
+                self.local_notify.notify_waiters();
+            }
         }
         let senders = &mut self.get_mut().senders;
         let mut remaining = Vec::with_capacity(senders.len());
@@ -468,7 +477,7 @@ pub struct BlueprintHarness {
     client: Arc<TangleClient>,
     event_client: Arc<TangleClient>,
     caller_client: Arc<TangleClient>,
-    local_results: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    local_results: Arc<Mutex<VecDeque<Result<Vec<u8>, String>>>>,
     local_notify: Arc<Notify>,
     env: BlueprintEnvironment,
     deployment: SeededTangleTestnet,
@@ -727,7 +736,7 @@ impl BlueprintHarness {
         );
         let fut = async {
             tokio::select! {
-                output = local_wait => Ok(output),
+                output = local_wait => output,
                 output = on_chain_wait => output,
             }
         };
@@ -764,22 +773,22 @@ impl BlueprintHarness {
             .await
     }
 
-    async fn wait_for_local_result_unbounded(&self) -> Vec<u8> {
+    async fn wait_for_local_result_unbounded(&self) -> Result<Vec<u8>> {
         loop {
             let notified = self.local_notify.notified();
             if let Some(output) = self.take_local_result() {
                 println!("blueprint-harness: drained local result from queue");
-                return output;
+                return output.map_err(|e| anyhow::anyhow!("job failed: {e}"));
             }
             notified.await;
             if let Some(output) = self.take_local_result() {
                 println!("blueprint-harness: received local result via notify");
-                return output;
+                return output.map_err(|e| anyhow::anyhow!("job failed: {e}"));
             }
         }
     }
 
-    fn take_local_result(&self) -> Option<Vec<u8>> {
+    fn take_local_result(&self) -> Option<Result<Vec<u8>, String>> {
         self.local_results.lock().unwrap().pop_front()
     }
 
@@ -961,7 +970,7 @@ async fn build_operator_runtimes(
     deployment: &SeededTangleTestnet,
     blueprint_id: u64,
     service_id: u64,
-    local_results: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    local_results: Arc<Mutex<VecDeque<Result<Vec<u8>, String>>>>,
     local_notify: Arc<Notify>,
 ) -> Result<(MultiOperatorConsumer, Vec<JoinHandle<()>>)> {
     let mut senders = Vec::new();
