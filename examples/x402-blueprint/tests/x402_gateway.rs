@@ -286,7 +286,7 @@ fn test_settlement_with_custom_token_address() {
             rate_per_native_unit: rust_decimal::Decimal::from(3200u32),
             markup_bps: 0,
         }],
-        job_overrides: Default::default(),
+
         service_id: 1,
     };
 
@@ -328,7 +328,7 @@ fn test_settlement_with_multiple_tokens() {
                 markup_bps: 100, // 1%
             },
         ],
-        job_overrides: Default::default(),
+
         service_id: 1,
     };
 

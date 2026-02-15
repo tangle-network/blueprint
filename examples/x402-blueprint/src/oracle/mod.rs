@@ -244,7 +244,6 @@ mod tests {
                 rate_per_native_unit: Decimal::from(3200u32),
                 markup_bps: 0,
             }],
-            job_overrides: Default::default(),
             service_id: 0,
         };
 

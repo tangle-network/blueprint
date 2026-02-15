@@ -46,10 +46,6 @@ pub struct X402Config {
     #[serde(default)]
     pub accepted_tokens: Vec<AcceptedToken>,
 
-    /// Per-job execution mode overrides (reserved for future use).
-    #[serde(default)]
-    pub job_overrides: JobOverrides,
-
     /// The service ID this gateway serves (set at runtime, not from TOML).
     #[serde(default)]
     pub service_id: u64,
@@ -165,21 +161,6 @@ impl AcceptedToken {
     }
 }
 
-/// Per-job execution mode configuration (reserved for future use).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct JobOverrides {
-    /// Jobs that execute directly (no gas, HTTP response).
-    #[serde(default)]
-    pub direct: Option<ModeConfig>,
-}
-
-/// Configuration for a specific execution mode.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModeConfig {
-    /// Which job indices use this mode.
-    pub job_indices: Vec<u32>,
-}
-
 impl X402Config {
     /// Load configuration from a TOML file.
     pub fn from_toml(path: impl AsRef<Path>) -> Result<Self, X402Error> {
@@ -196,14 +177,6 @@ impl X402Config {
             token.validate()?;
         }
         Ok(())
-    }
-
-    /// Check whether a job index is configured for direct execution.
-    ///
-    /// All jobs default to direct execution. This method exists for
-    /// future expansion when additional execution modes are supported.
-    pub fn is_direct_execution(&self, _job_index: u32) -> bool {
-        true
     }
 
     /// Build a lookup from job_index to list of accepted tokens.
@@ -406,20 +379,6 @@ mod tests {
         assert!(err.to_string().contains("positive"), "{err}");
     }
 
-    #[test]
-    fn test_all_jobs_default_to_direct() {
-        let config = X402Config {
-            bind_address: default_bind_address(),
-            facilitator_url: "https://example.com".parse().unwrap(),
-            quote_ttl_secs: 300,
-            accepted_tokens: vec![],
-            job_overrides: JobOverrides::default(),
-            service_id: 0,
-        };
-        assert!(config.is_direct_execution(0));
-        assert!(config.is_direct_execution(99));
-    }
-
     // ---- Config-level conversion (backwards compat) ----
 
     #[test]
@@ -430,7 +389,7 @@ mod tests {
             facilitator_url: "https://example.com".parse().unwrap(),
             quote_ttl_secs: 300,
             accepted_tokens: vec![token.clone()],
-            job_overrides: JobOverrides::default(),
+
             service_id: 0,
         };
         let wei = U256::from(1_000_000_000_000_000u64);
