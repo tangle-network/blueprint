@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 blueprint-core = { workspace = true, features = ["std", "tracing"] }
 blueprint-router = { workspace = true }
-blueprint-x402 = { workspace = true, default-features = false, features = ["std"] }
+blueprint-x402 = { workspace = true, features = ["std"] }
 alloy-primitives = { workspace = true }
 bytes = { workspace = true }
 toml = { workspace = true }

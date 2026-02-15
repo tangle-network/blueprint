@@ -1,7 +1,7 @@
 [package]
 name = "blueprint-x402"
 version = "0.1.0-alpha.1"
-description = "x402 payment gateway for Blueprint SDK — universal cross-chain settlement for job execution"
+description = "x402 payment gateway for Blueprint SDK — cross-chain EVM settlement for job execution"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -21,10 +21,7 @@ blueprint-runner = { workspace = true }
 # x402 protocol
 x402-types = { version = "1.1", default-features = false }
 x402-axum = { version = "1.1", default-features = false }
-
-# x402 chain support (feature-gated)
-x402-chain-eip155 = { version = "1.1", default-features = false, features = ["server"], optional = true }
-x402-chain-solana = { version = "1.1", default-features = false, features = ["server"], optional = true }
+x402-chain-eip155 = { version = "1.1", default-features = false, features = ["server"] }
 
 # HTTP server
 axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }
@@ -54,19 +51,13 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 bytes = { workspace = true }
-document-features = { workspace = true, features = ["default"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 
 [features]
-default = ["std", "evm"]
+default = ["std"]
 std = ["blueprint-core/std", "blueprint-runner/std"]
-## Enable EVM chain settlement (Base, Ethereum, Polygon, etc.)
-evm = ["dep:x402-chain-eip155"]
-## Enable Solana chain settlement
-solana = ["dep:x402-chain-solana"]
 
 [package.metadata.docs.rs]
-all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

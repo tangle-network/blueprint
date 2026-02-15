@@ -47,12 +47,3 @@ decimals = 6
 pay_to  = "0xYourOperatorAddressOnEthereum"
 rate_per_native_unit = "3200.00"
 markup_bps = 300
-
-# ─── Execution Mode Overrides ─────────────────────────────────────────────
-#
-# Jobs default to "direct" mode (off-chain execution, result in HTTP response).
-# List specific job indices under [job_overrides.relay] to submit them on-chain.
-
-[job_overrides.relay]
-job_indices    = [6, 7]
-gas_budget_wei = "500000000000000"

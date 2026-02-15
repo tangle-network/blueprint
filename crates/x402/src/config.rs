@@ -69,7 +69,7 @@ pub struct AcceptedToken {
     /// CAIP-2 network identifier, e.g. `"eip155:8453"` for Base.
     pub network: String,
 
-    /// Token contract address (EVM) or mint address (Solana).
+    /// Token contract address on the EVM chain.
     pub asset: String,
 
     /// Human-readable symbol, e.g. `"USDC"`.
@@ -91,16 +91,12 @@ pub struct AcceptedToken {
     pub markup_bps: u16,
 }
 
-/// Per-job execution mode configuration.
+/// Per-job execution mode configuration (reserved for future use).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct JobOverrides {
     /// Jobs that execute directly (no gas, HTTP response).
     #[serde(default)]
     pub direct: Option<ModeConfig>,
-
-    /// Jobs that are relayed on-chain (gas required, auditable).
-    #[serde(default)]
-    pub relay: Option<ModeConfig>,
 }
 
 /// Configuration for a specific execution mode.
@@ -108,19 +104,6 @@ pub struct JobOverrides {
 pub struct ModeConfig {
     /// Which job indices use this mode.
     pub job_indices: Vec<u32>,
-
-    /// For relay mode: max gas budget in wei per relay transaction.
-    #[serde(default)]
-    pub gas_budget_wei: Option<String>,
-}
-
-/// How a paid job should be executed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExecutionMode {
-    /// Execute locally, return result in the HTTP response. No gas cost.
-    Direct,
-    /// Submit on-chain via the operator's wallet. Gas required.
-    Relay,
 }
 
 impl X402Config {
@@ -131,15 +114,12 @@ impl X402Config {
         toml::from_str(&content).map_err(X402Error::from)
     }
 
-    /// Resolve the execution mode for a given job index.
-    pub fn execution_mode_for(&self, job_index: u32) -> ExecutionMode {
-        if let Some(relay) = &self.job_overrides.relay {
-            if relay.job_indices.contains(&job_index) {
-                return ExecutionMode::Relay;
-            }
-        }
-        // Default to direct execution
-        ExecutionMode::Direct
+    /// Check whether a job index is configured for direct execution.
+    ///
+    /// All jobs default to direct execution. This method exists for
+    /// future expansion when additional execution modes are supported.
+    pub fn is_direct_execution(&self, _job_index: u32) -> bool {
+        true
     }
 
     /// Build a lookup from job_index → list of accepted tokens.
@@ -248,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execution_mode_defaults_to_direct() {
+    fn test_all_jobs_default_to_direct() {
         let config = X402Config {
             bind_address: default_bind_address(),
             facilitator_url: "https://example.com".parse().unwrap(),
@@ -257,28 +237,7 @@ mod tests {
             job_overrides: JobOverrides::default(),
             service_id: 0,
         };
-        assert_eq!(config.execution_mode_for(0), ExecutionMode::Direct);
-        assert_eq!(config.execution_mode_for(99), ExecutionMode::Direct);
-    }
-
-    #[test]
-    fn test_execution_mode_relay_override() {
-        let config = X402Config {
-            bind_address: default_bind_address(),
-            facilitator_url: "https://example.com".parse().unwrap(),
-            quote_ttl_secs: 300,
-            accepted_tokens: vec![],
-            job_overrides: JobOverrides {
-                direct: None,
-                relay: Some(ModeConfig {
-                    job_indices: vec![6, 7],
-                    gas_budget_wei: Some("500000000000000".into()),
-                }),
-            },
-            service_id: 0,
-        };
-        assert_eq!(config.execution_mode_for(0), ExecutionMode::Direct);
-        assert_eq!(config.execution_mode_for(6), ExecutionMode::Relay);
-        assert_eq!(config.execution_mode_for(7), ExecutionMode::Relay);
+        assert!(config.is_direct_execution(0));
+        assert!(config.is_direct_execution(99));
     }
 }

@@ -5,7 +5,7 @@
 
 use alloy_primitives::U256;
 use blueprint_runner::BackgroundService;
-use blueprint_x402::producer::{VerifiedPayment, X402_ORIGIN_KEY, X402Producer};
+use blueprint_x402::producer::{VerifiedPayment, X402Producer};
 use blueprint_x402::{X402Config, X402Gateway};
 use bytes::Bytes;
 use std::collections::HashMap;
@@ -118,11 +118,12 @@ async fn test_unknown_job_returns_404() {
 }
 
 #[tokio::test]
-async fn test_job_submission_produces_verified_payment() {
+async fn test_unpaid_request_returns_402() {
     let port = free_port();
     let pricing = load_example_pricing();
-    let (handle, mut producer) = start_gateway(port, pricing).await;
+    let (handle, _producer) = start_gateway(port, pricing).await;
 
+    // POST without a payment header -- the x402 middleware should reject with 402.
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("http://127.0.0.1:{port}/x402/jobs/1/0"))
@@ -131,22 +132,11 @@ async fn test_job_submission_produces_verified_payment() {
         .await
         .expect("POST job");
 
-    assert_eq!(resp.status(), 202);
-
-    // The gateway should have sent a VerifiedPayment to the producer channel.
-    // Read it via the underlying receiver.
-    use futures::StreamExt;
-    let job_call = tokio::time::timeout(std::time::Duration::from_secs(2), producer.next())
-        .await
-        .expect("timeout waiting for job call")
-        .expect("stream ended")
-        .expect("job call error");
-
-    assert_eq!(job_call.job_id(), blueprint_core::JobId::from(0u64));
-    assert_eq!(job_call.body(), &Bytes::from("hello"));
-
-    let origin = job_call.metadata().get(X402_ORIGIN_KEY).unwrap();
-    assert_eq!(origin.as_bytes(), b"x402");
+    assert_eq!(
+        resp.status(),
+        402,
+        "unpaid request must be rejected by x402 middleware"
+    );
 
     handle.abort();
 }

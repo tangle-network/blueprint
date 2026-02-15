@@ -5,7 +5,7 @@
 //! [`x402_axum`]. When a client pays, the payment is verified via the configured
 //! facilitator, and a [`JobCall`] is injected into the runner's producer stream.
 
-use crate::config::{ExecutionMode, X402Config};
+use crate::config::X402Config;
 use crate::error::X402Error;
 use crate::producer::VerifiedPayment;
 use crate::quote_registry::QuoteRegistry;
@@ -25,8 +25,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
-
-#[cfg(feature = "evm")]
 use x402_axum::X402Middleware;
 
 /// Shared state for the axum handlers.
@@ -136,35 +134,29 @@ impl X402Gateway {
             call_id_counter: Arc::new(AtomicU64::new(1)),
         };
 
-        // Base job execution route handler
-        let job_route = post(handle_job_request);
-
-        // When EVM support is enabled, protect the route with the x402 middleware.
+        // Base job execution route handler, protected by the x402 middleware.
         // The middleware automatically:
         //   1. Returns 402 with payment requirements when no payment header is present
         //   2. Verifies payment via the facilitator when a payment header is found
         //   3. Settles payment before passing the request to our handler
-        #[cfg(feature = "evm")]
-        let job_route = {
-            let x402 =
-                X402Middleware::new(self.config.facilitator_url.as_str()).settle_before_execution();
+        let x402 =
+            X402Middleware::new(self.config.facilitator_url.as_str()).settle_before_execution();
 
-            let config = self.config.clone();
-            let job_pricing = self.job_pricing.clone();
+        let config = self.config.clone();
+        let job_pricing = self.job_pricing.clone();
 
-            let layer = x402.with_dynamic_price(
-                move |_headers: &http::header::HeaderMap,
-                      uri: &http::Uri,
-                      _base_url: Option<&url::Url>| {
-                    let config = config.clone();
-                    let job_pricing = job_pricing.clone();
-                    let uri = uri.clone();
-                    async move { build_evm_price_tags(&config, &job_pricing, &uri) }
-                },
-            );
+        let layer = x402.with_dynamic_price(
+            move |_headers: &http::header::HeaderMap,
+                  uri: &http::Uri,
+                  _base_url: Option<&url::Url>| {
+                let config = config.clone();
+                let job_pricing = job_pricing.clone();
+                let uri = uri.clone();
+                async move { build_evm_price_tags(&config, &job_pricing, &uri) }
+            },
+        );
 
-            job_route.layer(layer)
-        };
+        let job_route = post(handle_job_request).layer(layer);
 
         Router::new()
             .route("/x402/jobs/{service_id}/{job_index}", job_route)
@@ -275,13 +267,11 @@ async fn get_job_price(
 
 /// Handle a paid job request.
 ///
-/// This endpoint is called AFTER the x402 middleware has verified payment.
-/// At this point, the payment has been settled — we inject the job into the
-/// runner's producer stream.
-///
-/// For direct execution mode, in the future this will wait for the job result
-/// and return it in the HTTP response. For now, all jobs are dispatched
-/// asynchronously and a receipt is returned.
+/// This endpoint is called AFTER the x402 middleware has verified and settled
+/// payment. The payment details (chain, token, payer) are available in the
+/// `X-Payment-Response` response header set by the middleware, but are not
+/// directly accessible to the handler. We record the accepted token networks
+/// from our config as metadata.
 async fn handle_job_request(
     State(state): State<GatewayState>,
     Path((service_id, job_index)): Path<(u64, u32)>,
@@ -321,17 +311,35 @@ async fn handle_job_request(
 
     let call_id = state.call_id_counter.fetch_add(1, Ordering::Relaxed);
 
+    // Determine payment network/token from accepted tokens config.
+    // The x402 middleware verified the payment against one of these tokens.
+    // For single-chain setups this is exact; for multi-chain we record all
+    // accepted networks. Full per-request chain identification requires
+    // x402-axum to pass payment context via request extensions (not yet
+    // supported upstream).
+    let (payment_network, payment_token) = if state.config.accepted_tokens.len() == 1 {
+        let token = &state.config.accepted_tokens[0];
+        (token.network.clone(), token.symbol.clone())
+    } else {
+        // Multi-chain: list all accepted networks
+        let networks: Vec<&str> = state
+            .config
+            .accepted_tokens
+            .iter()
+            .map(|t| t.network.as_str())
+            .collect();
+        (networks.join(","), "MULTI".into())
+    };
+
     let payment = VerifiedPayment {
         service_id,
         job_index,
         job_args: body,
         quote_digest,
-        payment_network: "x402".into(), // enriched by middleware in production
-        payment_token: "USDC".into(),
+        payment_network,
+        payment_token,
         call_id,
     };
-
-    let execution_mode = state.config.execution_mode_for(job_index);
 
     // Send to the runner's producer stream
     if state.payment_tx.send(payment).is_err() {
@@ -344,41 +352,20 @@ async fn handle_job_request(
 
     let digest_hex = hex::encode(quote_digest);
 
-    match execution_mode {
-        ExecutionMode::Direct => {
-            // For now, return an async receipt. Full synchronous execution
-            // (holding the connection open until the job completes) will be
-            // added in a future iteration.
-            (
-                StatusCode::ACCEPTED,
-                Json(serde_json::json!({
-                    "status": "accepted",
-                    "mode": "direct",
-                    "receipt": digest_hex,
-                    "service_id": service_id,
-                    "job_index": job_index,
-                    "call_id": call_id,
-                })),
-            )
-                .into_response()
-        }
-        ExecutionMode::Relay => (
-            StatusCode::ACCEPTED,
-            Json(serde_json::json!({
-                "status": "accepted",
-                "mode": "relay",
-                "receipt": digest_hex,
-                "service_id": service_id,
-                "job_index": job_index,
-                "call_id": call_id,
-                "note": "job will be submitted on-chain via operator relay",
-            })),
-        )
-            .into_response(),
-    }
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({
+            "status": "accepted",
+            "receipt": digest_hex,
+            "service_id": service_id,
+            "job_index": job_index,
+            "call_id": call_id,
+        })),
+    )
+        .into_response()
 }
 
-// Need hex encoding for quote digests — use alloy_primitives::hex
+// Need hex encoding for quote digests
 mod hex {
     pub fn encode(bytes: impl AsRef<[u8]>) -> String {
         bytes.as_ref().iter().fold(String::new(), |mut s, b| {
@@ -397,7 +384,6 @@ mod hex {
 ///
 /// Parses `service_id` and `job_index` from the URI path, looks up the
 /// wei-denominated price, and converts to each accepted token's denomination.
-#[cfg(feature = "evm")]
 fn build_evm_price_tags(
     config: &X402Config,
     job_pricing: &HashMap<(u64, u32), U256>,

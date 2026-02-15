@@ -1,13 +1,13 @@
 //! # Blueprint x402 Payment Gateway
 //!
-//! Universal cross-chain settlement for Blueprint SDK job execution via the
+//! Cross-chain EVM settlement for Blueprint SDK job execution via the
 //! [x402 payment protocol](https://x402.org).
 //!
 //! This crate provides an HTTP server that accepts x402 payments (stablecoins on any
-//! supported chain) and translates them into job executions within the Blueprint runner.
-//! It integrates with the existing RFQ/pricing system so that operator-signed price
-//! quotes serve as chain-agnostic invoices, settled via x402 on whichever chain the
-//! client prefers.
+//! supported EVM chain) and translates them into job executions within the Blueprint
+//! runner. It integrates with the existing RFQ/pricing system so that operator-signed
+//! price quotes serve as chain-agnostic invoices, settled via x402 on whichever EVM
+//! chain the client prefers.
 //!
 //! ## Architecture
 //!
@@ -31,7 +31,7 @@
 //! use blueprint_router::Router;
 //!
 //! let config = X402Config::from_toml("x402.toml")?;
-//! let (gateway, producer) = X402Gateway::new(config, router.clone())?;
+//! let (gateway, producer) = X402Gateway::new(config, job_pricing)?;
 //!
 //! BlueprintRunner::builder((), env)
 //!     .router(router)
@@ -41,8 +41,10 @@
 //!     .await?;
 //! ```
 //!
-//! ## Features
-#![doc = document_features::document_features!()]
+//! ## Supported Chains
+//!
+//! All EVM chains that have USDC/DAI with `transferWithAuthorization` (EIP-3009):
+//! Base, Ethereum, Polygon, Arbitrum, Optimism, etc.
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 pub mod config;

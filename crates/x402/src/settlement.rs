@@ -12,7 +12,7 @@ pub struct SettlementOption {
     /// CAIP-2 network identifier, e.g. `"eip155:8453"` for Base.
     pub network: String,
 
-    /// Token identifier — contract address (EVM) or mint (Solana).
+    /// Token contract address on the EVM chain.
     pub asset: String,
 
     /// Human-readable symbol, e.g. `"USDC"`.

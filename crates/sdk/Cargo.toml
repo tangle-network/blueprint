@@ -231,14 +231,8 @@ faas = ["blueprint-runner/faas"]
 
 #! ### Payments
 
-## Enable x402 payment gateway for cross-chain job settlement
+## Enable x402 payment gateway for cross-chain EVM job settlement
 x402 = ["dep:blueprint-x402"]
-
-## Enable x402 with EVM chain support (Base, Ethereum, Polygon, etc.)
-x402-evm = ["x402", "blueprint-x402/evm"]
-
-## Enable x402 with Solana chain support
-x402-solana = ["x402", "blueprint-x402/solana"]
 
 [package.metadata.docs.rs]
 features = ["tangle", "tangle-aggregation", "tangle-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
