@@ -24,6 +24,37 @@ use crate::pricing_engine::{
 /// If no entry exists for a (service_id, job_index) pair, the RPC returns NOT_FOUND.
 pub type JobPricingConfig = std::collections::HashMap<(u64, u32), alloy_primitives::U256>;
 
+/// x402 settlement configuration for cross-chain payment options.
+///
+/// When set, the RPC server will include settlement options in `GetJobPriceResponse`,
+/// allowing clients to pay via x402 on any supported chain/token.
+#[derive(Debug, Clone)]
+pub struct X402SettlementConfig {
+    /// Operator's x402 gateway endpoint URL.
+    pub x402_endpoint: String,
+    /// Accepted tokens for x402 settlement, with conversion rates.
+    pub accepted_tokens: Vec<X402AcceptedToken>,
+}
+
+/// An accepted token for x402 settlement.
+#[derive(Debug, Clone)]
+pub struct X402AcceptedToken {
+    /// CAIP-2 network identifier, e.g. `"eip155:8453"` for Base.
+    pub network: String,
+    /// Token contract/mint address.
+    pub asset: String,
+    /// Human-readable symbol.
+    pub symbol: String,
+    /// Token decimals.
+    pub decimals: u8,
+    /// Operator's receive address on this chain.
+    pub pay_to: String,
+    /// Exchange rate: token units per native unit (e.g. 3200 USDC per ETH).
+    pub rate_per_native_unit: rust_decimal::Decimal,
+    /// Markup in basis points.
+    pub markup_bps: u16,
+}
+
 pub struct PricingEngineService {
     config: Arc<OperatorConfig>,
     benchmark_cache: Arc<BenchmarkCache>,
@@ -32,6 +63,9 @@ pub struct PricingEngineService {
     job_pricing_config: Arc<Mutex<JobPricingConfig>>,
     signer: Arc<Mutex<OperatorSigner>>,
     pow_difficulty: u32,
+    /// Optional x402 settlement config. When set, `GetJobPriceResponse` includes
+    /// cross-chain payment options alongside the signed quote.
+    x402_config: Option<X402SettlementConfig>,
 }
 
 impl PricingEngineService {
@@ -50,6 +84,7 @@ impl PricingEngineService {
             job_pricing_config: Arc::new(Mutex::new(JobPricingConfig::new())),
             signer,
             pow_difficulty: DEFAULT_POW_DIFFICULTY,
+            x402_config: None,
         }
     }
 
@@ -70,7 +105,17 @@ impl PricingEngineService {
             job_pricing_config,
             signer,
             pow_difficulty: DEFAULT_POW_DIFFICULTY,
+            x402_config: None,
         }
+    }
+
+    /// Enable x402 settlement options in `GetJobPriceResponse`.
+    ///
+    /// When configured, every job quote response will include cross-chain
+    /// payment options that clients can use to settle via x402.
+    pub fn with_x402_settlement(mut self, config: X402SettlementConfig) -> Self {
+        self.x402_config = Some(config);
+        self
     }
 }
 
@@ -336,11 +381,31 @@ impl PricingEngine for PricingEngineService {
                 Status::internal("Failed to sign job price quote")
             })?;
 
+        // Build x402 settlement options if configured
+        let (settlement_options, x402_endpoint) = if let Some(x402) = &self.x402_config {
+            let options = compute_settlement_options(&x402.accepted_tokens, price)
+                .into_iter()
+                .map(|opt| crate::pricing_engine::SettlementOption {
+                    network: opt.network,
+                    asset: opt.asset,
+                    symbol: opt.symbol,
+                    amount: opt.amount,
+                    pay_to: opt.pay_to,
+                    scheme: opt.scheme,
+                })
+                .collect();
+            (options, x402.x402_endpoint.clone())
+        } else {
+            (vec![], String::new())
+        };
+
         let response = GetJobPriceResponse {
             quote_details: Some(signed.quote_details),
             signature: signed.signature.to_bytes().to_vec(),
             operator_id: signed.operator_id.0.to_vec(),
             proof_of_work: signed.proof_of_work,
+            settlement_options,
+            x402_endpoint,
         };
 
         info!(
@@ -701,6 +766,49 @@ mod tests {
             "signature should verify with the operator's key"
         );
     }
+}
+
+/// Internal settlement option (pre-proto conversion).
+struct SettlementOptionInternal {
+    network: String,
+    asset: String,
+    symbol: String,
+    amount: String,
+    pay_to: String,
+    scheme: String,
+}
+
+/// Convert a wei price into settlement options for each accepted token.
+fn compute_settlement_options(
+    accepted_tokens: &[X402AcceptedToken],
+    price_wei: alloy_primitives::U256,
+) -> Vec<SettlementOptionInternal> {
+    accepted_tokens
+        .iter()
+        .filter_map(|token| {
+            // Convert wei → native units → token units
+            let wei_decimal =
+                rust_decimal::Decimal::from_str_exact(&price_wei.to_string()).ok()?;
+            let native_unit = rust_decimal::Decimal::from(10u64.pow(18));
+            let native_amount = wei_decimal / native_unit;
+            let token_amount = native_amount * token.rate_per_native_unit;
+            let markup = rust_decimal::Decimal::ONE
+                + rust_decimal::Decimal::from(token.markup_bps)
+                    / rust_decimal::Decimal::from(10_000u32);
+            let final_amount = token_amount * markup;
+            let token_unit = rust_decimal::Decimal::from(10u64.pow(u32::from(token.decimals)));
+            let smallest_units = (final_amount * token_unit).floor().to_string();
+
+            Some(SettlementOptionInternal {
+                network: token.network.clone(),
+                asset: token.asset.clone(),
+                symbol: token.symbol.clone(),
+                amount: smallest_units,
+                pay_to: token.pay_to.clone(),
+                scheme: "exact".into(),
+            })
+        })
+        .collect()
 }
 
 // Function to run the server (called from main.rs)

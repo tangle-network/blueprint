@@ -1,0 +1,48 @@
+[package]
+name = "x402-blueprint"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+blueprint-core = { workspace = true, features = ["std", "tracing"] }
+blueprint-router = { workspace = true }
+blueprint-x402 = { workspace = true, default-features = false, features = ["std"] }
+alloy-primitives = { workspace = true }
+bytes = { workspace = true }
+toml = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+rust_decimal = { workspace = true }
+
+# Oracle: EVM on-chain feeds (Chainlink, Uniswap V3 TWAP)
+alloy-sol-types = { workspace = true, optional = true }
+alloy-contract = { workspace = true, optional = true }
+alloy-provider = { workspace = true, optional = true }
+alloy-network = { workspace = true, optional = true }
+alloy-transport = { workspace = true, optional = true }
+
+# Oracle: Coinbase REST API
+reqwest = { workspace = true, features = ["rustls-tls", "json"], optional = true }
+serde_json = { workspace = true, features = ["std"], optional = true }
+
+[dev-dependencies]
+blueprint-runner = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-tls"] }
+tokio = { workspace = true, features = ["full"] }
+futures = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+serde_json = { workspace = true, features = ["std"] }
+
+[features]
+default = []
+## Chainlink AggregatorV3 on-chain oracle
+chainlink = ["dep:alloy-sol-types", "dep:alloy-contract", "dep:alloy-provider", "dep:alloy-network", "dep:alloy-transport"]
+## Uniswap V3 TWAP on-chain oracle
+uniswap = ["dep:alloy-sol-types", "dep:alloy-contract", "dep:alloy-provider", "dep:alloy-network", "dep:alloy-transport"]
+## Coinbase exchange rate API oracle
+coinbase = ["dep:reqwest", "dep:serde_json"]
+
+[lints]
+workspace = true

@@ -1,0 +1,72 @@
+[package]
+name = "blueprint-x402"
+version = "0.1.0-alpha.1"
+description = "x402 payment gateway for Blueprint SDK — universal cross-chain settlement for job execution"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Core Blueprint dependencies
+blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-router = { workspace = true }
+blueprint-runner = { workspace = true }
+
+# x402 protocol
+x402-types = { version = "1.1", default-features = false }
+x402-axum = { version = "1.1", default-features = false }
+
+# x402 chain support (feature-gated)
+x402-chain-eip155 = { version = "1.1", default-features = false, features = ["server"], optional = true }
+x402-chain-solana = { version = "1.1", default-features = false, features = ["server"], optional = true }
+
+# HTTP server
+axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }
+tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true, features = ["cors", "trace"] }
+http = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time"] }
+futures = { workspace = true }
+futures-core = { workspace = true }
+
+# Serialization & config
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
+toml = { workspace = true }
+
+# Crypto & blockchain
+alloy-primitives = { workspace = true }
+rust_decimal = { workspace = true }
+
+# Error handling & logging
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Misc
+dashmap = { workspace = true }
+url = { workspace = true, features = ["serde"] }
+bytes = { workspace = true }
+document-features = { workspace = true, features = ["default"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+
+[features]
+default = ["std", "evm"]
+std = ["blueprint-core/std", "blueprint-runner/std"]
+## Enable EVM chain settlement (Base, Ethereum, Polygon, etc.)
+evm = ["dep:x402-chain-eip155"]
+## Enable Solana chain settlement
+solana = ["dep:x402-chain-solana"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -136,6 +136,30 @@ message GetJobPriceResponse {
   bytes operator_id = 3;
   // Proof of work response for next request
   bytes proof_of_work = 4;
+
+  // ── x402 cross-chain settlement (optional) ─────────────────────────
+  // Available payment methods for settling this quote via x402.
+  // Clients that don't understand x402 simply ignore these fields.
+  repeated SettlementOption settlement_options = 5;
+  // Operator's x402 gateway endpoint URL (e.g. "https://operator.example.com:8402")
+  string x402_endpoint = 6;
+}
+
+// A cross-chain settlement option for x402 payment.
+// Describes one way a client can pay for a job quote off-chain.
+message SettlementOption {
+  // CAIP-2 network identifier, e.g. "eip155:8453" for Base
+  string network = 1;
+  // Token contract address (EVM) or mint address (Solana)
+  string asset = 2;
+  // Human-readable token symbol, e.g. "USDC"
+  string symbol = 3;
+  // Payment amount in the token's smallest unit
+  string amount = 4;
+  // Operator's receive address on this chain
+  string pay_to = 5;
+  // x402 payment scheme, e.g. "exact"
+  string scheme = 6;
 }
 
 // Per-job quote details matching tnt-core Types.JobQuoteDetails

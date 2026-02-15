@@ -1,0 +1,20 @@
+# x402 payment gateway configuration.
+#
+# This file controls which tokens the operator accepts, the exchange rate
+# used to convert wei-denominated job prices into stablecoin amounts, and
+# the facilitator endpoint for on-chain payment verification.
+
+bind_address = "127.0.0.1:0"
+facilitator_url = "https://facilitator.x402.org"
+quote_ttl_secs = 300
+
+# Accept USDC on Base.
+# 1 ETH = 3200 USDC, 2% markup (200 basis points).
+[[accepted_tokens]]
+network = "eip155:8453"
+asset = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+symbol = "USDC"
+decimals = 6
+pay_to = "0x0000000000000000000000000000000000000001"
+rate_per_native_unit = "3200.00"
+markup_bps = 200

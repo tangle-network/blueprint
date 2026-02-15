@@ -183,6 +183,16 @@ pub mod build {
     pub use blueprint_build_utils::*;
 }
 
+// x402 payment gateway
+#[cfg(feature = "x402")]
+/// x402 payment gateway for cross-chain job settlement.
+///
+/// Enables operators to accept payments in any supported token on any supported
+/// chain (Base, Ethereum, Solana, etc.) and translate them into job executions.
+pub mod x402 {
+    pub use blueprint_x402::*;
+}
+
 // Remote cloud deployment providers
 #[cfg(feature = "remote-providers")]
 /// Remote cloud deployment providers for Blueprint instances

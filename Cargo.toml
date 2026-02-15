@@ -13,6 +13,7 @@ members = [
     "examples/incredible-squaring/incredible-squaring-bin",
     "examples/incredible-squaring-eigenlayer",
     "examples/hello-tangle",
+    "examples/x402-blueprint",
     "workspace-hack",
 ]
 
@@ -197,6 +198,9 @@ blueprint-contexts = { version = "0.1.0-alpha.21", path = "./crates/contexts", d
 
 # Pricing Engine
 blueprint-pricing-engine = { version = "0.2.6", path = "./crates/pricing-engine", default-features = false }
+
+# x402 Payment Gateway
+blueprint-x402 = { version = "0.1.0-alpha.1", path = "./crates/x402", default-features = false }
 
 # Macros
 blueprint-macros = { version = "0.1.0-alpha.7", path = "./crates/macros", default-features = false }
