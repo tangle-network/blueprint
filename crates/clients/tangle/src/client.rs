@@ -997,6 +997,13 @@ impl TangleClient {
         } = params;
 
         let is_native_payment = payment_token == Address::ZERO && payment_amount > U256::ZERO;
+
+        // Auto-approve ERC-20 spending before the contract call (matches restaking pattern).
+        if payment_token != Address::ZERO && payment_amount > U256::ZERO {
+            self.erc20_approve(payment_token, self.tangle_address, payment_amount)
+                .await?;
+        }
+
         let request_id_hint = if !security_requirements.is_empty() {
             let mut call = contract.requestServiceWithSecurity(
                 blueprint_id,
@@ -2329,6 +2336,21 @@ impl TangleClient {
         job_index: u8,
         inputs: Bytes,
     ) -> Result<JobSubmissionResult> {
+        self.submit_job_with_value(service_id, job_index, inputs, U256::ZERO)
+            .await
+    }
+
+    /// Submit a job invocation with native token payment.
+    ///
+    /// For `EventDriven` services the caller should send `event_rate` as `value`.
+    /// For free jobs or services that don't charge per-event, pass `U256::ZERO`.
+    pub async fn submit_job_with_value(
+        &self,
+        service_id: u64,
+        job_index: u8,
+        inputs: Bytes,
+        value: U256,
+    ) -> Result<JobSubmissionResult> {
         use crate::contracts::ITangle::submitJobCall;
         use alloy_sol_types::SolCall;
 
@@ -2346,9 +2368,12 @@ impl TangleClient {
         };
         let calldata = call.abi_encode();
 
-        let tx_request = TransactionRequest::default()
+        let mut tx_request = TransactionRequest::default()
             .to(self.tangle_address)
             .input(calldata.into());
+        if value > U256::ZERO {
+            tx_request = tx_request.value(value);
+        }
 
         let pending_tx = provider
             .send_transaction(tx_request)
@@ -2360,6 +2385,66 @@ impl TangleClient {
             .await
             .map_err(Error::PendingTransaction)?;
 
+        self.parse_job_submitted(&receipt)
+    }
+
+    /// Submit a job from operator-signed quotes with payment.
+    ///
+    /// Calls the on-chain `submitJobFromQuote` function. The total quoted
+    /// price is sent as native value with the transaction.
+    pub async fn submit_job_from_quote(
+        &self,
+        service_id: u64,
+        job_index: u8,
+        inputs: Bytes,
+        quotes: Vec<ITangleTypes::SignedJobQuote>,
+    ) -> Result<JobSubmissionResult> {
+        use crate::contracts::ITangle::submitJobFromQuoteCall;
+        use alloy_sol_types::SolCall;
+
+        // Sum all quote prices to determine total native value to send.
+        let total_value: U256 = quotes.iter().map(|q| q.details.price).sum();
+
+        let wallet = self.wallet()?;
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect(self.config.http_rpc_endpoint.as_str())
+            .await
+            .map_err(Error::Transport)?;
+
+        let call = submitJobFromQuoteCall {
+            serviceId: service_id,
+            jobIndex: job_index,
+            inputs,
+            quotes,
+        };
+        let calldata = call.abi_encode();
+
+        let mut tx_request = TransactionRequest::default()
+            .to(self.tangle_address)
+            .input(calldata.into());
+        if total_value > U256::ZERO {
+            tx_request = tx_request.value(total_value);
+        }
+
+        let pending_tx = provider
+            .send_transaction(tx_request)
+            .await
+            .map_err(Error::Transport)?;
+
+        let receipt = pending_tx
+            .get_receipt()
+            .await
+            .map_err(Error::PendingTransaction)?;
+
+        self.parse_job_submitted(&receipt)
+    }
+
+    /// Parse a `JobSubmitted` event from a transaction receipt.
+    fn parse_job_submitted(
+        &self,
+        receipt: &TransactionReceipt,
+    ) -> Result<JobSubmissionResult> {
         let tx = TransactionResult {
             tx_hash: receipt.transaction_hash,
             block_number: receipt.block_number,

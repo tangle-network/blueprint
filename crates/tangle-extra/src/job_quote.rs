@@ -208,6 +208,29 @@ fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
     keccak256(encoded)
 }
 
+// ---- Conversion to on-chain types ----
+
+/// Convert an SDK `SignedJobQuote` to the on-chain `ITangleTypes::SignedJobQuote`
+/// for submission via `TangleClient::submit_job_from_quote`.
+impl From<SignedJobQuote>
+    for blueprint_client_tangle::contracts::ITangleTypes::SignedJobQuote
+{
+    fn from(quote: SignedJobQuote) -> Self {
+        use blueprint_crypto::BytesEncoding;
+        Self {
+            details: blueprint_client_tangle::contracts::ITangleTypes::JobQuoteDetails {
+                serviceId: quote.details.service_id,
+                jobIndex: quote.details.job_index,
+                price: quote.details.price,
+                timestamp: quote.details.timestamp,
+                expiry: quote.details.expiry,
+            },
+            signature: quote.signature.to_bytes().into(),
+            operator: quote.operator,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
