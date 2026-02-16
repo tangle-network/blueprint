@@ -1,0 +1,57 @@
+[package]
+name = "blueprint-webhooks"
+version = "0.1.0-alpha.1"
+description = "Webhook producer for Blueprint SDK — trigger jobs from external HTTP events"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Core Blueprint dependencies
+blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-runner = { workspace = true }
+
+# HTTP server
+axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }
+http = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["sync", "rt", "time"] }
+futures-core = { workspace = true }
+
+# Serialization & config
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
+toml = { workspace = true }
+
+# Crypto (HMAC auth)
+hmac = "0.12"
+sha2 = { workspace = true }
+hex = { workspace = true }
+subtle = "2"
+
+# Error handling & logging
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Misc
+bytes = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+futures = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+http = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["blueprint-core/std", "blueprint-runner/std"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]

@@ -74,6 +74,9 @@ blueprint-build-utils = { workspace = true, optional = true }
 # x402 Payment Gateway
 blueprint-x402 = { workspace = true, optional = true }
 
+# Webhook Producer
+blueprint-webhooks = { workspace = true, optional = true }
+
 # Remote cloud deployments
 blueprint-remote-providers = { workspace = true, optional = true }
 
@@ -233,6 +236,9 @@ faas = ["blueprint-runner/faas"]
 
 ## Enable x402 payment gateway for cross-chain EVM job settlement
 x402 = ["dep:blueprint-x402"]
+
+## Enable webhook producer for external HTTP event triggers
+webhooks = ["dep:blueprint-webhooks"]
 
 [package.metadata.docs.rs]
 features = ["tangle", "tangle-aggregation", "tangle-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]

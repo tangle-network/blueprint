@@ -3695,6 +3695,7 @@ dependencies = [
  "blueprint-stores",
  "blueprint-tangle-extra",
  "blueprint-testing-utils",
+ "blueprint-webhooks",
  "blueprint-x402",
  "document-features",
  "eigensdk",
@@ -3815,6 +3816,30 @@ dependencies = [
  "blueprint-anvil-testing-utils",
  "blueprint-core-testing-utils",
  "blueprint-eigenlayer-testing-utils",
+]
+
+[[package]]
+name = "blueprint-webhooks"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "axum",
+ "blueprint-core",
+ "blueprint-runner",
+ "bytes",
+ "futures",
+ "futures-core",
+ "hex",
+ "hmac",
+ "http 1.4.0",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "thiserror 2.0.17",
+ "tokio",
+ "toml 0.9.8",
+ "tower 0.5.2",
+ "tracing",
 ]
 
 [[package]]
