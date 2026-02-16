@@ -202,6 +202,9 @@ blueprint-pricing-engine = { version = "0.2.6", path = "./crates/pricing-engine"
 # x402 Payment Gateway
 blueprint-x402 = { version = "0.1.0-alpha.1", path = "./crates/x402", default-features = false }
 
+# Webhook Producer
+blueprint-webhooks = { version = "0.1.0-alpha.1", path = "./crates/webhooks", default-features = false }
+
 # Macros
 blueprint-macros = { version = "0.1.0-alpha.7", path = "./crates/macros", default-features = false }
 blueprint-context-derive = { version = "0.1.0-alpha.13", path = "./crates/macros/context-derive", default-features = false }

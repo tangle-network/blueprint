@@ -193,6 +193,16 @@ pub mod x402 {
     pub use blueprint_x402::*;
 }
 
+// Webhook producer for external HTTP event triggers
+#[cfg(feature = "webhooks")]
+/// Webhook producer for triggering jobs from external HTTP events.
+///
+/// Enables blueprints to receive webhooks from external services (TradingView,
+/// exchange APIs, monitoring systems, etc.) and convert them into job executions.
+pub mod webhooks {
+    pub use blueprint_webhooks::*;
+}
+
 // Remote cloud deployment providers
 #[cfg(feature = "remote-providers")]
 /// Remote cloud deployment providers for Blueprint instances
