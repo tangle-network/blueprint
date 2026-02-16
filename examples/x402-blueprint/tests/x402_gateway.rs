@@ -285,6 +285,9 @@ fn test_settlement_with_custom_token_address() {
             pay_to: pay_to.into(),
             rate_per_native_unit: rust_decimal::Decimal::from(3200u32),
             markup_bps: 0,
+            transfer_method: "permit2".into(),
+            eip3009_name: None,
+            eip3009_version: None,
         }],
 
         service_id: 1,
@@ -317,6 +320,9 @@ fn test_settlement_with_multiple_tokens() {
                 pay_to: "0x0000000000000000000000000000000000000001".into(),
                 rate_per_native_unit: rust_decimal::Decimal::from(3200u32),
                 markup_bps: 0,
+                transfer_method: "permit2".into(),
+                eip3009_name: None,
+                eip3009_version: None,
             },
             blueprint_x402::config::AcceptedToken {
                 network: "eip155:1".into(),
@@ -326,6 +332,9 @@ fn test_settlement_with_multiple_tokens() {
                 pay_to: "0x0000000000000000000000000000000000000002".into(),
                 rate_per_native_unit: rust_decimal::Decimal::from(3200u32),
                 markup_bps: 100, // 1%
+                transfer_method: "permit2".into(),
+                eip3009_name: None,
+                eip3009_version: None,
             },
         ],
 
