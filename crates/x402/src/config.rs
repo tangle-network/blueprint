@@ -77,6 +77,26 @@ pub struct AcceptedToken {
     /// to cover cross-chain settlement risk and operator margin.
     #[serde(default)]
     pub markup_bps: u16,
+
+    /// Transfer method for the token. Determines how the x402 facilitator
+    /// moves funds: `"permit2"` (default) or `"eip3009"`.
+    ///
+    /// For USDC on most chains, use `"eip3009"` with `eip3009_name = "USD Coin"`
+    /// and `eip3009_version = "2"`. For other tokens, `"permit2"` is universal.
+    #[serde(default = "default_transfer_method")]
+    pub transfer_method: String,
+
+    /// EIP-3009 domain name (required when `transfer_method = "eip3009"`).
+    #[serde(default)]
+    pub eip3009_name: Option<String>,
+
+    /// EIP-3009 domain version (required when `transfer_method = "eip3009"`).
+    #[serde(default)]
+    pub eip3009_version: Option<String>,
+}
+
+fn default_transfer_method() -> String {
+    "permit2".into()
 }
 
 impl AcceptedToken {
@@ -221,6 +241,9 @@ mod tests {
             pay_to: "0x0000000000000000000000000000000000000001".into(),
             rate_per_native_unit: Decimal::from(3200u32),
             markup_bps,
+            transfer_method: "eip3009".into(),
+            eip3009_name: Some("USD Coin".into()),
+            eip3009_version: Some("2".into()),
         }
     }
 
@@ -233,6 +256,9 @@ mod tests {
             pay_to: "0x0000000000000000000000000000000000000002".into(),
             rate_per_native_unit: Decimal::from(3200u32),
             markup_bps,
+            transfer_method: default_transfer_method(),
+            eip3009_name: None,
+            eip3009_version: None,
         }
     }
 

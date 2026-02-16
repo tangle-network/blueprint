@@ -243,6 +243,9 @@ mod tests {
                 pay_to: "0x0000000000000000000000000000000000000001".into(),
                 rate_per_native_unit: Decimal::from(3200u32),
                 markup_bps: 0,
+                transfer_method: "permit2".into(),
+                eip3009_name: None,
+                eip3009_version: None,
             }],
             service_id: 0,
         };
