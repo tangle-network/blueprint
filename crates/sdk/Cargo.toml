@@ -71,6 +71,9 @@ tempfile = { workspace = true, optional = true }
 # Optional dependencies for build
 blueprint-build-utils = { workspace = true, optional = true }
 
+# x402 Payment Gateway
+blueprint-x402 = { workspace = true, optional = true }
+
 # Remote cloud deployments
 blueprint-remote-providers = { workspace = true, optional = true }
 
@@ -225,6 +228,11 @@ remote-providers = ["dep:blueprint-remote-providers"]
 
 ## Enable FaaS (Function-as-a-Service) execution support
 faas = ["blueprint-runner/faas"]
+
+#! ### Payments
+
+## Enable x402 payment gateway for cross-chain EVM job settlement
+x402 = ["dep:blueprint-x402"]
 
 [package.metadata.docs.rs]
 features = ["tangle", "tangle-aggregation", "tangle-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]

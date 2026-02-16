@@ -1,0 +1,11 @@
+# Per-job pricing configuration.
+#
+# Format: [service_id] \n job_index = "price_in_wei"
+#
+# Prices are denominated in wei (1 ETH = 10^18 wei).
+# The gateway converts these to stablecoin amounts using the exchange rate
+# and markup configured in x402.toml.
+
+[1]
+0 = "1000000000000000"       # echo: 0.001 ETH
+1 = "10000000000000000"      # keccak256: 0.01 ETH

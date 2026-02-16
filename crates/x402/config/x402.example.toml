@@ -1,0 +1,49 @@
+# x402 Payment Gateway — Example Configuration
+#
+# Copy this file to x402.toml and customise for your operator deployment.
+# The gateway converts wei-denominated job prices into stablecoin amounts
+# using the exchange rates and markups defined here.
+
+# Socket address for the x402 HTTP server.
+bind_address = "0.0.0.0:8402"
+
+# URL of the x402 facilitator used for payment verification and settlement.
+facilitator_url = "https://x402.org/facilitator"
+
+# How long (seconds) dynamically-generated quotes stay valid.
+quote_ttl_secs = 300
+
+# Service instance ID (set at runtime by the operator).
+service_id = 1
+
+# ─── Accepted Tokens ──────────────────────────────────────────────────────
+#
+# Each [[accepted_tokens]] entry describes a token the operator will accept.
+# Fields:
+#   network             – CAIP-2 chain identifier (e.g. "eip155:8453" for Base)
+#   asset               – Token contract address on that chain
+#   symbol              – Human-readable symbol
+#   decimals            – Token decimal places (6 for USDC, 18 for DAI, etc.)
+#   pay_to              – Operator's receive address on this chain
+#   rate_per_native_unit – Exchange rate: 1 native unit = N token units
+#   markup_bps          – Markup in basis points (100 bps = 1%)
+
+# USDC on Base
+[[accepted_tokens]]
+network = "eip155:8453"
+asset   = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+symbol  = "USDC"
+decimals = 6
+pay_to  = "0xYourOperatorAddressOnBase"
+rate_per_native_unit = "3200.00"
+markup_bps = 200
+
+# USDC on Ethereum mainnet
+[[accepted_tokens]]
+network = "eip155:1"
+asset   = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+symbol  = "USDC"
+decimals = 6
+pay_to  = "0xYourOperatorAddressOnEthereum"
+rate_per_native_unit = "3200.00"
+markup_bps = 300

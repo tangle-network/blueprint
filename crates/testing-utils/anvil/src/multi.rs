@@ -194,7 +194,7 @@ pub struct BlueprintHandle {
     name: String,
     caller_client: Arc<TangleClient>,
     event_client: Arc<TangleClient>,
-    local_results: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    local_results: Arc<Mutex<VecDeque<Result<Vec<u8>, String>>>>,
     local_notify: Arc<Notify>,
     service_id: u64,
     blueprint_id: u64,
@@ -224,11 +224,11 @@ impl BlueprintHandle {
             loop {
                 let notified = local_notify.notified();
                 if let Some(output) = local_results.lock().unwrap().pop_front() {
-                    return output;
+                    return output.map_err(|e| anyhow::anyhow!("job failed: {e}"));
                 }
                 notified.await;
                 if let Some(output) = local_results.lock().unwrap().pop_front() {
-                    return output;
+                    return output.map_err(|e| anyhow::anyhow!("job failed: {e}"));
                 }
             }
         };
@@ -237,7 +237,7 @@ impl BlueprintHandle {
 
         let fut = async {
             tokio::select! {
-                output = local_wait => Ok(output),
+                output = local_wait => output,
                 output = on_chain_wait => output,
             }
         };
