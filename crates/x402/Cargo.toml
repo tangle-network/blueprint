@@ -19,9 +19,9 @@ blueprint-router = { workspace = true }
 blueprint-runner = { workspace = true }
 
 # x402 protocol
-x402-types = { version = "1.1", default-features = false }
-x402-axum = { version = "1.1", default-features = false }
-x402-chain-eip155 = { version = "1.1", default-features = false, features = ["server"] }
+x402-types = { version = "1", default-features = false }
+x402-axum = { version = "1", default-features = false }
+x402-chain-eip155 = { version = "1", default-features = false, features = ["server"] }
 
 # HTTP server
 axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }

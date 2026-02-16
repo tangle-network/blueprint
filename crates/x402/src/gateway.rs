@@ -380,7 +380,7 @@ fn build_evm_price_tags(
     uri: &http::Uri,
 ) -> Vec<x402_types::proto::v2::PriceTag> {
     use x402_chain_eip155::V2Eip155Exact;
-    use x402_chain_eip155::chain::{Eip155ChainReference, Eip155TokenDeployment};
+    use x402_chain_eip155::chain::{AssetTransferMethod, Eip155ChainReference, Eip155TokenDeployment};
 
     // Parse service_id and job_index from URI: /x402/jobs/{service_id}/{job_index}
     let segments: Vec<&str> = uri.path().split('/').collect();
@@ -460,22 +460,31 @@ fn build_evm_price_tags(
                 }
             };
 
+            let transfer_method = if token.transfer_method == "eip3009" {
+                let name = token.eip3009_name.clone().unwrap_or_else(|| "USD Coin".into());
+                let version = token.eip3009_version.clone().unwrap_or_else(|| "2".into());
+                AssetTransferMethod::Eip3009 { name, version }
+            } else {
+                AssetTransferMethod::Permit2
+            };
+
             let deployment = Eip155TokenDeployment {
                 chain_reference: Eip155ChainReference::new(chain_id),
                 address,
                 decimals: token.decimals,
-                eip712: None,
+                transfer_method,
             };
 
-            // Parse amount as U256 to handle large values (18-decimal tokens
-            // can exceed u64::MAX).
-            let amount = match U256::from_str_radix(&amount_str, 10) {
+            // Parse amount and convert to u64 for the x402-chain-eip155 API.
+            // For 6-decimal tokens (USDC) this easily fits. For 18-decimal tokens
+            // very large amounts could overflow, but in practice job prices are small.
+            let amount: u64 = match amount_str.parse::<u64>() {
                 Ok(a) => a,
                 Err(_) => {
                     tracing::warn!(
                         token = %token.symbol,
                         amount = %amount_str,
-                        "failed to parse token amount as U256"
+                        "token amount exceeds u64 — skipping this token"
                     );
                     return None;
                 }
