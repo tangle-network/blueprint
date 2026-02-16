@@ -25,7 +25,7 @@ serde_json.workspace = true
 serde_yaml = "0.9"
 shell-escape = "0.1"
 aes-gcm = "0.10"
-blake3 = "1.5"
+blake3 = "1.8"
 hex = "0.4"
 zeroize = { version = "1.8", features = ["derive"] }
 url = "2.5"
