@@ -1,8 +1,7 @@
 use alloy_primitives::{Address, B256, ChainId, U256, keccak256};
 use alloy_sol_types::{SolType, SolValue};
 use blueprint_client_tangle::contracts::ITangleTypes;
-use blueprint_crypto::KeyType;
-use blueprint_crypto::k256::{K256Ecdsa, K256Signature, K256SigningKey, K256VerifyingKey};
+use blueprint_crypto::k256::{K256Signature, K256SigningKey, K256VerifyingKey};
 use rust_decimal::Decimal;
 
 use crate::config::OperatorConfig;
@@ -18,6 +17,8 @@ pub struct SignedQuote {
     pub quote_details: pricing_engine::QuoteDetails,
     pub abi_details: ITangleTypes::QuoteDetails,
     pub signature: K256Signature,
+    /// ECDSA recovery byte (0 or 1). The Ethereum `v` value is `27 + recovery_id`.
+    pub recovery_id: u8,
     pub operator_id: OperatorId,
     pub proof_of_work: Vec<u8>,
 }
@@ -75,20 +76,27 @@ impl OperatorSigner {
         })
     }
 
-    /// Returns a signed quote made up of the quote details, signature, operator ID, and proof of work
+    /// Returns a signed quote made up of the quote details, signature, operator ID, and proof of work.
+    ///
+    /// Uses `sign_prehash_recoverable` to sign the raw EIP-712 keccak256 digest directly,
+    /// avoiding the double-hash that `SignerMut::sign()` would introduce (SHA-256 on top of keccak256).
     pub fn sign_quote(
         &mut self,
         quote: SignableQuote,
         proof_of_work: Vec<u8>,
     ) -> Result<SignedQuote> {
         let hash = quote_digest_eip712(&quote.abi_details, self.domain)?;
-        let signature = K256Ecdsa::sign_with_secret(&mut self.keypair, &hash)
+        let (signature, recovery_id) = self
+            .keypair
+            .0
+            .sign_prehash_recoverable(&hash)
             .map_err(|e| PricingError::Signing(format!("Error signing quote hash: {e}")))?;
 
         Ok(SignedQuote {
             quote_details: quote.proto_details,
             abi_details: quote.abi_details,
-            signature,
+            signature: K256Signature(signature),
+            recovery_id: recovery_id.to_byte(),
             operator_id: self.operator_id,
             proof_of_work,
         })
@@ -126,14 +134,21 @@ pub fn quote_digest_eip712(
     Ok(keccak256(payload).into())
 }
 
-/// Verify a quote signature by checking the signature against the hash of the quote details.
+/// Verify a quote signature by checking the prehashed EIP-712 digest against the public key.
+///
+/// Uses `verify_prehash` to verify against the raw keccak256 digest directly,
+/// matching the `sign_prehash_recoverable` used in `sign_quote`.
 pub fn verify_quote(
     quote: &SignedQuote,
     public_key: &K256VerifyingKey,
     domain: QuoteSigningDomain,
 ) -> Result<bool> {
+    use k256::ecdsa::signature::hazmat::PrehashVerifier;
     let hash = quote_digest_eip712(&quote.abi_details, domain)?;
-    Ok(K256Ecdsa::verify(public_key, &hash, &quote.signature))
+    Ok(public_key
+        .0
+        .verify_prehash(&hash, &quote.signature.0)
+        .is_ok())
 }
 
 fn compute_domain_separator(domain: QuoteSigningDomain) -> B256 {
@@ -220,6 +235,8 @@ use blueprint_tangle_extra::job_quote as jq;
 pub struct SignedJobQuote {
     pub quote_details: crate::pricing_engine::JobQuoteDetails,
     pub signature: K256Signature,
+    /// ECDSA recovery byte (0 or 1). The Ethereum `v` value is `27 + recovery_id`.
+    pub recovery_id: u8,
     pub operator_id: OperatorId,
     pub proof_of_work: Vec<u8>,
 }
@@ -228,18 +245,23 @@ impl OperatorSigner {
     /// Sign a per-job quote for the RFQ system.
     ///
     /// The EIP-712 digest matches `SignatureLib.computeJobQuoteDigest()` in tnt-core.
+    /// Uses `sign_prehash_recoverable` to sign the raw digest directly.
     pub fn sign_job_quote(
         &mut self,
         details: &crate::pricing_engine::JobQuoteDetails,
         proof_of_work: Vec<u8>,
     ) -> Result<SignedJobQuote> {
         let digest = job_quote_digest_eip712(details, self.domain);
-        let signature = K256Ecdsa::sign_with_secret(&mut self.keypair, &digest)
+        let (signature, recovery_id) = self
+            .keypair
+            .0
+            .sign_prehash_recoverable(&digest)
             .map_err(|e| PricingError::Signing(format!("Error signing job quote: {e}")))?;
 
         Ok(SignedJobQuote {
             quote_details: details.clone(),
-            signature,
+            signature: K256Signature(signature),
+            recovery_id: recovery_id.to_byte(),
             operator_id: self.operator_id,
             proof_of_work,
         })
