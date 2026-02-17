@@ -68,7 +68,11 @@ urlencoding = "2.1"
 
 # gRPC
 tonic = { workspace = true, features = ["transport", "codegen", "prost", "router"] }
+tonic-web = { workspace = true }
 prost = { workspace = true, features = ["derive"] }
+
+# gRPC-web CORS
+tower-http = { workspace = true, features = ["cors"] }
 
 # Proof of work
 sha2 = { workspace = true }

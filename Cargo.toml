@@ -384,6 +384,7 @@ libc = { version = "0.2.175", default-features = false }
 tonic = { version = "0.13.1", default-features = false, features = ["tls-webpki-roots"] }
 prost = { version = "0.13", default-features = false }
 tonic-build = { version = "0.13.1", default-features = false }
+tonic-web = { version = "0.13.0", default-features = false }
 
 # Quality of Service
 prometheus = { version = "0.14", default-features = false }

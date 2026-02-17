@@ -12,8 +12,8 @@ use url::Url;
 use blueprint_pricing_engine_lib::{
     cleanup,
     error::{PricingError, Result},
-    init_benchmark_cache, init_job_pricing_config, init_operator_signer, init_pricing_config,
-    load_operator_config,
+    handle_blueprint_update, init_benchmark_cache, init_job_pricing_config, init_operator_signer,
+    init_pricing_config, load_operator_config,
     service::blockchain::event::BlockchainEvent,
     service::rpc::server::run_rpc_server,
     signer::QuoteSigningDomain,
@@ -159,6 +159,31 @@ pub async fn run_app(cli: Cli) -> Result<()> {
 
     // Initialize benchmark cache
     let benchmark_cache = init_benchmark_cache(&config).await?;
+
+    // Seed benchmark profile on startup if none exists for the configured blueprint
+    match benchmark_cache.get_profile(cli.blueprint_id) {
+        Ok(Some(_)) => {
+            info!(
+                "Benchmark profile already exists for blueprint {}",
+                cli.blueprint_id
+            );
+        }
+        _ => {
+            info!(
+                "No benchmark profile for blueprint {}, running initial benchmark...",
+                cli.blueprint_id
+            );
+            if let Err(e) =
+                handle_blueprint_update(cli.blueprint_id, benchmark_cache.clone(), config.clone())
+                    .await
+            {
+                blueprint_core::error!(
+                    "Initial benchmark failed for blueprint {}: {e}",
+                    cli.blueprint_id
+                );
+            }
+        }
+    }
 
     // Initialize pricing configuration
     let pricing_config = init_pricing_config(
