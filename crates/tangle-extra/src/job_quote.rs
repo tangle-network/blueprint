@@ -27,8 +27,7 @@
 
 use alloy_primitives::{Address, B256, ChainId, U256, keccak256};
 use alloy_sol_types::SolValue;
-use blueprint_crypto::KeyType;
-use blueprint_crypto::k256::{K256Ecdsa, K256Signature, K256SigningKey, K256VerifyingKey};
+use blueprint_crypto::k256::{K256Signature, K256SigningKey, K256VerifyingKey};
 
 /// Errors from job quote signing/verification
 #[derive(Debug, thiserror::Error)]
@@ -65,6 +64,8 @@ pub struct JobQuoteDetails {
 pub struct SignedJobQuote {
     pub details: JobQuoteDetails,
     pub signature: K256Signature,
+    /// ECDSA recovery byte (0 or 1). The Ethereum `v` value is `27 + recovery_id`.
+    pub recovery_id: u8,
     pub operator: Address,
 }
 
@@ -101,15 +102,22 @@ impl JobQuoteSigner {
         })
     }
 
-    /// Sign a job quote, producing a `SignedJobQuote` for on-chain submission
+    /// Sign a job quote, producing a `SignedJobQuote` for on-chain submission.
+    ///
+    /// Uses `sign_prehash_recoverable` to sign the raw EIP-712 keccak256 digest directly,
+    /// avoiding the double-hash that `SignerMut::sign()` would introduce (SHA-256 on top of keccak256).
     pub fn sign(&mut self, details: &JobQuoteDetails) -> Result<SignedJobQuote> {
         let digest = job_quote_digest_eip712(details, self.domain);
-        let signature = K256Ecdsa::sign_with_secret(&mut self.keypair, &digest)
+        let (signature, recovery_id) = self
+            .keypair
+            .0
+            .sign_prehash_recoverable(&digest)
             .map_err(|e| JobQuoteError::Signing(format!("ECDSA signing failed: {e}")))?;
 
         Ok(SignedJobQuote {
             details: details.clone(),
-            signature,
+            signature: K256Signature(signature),
+            recovery_id: recovery_id.to_byte(),
             operator: self.operator,
         })
     }
@@ -130,14 +138,21 @@ impl JobQuoteSigner {
     }
 }
 
-/// Verify a signed job quote against a public key
+/// Verify a signed job quote against a public key.
+///
+/// Uses `verify_prehash` to verify against the raw keccak256 digest directly,
+/// matching the `sign_prehash_recoverable` used in `JobQuoteSigner::sign`.
 pub fn verify_job_quote(
     quote: &SignedJobQuote,
     public_key: &K256VerifyingKey,
     domain: QuoteSigningDomain,
 ) -> Result<bool> {
+    use alloy::signers::k256::ecdsa::signature::hazmat::PrehashVerifier;
     let digest = job_quote_digest_eip712(&quote.details, domain);
-    Ok(K256Ecdsa::verify(public_key, &digest, &quote.signature))
+    Ok(public_key
+        .0
+        .verify_prehash(&digest, &quote.signature.0)
+        .is_ok())
 }
 
 /// Compute the full EIP-712 digest for a job quote
@@ -212,9 +227,13 @@ fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
 
 /// Convert an SDK `SignedJobQuote` to the on-chain `ITangleTypes::SignedJobQuote`
 /// for submission via `TangleClient::submit_job_from_quote`.
+///
+/// Produces a 65-byte ECDSA signature (r || s || v) where v = 27 + recovery_id.
 impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::SignedJobQuote {
     fn from(quote: SignedJobQuote) -> Self {
         use blueprint_crypto::BytesEncoding;
+        let mut sig_bytes = quote.signature.to_bytes();
+        sig_bytes.push(27 + quote.recovery_id);
         Self {
             details: blueprint_client_tangle::contracts::ITangleTypes::JobQuoteDetails {
                 serviceId: quote.details.service_id,
@@ -223,7 +242,7 @@ impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::
                 timestamp: quote.details.timestamp,
                 expiry: quote.details.expiry,
             },
-            signature: quote.signature.to_bytes().into(),
+            signature: sig_bytes.into(),
             operator: quote.operator,
         }
     }

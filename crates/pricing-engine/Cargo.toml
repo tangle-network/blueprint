@@ -42,6 +42,7 @@ alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-sol-types = { workspace = true }
+k256 = { workspace = true, features = ["ecdsa"] }
 
 # Async / networking utilities
 futures = { workspace = true, features = ["thread-pool"] }

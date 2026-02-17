@@ -232,13 +232,20 @@ mod evm_listener_tests {
         let total_cost = rust_decimal::Decimal::from_f64(quote_details.total_cost_rate)
             .ok_or_else(|| anyhow::anyhow!("invalid total cost"))?;
         let signable = SignableQuote::new(quote_details.clone(), total_cost)?;
-        let signature = K256Signature::from_bytes(&response.signature)?;
+        assert_eq!(
+            response.signature.len(),
+            65,
+            "signature should be 65 bytes (r||s||v)"
+        );
+        let signature = K256Signature::from_bytes(&response.signature[..64])?;
+        let recovery_id = response.signature[64] - 27;
         let operator_id = Address::from_slice(&response.operator_id);
 
         let signed_quote = SignedQuote {
             quote_details,
             abi_details: signable.abi_details().clone(),
             signature,
+            recovery_id,
             operator_id,
             proof_of_work: response.proof_of_work.clone(),
         };
@@ -465,13 +472,20 @@ mod evm_listener_tests {
             let total_cost = rust_decimal::Decimal::from_f64(quote_details.total_cost_rate)
                 .ok_or_else(|| anyhow::anyhow!("invalid total cost"))?;
             let signable = SignableQuote::new(quote_details.clone(), total_cost)?;
-            let signature = K256Signature::from_bytes(&response.signature)?;
+            assert_eq!(
+                response.signature.len(),
+                65,
+                "signature should be 65 bytes (r||s||v)"
+            );
+            let signature = K256Signature::from_bytes(&response.signature[..64])?;
+            let recovery_id = response.signature[64] - 27;
             let operator_id = Address::from_slice(&response.operator_id);
 
             let signed_quote = SignedQuote {
                 quote_details: quote_details.clone(),
                 abi_details: signable.abi_details().clone(),
                 signature,
+                recovery_id,
                 operator_id,
                 proof_of_work: response.proof_of_work.clone(),
             };

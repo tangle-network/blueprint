@@ -300,10 +300,12 @@ impl PricingEngine for PricingEngineService {
             }
         };
 
-        // Create the response
+        // Create the response with 65-byte signature (r || s || v)
+        let mut sig_bytes = signed_quote.signature.to_bytes().to_vec();
+        sig_bytes.push(27 + signed_quote.recovery_id);
         let response = GetPriceResponse {
             quote_details: Some(signed_quote.quote_details.clone()),
-            signature: signed_quote.signature.to_bytes().to_vec(),
+            signature: sig_bytes,
             operator_id: signed_quote.operator_id.0.to_vec(),
             proof_of_work: signed_quote.proof_of_work,
         };
@@ -419,9 +421,12 @@ impl PricingEngine for PricingEngineService {
             (vec![], String::new())
         };
 
+        // 65-byte signature (r || s || v)
+        let mut sig_bytes = signed.signature.to_bytes().to_vec();
+        sig_bytes.push(27 + signed.recovery_id);
         let response = GetJobPriceResponse {
             quote_details: Some(signed.quote_details),
-            signature: signed.signature.to_bytes().to_vec(),
+            signature: sig_bytes,
             operator_id: signed.operator_id.0.to_vec(),
             proof_of_work: signed.proof_of_work,
             settlement_options,
@@ -778,13 +783,21 @@ mod tests {
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
         let details = resp.quote_details.unwrap();
 
-        // Reconstruct the digest and verify the signature
+        // Reconstruct the digest and verify the 65-byte signature (r||s||v)
         let digest = crate::signer::job_quote_digest_eip712(&details, domain);
-        let sig = blueprint_crypto::k256::K256Signature::from_bytes(&resp.signature).unwrap();
-        assert!(
-            blueprint_crypto::k256::K256Ecdsa::verify(&verifying_key, &digest, &sig),
-            "signature should verify with the operator's key"
+        assert_eq!(
+            resp.signature.len(),
+            65,
+            "signature should be 65 bytes (r||s||v)"
         );
+        let sig = blueprint_crypto::k256::K256Signature::from_bytes(&resp.signature[..64]).unwrap();
+        {
+            use k256::ecdsa::signature::hazmat::PrehashVerifier;
+            assert!(
+                verifying_key.0.verify_prehash(&digest, &sig.0).is_ok(),
+                "signature should verify with the operator's key (prehash)"
+            );
+        }
     }
 }
 

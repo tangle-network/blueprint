@@ -3437,6 +3437,7 @@ dependencies = [
  "crossbeam-channel",
  "futures",
  "hex",
+ "k256",
  "libc",
  "libp2p",
  "log",

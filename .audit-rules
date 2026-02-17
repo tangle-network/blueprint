@@ -1,0 +1,24 @@
+# Blueprint SDK - Audit Rules
+
+FOCUS:
+- Rust API design and ergonomics
+- Error handling patterns
+- Documentation completeness
+- Public API stability
+- No breaking changes without version bump
+
+IGNORE:
+- **/target/**
+- **/*.test.rs
+- **/examples/**
+
+STRICT:
+- Any unwrap() in library code
+- Missing doc comments on public items
+- Unsafe without safety comments
+- Breaking API changes
+
+CONTEXT:
+Blueprint SDK for building AVS (Actively Validated Services).
+Public Rust library used by external developers.
+API stability and documentation are critical.
