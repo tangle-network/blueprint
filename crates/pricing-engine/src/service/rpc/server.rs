@@ -446,8 +446,8 @@ mod tests {
     use super::*;
     use crate::signer::QuoteSigningDomain;
     use alloy_primitives::U256;
-    use blueprint_crypto::k256::K256SigningKey;
     use blueprint_crypto::BytesEncoding;
+    use blueprint_crypto::k256::K256SigningKey;
 
     /// Deterministic test key (32 bytes, non-zero)
     const TEST_KEY: [u8; 32] = [
