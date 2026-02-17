@@ -69,7 +69,7 @@ rand = "0.8"
 urlencoding = "2.1"
 
 [dev-dependencies]
-mockall = "0.13"
+mockall = "0.14"
 tempfile.workspace = true
 tokio-test = "0.4"
 wiremock = "0.6"

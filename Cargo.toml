@@ -341,9 +341,9 @@ local-ip-address = "0.6.5"
 
 # System & OS
 parking_lot = { version = "0.12.4", default-features = false }
-tempfile = { version = "3.23.0", default-features = false }
+tempfile = { version = "3.25.0", default-features = false }
 uuid = { version = "1.17.0", default-features = false }
-blake3 = { version = "1.8.2", default-features = false }
+blake3 = { version = "1.8.3", default-features = false }
 tar = { version = "0.4.44", default-features = false }
 xz = { version = "0.1.0", default-features = false }
 walkdir = { version = "2.5.0", default-features = false }
@@ -366,7 +366,7 @@ quote = { version = "1.0", default-features = false }
 syn = { version = "2.0", default-features = false }
 trybuild = { version = "1.0", default-features = false }
 dirs = { version = "6.0.0", default-features = false }
-indicatif = { version = "0.18.0", default-features = false }
+indicatif = { version = "0.18.4", default-features = false }
 document-features = { version = "0.2.11", default-features = false }
 rustversion = { version = "1.0.21", default-features = false }
 cargo-dist-schema = { version = "0.30.3", default-features = false }
