@@ -9,6 +9,7 @@ use chrono::Utc;
 use rust_decimal::prelude::ToPrimitive;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tower_http::cors::{Any, CorsLayer};
 use tonic::{Request, Response, Status, transport::Server};
 
 use crate::pricing_engine::{
@@ -858,7 +859,19 @@ pub async fn run_rpc_server(
     };
     let server = PricingEngineServer::new(pricing_service);
 
-    Server::builder().add_service(server).serve(addr).await?;
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_headers(Any)
+        .allow_methods(Any)
+        .expose_headers(Any);
+
+    Server::builder()
+        .accept_http1(true)
+        .layer(cors)
+        .layer(tonic_web::GrpcWebLayer::new())
+        .add_service(server)
+        .serve(addr)
+        .await?;
 
     Ok(())
 }
