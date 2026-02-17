@@ -9,14 +9,14 @@ KEEP_TMP="${KEEP_FIXTURE_TMP:-0}"
 
 if [[ -z "$VERSION" ]]; then
   if command -v python3 >/dev/null 2>&1; then
-    VERSION="$(curl -s "https://crates.io/api/v1/crates/${CRATE_NAME}" | python3 - <<'PY'
+    VERSION="$(curl -sH "User-Agent: blueprint-dev (github.com/tangle-network/blueprint)" "https://crates.io/api/v1/crates/${CRATE_NAME}" | python3 - <<'PY'
 import json, sys
 data = json.load(sys.stdin)
 print(data.get("crate", {}).get("newest_version", ""))
 PY
 )"
   elif command -v python >/dev/null 2>&1; then
-    VERSION="$(curl -s "https://crates.io/api/v1/crates/${CRATE_NAME}" | python - <<'PY'
+    VERSION="$(curl -sH "User-Agent: blueprint-dev (github.com/tangle-network/blueprint)" "https://crates.io/api/v1/crates/${CRATE_NAME}" | python - <<'PY'
 import json, sys
 data = json.load(sys.stdin)
 print(data.get("crate", {}).get("newest_version", ""))
@@ -42,7 +42,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Fetching ${CRATE_NAME} ${VERSION} from crates.io..."
-curl -sSL "https://crates.io/api/v1/crates/${CRATE_NAME}/${VERSION}/download" -o "$TARBALL"
+curl -sSL -H "User-Agent: blueprint-dev (github.com/tangle-network/blueprint)" "https://crates.io/api/v1/crates/${CRATE_NAME}/${VERSION}/download" -o "$TARBALL"
 tar -xzf "$TARBALL" -C "$TMP_DIR"
 
 SRC_DIR="${TMP_DIR}/${CRATE_NAME}-${VERSION}/fixtures"
