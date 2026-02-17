@@ -58,7 +58,7 @@ chrono = { workspace = true, features = ["serde", "clock"] }
 
 [dev-dependencies]
 blueprint-eigenlayer-testing-utils = { path = "../testing-utils/eigenlayer" }
-tempfile = "3.0"
+tempfile = "3.25"
 
 [features]
 default = ["std"]
