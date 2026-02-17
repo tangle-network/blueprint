@@ -1,7 +1,7 @@
 //! Utilities for spinning up an Anvil testnet with the full Tangle stack deployed.
 //!
 //! These helpers replay the broadcast artifacts generated from
-//! `tnt-core/script/v2/LocalTestnet.s.sol` so all tests run against the same contract
+//! `tnt-core/script/LocalTestnet.s.sol` so all tests run against the same contract
 //! addresses the SDK expects in production. The broadcast file is bundled with the SDK.
 
 use alloy_primitives::{Address, TxKind};
@@ -37,7 +37,7 @@ pub const LOCAL_SERVICE_ID: u64 = 0;
 
 const TANGLE_ADDRESS: &str = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
 const RESTAKING_ADDRESS: &str = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
-const STATUS_REGISTRY_ADDRESS: &str = "0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9";
+const STATUS_REGISTRY_ADDRESS: &str = "0x99bbA657f2BbC93c02D617f8bA121cB8Fc104Acf";
 const DEFAULT_FEE_WEI: u128 = 1;
 const DEFAULT_GAS_LIMIT: u64 = 120_000_000;
 const OPERATOR1_PRIVATE_KEY: &str =
