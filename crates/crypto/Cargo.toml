@@ -47,6 +47,8 @@ hashing = [
 	"blueprint-crypto-hashing/sha2-hasher",
 	"blueprint-crypto-hashing/sha3-hasher",
 	"blueprint-crypto-hashing/blake3-hasher",
+	"blueprint-crypto-hashing/kdf-hkdf",
+	"blueprint-crypto-hashing/kdf-argon2",
 ]
 aggregation = [
 	"blueprint-crypto-bls/aggregation",

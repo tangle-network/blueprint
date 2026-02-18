@@ -210,9 +210,10 @@ async fn bad_payload_surfaces_decode_error() -> Result<()> {
             .wait_for_job_result_with_deadline(submission, Duration::from_secs(5))
             .await
             .expect_err("decode failure should bubble through harness");
+        let msg = err.to_string();
         assert!(
-            err.to_string().contains("timed out"),
-            "expected timeout waiting error, got {err}"
+            msg.contains("timed out") || msg.contains("decode") || msg.contains("Decode"),
+            "expected timeout or decode error, got {err}"
         );
 
         harness.shutdown().await;

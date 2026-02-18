@@ -1,7 +1,7 @@
 [package]
 name = "blueprint-crypto-hashing"
 version = "0.1.0-alpha.5"
-description = "Hashing primitives for Tangle Blueprints"
+description = "Hashing and key derivation primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,18 +14,23 @@ blueprint-std = { workspace = true }
 sha2 = { workspace = true, optional = true }
 sha3 = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
+hkdf = { workspace = true, optional = true }
+argon2 = { workspace = true, optional = true }
 
 [features]
-default = ["std", "sha2-hasher", "sha3-hasher", "blake3-hasher"]
+default = ["std", "sha2-hasher", "sha3-hasher", "blake3-hasher", "kdf-hkdf", "kdf-argon2"]
 std = [
     "blueprint-std/std",
     "sha2?/std",
     "sha3?/std",
     "blake3?/std",
+    "argon2?/std",
 ]
 sha2-hasher = ["sha2"]
 sha3-hasher = ["sha3"]
 blake3-hasher = ["blake3"]
+kdf-hkdf = ["dep:hkdf", "sha2"]
+kdf-argon2 = ["dep:argon2"]
 
 [lints]
 workspace = true
