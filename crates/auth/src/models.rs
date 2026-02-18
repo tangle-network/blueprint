@@ -371,6 +371,24 @@ impl ServiceModel {
         Ok(())
     }
 
+    /// Atomically saves the service only if no registration exists for this ID.
+    ///
+    /// Returns `Ok(true)` if saved, `Ok(false)` if a registration already existed.
+    /// Uses an optimistic transaction to prevent TOCTOU races between bridges.
+    pub fn save_if_absent(&self, id: ServiceId, db: &RocksDb) -> Result<bool, crate::Error> {
+        let cf = db
+            .cf_handle(cf::SERVICES_USER_KEYS_CF)
+            .ok_or(crate::Error::UnknownColumnFamily(cf::SERVICES_USER_KEYS_CF))?;
+        let key = id.to_be_bytes();
+        let txn = db.transaction();
+        if txn.get_cf(&cf, key)?.is_some() {
+            return Ok(false);
+        }
+        txn.put_cf(&cf, key, self.encode_to_vec())?;
+        txn.commit()?;
+        Ok(true)
+    }
+
     /// Deletes the service from the database.
     pub fn delete(id: ServiceId, db: &RocksDb) -> Result<(), crate::Error> {
         let cf = db

@@ -328,34 +328,32 @@ impl BlueprintManagerBridge for BridgeService {
             tls_profile,
         };
 
-        // Save to database
         let service_id = ServiceId(service_id, 0);
 
-        // Cross-bridge hijack protection: if this bridge hasn't registered yet,
-        // reject if the service already exists (registered by another bridge)
-        {
-            let pinned = self
-                .registered_service_id
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            if pinned.is_none()
-                && ServiceModel::find_by_id(service_id, db)
-                    .map_err(|e| {
-                        error!("Failed to check existing service in database: {e}");
-                        tonic::Status::internal(format!("Database error: {e}"))
-                    })?
-                    .is_some()
-            {
+        // First-time registration uses an atomic check-then-write to prevent
+        // cross-bridge hijacking races. Updates (bridge already pinned) use plain save.
+        let is_update = self
+            .registered_service_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some();
+
+        if is_update {
+            service.save(service_id, db).map_err(|e| {
+                error!("Failed to save service to database: {e}");
+                tonic::Status::internal(format!("Database error: {e}"))
+            })?;
+        } else {
+            let saved = service.save_if_absent(service_id, db).map_err(|e| {
+                error!("Failed to save service to database: {e}");
+                tonic::Status::internal(format!("Database error: {e}"))
+            })?;
+            if !saved {
                 return Err(tonic::Status::already_exists(format!(
                     "Service {service_id} is already registered by another bridge"
                 )));
             }
         }
-
-        service.save(service_id, db).map_err(|e| {
-            error!("Failed to save service to database: {e}");
-            tonic::Status::internal(format!("Database error: {e}"))
-        })?;
 
         // Pin this bridge to the registered service
         {
