@@ -102,7 +102,13 @@ impl EigenlayerTestHarness {
         let runtime_dir = test_dir.path().join("runtime");
         tokio::fs::create_dir_all(&runtime_dir).await?;
 
-        let bridge = Bridge::new(runtime_dir, String::from("service"), auth_proxy_db, true);
+        let bridge = Bridge::new(
+            runtime_dir,
+            String::from("service"),
+            auth_proxy_db,
+            true,
+            None,
+        );
         let bridge_socket_path = bridge.base_socket_path();
 
         let (bridge_handle, _alive_rx) = bridge.spawn()?;

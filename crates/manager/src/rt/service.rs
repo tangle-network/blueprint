@@ -64,6 +64,7 @@ async fn create_bridge(
     runtime_dir: impl AsRef<Path>,
     service_name: &str,
     no_vm: bool,
+    expected_service_id: Option<u64>,
 ) -> Result<(PathBuf, BridgeHandle, oneshot::Receiver<()>)> {
     let db = ctx
         .db()
@@ -75,6 +76,7 @@ async fn create_bridge(
         service_name.to_string(),
         db,
         no_vm,
+        expected_service_id,
     );
     let bridge_base_socket = bridge.base_socket_path();
 
@@ -175,7 +177,7 @@ impl Service {
         env_vars.bridge_socket_path = None;
 
         let (bridge_base_socket, bridge_handle, alive_rx) =
-            create_bridge(ctx, runtime_dir.as_ref(), service_name, false).await?;
+            create_bridge(ctx, runtime_dir.as_ref(), service_name, false, None).await?;
 
         let mut hypervisor = HypervisorInstance::new(
             ctx,
@@ -231,7 +233,7 @@ impl Service {
         debug: bool,
     ) -> Result<Service> {
         let (bridge_base_socket, bridge_handle, alive_rx) =
-            create_bridge(ctx, runtime_dir.as_ref(), service_name, false).await?;
+            create_bridge(ctx, runtime_dir.as_ref(), service_name, false, None).await?;
 
         env_vars.bridge_socket_path = Some(bridge_base_socket);
 
@@ -267,7 +269,7 @@ impl Service {
         arguments: BlueprintArgs,
     ) -> Result<Service> {
         let (bridge_base_socket, bridge_handle, alive_rx) =
-            create_bridge(ctx, runtime_dir.as_ref(), service_name, true).await?;
+            create_bridge(ctx, runtime_dir.as_ref(), service_name, true, None).await?;
 
         env_vars.bridge_socket_path = Some(bridge_base_socket);
 
@@ -297,7 +299,7 @@ impl Service {
         remote_instance: RemoteServiceInstance,
     ) -> Result<Service> {
         let (_, bridge_handle, alive_rx) =
-            create_bridge(ctx, runtime_dir.as_ref(), service_name, true).await?;
+            create_bridge(ctx, runtime_dir.as_ref(), service_name, true, None).await?;
 
         Ok(Self {
             runtime: Runtime::Remote(remote_instance),

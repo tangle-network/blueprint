@@ -12,7 +12,7 @@ use blueprint_auth::{
     models::{ServiceModel, ServiceOwnerModel},
     types::ServiceId,
 };
-use blueprint_core::{error, info};
+use blueprint_core::{error, info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UnixListener;
@@ -23,10 +23,12 @@ use tonic::{Request, Response, transport::Server};
 
 /// Handle to a running bridge
 ///
-/// Dropping this handle will shut down the bridge.
+/// Dropping this handle will shut down the bridge and clean up any registered service.
 pub struct BridgeHandle {
     sock_path: PathBuf,
     handle: JoinHandle<Result<(), Error>>,
+    db: RocksDb,
+    registered_service_id: Arc<std::sync::Mutex<Option<u64>>>,
 }
 
 impl BridgeHandle {
@@ -35,6 +37,20 @@ impl BridgeHandle {
 
 impl Drop for BridgeHandle {
     fn drop(&mut self) {
+        // Clean up any registered service from the database
+        if let Some(service_id) = self
+            .registered_service_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            let sid = ServiceId(service_id, 0);
+            if let Err(e) = ServiceModel::delete(sid, &self.db) {
+                warn!("Failed to clean up service {sid} on bridge drop: {e}");
+            } else {
+                info!("Cleaned up service {sid} registration on bridge shutdown");
+            }
+        }
         let _ = std::fs::remove_file(&self.sock_path);
         self.handle.abort();
     }
@@ -46,16 +62,24 @@ pub struct Bridge {
     service_name: String,
     db: RocksDb,
     no_vm: bool,
+    expected_service_id: Option<u64>,
 }
 
 impl Bridge {
     #[must_use]
-    pub fn new(runtime_dir: PathBuf, service_name: String, db: RocksDb, no_vm: bool) -> Self {
+    pub fn new(
+        runtime_dir: PathBuf,
+        service_name: String,
+        db: RocksDb,
+        no_vm: bool,
+        expected_service_id: Option<u64>,
+    ) -> Self {
         Self {
             runtime_dir,
             service_name,
             db,
             no_vm,
+            expected_service_id,
         }
     }
 
@@ -79,9 +103,7 @@ impl Bridge {
         let sock_name = format!("{}.sock_{VSOCK_PORT}", self.service_name);
         self.runtime_dir.join(sock_name)
     }
-}
 
-impl Bridge {
     /// Spawn the bridge instance
     ///
     /// # Errors
@@ -90,70 +112,64 @@ impl Bridge {
     ///
     /// [`HypervisorInstance`]: https://docs.rs/blueprint-manager/latest/blueprint_manager/rt/struct.HypervisorInstance.html
     pub fn spawn(self) -> Result<(BridgeHandle, oneshot::Receiver<()>), Error> {
-        let (sock_path, listener) = if self.no_vm {
-            self.spawn_for_native()?
+        let sock_path = if self.no_vm {
+            self.base_socket_path()
         } else {
-            self.spawn_for_vm()?
+            self.guest_socket_path()
         };
 
+        let _ = std::fs::remove_file(&sock_path);
+        let listener = UnixListener::bind(&sock_path).map_err(|e| {
+            error!(
+                "Failed to bind bridge socket at {}: {e}",
+                sock_path.display()
+            );
+            e
+        })?;
+
+        info!(
+            "Bridge for service `{}` listening on {}",
+            self.service_name,
+            sock_path.display()
+        );
+
         let (tx, rx) = oneshot::channel();
+        let registered_service_id = Arc::new(std::sync::Mutex::new(None));
+        let registered_service_id_clone = Arc::clone(&registered_service_id);
+        let db_clone = self.db.clone();
 
         let handle = tokio::task::spawn(async move {
             Server::builder()
-                .add_service(BlueprintManagerBridgeServer::new(BridgeService::new(
-                    tx, self.db,
-                )))
+                .add_service(BlueprintManagerBridgeServer::new(
+                    BridgeService::with_service_pinning(
+                        tx,
+                        self.db,
+                        self.expected_service_id,
+                        registered_service_id_clone,
+                    ),
+                ))
                 .serve_with_incoming(UnixListenerStream::new(listener))
                 .await
                 .map_err(Error::from)
         });
 
-        Ok((BridgeHandle { sock_path, handle }, rx))
-    }
-
-    fn spawn_for_vm(&self) -> Result<(PathBuf, UnixListener), Error> {
-        let sock_path = self.guest_socket_path();
-        let _ = std::fs::remove_file(&sock_path);
-        let listener = UnixListener::bind(&sock_path).map_err(|e| {
-            error!(
-                "Failed to bind bridge socket at {}: {e}",
-                sock_path.display()
-            );
-            e
-        })?;
-
-        info!(
-            "Connected to bridge for service `{}`, listening on VSOCK port {VSOCK_PORT}",
-            self.service_name
-        );
-
-        Ok((sock_path, listener))
-    }
-
-    fn spawn_for_native(&self) -> Result<(PathBuf, UnixListener), Error> {
-        let sock_path = self.base_socket_path();
-        let _ = std::fs::remove_file(&sock_path);
-        let listener = UnixListener::bind(&sock_path).map_err(|e| {
-            error!(
-                "Failed to bind bridge socket at {}: {e}",
-                sock_path.display()
-            );
-            e
-        })?;
-
-        info!(
-            "Connected to bridge for service `{}`, listening on socket `{}`",
-            self.service_name,
-            sock_path.display()
-        );
-
-        Ok((sock_path, listener))
+        Ok((
+            BridgeHandle {
+                sock_path,
+                handle,
+                db: db_clone,
+                registered_service_id,
+            },
+            rx,
+        ))
     }
 }
 
 struct BridgeService {
     ready_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     db: RocksDb,
+    expected_service_id: Option<u64>,
+    registered_service_id: Arc<std::sync::Mutex<Option<u64>>>,
 }
 
 impl BridgeService {
@@ -161,6 +177,22 @@ impl BridgeService {
         Self {
             ready_tx: Arc::new(Mutex::new(Some(tx))),
             db,
+            expected_service_id: None,
+            registered_service_id: Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+
+    fn with_service_pinning(
+        tx: oneshot::Sender<()>,
+        db: RocksDb,
+        expected_service_id: Option<u64>,
+        registered_service_id: Arc<std::sync::Mutex<Option<u64>>>,
+    ) -> Self {
+        Self {
+            ready_tx: Arc::new(Mutex::new(Some(tx))),
+            db,
+            expected_service_id,
+            registered_service_id,
         }
     }
 
@@ -169,6 +201,72 @@ impl BridgeService {
             let _ = tx.send(());
         }
     }
+
+    /// Verify that the given service_id is allowed for this bridge.
+    ///
+    /// Checks the BPM-provided expected_service_id constraint and the self-pinning constraint.
+    fn verify_service_id(&self, service_id: u64) -> Result<(), tonic::Status> {
+        // Check BPM-provided constraint
+        if let Some(expected) = self.expected_service_id {
+            if service_id != expected {
+                return Err(tonic::Status::permission_denied(format!(
+                    "Bridge is configured for service_id {expected}, got {service_id}"
+                )));
+            }
+        }
+
+        // Check self-pinning constraint
+        let pinned = self
+            .registered_service_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(pinned_id) = *pinned {
+            if service_id != pinned_id {
+                return Err(tonic::Status::permission_denied(format!(
+                    "Bridge is pinned to service_id {pinned_id}, cannot operate on {service_id}"
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Verify that this bridge has previously registered a service and the given service_id matches.
+    fn verify_registered_service_id(&self, service_id: u64) -> Result<(), tonic::Status> {
+        self.verify_service_id(service_id)?;
+
+        let pinned = self
+            .registered_service_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if pinned.is_none() {
+            return Err(tonic::Status::failed_precondition(
+                "No service registered on this bridge",
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+fn validate_tls_profile(profile: &blueprint_auth::models::TlsProfile) -> Result<(), tonic::Status> {
+    if !profile.tls_enabled {
+        return Ok(());
+    }
+
+    if profile.encrypted_server_cert.is_empty() || profile.encrypted_server_key.is_empty() {
+        return Err(tonic::Status::invalid_argument(
+            "Server certificate and key are required when TLS is enabled",
+        ));
+    }
+
+    if profile.require_client_mtls && profile.encrypted_client_ca_bundle.is_empty() {
+        return Err(tonic::Status::invalid_argument(
+            "Client CA bundle is required when mutual TLS authentication is enabled",
+        ));
+    }
+
+    Ok(())
 }
 
 #[tonic::async_trait]
@@ -204,6 +302,9 @@ impl BlueprintManagerBridge for BridgeService {
             tls_profile,
         } = req.into_inner();
 
+        // Verify this bridge is allowed to operate on this service_id
+        self.verify_service_id(service_id)?;
+
         let db = &self.db;
 
         // Convert protobuf owners to ServiceOwnerModel
@@ -215,30 +316,9 @@ impl BlueprintManagerBridge for BridgeService {
             })
             .collect();
 
-        // Convert TLS profile if provided
-        let tls_profile = tls_profile.map(|config| {
-            let profile: blueprint_auth::models::TlsProfile = config.into();
-            profile
-        });
-
-        // Validate TLS profile if TLS is enabled
+        let tls_profile: Option<blueprint_auth::models::TlsProfile> = tls_profile.map(Into::into);
         if let Some(ref profile) = tls_profile {
-            if profile.tls_enabled {
-                // Validate required fields for TLS
-                if profile.encrypted_server_cert.is_empty()
-                    || profile.encrypted_server_key.is_empty()
-                {
-                    return Err(tonic::Status::invalid_argument(
-                        "Server certificate and key are required when TLS is enabled",
-                    ));
-                }
-
-                if profile.require_client_mtls && profile.encrypted_client_ca_bundle.is_empty() {
-                    return Err(tonic::Status::invalid_argument(
-                        "Client CA bundle is required when mutual TLS authentication is enabled",
-                    ));
-                }
-            }
+            validate_tls_profile(profile)?;
         }
 
         let service = ServiceModel {
@@ -250,10 +330,41 @@ impl BlueprintManagerBridge for BridgeService {
 
         // Save to database
         let service_id = ServiceId(service_id, 0);
+
+        // Cross-bridge hijack protection: if this bridge hasn't registered yet,
+        // reject if the service already exists (registered by another bridge)
+        {
+            let pinned = self
+                .registered_service_id
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if pinned.is_none()
+                && ServiceModel::find_by_id(service_id, db)
+                    .map_err(|e| {
+                        error!("Failed to check existing service in database: {e}");
+                        tonic::Status::internal(format!("Database error: {e}"))
+                    })?
+                    .is_some()
+            {
+                return Err(tonic::Status::already_exists(format!(
+                    "Service {service_id} is already registered by another bridge"
+                )));
+            }
+        }
+
         service.save(service_id, db).map_err(|e| {
             error!("Failed to save service to database: {e}");
             tonic::Status::internal(format!("Database error: {e}"))
         })?;
+
+        // Pin this bridge to the registered service
+        {
+            let mut pinned = self
+                .registered_service_id
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *pinned = Some(service_id.0);
+        }
 
         info!("Registered service proxy with ID: {}", service_id);
         Ok(Response::new(()))
@@ -265,6 +376,9 @@ impl BlueprintManagerBridge for BridgeService {
     ) -> Result<Response<()>, tonic::Status> {
         let UnregisterBlueprintServiceProxyRequest { service_id } = req.into_inner();
 
+        // Verify this bridge owns this service
+        self.verify_registered_service_id(service_id)?;
+
         let db = &self.db;
 
         let service_id = ServiceId(service_id, 0);
@@ -274,6 +388,15 @@ impl BlueprintManagerBridge for BridgeService {
             error!("Failed to delete service {} from database: {e}", service_id);
             tonic::Status::internal(format!("Database error: {e}"))
         })?;
+
+        // Clear the pin
+        {
+            let mut pinned = self
+                .registered_service_id
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *pinned = None;
+        }
 
         info!("Unregistered service proxy with ID: {}", service_id);
         Ok(Response::new(()))
@@ -287,6 +410,9 @@ impl BlueprintManagerBridge for BridgeService {
             service_id,
             owner_to_add,
         } = req.into_inner();
+
+        // Verify this bridge owns this service
+        self.verify_registered_service_id(service_id)?;
 
         let db = &self.db;
 
@@ -340,6 +466,9 @@ impl BlueprintManagerBridge for BridgeService {
             service_id,
             owner_to_remove,
         } = req.into_inner();
+
+        // Verify this bridge owns this service
+        self.verify_registered_service_id(service_id)?;
 
         let db = &self.db;
 
@@ -405,6 +534,9 @@ impl BlueprintManagerBridge for BridgeService {
             tls_profile,
         } = req.into_inner();
 
+        // Verify this bridge owns this service
+        self.verify_registered_service_id(service_id)?;
+
         let db = &self.db;
         let service_id = ServiceId(service_id, 0);
 
@@ -422,33 +554,12 @@ impl BlueprintManagerBridge for BridgeService {
                 tonic::Status::not_found(format!("Service {} not found", service_id))
             })?;
 
-        // Convert and validate TLS profile if provided
-        let new_tls_profile = tls_profile
-            .map(|config| {
-                let profile: blueprint_auth::models::TlsProfile = config.into();
+        let new_tls_profile: Option<blueprint_auth::models::TlsProfile> =
+            tls_profile.map(Into::into);
+        if let Some(ref profile) = new_tls_profile {
+            validate_tls_profile(profile)?;
+        }
 
-                // Validate required fields for TLS
-                if profile.tls_enabled {
-                    if profile.encrypted_server_cert.is_empty()
-                        || profile.encrypted_server_key.is_empty()
-                    {
-                        return Err(tonic::Status::invalid_argument(
-                            "Server certificate and key are required when TLS is enabled",
-                        ));
-                    }
-
-                    if profile.require_client_mtls && profile.encrypted_client_ca_bundle.is_empty() {
-                        return Err(tonic::Status::invalid_argument(
-                            "Client CA bundle is required when mutual TLS authentication is enabled",
-                        ));
-                    }
-                }
-
-                Ok(profile)
-            })
-            .transpose()?;
-
-        // Update TLS profile
         service.tls_profile = new_tls_profile;
 
         // Save updated service
@@ -520,7 +631,7 @@ mod tests {
 
         // Test that client CA bundle is optional when client mTLS is disabled
         let optional_ca_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
-            service_id: 2,
+            service_id: 1,
             api_key_prefix: "test".to_string(),
             upstream_url: "http://localhost:8080".to_string(),
             owners: vec![],
@@ -547,7 +658,7 @@ mod tests {
 
         // Test invalid server TLS configuration (missing cert)
         let invalid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
-            service_id: 3,
+            service_id: 1,
             api_key_prefix: "test".to_string(),
             upstream_url: "http://localhost:8080".to_string(),
             owners: vec![],
@@ -582,7 +693,7 @@ mod tests {
 
         // Test invalid server TLS configuration (missing key)
         let invalid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
-            service_id: 4,
+            service_id: 1,
             api_key_prefix: "test".to_string(),
             upstream_url: "http://localhost:8080".to_string(),
             owners: vec![],
@@ -651,7 +762,7 @@ mod tests {
 
         // Test invalid client mTLS configuration (missing client CA)
         let invalid_request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
-            service_id: 2,
+            service_id: 1,
             api_key_prefix: "test".to_string(),
             upstream_url: "http://localhost:8080".to_string(),
             owners: vec![],
@@ -798,5 +909,87 @@ mod tests {
             .update_blueprint_service_tls_profile(disable_request)
             .await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_service_id_pinning() {
+        let tmp_dir = tempdir().unwrap();
+        let db = RocksDb::open(tmp_dir.path(), &RocksDbConfig::default()).unwrap();
+        let service = BridgeService::new(tokio::sync::oneshot::channel().0, db);
+
+        // Register service_id=1
+        let request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 1,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: None,
+        });
+        assert!(
+            service
+                .register_blueprint_service_proxy(request)
+                .await
+                .is_ok()
+        );
+
+        // Try to register service_id=2 on the same bridge - should be rejected (pinned to 1)
+        let request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 2,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:9090".to_string(),
+            owners: vec![],
+            tls_profile: None,
+        });
+        let result = service.register_blueprint_service_proxy(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn test_cross_bridge_hijack_protection() {
+        let tmp_dir = tempdir().unwrap();
+        let db = RocksDb::open(tmp_dir.path(), &RocksDbConfig::default()).unwrap();
+
+        // Bridge A registers service_id=1
+        let bridge_a = BridgeService::new(tokio::sync::oneshot::channel().0, db.clone());
+        let request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 1,
+            api_key_prefix: "test".to_string(),
+            upstream_url: "http://localhost:8080".to_string(),
+            owners: vec![],
+            tls_profile: None,
+        });
+        assert!(
+            bridge_a
+                .register_blueprint_service_proxy(request)
+                .await
+                .is_ok()
+        );
+
+        // Bridge B (different instance, same DB) tries to register service_id=1 - should be rejected
+        let bridge_b = BridgeService::new(tokio::sync::oneshot::channel().0, db);
+        let request = tonic::Request::new(RegisterBlueprintServiceProxyRequest {
+            service_id: 1,
+            api_key_prefix: "evil".to_string(),
+            upstream_url: "http://attacker:9090".to_string(),
+            owners: vec![],
+            tls_profile: None,
+        });
+        let result = bridge_b.register_blueprint_service_proxy(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::AlreadyExists);
+    }
+
+    #[tokio::test]
+    async fn test_unregister_requires_registration() {
+        let tmp_dir = tempdir().unwrap();
+        let db = RocksDb::open(tmp_dir.path(), &RocksDbConfig::default()).unwrap();
+        let service = BridgeService::new(tokio::sync::oneshot::channel().0, db);
+
+        // Try to unregister without having registered - should fail
+        let request = tonic::Request::new(UnregisterBlueprintServiceProxyRequest { service_id: 1 });
+        let result = service.unregister_blueprint_service_proxy(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::FailedPrecondition);
     }
 }

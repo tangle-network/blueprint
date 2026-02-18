@@ -122,7 +122,7 @@ async fn setup_runner_test(test_name: &str) -> Result<Option<RunnerTestHarness>>
     let bridge_db_path = bridge_runtime.join("auth-db");
     let auth_db = RocksDb::open(&bridge_db_path, &RocksDbConfig::default())
         .context("failed to open bridge db")?;
-    let bridge = Bridge::new(bridge_runtime, String::from("runner"), auth_db, true);
+    let bridge = Bridge::new(bridge_runtime, String::from("runner"), auth_db, true, None);
     let bridge_socket_path = bridge.base_socket_path();
     let (bridge_handle, _bridge_alive) = bridge.spawn()?;
 
