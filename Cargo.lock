@@ -1049,6 +1049,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures",
+ "password-hash",
+]
+
+[[package]]
 name = "ark-bls12-377"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2993,8 +3005,10 @@ dependencies = [
 name = "blueprint-crypto-hashing"
 version = "0.1.0-alpha.5"
 dependencies = [
+ "argon2",
  "blake3",
  "blueprint-std",
+ "hkdf",
  "sha2 0.10.9",
  "sha3",
 ]
