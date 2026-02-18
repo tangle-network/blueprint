@@ -148,12 +148,18 @@ log_success "Rust toolchain updated to 1.88"
 # Update to use local SDK
 log_info "Updating Cargo.toml to use local SDK..."
 if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s|blueprint-sdk = { git = \"https://github.com/tangle-network/blueprint\", branch = \"main\"|blueprint-sdk = { path = \"$BLUEPRINT_SDK_ABS/crates/sdk\"|" svc-test-blueprint-bin/Cargo.toml 2>/dev/null || true
     sed -i '' "s|blueprint-sdk = { git = \"https://github.com/tangle-network/blueprint\", branch = \"v2\"|blueprint-sdk = { path = \"$BLUEPRINT_SDK_ABS/crates/sdk\"|" svc-test-blueprint-bin/Cargo.toml 2>/dev/null || true
+    sed -i '' "s|blueprint-sdk = { git = \"https://github.com/tangle-network/blueprint\", branch = \"main\"|blueprint-sdk = { path = \"$BLUEPRINT_SDK_ABS/crates/sdk\"|" svc-test-blueprint-lib/Cargo.toml 2>/dev/null || true
     sed -i '' "s|blueprint-sdk = { git = \"https://github.com/tangle-network/blueprint\", branch = \"v2\"|blueprint-sdk = { path = \"$BLUEPRINT_SDK_ABS/crates/sdk\"|" svc-test-blueprint-lib/Cargo.toml 2>/dev/null || true
+    sed -i '' "s|blueprint-anvil-testing-utils = { git = \"https://github.com/tangle-network/blueprint\", branch = \"main\" }|blueprint-anvil-testing-utils = { path = \"$BLUEPRINT_SDK_ABS/crates/testing-utils/anvil\" }|" svc-test-blueprint-lib/Cargo.toml 2>/dev/null || true
     sed -i '' "s|blueprint-anvil-testing-utils = { git = \"https://github.com/tangle-network/blueprint\", branch = \"v2\" }|blueprint-anvil-testing-utils = { path = \"$BLUEPRINT_SDK_ABS/crates/testing-utils/anvil\" }|" svc-test-blueprint-lib/Cargo.toml 2>/dev/null || true
 else
+    sed -i "s|blueprint-sdk = { git = \"https://github.com/tangle-network/blueprint\", branch = \"main\"|blueprint-sdk = { path = \"$BLUEPRINT_SDK_ABS/crates/sdk\"|" svc-test-blueprint-bin/Cargo.toml 2>/dev/null || true
     sed -i "s|blueprint-sdk = { git = \"https://github.com/tangle-network/blueprint\", branch = \"v2\"|blueprint-sdk = { path = \"$BLUEPRINT_SDK_ABS/crates/sdk\"|" svc-test-blueprint-bin/Cargo.toml 2>/dev/null || true
+    sed -i "s|blueprint-sdk = { git = \"https://github.com/tangle-network/blueprint\", branch = \"main\"|blueprint-sdk = { path = \"$BLUEPRINT_SDK_ABS/crates/sdk\"|" svc-test-blueprint-lib/Cargo.toml 2>/dev/null || true
     sed -i "s|blueprint-sdk = { git = \"https://github.com/tangle-network/blueprint\", branch = \"v2\"|blueprint-sdk = { path = \"$BLUEPRINT_SDK_ABS/crates/sdk\"|" svc-test-blueprint-lib/Cargo.toml 2>/dev/null || true
+    sed -i "s|blueprint-anvil-testing-utils = { git = \"https://github.com/tangle-network/blueprint\", branch = \"main\" }|blueprint-anvil-testing-utils = { path = \"$BLUEPRINT_SDK_ABS/crates/testing-utils/anvil\" }|" svc-test-blueprint-lib/Cargo.toml 2>/dev/null || true
     sed -i "s|blueprint-anvil-testing-utils = { git = \"https://github.com/tangle-network/blueprint\", branch = \"v2\" }|blueprint-anvil-testing-utils = { path = \"$BLUEPRINT_SDK_ABS/crates/testing-utils/anvil\" }|" svc-test-blueprint-lib/Cargo.toml 2>/dev/null || true
 fi
 log_success "Cargo.toml updated to use local SDK"
