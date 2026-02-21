@@ -12,6 +12,17 @@ service PricingEngine {
   rpc GetJobPrice (GetJobPriceRequest) returns (GetJobPriceResponse);
 }
 
+// Pricing model hint — matches on-chain Types.PricingModel.
+// Tells the pricing engine which computation to use.
+enum PricingModelHint {
+  // Default: resource-based pricing (count * rate * ttl * block_time)
+  PAY_ONCE = 0;
+  // Flat subscription rate per billing interval
+  SUBSCRIPTION = 1;
+  // Flat event rate per job/event
+  EVENT_DRIVEN = 2;
+}
+
 // Asset type definition
 enum AssetType {
   CUSTOM = 0;
@@ -60,6 +71,10 @@ message GetPriceRequest {
   AssetSecurityRequirements security_requirements = 5;
   // Timestamp used for generating the challenge
   uint64 challenge_timestamp = 6;
+  // Pricing model hint — when SUBSCRIPTION, the engine returns a flat
+  // subscription rate instead of computing from resources and TTL.
+  // Defaults to PAY_ONCE (0) for backwards compatibility.
+  PricingModelHint pricing_model = 7;
 }
 
 // Resource requirement for a specific resource type

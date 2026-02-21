@@ -891,6 +891,7 @@ mod evm_listener_tests {
                     timestamp: chrono::Utc::now().timestamp() as u64,
                     expiry: chrono::Utc::now().timestamp() as u64 + 3600,
                     securityCommitments: vec![].into(),
+                    resourceCommitments: vec![].into(),
                 },
                 signature: Bytes::from(vec![0u8; 65]), // Invalid signature
                 operator: Address::ZERO,
@@ -958,6 +959,7 @@ mod evm_listener_tests {
                     timestamp: now - 7200, // 2 hours ago
                     expiry: now - 3600,    // Expired 1 hour ago
                     securityCommitments: vec![].into(),
+                    resourceCommitments: vec![].into(),
                 },
                 signature: Bytes::from(vec![0u8; 65]),
                 operator: Address::ZERO,
@@ -1115,6 +1117,7 @@ mod evm_listener_tests {
                     timestamp: chrono::Utc::now().timestamp() as u64,
                     expiry: chrono::Utc::now().timestamp() as u64 + 3600,
                     securityCommitments: vec![].into(),
+                    resourceCommitments: vec![].into(),
                 },
                 signature: Bytes::from(vec![0u8; 65]),
                 operator: Address::ZERO,
@@ -1443,6 +1446,37 @@ mod evm_listener_tests {
 
         // Scale total cost (from float to U256 with 18 decimals)
         let total_cost_scaled = (quote_details.total_cost_rate * 1e18) as u128;
+        let resource_commitments = quote_details
+            .resources
+            .iter()
+            .filter_map(|resource| match resource.kind.to_uppercase().as_str() {
+                "CPU" => Some(ITangleServicesTypes::ResourceCommitment {
+                    kind: 0,
+                    count: resource.count,
+                }),
+                "MEMORYMB" => Some(ITangleServicesTypes::ResourceCommitment {
+                    kind: 1,
+                    count: resource.count,
+                }),
+                "STORAGEMB" => Some(ITangleServicesTypes::ResourceCommitment {
+                    kind: 2,
+                    count: resource.count,
+                }),
+                "NETWORKEGRESSMB" => Some(ITangleServicesTypes::ResourceCommitment {
+                    kind: 3,
+                    count: resource.count,
+                }),
+                "NETWORKINGRESSMB" => Some(ITangleServicesTypes::ResourceCommitment {
+                    kind: 4,
+                    count: resource.count,
+                }),
+                "GPU" => Some(ITangleServicesTypes::ResourceCommitment {
+                    kind: 5,
+                    count: resource.count,
+                }),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
 
         let details = ITangleServicesTypes::QuoteDetails {
             blueprintId: quote_details.blueprint_id,
@@ -1451,6 +1485,7 @@ mod evm_listener_tests {
             timestamp: quote_details.timestamp,
             expiry: quote_details.expiry,
             securityCommitments: security_commitments.into(),
+            resourceCommitments: resource_commitments.into(),
         };
 
         let operator_addr = Address::from_slice(&response.operator_id);

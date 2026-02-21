@@ -3259,6 +3259,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-crypto",
  "blueprint-eigenlayer-extra",
+ "blueprint-faas",
  "blueprint-keystore",
  "blueprint-manager-bridge",
  "blueprint-pricing-engine",
@@ -13674,9 +13675,9 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bindings"
-version = "0.10.0"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e6962f87d3167a91f04623b79aac6cfaed814768923cd63947642ac3ab1fce7"
+checksum = "7f4174222585d5b012f1be3ac51d9e44eee23ca9f1968838ae9dcdd4e5324ca1"
 dependencies = [
  "alloy",
  "alloy-contract",

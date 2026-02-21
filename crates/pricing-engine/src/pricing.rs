@@ -1,5 +1,5 @@
 use crate::benchmark::BenchmarkProfile;
-use crate::error::Result;
+use crate::error::{PricingError, Result};
 use crate::pricing_engine::AssetSecurityRequirements;
 use crate::types::ResourceUnit;
 use rust_decimal::Decimal;
@@ -32,6 +32,18 @@ pub struct PriceModel {
     pub benchmark_profile: Option<BenchmarkProfile>,
 }
 
+/// Subscription pricing configuration for a blueprint.
+/// Used when `PricingModelHint::SUBSCRIPTION` — returns a flat rate per interval.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SubscriptionPricing {
+    /// Cost per billing interval (same scale as resource pricing, pre-10^9 scaling)
+    pub subscription_rate: Decimal,
+    /// Billing interval in seconds (e.g. 86400 = daily, 604800 = weekly)
+    pub subscription_interval: u64,
+    /// Per-event charge (for EVENT_DRIVEN pricing)
+    pub event_rate: Decimal,
+}
+
 /// Function that applies pricing adjustments based on the base cost (price * count)
 fn calculate_base_resource_cost(resource_count: u64, resource_price_rate: Decimal) -> Decimal {
     // We multiply the resource count by the price rate
@@ -47,7 +59,7 @@ fn calculate_ttl_price_adjustment(time_blocks: u64) -> Decimal {
 
 /// Function that applies security requirement adjustments to the cost
 fn calculate_security_rate_adjustment(
-    _security_requirements: &Option<AssetSecurityRequirements>,
+    _security_requirements: Option<&AssetSecurityRequirements>,
 ) -> Decimal {
     // TODO: Implement security requirement adjustments
     Decimal::ONE
@@ -59,13 +71,42 @@ pub fn calculate_resource_price(
     count: u64,
     price_per_unit_rate: Decimal,
     ttl_blocks: u64,
-    security_requirements: Option<AssetSecurityRequirements>,
+    security_requirements: Option<&AssetSecurityRequirements>,
 ) -> Decimal {
     let adjusted_base_cost = calculate_base_resource_cost(count, price_per_unit_rate);
     let adjusted_time_cost = calculate_ttl_price_adjustment(ttl_blocks);
-    let security_factor = calculate_security_rate_adjustment(&security_requirements);
+    let security_factor = calculate_security_rate_adjustment(security_requirements);
 
     adjusted_base_cost * adjusted_time_cost * security_factor
+}
+
+/// Calculate the price for a subscription-based blueprint.
+/// Returns a flat rate per billing interval, ignoring resource usage and TTL.
+pub fn calculate_subscription_price(
+    config: &SubscriptionPricing,
+    security_requirements: Option<&AssetSecurityRequirements>,
+) -> PriceModel {
+    let security_factor = calculate_security_rate_adjustment(security_requirements);
+    PriceModel {
+        resources: vec![],
+        total_cost: config.subscription_rate * security_factor,
+        benchmark_profile: None,
+    }
+}
+
+/// Calculate the price for an event-driven blueprint.
+/// Returns the per-event rate from the subscription config.
+pub fn calculate_event_price(
+    config: &SubscriptionPricing,
+    security_requirements: Option<&AssetSecurityRequirements>,
+) -> PriceModel {
+    let security_factor = calculate_security_rate_adjustment(security_requirements);
+    let rate = config.event_rate;
+    PriceModel {
+        resources: vec![],
+        total_cost: rate * security_factor,
+        benchmark_profile: None,
+    }
 }
 
 /// Calculates a price based on benchmark results and configuration.
@@ -74,7 +115,7 @@ pub fn calculate_price(
     pricing_config: &HashMap<Option<u64>, Vec<ResourcePricing>>,
     blueprint_id: Option<u64>,
     ttl_blocks: u64,
-    security_requirements: Option<AssetSecurityRequirements>,
+    security_requirements: Option<&AssetSecurityRequirements>,
 ) -> Result<PriceModel> {
     let mut resources = Vec::new();
     let mut total_cost = Decimal::ZERO;
@@ -96,168 +137,49 @@ pub fn calculate_price(
         resource_price_map.insert(resource.kind.clone(), resource.price_per_unit_rate);
     }
 
-    // CPU pricing
-    if let Some(cpu_details) = &profile.cpu_details {
-        // Round up to nearest integer for CPU cores
-        let cpu_count = cpu_details.avg_cores_used.ceil() as u64;
-        if cpu_count > 0 {
-            // Get the price per CPU core from the configuration or use a default
-            let price_per_unit = resource_price_map
-                .get(&ResourceUnit::CPU)
-                .cloned()
-                .unwrap_or(Decimal::ZERO);
-
-            let adjusted_price = calculate_resource_price(
-                cpu_count,
-                price_per_unit,
-                ttl_blocks,
-                security_requirements.clone(),
-            );
-
+    // Helper: price a resource if it has a configured rate, skip otherwise.
+    // Unconfigured resources are omitted rather than priced at $0.
+    let mut price_resource = |kind: ResourceUnit, count: u64| {
+        if count == 0 {
+            return;
+        }
+        if let Some(&price_per_unit) = resource_price_map.get(&kind) {
+            let adjusted_price =
+                calculate_resource_price(count, price_per_unit, ttl_blocks, security_requirements);
             resources.push(ResourcePricing {
-                kind: ResourceUnit::CPU,
-                count: cpu_count,
+                kind,
+                count,
                 price_per_unit_rate: price_per_unit,
             });
-
             total_cost += adjusted_price;
         }
+    };
+
+    if let Some(cpu) = &profile.cpu_details {
+        price_resource(ResourceUnit::CPU, cpu.avg_cores_used.ceil() as u64);
     }
-
-    // Memory pricing
-    if let Some(memory_details) = &profile.memory_details {
-        // Round up to nearest MB
-        let memory_mb = memory_details.avg_memory_mb.ceil() as u64;
-        if memory_mb > 0 {
-            // Get the price per MB from the configuration or use a default
-            let price_per_unit = resource_price_map
-                .get(&ResourceUnit::MemoryMB)
-                .cloned()
-                .unwrap_or(Decimal::ZERO);
-
-            let adjusted_price = calculate_resource_price(
-                memory_mb,
-                price_per_unit,
-                ttl_blocks,
-                security_requirements.clone(),
-            );
-
-            resources.push(ResourcePricing {
-                kind: ResourceUnit::MemoryMB,
-                count: memory_mb,
-                price_per_unit_rate: price_per_unit,
-            });
-
-            total_cost += adjusted_price;
-        }
+    if let Some(mem) = &profile.memory_details {
+        price_resource(ResourceUnit::MemoryMB, mem.avg_memory_mb.ceil() as u64);
     }
-
-    // Storage pricing
-    if let Some(storage_details) = &profile.storage_details {
-        // Convert GB to MB and round up
-        let storage_mb = (storage_details.storage_available_gb * 1024.0).ceil() as u64;
-        if storage_mb > 0 {
-            // Get the price per MB from the configuration or use a default
-            let price_per_unit = resource_price_map
-                .get(&ResourceUnit::StorageMB)
-                .cloned()
-                .unwrap_or(Decimal::ZERO);
-
-            let adjusted_price = calculate_resource_price(
-                storage_mb,
-                price_per_unit,
-                ttl_blocks,
-                security_requirements.clone(),
-            );
-
-            resources.push(ResourcePricing {
-                kind: ResourceUnit::StorageMB,
-                count: storage_mb,
-                price_per_unit_rate: price_per_unit,
-            });
-
-            total_cost += adjusted_price;
-        }
+    if let Some(storage) = &profile.storage_details {
+        price_resource(
+            ResourceUnit::StorageMB,
+            (storage.storage_available_gb * 1024.0).ceil() as u64,
+        );
     }
-
-    // Network egress pricing
-    if let Some(network_details) = &profile.network_details {
-        // Network egress (outbound traffic)
-        let egress_mb = network_details.network_tx_mb.ceil() as u64;
-        if egress_mb > 0 {
-            // Get the price per MB from the configuration or use a default
-            let price_per_unit = resource_price_map
-                .get(&ResourceUnit::NetworkEgressMB)
-                .cloned()
-                .unwrap_or(Decimal::ZERO);
-
-            let adjusted_price = calculate_resource_price(
-                egress_mb,
-                price_per_unit,
-                ttl_blocks,
-                security_requirements.clone(),
-            );
-
-            resources.push(ResourcePricing {
-                kind: ResourceUnit::NetworkEgressMB,
-                count: egress_mb,
-                price_per_unit_rate: price_per_unit,
-            });
-
-            total_cost += adjusted_price;
-        }
+    if let Some(net) = &profile.network_details {
+        price_resource(
+            ResourceUnit::NetworkEgressMB,
+            net.network_tx_mb.ceil() as u64,
+        );
+        price_resource(
+            ResourceUnit::NetworkIngressMB,
+            net.network_rx_mb.ceil() as u64,
+        );
     }
-
-    // Network ingress pricing
-    if let Some(network_details) = &profile.network_details {
-        // Network ingress (inbound traffic)
-        let ingress_mb = network_details.network_rx_mb.ceil() as u64;
-        if ingress_mb > 0 {
-            // Get the price per MB from the configuration or use a default
-            let price_per_unit = resource_price_map
-                .get(&ResourceUnit::NetworkIngressMB)
-                .cloned()
-                .unwrap_or(Decimal::ZERO);
-
-            let adjusted_price = calculate_resource_price(
-                ingress_mb,
-                price_per_unit,
-                ttl_blocks,
-                security_requirements.clone(),
-            );
-
-            resources.push(ResourcePricing {
-                kind: ResourceUnit::NetworkIngressMB,
-                count: ingress_mb,
-                price_per_unit_rate: price_per_unit,
-            });
-
-            total_cost += adjusted_price;
-        }
-    }
-
-    // GPU pricing
-    if let Some(gpu_details) = &profile.gpu_details {
-        if gpu_details.gpu_available {
-            // Get the price per GPU unit from the configuration or use a default
-            let price_per_unit = resource_price_map
-                .get(&ResourceUnit::GPU)
-                .cloned()
-                .unwrap_or(Decimal::ZERO);
-
-            let adjusted_price = calculate_resource_price(
-                1,
-                price_per_unit,
-                ttl_blocks,
-                security_requirements.clone(),
-            );
-
-            resources.push(ResourcePricing {
-                kind: ResourceUnit::GPU,
-                count: 1, // TODO: Support multiple GPUs
-                price_per_unit_rate: price_per_unit,
-            });
-            total_cost += adjusted_price;
+    if let Some(gpu) = &profile.gpu_details {
+        if gpu.gpu_available {
+            price_resource(ResourceUnit::GPU, 1);
         }
     }
 
@@ -352,21 +274,30 @@ pub fn load_pricing_from_toml(content: &str) -> Result<HashMap<Option<u64>, Vec<
                         continue; // Skip if kind is missing
                     };
 
-                    // Extract count
+                    // Extract count (safe i64 → u64)
                     let count = resource_table
                         .get("count")
                         .and_then(|c| c.as_integer())
-                        .unwrap_or(1) as u64;
+                        .unwrap_or(1);
+                    let count = u64::try_from(count).map_err(|_| {
+                        PricingError::Config(format!(
+                            "Negative count {count} for resource {kind:?}"
+                        ))
+                    })?;
 
-                    // Extract price per unit rate as Decimal
+                    // Extract price per unit rate as Decimal (required)
                     let price_per_unit_rate = resource_table
                         .get("price_per_unit_rate")
                         .and_then(|p| {
                             p.as_float()
-                                .map(|f| Decimal::try_from(f).unwrap_or(Decimal::ZERO))
+                                .and_then(|f| Decimal::try_from(f).ok())
                                 .or_else(|| p.as_integer().map(Decimal::from))
                         })
-                        .unwrap_or(Decimal::ZERO);
+                        .ok_or_else(|| {
+                            PricingError::Config(format!(
+                                "Missing or invalid price_per_unit_rate for resource {kind:?}"
+                            ))
+                        })?;
 
                     default_resources.push(ResourcePricing {
                         kind,
@@ -403,21 +334,30 @@ pub fn load_pricing_from_toml(content: &str) -> Result<HashMap<Option<u64>, Vec<
                             continue; // Skip if kind is missing
                         };
 
-                        // Extract count
+                        // Extract count (safe i64 → u64)
                         let count = resource_table
                             .get("count")
                             .and_then(|c| c.as_integer())
-                            .unwrap_or(1) as u64;
+                            .unwrap_or(1);
+                        let count = u64::try_from(count).map_err(|_| {
+                            PricingError::Config(format!(
+                                "Negative count {count} for resource {kind:?} in blueprint [{blueprint_id}]"
+                            ))
+                        })?;
 
-                        // Extract price per unit rate as Decimal
+                        // Extract price per unit rate as Decimal (required)
                         let price_per_unit_rate = resource_table
                             .get("price_per_unit_rate")
                             .and_then(|p| {
                                 p.as_float()
-                                    .map(|f| Decimal::try_from(f).unwrap_or(Decimal::ZERO))
+                                    .and_then(|f| Decimal::try_from(f).ok())
                                     .or_else(|| p.as_integer().map(Decimal::from))
                             })
-                            .unwrap_or(Decimal::ZERO);
+                            .ok_or_else(|| {
+                                PricingError::Config(format!(
+                                    "Missing or invalid price_per_unit_rate for resource {kind:?} in blueprint [{blueprint_id}]"
+                                ))
+                            })?;
 
                         blueprint_resources.push(ResourcePricing {
                             kind,
@@ -433,4 +373,102 @@ pub fn load_pricing_from_toml(content: &str) -> Result<HashMap<Option<u64>, Vec<
     }
 
     Ok(pricing)
+}
+
+/// Load subscription pricing from a pricing.toml file.
+///
+/// Sections with `pricing_model = "subscription"` are parsed for subscription rates.
+/// Supports `[default]` and `[<blueprint_id>]` sections.
+///
+/// ```toml
+/// [default]
+/// pricing_model = "subscription"
+/// subscription_rate = 0.001
+/// subscription_interval = 86400
+/// event_rate = 0.0001
+///
+/// [5]
+/// pricing_model = "subscription"
+/// subscription_rate = 0.005
+/// subscription_interval = 604800
+/// ```
+pub fn load_subscription_pricing_from_toml(
+    content: &str,
+) -> Result<HashMap<Option<u64>, SubscriptionPricing>> {
+    let parsed: toml::Value = toml::from_str(content)?;
+    let mut config = HashMap::new();
+
+    let table = match parsed.as_table() {
+        Some(t) => t,
+        None => return Ok(config),
+    };
+
+    for (key, value) in table {
+        let section = match value.as_table() {
+            Some(t) => t,
+            None => continue,
+        };
+
+        // Only parse sections with pricing_model = "subscription" or "event_driven"
+        let model = section
+            .get("pricing_model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if model != "subscription" && model != "event_driven" {
+            continue;
+        }
+
+        let subscription_rate = section
+            .get("subscription_rate")
+            .and_then(|v| {
+                v.as_float()
+                    .and_then(|f| Decimal::try_from(f).ok())
+                    .or_else(|| v.as_integer().map(Decimal::from))
+            })
+            .ok_or_else(|| {
+                PricingError::Config(format!(
+                    "Missing or invalid subscription_rate in section [{key}]"
+                ))
+            })?;
+
+        let subscription_interval = section
+            .get("subscription_interval")
+            .and_then(|v| v.as_integer())
+            .and_then(|i| u64::try_from(i).ok())
+            .ok_or_else(|| {
+                PricingError::Config(format!(
+                    "Missing or invalid subscription_interval in section [{key}]"
+                ))
+            })?;
+
+        let event_rate = section
+            .get("event_rate")
+            .and_then(|v| {
+                v.as_float()
+                    .and_then(|f| Decimal::try_from(f).ok())
+                    .or_else(|| v.as_integer().map(Decimal::from))
+            })
+            .ok_or_else(|| {
+                PricingError::Config(format!("Missing or invalid event_rate in section [{key}]"))
+            })?;
+
+        let pricing = SubscriptionPricing {
+            subscription_rate,
+            subscription_interval,
+            event_rate,
+        };
+
+        let bp_key = if key == "default" {
+            None
+        } else {
+            match key.parse::<u64>() {
+                Ok(id) => Some(id),
+                Err(_) => continue,
+            }
+        };
+
+        config.insert(bp_key, pricing);
+    }
+
+    Ok(config)
 }

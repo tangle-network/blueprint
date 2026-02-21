@@ -7,6 +7,7 @@ use rust_decimal::Decimal;
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
 use crate::pricing_engine::{self, asset::AssetType};
+use crate::types::ResourceUnit;
 use crate::utils::{decimal_to_scaled_amount, percent_to_bps};
 
 pub type BlueprintId = u64;
@@ -251,7 +252,7 @@ impl OperatorSigner {
         details: &crate::pricing_engine::JobQuoteDetails,
         proof_of_work: Vec<u8>,
     ) -> Result<SignedJobQuote> {
-        let digest = job_quote_digest_eip712(details, self.domain);
+        let digest = job_quote_digest_eip712(details, self.domain)?;
         let (signature, recovery_id) = self
             .keypair
             .0
@@ -271,20 +272,27 @@ impl OperatorSigner {
 /// Convert proto `JobQuoteDetails` (bytes price) → native `job_quote::JobQuoteDetails` (U256 price).
 fn proto_to_native_job_quote(
     details: &crate::pricing_engine::JobQuoteDetails,
-) -> jq::JobQuoteDetails {
+) -> Result<jq::JobQuoteDetails> {
     let price = if details.price.is_empty() {
         U256::ZERO
     } else {
         U256::from_be_slice(&details.price)
     };
 
-    jq::JobQuoteDetails {
+    let job_index = u8::try_from(details.job_index).map_err(|_| {
+        PricingError::Signing(format!(
+            "job_index {} exceeds u8 range (max 255)",
+            details.job_index
+        ))
+    })?;
+
+    Ok(jq::JobQuoteDetails {
         service_id: details.service_id,
-        job_index: details.job_index as u8,
+        job_index,
         price,
         timestamp: details.timestamp,
         expiry: details.expiry,
-    }
+    })
 }
 
 /// Convert this crate's `QuoteSigningDomain` to the canonical `job_quote::QuoteSigningDomain`.
@@ -301,9 +309,9 @@ fn to_jq_domain(domain: QuoteSigningDomain) -> jq::QuoteSigningDomain {
 pub fn job_quote_digest_eip712(
     details: &crate::pricing_engine::JobQuoteDetails,
     domain: QuoteSigningDomain,
-) -> [u8; 32] {
-    let native = proto_to_native_job_quote(details);
-    jq::job_quote_digest_eip712(&native, to_jq_domain(domain))
+) -> Result<[u8; 32]> {
+    let native = proto_to_native_job_quote(details)?;
+    Ok(jq::job_quote_digest_eip712(&native, to_jq_domain(domain)))
 }
 
 fn build_abi_quote_details(
@@ -315,6 +323,11 @@ fn build_abi_quote_details(
         .iter()
         .map(proto_commitment_to_abi)
         .collect::<Result<Vec<_>>>()?;
+    let resource_commitments = details
+        .resources
+        .iter()
+        .map(proto_resource_commitment_to_abi)
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(ITangleTypes::QuoteDetails {
         blueprintId: details.blueprint_id,
@@ -323,6 +336,7 @@ fn build_abi_quote_details(
         timestamp: details.timestamp,
         expiry: details.expiry,
         securityCommitments: security_commitments.into(),
+        resourceCommitments: resource_commitments.into(),
     })
 }
 
@@ -367,4 +381,33 @@ fn proto_asset_to_abi(asset: &pricing_engine::Asset) -> Result<ITangleTypes::Ass
             "Custom assets are not supported on Tangle EVM".to_string(),
         )),
     }
+}
+
+fn proto_resource_commitment_to_abi(
+    resource: &pricing_engine::ResourcePricing,
+) -> Result<ITangleTypes::ResourceCommitment> {
+    // Matches tnt-core Types.ResourceCommitment.kind:
+    // 0=CPU, 1=MemoryMB, 2=StorageMB, 3=NetworkEgressMB, 4=NetworkIngressMB, 5=GPU
+    let kind =
+        match resource.kind.parse::<ResourceUnit>().map_err(|_| {
+            PricingError::Signing(format!("Invalid resource kind: {}", resource.kind))
+        })? {
+            ResourceUnit::CPU => 0,
+            ResourceUnit::MemoryMB => 1,
+            ResourceUnit::StorageMB => 2,
+            ResourceUnit::NetworkEgressMB => 3,
+            ResourceUnit::NetworkIngressMB => 4,
+            ResourceUnit::GPU => 5,
+            _ => {
+                return Err(PricingError::Signing(format!(
+                    "Unsupported resource kind for tnt-core quote commitments: {}",
+                    resource.kind
+                )));
+            }
+        };
+
+    Ok(ITangleTypes::ResourceCommitment {
+        kind,
+        count: resource.count,
+    })
 }

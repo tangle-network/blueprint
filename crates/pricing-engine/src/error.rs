@@ -51,9 +51,6 @@ pub enum PricingError {
     #[error("HTTP error: {0}")]
     HttpError(String),
 
-    #[error("Configuration error: {0}")]
-    ConfigurationError(String),
-
     #[error("Other error: {0}")]
     Other(String),
 }
