@@ -10,7 +10,7 @@ Used with `createServiceFromQuotes()` on the Tangle contract. The operator quote
 
 ```
 Consumer → GetPrice(blueprint_id, ttl_blocks) → Operator
-Operator → signs QuoteDetails{totalCost, blueprintId, ttl, securityCommitments}
+Operator → signs QuoteDetails{totalCost, blueprintId, ttlBlocks, securityCommitments, resourceCommitments}
 Consumer → createServiceFromQuotes(blueprintId, [signedQuotes], config, callers, ttl)
 ```
 

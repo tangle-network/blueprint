@@ -66,72 +66,8 @@ impl core::str::FromStr for ResourceUnit {
             "INVOCATION" => Ok(ResourceUnit::Invocation),
             "EXECUTIONTIMEMS" => Ok(ResourceUnit::ExecutionTimeMS),
             "STORAGEIOPS" => Ok(ResourceUnit::StorageIOPS),
-            _ => Ok(ResourceUnit::Custom(s.to_string())),
+            _ => Err(ParseResourceUnitError),
         }
-    }
-}
-
-/// Represents a price with a value and currency/token
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Price {
-    /// Numerical value of the price (in the smallest unit of the token, e.g., microtoken)
-    pub value: u128,
-    /// Token or currency used for pricing (e.g., "TGL")
-    pub token: String,
-}
-
-impl Price {
-    /// Create a new price
-    pub fn new(value: u128, token: impl Into<String>) -> Self {
-        Self {
-            value,
-            token: token.into(),
-        }
-    }
-
-    /// Add another price to this one, assuming same token
-    pub fn add(&self, other: &Price) -> Result<Price, &'static str> {
-        if self.token != other.token {
-            return Err("Cannot add prices with different tokens");
-        }
-
-        Ok(Price {
-            value: self.value.saturating_add(other.value),
-            token: self.token.clone(),
-        })
-    }
-
-    /// Scale this price by a factor
-    pub fn scale(&self, factor: u128) -> Price {
-        Price {
-            value: self.value.saturating_mul(factor),
-            token: self.token.clone(),
-        }
-    }
-}
-
-impl core::fmt::Display for Price {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // Format to show as a decimal number with 6 decimal places (assuming microtoken)
-        let whole = self.value / 1_000_000;
-        let fractional = self.value % 1_000_000;
-        write!(f, "{}.{:06} {}", whole, fractional, self.token)
-    }
-}
-
-/// Resource requirement for a service
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceRequirement {
-    /// Type of resource
-    pub unit: ResourceUnit,
-    /// Quantity of the resource (in the smallest measurable unit)
-    pub quantity: u128,
-}
-
-impl ResourceRequirement {
-    /// Create a new resource requirement
-    pub fn new(unit: ResourceUnit, quantity: u128) -> Self {
-        Self { unit, quantity }
     }
 }
 

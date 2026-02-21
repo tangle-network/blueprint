@@ -6,7 +6,10 @@ use rust_decimal::Decimal;
 use rust_decimal::prelude::FromPrimitive;
 
 use crate::benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark_suite};
-use crate::pricing::{ResourcePricing, calculate_price};
+use crate::pricing::{
+    ResourcePricing, SubscriptionPricing, calculate_event_price, calculate_price,
+    calculate_subscription_price, load_subscription_pricing_from_toml,
+};
 use crate::types::ResourceUnit;
 
 // Helper function to create a test benchmark profile
@@ -592,4 +595,144 @@ fn test_pow_challenge_generation() {
         challenge_1, challenge_1_repeat,
         "Same inputs should produce the same challenge"
     );
+}
+
+// ── Subscription Pricing Tests ────────────────────────────────────────────
+
+#[test]
+fn test_calculate_subscription_price_basic() {
+    let config = SubscriptionPricing {
+        subscription_rate: Decimal::from_f64(0.001).unwrap(), // $0.001 per day
+        subscription_interval: 86400,
+        event_rate: Decimal::ZERO,
+    };
+
+    let model = calculate_subscription_price(&config, None);
+    assert_eq!(model.total_cost, Decimal::from_f64(0.001).unwrap());
+    assert!(
+        model.resources.is_empty(),
+        "subscription has no resource breakdown"
+    );
+    assert!(
+        model.benchmark_profile.is_none(),
+        "subscription needs no benchmark"
+    );
+}
+
+#[test]
+fn test_calculate_event_price_basic() {
+    let config = SubscriptionPricing {
+        subscription_rate: Decimal::from_f64(0.001).unwrap(),
+        subscription_interval: 86400,
+        event_rate: Decimal::from_f64(0.0001).unwrap(),
+    };
+
+    let model = calculate_event_price(&config, None);
+    assert_eq!(model.total_cost, Decimal::from_f64(0.0001).unwrap());
+    assert!(model.resources.is_empty());
+}
+
+#[test]
+fn test_calculate_event_price_zero_rate() {
+    let config = SubscriptionPricing {
+        subscription_rate: Decimal::from_f64(0.001).unwrap(),
+        subscription_interval: 86400,
+        event_rate: Decimal::ZERO,
+    };
+
+    let model = calculate_event_price(&config, None);
+    assert_eq!(model.total_cost, Decimal::ZERO);
+}
+
+#[test]
+fn test_subscription_pricing_toml_loading() {
+    let toml = r#"
+[default]
+pricing_model = "subscription"
+subscription_rate = 0.001
+subscription_interval = 86400
+event_rate = 0.0001
+
+[5]
+pricing_model = "subscription"
+subscription_rate = 0.005
+subscription_interval = 604800
+event_rate = 0.0005
+
+[99]
+resources = [
+    { kind = "CPU", count = 1, price_per_unit_rate = 0.001 }
+]
+"#;
+
+    let config = load_subscription_pricing_from_toml(toml).unwrap();
+
+    // Default section
+    let default = config.get(&None).expect("should have default");
+    assert_eq!(default.subscription_rate, Decimal::from_f64(0.001).unwrap());
+    assert_eq!(default.subscription_interval, 86400);
+    assert_eq!(default.event_rate, Decimal::from_f64(0.0001).unwrap());
+
+    // Blueprint 5 override
+    let bp5 = config.get(&Some(5)).expect("should have blueprint 5");
+    assert_eq!(bp5.subscription_rate, Decimal::from_f64(0.005).unwrap());
+    assert_eq!(bp5.subscription_interval, 604800);
+
+    // Blueprint 99 has no pricing_model = "subscription", should be absent
+    assert!(
+        !config.contains_key(&Some(99)),
+        "resource-only section should be skipped"
+    );
+}
+
+#[test]
+fn test_subscription_pricing_blueprint_override() {
+    let config_map = {
+        let mut m = HashMap::new();
+        m.insert(
+            None,
+            SubscriptionPricing {
+                subscription_rate: Decimal::from_f64(0.001).unwrap(),
+                subscription_interval: 86400,
+                event_rate: Decimal::ZERO,
+            },
+        );
+        m.insert(
+            Some(42),
+            SubscriptionPricing {
+                subscription_rate: Decimal::from_f64(0.01).unwrap(),
+                subscription_interval: 604800,
+                event_rate: Decimal::from_f64(0.002).unwrap(),
+            },
+        );
+        m
+    };
+
+    // Blueprint 42 should use its override
+    let bp42 = config_map
+        .get(&Some(42))
+        .or_else(|| config_map.get(&None))
+        .unwrap();
+    let model = calculate_subscription_price(bp42, None);
+    assert_eq!(model.total_cost, Decimal::from_f64(0.01).unwrap());
+
+    // Unknown blueprint 99 should fall back to default
+    let bp99 = config_map
+        .get(&Some(99))
+        .or_else(|| config_map.get(&None))
+        .unwrap();
+    let model = calculate_subscription_price(bp99, None);
+    assert_eq!(model.total_cost, Decimal::from_f64(0.001).unwrap());
+}
+
+#[test]
+fn test_subscription_pricing_empty_toml() {
+    let toml = r#"
+[default]
+resources = [
+    { kind = "CPU", count = 1, price_per_unit_rate = 0.001 }
+]
+"#;
+    let config = load_subscription_pricing_from_toml(toml).unwrap();
+    assert!(config.is_empty(), "no subscription sections → empty map");
 }
