@@ -378,7 +378,7 @@ time = { version = "0.3.41", default-features = false }
 chrono = { version = "0.4", default-features = false }
 
 # System & OS
-sysinfo = { version = "0.34.2", default-features = false }
+sysinfo = { version = "0.38.0", default-features = false }
 num_cpus = { version = "1.17", default-features = false }
 libc = { version = "0.2.175", default-features = false }
 
