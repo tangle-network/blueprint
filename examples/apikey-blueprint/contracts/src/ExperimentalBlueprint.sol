@@ -26,7 +26,7 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
         string resourceId,
         bytes32 indexed tenantHash,
         uint64 indexed serviceId,
-        uint64 indexed callId
+        uint64 callId
     );
 
     // Job IDs that correspond to Rust job constants
@@ -66,7 +66,7 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
         uint8 job,
         uint64 jobCallId,
         bytes calldata inputs
-    ) external payable override onlyFromMaster {
+    ) external payable override onlyFromTangle {
         // Track that this job call was received
         processedJobCalls[serviceId][jobCallId] = true;
 
@@ -105,17 +105,17 @@ contract ExperimentalBlueprint is BlueprintServiceManagerBase {
         uint64 serviceId,
         uint8 job,
         uint64 jobCallId,
-        ServiceOperators.OperatorPreferences calldata operator,
+        address operator,
         bytes calldata inputs,
         bytes calldata /* outputs */
-    ) external payable override onlyFromMaster {
+    ) external payable override onlyFromTangle {
         if (job == WRITE_RESOURCE_JOB_ID) {
             // Decode resource data from inputs
             (string memory resourceId, string memory data, string memory accountId) =
                 abi.decode(inputs, (string, string, string));
             require(bytes(accountId).length != 0, "Missing account input");
 
-            bytes32 tenantHash = keccak256(abi.encodePacked("tenant_", operator.ecdsaKey));
+            bytes32 tenantHash = keccak256(abi.encodePacked("tenant_", operator));
             bytes32 accountHash = _accountKey(accountId);
 
             // Track resource creation per tenant and account
