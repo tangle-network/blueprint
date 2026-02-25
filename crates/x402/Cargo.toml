@@ -40,7 +40,9 @@ serde_json = { workspace = true, features = ["std"] }
 toml = { workspace = true }
 
 # Crypto & blockchain
-alloy-primitives = { workspace = true }
+alloy-primitives = { workspace = true, features = ["k256"] }
+alloy-provider = { workspace = true }
+tnt-core-bindings = { workspace = true }
 rust_decimal = { workspace = true }
 
 # Error handling & logging

@@ -7,6 +7,17 @@
 bind_address = "127.0.0.1:0"
 facilitator_url = "https://facilitator.x402.org"
 quote_ttl_secs = 300
+default_invocation_mode = "disabled"
+
+[[job_policies]]
+service_id = 1
+job_index = 0
+invocation_mode = "public_paid"
+
+[[job_policies]]
+service_id = 1
+job_index = 1
+invocation_mode = "public_paid"
 
 # Accept USDC on Base.
 # 1 ETH = 3200 USDC, 2% markup (200 basis points).

@@ -5,6 +5,7 @@
 //! [`Stream<Item = Result<JobCall, BoxError>>`], which the runner consumes
 //! alongside other producers (e.g. `TangleProducer`).
 
+use alloy_primitives::Address;
 use blueprint_core::error::BoxError;
 use blueprint_core::job::call::Parts;
 use blueprint_core::metadata::{MetadataMap, MetadataValue};
@@ -27,6 +28,8 @@ pub const X402_ORIGIN_KEY: &str = "X-X402-ORIGIN";
 pub const X402_SERVICE_ID_KEY: &str = "X-TANGLE-SERVICE-ID";
 /// Metadata key for a synthetic call ID.
 pub const X402_CALL_ID_KEY: &str = "X-TANGLE-CALL-ID";
+/// Metadata key for caller address bytes (20-byte EVM address).
+pub const X402_CALLER_KEY: &str = "X-TANGLE-CALLER";
 
 /// A verified x402 payment ready to be converted into a [`JobCall`].
 #[derive(Debug, Clone)]
@@ -45,6 +48,8 @@ pub struct VerifiedPayment {
     pub payment_token: String,
     /// Synthetic call ID for tracking.
     pub call_id: u64,
+    /// Optional caller identity when policy mode is restricted.
+    pub caller: Option<Address>,
 }
 
 impl VerifiedPayment {
@@ -66,6 +71,12 @@ impl VerifiedPayment {
         );
         metadata.insert(X402_SERVICE_ID_KEY, MetadataValue::from(self.service_id));
         metadata.insert(X402_CALL_ID_KEY, MetadataValue::from(self.call_id));
+        if let Some(caller) = self.caller {
+            metadata.insert(
+                X402_CALLER_KEY,
+                MetadataValue::from(Bytes::copy_from_slice(caller.as_slice())),
+            );
+        }
 
         let parts = Parts::new(JobId::from(self.job_index as u64)).with_metadata(metadata);
 
@@ -133,6 +144,7 @@ mod tests {
             payment_network: "eip155:8453".into(),
             payment_token: "USDC".into(),
             call_id: 1,
+            caller: None,
         };
 
         tx.send(payment).unwrap();
@@ -155,6 +167,7 @@ mod tests {
             payment_network: "eip155:1".into(),
             payment_token: "USDC".into(),
             call_id: 99,
+            caller: None,
         };
 
         let call = payment.into_job_call();

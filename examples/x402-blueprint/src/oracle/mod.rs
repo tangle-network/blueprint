@@ -17,6 +17,8 @@
 //! data source on every call.
 
 use blueprint_x402::X402Config;
+#[cfg(test)]
+use blueprint_x402::config::X402InvocationMode;
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::fmt;
@@ -247,6 +249,8 @@ mod tests {
                 eip3009_name: None,
                 eip3009_version: None,
             }],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
             service_id: 0,
         };
 
