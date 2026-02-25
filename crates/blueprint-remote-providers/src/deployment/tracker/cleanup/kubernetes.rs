@@ -1,9 +1,9 @@
 //! Kubernetes cluster cleanup handlers
 
 use super::super::types::{CleanupHandler, DeploymentRecord};
-use crate::core::error::Result;
 #[cfg(feature = "aws-eks")]
 use crate::core::error::Error;
+use crate::core::error::Result;
 use blueprint_core::{info, warn};
 
 /// EKS cleanup
