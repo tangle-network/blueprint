@@ -418,39 +418,85 @@ pub fn load_subscription_pricing_from_toml(
             continue;
         }
 
-        let subscription_rate = section
-            .get("subscription_rate")
-            .and_then(|v| {
-                v.as_float()
-                    .and_then(|f| Decimal::try_from(f).ok())
-                    .or_else(|| v.as_integer().map(Decimal::from))
-            })
-            .ok_or_else(|| {
-                PricingError::Config(format!(
-                    "Missing or invalid subscription_rate in section [{key}]"
-                ))
-            })?;
+        let parse_decimal_field = |field: &str| -> Result<Option<Decimal>> {
+            let Some(v) = section.get(field) else {
+                return Ok(None);
+            };
+            let dec = v
+                .as_float()
+                .and_then(|f| Decimal::try_from(f).ok())
+                .or_else(|| v.as_integer().map(Decimal::from))
+                .ok_or_else(|| {
+                    PricingError::Config(format!("Missing or invalid {field} in section [{key}]"))
+                })?;
+            if dec.is_sign_negative() {
+                return Err(PricingError::Config(format!(
+                    "{field} cannot be negative in section [{key}]"
+                )));
+            }
+            Ok(Some(dec))
+        };
 
-        let subscription_interval = section
-            .get("subscription_interval")
-            .and_then(|v| v.as_integer())
-            .and_then(|i| u64::try_from(i).ok())
-            .ok_or_else(|| {
-                PricingError::Config(format!(
-                    "Missing or invalid subscription_interval in section [{key}]"
-                ))
-            })?;
+        let parse_u64_field = |field: &str| -> Result<Option<u64>> {
+            let Some(v) = section.get(field) else {
+                return Ok(None);
+            };
+            let parsed = v
+                .as_integer()
+                .and_then(|i| u64::try_from(i).ok())
+                .ok_or_else(|| {
+                    PricingError::Config(format!("Missing or invalid {field} in section [{key}]"))
+                })?;
+            Ok(Some(parsed))
+        };
 
-        let event_rate = section
-            .get("event_rate")
-            .and_then(|v| {
-                v.as_float()
-                    .and_then(|f| Decimal::try_from(f).ok())
-                    .or_else(|| v.as_integer().map(Decimal::from))
-            })
-            .ok_or_else(|| {
-                PricingError::Config(format!("Missing or invalid event_rate in section [{key}]"))
-            })?;
+        let (subscription_rate, subscription_interval, event_rate) = match model {
+            "subscription" => {
+                let subscription_rate =
+                    parse_decimal_field("subscription_rate")?.ok_or_else(|| {
+                        PricingError::Config(format!(
+                            "Missing subscription_rate in section [{key}] for pricing_model=subscription"
+                        ))
+                    })?;
+                if subscription_rate <= Decimal::ZERO {
+                    return Err(PricingError::Config(format!(
+                        "subscription_rate must be > 0 in section [{key}]"
+                    )));
+                }
+
+                let subscription_interval = parse_u64_field("subscription_interval")?.ok_or_else(|| {
+                    PricingError::Config(format!(
+                        "Missing subscription_interval in section [{key}] for pricing_model=subscription"
+                    ))
+                })?;
+                if subscription_interval == 0 {
+                    return Err(PricingError::Config(format!(
+                        "subscription_interval must be > 0 in section [{key}]"
+                    )));
+                }
+
+                let event_rate = parse_decimal_field("event_rate")?.unwrap_or(Decimal::ZERO);
+                (subscription_rate, subscription_interval, event_rate)
+            }
+            "event_driven" => {
+                let event_rate = parse_decimal_field("event_rate")?.ok_or_else(|| {
+                    PricingError::Config(format!(
+                        "Missing event_rate in section [{key}] for pricing_model=event_driven"
+                    ))
+                })?;
+                if event_rate <= Decimal::ZERO {
+                    return Err(PricingError::Config(format!(
+                        "event_rate must be > 0 in section [{key}]"
+                    )));
+                }
+
+                let subscription_rate =
+                    parse_decimal_field("subscription_rate")?.unwrap_or(Decimal::ZERO);
+                let subscription_interval = parse_u64_field("subscription_interval")?.unwrap_or(0);
+                (subscription_rate, subscription_interval, event_rate)
+            }
+            _ => unreachable!("guarded above"),
+        };
 
         let pricing = SubscriptionPricing {
             subscription_rate,

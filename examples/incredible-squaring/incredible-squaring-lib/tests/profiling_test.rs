@@ -26,7 +26,7 @@ async fn test_profile_square_job() {
             let x = 12345u64;
 
             // Call the actual job
-            let result = square(TangleArg(x)).await;
+            let result = square(TangleArg((x,))).await;
 
             // Verify correctness
             assert_eq!(result.0, x * x);
@@ -184,7 +184,7 @@ async fn test_profiling_varying_inputs() {
             // Use a large input value to test varying workloads
             let x = 1_000_000u64;
 
-            let result = square(TangleArg(x)).await;
+            let result = square(TangleArg((x,))).await;
             assert_eq!(result.0, x.wrapping_mul(x));
 
             Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())

@@ -651,6 +651,8 @@ impl<T> From<T> for TangleArg<T> {
 impl<T, Ctx> FromJobCall<Ctx> for TangleArg<T>
 where
     T: SolValue + Send + From<<T::SolType as alloy_sol_types::SolType>::RustType>,
+    for<'a> <<T as SolValue>::SolType as alloy_sol_types::SolType>::Token<'a>:
+        alloy_sol_types::abi::TokenSeq<'a>,
     Ctx: Send + Sync,
 {
     type Rejection = AbiDecodeError;
@@ -666,8 +668,12 @@ where
         // while supporting the new --params-file (compact binary) format.
 
         if looks_like_abi_encoded(&body) {
-            // Data looks like ABI format, try ABI decode first
+            // Data looks like ABI format, try abi_decode (with outer offset) first
             if let Ok(value) = T::abi_decode(&body) {
+                return Ok(TangleArg(value));
+            }
+            // Try abi_decode_sequence (flat tuple encoding, no outer offset)
+            if let Ok(value) = T::abi_decode_sequence(&body) {
                 return Ok(TangleArg(value));
             }
             // ABI failed, try compact as fallback
@@ -679,8 +685,12 @@ where
             if let Ok(value) = try_decode_compact::<T>(&body) {
                 return Ok(TangleArg(value));
             }
-            // Compact failed, try ABI as fallback
+            // Compact failed, try ABI as fallback (with outer offset)
             if let Ok(value) = T::abi_decode(&body) {
+                return Ok(TangleArg(value));
+            }
+            // Try abi_decode_sequence (flat tuple encoding, no outer offset)
+            if let Ok(value) = T::abi_decode_sequence(&body) {
                 return Ok(TangleArg(value));
             }
         }

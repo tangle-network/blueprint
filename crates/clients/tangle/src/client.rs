@@ -540,12 +540,16 @@ impl TangleClient {
     }
 
     /// Get the next event (polls for new blocks)
+    ///
+    /// On the first call, scans from block 0 to catch up on any historical
+    /// events (e.g. ServiceActivated) that were emitted before the client
+    /// started.  Subsequent calls only scan new blocks.
     pub async fn next_event(&self) -> Option<TangleEvent> {
         loop {
             let current_block = self.block_number().await.ok()?;
 
             let mut last_block = self.block_subscription.lock().await;
-            let from_block = last_block.map(|b| b + 1).unwrap_or(current_block);
+            let from_block = last_block.map(|b| b + 1).unwrap_or(0);
 
             if from_block > current_block {
                 drop(last_block);

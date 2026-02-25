@@ -22,6 +22,7 @@
 //! - **Single**: 1 result completes the job
 //! - **Multi**: N results required (for redundancy/consensus)
 
+use blueprint_sdk::macros::debug_job;
 use blueprint_sdk::runner::BackgroundService;
 use blueprint_sdk::runner::error::RunnerError;
 use blueprint_sdk::tangle::TangleLayer;
@@ -79,7 +80,8 @@ pub const VERIFIED_XSQUARE_FAAS_JOB_ID: u8 = 4;
 /// # Returns
 ///
 /// Returns the square of the input value as ABI-encoded output
-pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+#[debug_job]
+pub async fn square(TangleArg((x,)): TangleArg<(u64,)>) -> TangleResult<u64> {
     let result = x * x;
     TangleResult(result)
 }
@@ -103,7 +105,8 @@ pub async fn square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
 /// # Returns
 ///
 /// Returns the square of the input value
-pub async fn square_faas(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+#[debug_job]
+pub async fn square_faas(TangleArg((x,)): TangleArg<(u64,)>) -> TangleResult<u64> {
     let result = x * x;
     TangleResult(result)
 }
@@ -128,7 +131,8 @@ pub async fn square_faas(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
 /// # Returns
 ///
 /// Returns the square of the input value
-pub async fn verified_square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+#[debug_job]
+pub async fn verified_square(TangleArg((x,)): TangleArg<(u64,)>) -> TangleResult<u64> {
     let result = x * x;
     TangleResult(result)
 }
@@ -153,7 +157,8 @@ pub async fn verified_square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> 
 /// # Returns
 ///
 /// Returns the square of the input value
-pub async fn consensus_square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+#[debug_job]
+pub async fn consensus_square(TangleArg((x,)): TangleArg<(u64,)>) -> TangleResult<u64> {
     let result = x * x;
     TangleResult(result)
 }
@@ -179,7 +184,8 @@ pub async fn consensus_square(TangleArg(x): TangleArg<u64>) -> TangleResult<u64>
 /// # Returns
 ///
 /// Returns the square of the input value
-pub async fn verified_square_faas(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+#[debug_job]
+pub async fn verified_square_faas(TangleArg((x,)): TangleArg<(u64,)>) -> TangleResult<u64> {
     let result = x * x;
     TangleResult(result)
 }

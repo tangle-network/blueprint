@@ -265,7 +265,7 @@ async fn test_result_submission_updates_job_state() -> Result<()> {
 // Job Handler
 // =============================================================================
 
-async fn multiply_job(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+async fn multiply_job(TangleArg((x,)): TangleArg<(u64,)>) -> TangleResult<u64> {
     TangleResult(x * 2)
 }
 

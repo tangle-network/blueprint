@@ -1,7 +1,7 @@
 //! Kubernetes cluster cleanup handlers
 
 use super::super::types::{CleanupHandler, DeploymentRecord};
-use crate::core::error::Result;
+use crate::core::error::{Error, Result};
 use blueprint_core::{info, warn};
 
 /// EKS cleanup
@@ -79,8 +79,7 @@ impl CleanupHandler for GkeCleanup {
                     warn!("GKE cluster cleanup not implemented - use gcloud CLI");
                 }
 
-                // Avoid unused variable warning
-                let _ = (provisioner, cluster_name);
+                let _ = (provisioner, region);
             }
         }
 

@@ -55,19 +55,19 @@ impl SimulatedOperator {
     /// Compute the square job result
     async fn compute_square(&self, input: u64) -> TangleResult<u64> {
         println!("Operator {} computing square({})", self.id, input);
-        square(TangleArg(input)).await
+        square(TangleArg((input,))).await
     }
 
     /// Compute the verified_square job result
     async fn compute_verified_square(&self, input: u64) -> TangleResult<u64> {
         println!("Operator {} computing verified_square({})", self.id, input);
-        verified_square(TangleArg(input)).await
+        verified_square(TangleArg((input,))).await
     }
 
     /// Compute the consensus_square job result
     async fn compute_consensus_square(&self, input: u64) -> TangleResult<u64> {
         println!("Operator {} computing consensus_square({})", self.id, input);
-        consensus_square(TangleArg(input)).await
+        consensus_square(TangleArg((input,))).await
     }
 }
 

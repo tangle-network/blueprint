@@ -80,6 +80,12 @@ let service = PricingEngineService::with_job_pricing(
 );
 ```
 
+To enable subscription/event-driven `GetPrice` requests, attach a subscription config:
+
+```rust
+let service = service.with_subscription_pricing(subscription_config);
+```
+
 ### Operator config (`operator.toml`)
 
 ```toml
@@ -150,7 +156,7 @@ verifyingContract: <tangle_proxy_address>
 
 **Service quotes** use `QUOTE_TYPEHASH`:
 ```
-QuoteDetails(uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,AssetSecurityCommitment[] securityCommitments)
+QuoteDetails(uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,AssetSecurityCommitment[] securityCommitments,ResourceCommitment[] resourceCommitments)
 ```
 
 **Job quotes** use `JOB_QUOTE_TYPEHASH`:

@@ -119,7 +119,7 @@ impl Service {
                 limits,
                 // TODO: !!! Actually configure the VM with resource limits
                 ServiceVmConfig {
-                    _id,
+                    id: _id,
                     ..Default::default()
                 },
                 &_blueprint_config.data_dir,

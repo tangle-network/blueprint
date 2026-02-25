@@ -160,7 +160,10 @@ impl Sink<JobResult> for TangleConsumer {
                     Poll::Ready(Ok(())) => {
                         *state = State::WaitingForResult;
                     }
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e.into())),
+                    Poll::Ready(Err(e)) => {
+                        *state = State::WaitingForResult;
+                        return Poll::Ready(Err(e.into()));
+                    }
                     Poll::Pending => return Poll::Pending,
                 },
             }

@@ -14,7 +14,7 @@ use tonic::transport::Channel;
 pub const XSQUARE_JOB_ID: u8 = 0;
 
 /// Minimal job handler used by the integration tests.
-pub async fn square(TangleArg(value): TangleArg<u64>) -> TangleResult<u64> {
+pub async fn square(TangleArg((value,)): TangleArg<(u64,)>) -> TangleResult<u64> {
     TangleResult(value * value)
 }
 

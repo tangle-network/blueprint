@@ -92,7 +92,7 @@ async fn test_square_function() -> Result<()> {
 
         // Call the square function with the extracted argument
         use blueprint_sdk::tangle::extract::{TangleArg, TangleResult};
-        let result: TangleResult<u64> = square(TangleArg(input)).await;
+        let result: TangleResult<u64> = square(TangleArg((input,))).await;
 
         // Verify the result
         assert_eq!(
@@ -129,13 +129,13 @@ async fn test_square_edge_cases() -> Result<()> {
     // Test maximum safe value that won't overflow
     // sqrt(u64::MAX) ≈ 4294967295.99, so max safe input is 4294967295
     let max_safe: u64 = 4294967295; // 2^32 - 1
-    let result: TangleResult<u64> = square(TangleArg(max_safe)).await;
+    let result: TangleResult<u64> = square(TangleArg((max_safe,))).await;
     assert_eq!(*result, max_safe * max_safe);
 
     // Test powers of 2
     for power in 0..16 {
         let input: u64 = 1 << power;
-        let result: TangleResult<u64> = square(TangleArg(input)).await;
+        let result: TangleResult<u64> = square(TangleArg((input,))).await;
         let expected = input * input;
         assert_eq!(*result, expected, "Square of 2^{} should be correct", power);
     }
@@ -155,9 +155,9 @@ async fn test_tangle_arg_extractor() -> Result<()> {
     let job_call = blueprint_sdk::JobCall::new(XSQUARE_JOB_ID, bytes::Bytes::from(encoded));
 
     // Extract using the TangleArg extractor
-    let extracted: TangleArg<u64> = TangleArg::from_job_call(job_call, &()).await?;
+    let extracted: TangleArg<(u64,)> = TangleArg::from_job_call(job_call, &()).await?;
 
-    assert_eq!(*extracted, 42);
+    assert_eq!(extracted.0.0, 42);
 
     Ok(())
 }
@@ -200,11 +200,11 @@ async fn test_full_job_flow() -> Result<()> {
         blueprint_sdk::JobCall::new(XSQUARE_JOB_ID, bytes::Bytes::from(abi_encoded_input));
 
     // 3. The router dispatches to the job function, which extracts the arg
-    let TangleArg(x): TangleArg<u64> = TangleArg::from_job_call(job_call, &()).await?;
+    let TangleArg((x,)): TangleArg<(u64,)> = TangleArg::from_job_call(job_call, &()).await?;
     assert_eq!(x, 7);
 
     // 4. The job function computes the result
-    let result: TangleResult<u64> = square(TangleArg(x)).await;
+    let result: TangleResult<u64> = square(TangleArg((x,))).await;
     assert_eq!(*result, 49);
 
     // 5. The result is converted to a JobResult with ABI-encoded body
@@ -251,7 +251,7 @@ async fn test_verified_square_function() -> Result<()> {
     let test_cases: Vec<(u64, u64)> = vec![(0, 0), (1, 1), (5, 25), (100, 10000)];
 
     for (input, expected) in test_cases {
-        let result: TangleResult<u64> = verified_square(TangleArg(input)).await;
+        let result: TangleResult<u64> = verified_square(TangleArg((input,))).await;
         assert_eq!(
             *result, expected,
             "Verified square of {} should be {}",
@@ -287,7 +287,7 @@ async fn test_consensus_square_function() -> Result<()> {
     let test_cases: Vec<(u64, u64)> = vec![(0, 0), (1, 1), (7, 49), (1000, 1000000)];
 
     for (input, expected) in test_cases {
-        let result: TangleResult<u64> = consensus_square(TangleArg(input)).await;
+        let result: TangleResult<u64> = consensus_square(TangleArg((input,))).await;
         assert_eq!(
             *result, expected,
             "Consensus square of {} should be {}",
@@ -326,8 +326,8 @@ async fn test_verified_square_job_flow() -> Result<()> {
         bytes::Bytes::from(abi_encoded_input.clone()),
     );
 
-    let TangleArg(x): TangleArg<u64> = TangleArg::from_job_call(job_call, &()).await?;
-    let result_op1: TangleResult<u64> = verified_square(TangleArg(x)).await;
+    let TangleArg((x,)): TangleArg<(u64,)> = TangleArg::from_job_call(job_call, &()).await?;
+    let result_op1: TangleResult<u64> = verified_square(TangleArg((x,))).await;
     assert_eq!(*result_op1, 64);
 
     // Simulate operator 2 processing (same input, same expected output)
@@ -336,8 +336,8 @@ async fn test_verified_square_job_flow() -> Result<()> {
         bytes::Bytes::from(abi_encoded_input),
     );
 
-    let TangleArg(x2): TangleArg<u64> = TangleArg::from_job_call(job_call_op2, &()).await?;
-    let result_op2: TangleResult<u64> = verified_square(TangleArg(x2)).await;
+    let TangleArg((x2,)): TangleArg<(u64,)> = TangleArg::from_job_call(job_call_op2, &()).await?;
+    let result_op2: TangleResult<u64> = verified_square(TangleArg((x2,))).await;
     assert_eq!(*result_op2, 64);
 
     // Both operators should produce identical results
@@ -367,24 +367,24 @@ async fn test_consensus_square_job_flow() -> Result<()> {
         CONSENSUS_XSQUARE_JOB_ID,
         bytes::Bytes::from(abi_encoded_input.clone()),
     );
-    let TangleArg(x1): TangleArg<u64> = TangleArg::from_job_call(job_call_1, &()).await?;
-    let result_op1: TangleResult<u64> = consensus_square(TangleArg(x1)).await;
+    let TangleArg((x1,)): TangleArg<(u64,)> = TangleArg::from_job_call(job_call_1, &()).await?;
+    let result_op1: TangleResult<u64> = consensus_square(TangleArg((x1,))).await;
 
     // Operator 2
     let job_call_2 = blueprint_sdk::JobCall::new(
         CONSENSUS_XSQUARE_JOB_ID,
         bytes::Bytes::from(abi_encoded_input.clone()),
     );
-    let TangleArg(x2): TangleArg<u64> = TangleArg::from_job_call(job_call_2, &()).await?;
-    let result_op2: TangleResult<u64> = consensus_square(TangleArg(x2)).await;
+    let TangleArg((x2,)): TangleArg<(u64,)> = TangleArg::from_job_call(job_call_2, &()).await?;
+    let result_op2: TangleResult<u64> = consensus_square(TangleArg((x2,))).await;
 
     // Operator 3
     let job_call_3 = blueprint_sdk::JobCall::new(
         CONSENSUS_XSQUARE_JOB_ID,
         bytes::Bytes::from(abi_encoded_input),
     );
-    let TangleArg(x3): TangleArg<u64> = TangleArg::from_job_call(job_call_3, &()).await?;
-    let result_op3: TangleResult<u64> = consensus_square(TangleArg(x3)).await;
+    let TangleArg((x3,)): TangleArg<(u64,)> = TangleArg::from_job_call(job_call_3, &()).await?;
+    let result_op3: TangleResult<u64> = consensus_square(TangleArg((x3,))).await;
 
     // All three operators should produce identical results
     assert_eq!(*result_op1, 81);
@@ -412,9 +412,9 @@ async fn test_all_jobs_consistent() -> Result<()> {
     let inputs = [0u64, 1, 5, 10, 100, 1000];
 
     for input in inputs {
-        let result_basic: TangleResult<u64> = square(TangleArg(input)).await;
-        let result_verified: TangleResult<u64> = verified_square(TangleArg(input)).await;
-        let result_consensus: TangleResult<u64> = consensus_square(TangleArg(input)).await;
+        let result_basic: TangleResult<u64> = square(TangleArg((input,))).await;
+        let result_verified: TangleResult<u64> = verified_square(TangleArg((input,))).await;
+        let result_consensus: TangleResult<u64> = consensus_square(TangleArg((input,))).await;
 
         let expected = input * input;
 
@@ -461,21 +461,21 @@ async fn test_aggregation_scenario() -> Result<()> {
     let expected_result: u64 = 36;
 
     // Job 0: Basic square - completes with 1 operator
-    let result: TangleResult<u64> = square(TangleArg(input)).await;
+    let result: TangleResult<u64> = square(TangleArg((input,))).await;
     assert_eq!(*result, expected_result);
     // Job complete after 1 result ✓
 
     // Job 1: Verified square - needs 2 operators
-    let result_v1: TangleResult<u64> = verified_square(TangleArg(input)).await;
-    let result_v2: TangleResult<u64> = verified_square(TangleArg(input)).await;
+    let result_v1: TangleResult<u64> = verified_square(TangleArg((input,))).await;
+    let result_v2: TangleResult<u64> = verified_square(TangleArg((input,))).await;
     assert_eq!(*result_v1, expected_result);
     assert_eq!(*result_v2, expected_result);
     // Job complete after 2 matching results ✓
 
     // Job 2: Consensus square - needs 3 operators
-    let result_c1: TangleResult<u64> = consensus_square(TangleArg(input)).await;
-    let result_c2: TangleResult<u64> = consensus_square(TangleArg(input)).await;
-    let result_c3: TangleResult<u64> = consensus_square(TangleArg(input)).await;
+    let result_c1: TangleResult<u64> = consensus_square(TangleArg((input,))).await;
+    let result_c2: TangleResult<u64> = consensus_square(TangleArg((input,))).await;
+    let result_c3: TangleResult<u64> = consensus_square(TangleArg((input,))).await;
     assert_eq!(*result_c1, expected_result);
     assert_eq!(*result_c2, expected_result);
     assert_eq!(*result_c3, expected_result);

@@ -2,7 +2,7 @@
 //!
 //! Fetches blueprint information from Tangle to determine deployment strategy.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// Blueprint metadata from chain.
@@ -22,6 +22,19 @@ pub struct JobProfile {
     pub p95_duration_ms: u64,
     pub stateful: bool,
     pub persistent_connections: bool,
+}
+
+#[cfg(feature = "tangle-client")]
+impl From<blueprint_profiling::JobProfile> for JobProfile {
+    fn from(profile: blueprint_profiling::JobProfile) -> Self {
+        Self {
+            avg_duration_ms: profile.avg_duration_ms,
+            peak_memory_mb: profile.peak_memory_mb,
+            p95_duration_ms: profile.p95_duration_ms,
+            stateful: profile.stateful,
+            persistent_connections: profile.persistent_connections,
+        }
+    }
 }
 
 impl JobProfile {
@@ -131,9 +144,10 @@ pub async fn fetch_blueprint_metadata(
 
 #[cfg(feature = "tangle-client")]
 async fn fetch_from_chain(blueprint_id: u64, rpc_url: Option<&str>) -> Result<BlueprintMetadata> {
-    use blueprint_tangle_client::ServicesClient;
+    use alloy_provider::ProviderBuilder;
+    use blueprint_client_tangle::contracts::ITangle;
 
-    let url = rpc_url.unwrap_or("ws://localhost:9944");
+    let url = rpc_url.unwrap_or("http://localhost:9944");
 
     tracing::debug!(
         "Fetching blueprint {} metadata from Tangle at {}",
@@ -141,110 +155,93 @@ async fn fetch_from_chain(blueprint_id: u64, rpc_url: Option<&str>) -> Result<Bl
         url
     );
 
-    let client = ServicesClient::new(url)
+    let provider = ProviderBuilder::new()
+        .connect(url)
         .await
         .map_err(|e| Error::Other(format!("Failed to connect to Tangle: {}", e)))?;
 
-    // Get latest block hash
-    let latest_block = client
-        .rpc_client()
-        .blocks()
-        .at_latest()
+    let contract_addr = std::env::var("TANGLE_CONTRACT")
+        .or_else(|_| std::env::var("TANGLE_CONTRACT_ADDRESS"))
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(|| {
+            Error::Other(
+                "Missing Tangle contract address. Set TANGLE_CONTRACT or TANGLE_CONTRACT_ADDRESS."
+                    .to_string(),
+            )
+        })?;
+
+    // Query blueprint definition for job metadata and profiling hints.
+    let contract = ITangle::new(contract_addr, &provider);
+    let definition = contract
+        .getBlueprintDefinition(blueprint_id)
+        .call()
         .await
-        .map_err(|e| Error::Other(format!("Failed to get latest block: {}", e)))?;
+        .map_err(|e| Error::Other(format!("Failed to query blueprint: {}", e)))?;
 
-    let block_hash = latest_block.hash();
-
-    // Query blueprint
-    let blueprint = client
-        .get_blueprint_by_id(block_hash.into(), blueprint_id)
-        .await
-        .map_err(|e| Error::Other(format!("Failed to query blueprint: {}", e)))?
-        .ok_or_else(|| Error::Other(format!("Blueprint {} not found", blueprint_id)))?;
-
-    let job_count = blueprint.jobs.0.len() as u32;
+    let job_count = definition.jobs.len() as u32;
 
     // Extract job profiles from ServiceMetadata
     // Priority: profiling_data field (after migration) > description field (temporary) > defaults
-    let job_profiles = {
-        // FUTURE: After chain migration adds profiling_data field, uncomment this:
-        /*
-        if let Some(profiling_data_bounded) = &blueprint.metadata.profiling_data {
-            // Convert BoundedString to &str
-            let profiling_data_str = std::str::from_utf8(&profiling_data_bounded.0)
-                .ok()
-                .unwrap_or("");
-
-            if !profiling_data_str.is_empty() {
-                // Decode base64-encoded compressed profiles
-                match decode_profiles_from_chain(profiling_data_str) {
-                    Ok(profiles) => {
-                        tracing::info!(
-                            "Loaded {} job profiles from chain metadata (profiling_data field)",
-                            profiles.iter().filter(|p| p.is_some()).count()
-                        );
-                        profiles
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to decode profiling data from chain: {}. Trying description field.",
-                            e
-                        );
-                        vec![None; job_count as usize]
-                    }
-                }
-            } else {
-                tracing::debug!("profiling_data field exists but is empty. Trying description field.");
-                vec![None; job_count as usize]
-            }
-        } else */
-        // TEMPORARY: Extract from description field until chain migration completes
-        if let Some(description_bounded) = &blueprint.metadata.description {
-            let description_str = std::str::from_utf8(&description_bounded.0)
-                .ok()
-                .unwrap_or("");
-
-            if blueprint_profiling::has_profiling_data(description_str) {
-                match blueprint_profiling::BlueprintProfiles::from_description_field(
-                    description_str,
-                ) {
-                    Some(Ok(profiles)) => {
-                        // Convert BlueprintProfiles to Vec<Option<JobProfile>>
-                        let max_job_id = profiles.jobs.keys().copied().max().unwrap_or(0);
-                        let mut result = vec![None; (max_job_id + 1).max(job_count) as usize];
-
-                        for (job_id, profile) in profiles.jobs {
-                            if (job_id as usize) < result.len() {
-                                result[job_id as usize] = Some(profile);
-                            }
-                        }
-
-                        tracing::info!(
-                            "Loaded {} job profiles from chain metadata (description field - temporary)",
-                            profiles.jobs.len()
-                        );
-                        result
-                    }
-                    Some(Err(e)) => {
-                        tracing::warn!(
-                            "Failed to decode profiling data from description field: {}. Using defaults.",
-                            e
-                        );
-                        vec![None; job_count as usize]
-                    }
-                    None => {
-                        tracing::debug!("No profiling data marker in description field");
-                        vec![None; job_count as usize]
-                    }
-                }
-            } else {
-                tracing::debug!("No profiling data in description field");
-                vec![None; job_count as usize]
-            }
-        } else {
-            tracing::debug!("No description field in chain metadata");
-            vec![None; job_count as usize]
+    let parse_description_profiles = || {
+        if !blueprint_profiling::has_profiling_data(definition.metadata.description.as_str()) {
+            tracing::debug!("No profiling data in chain metadata description");
+            return vec![None; job_count as usize];
         }
+
+        match blueprint_profiling::BlueprintProfiles::from_description_field(
+            definition.metadata.description.as_str(),
+        ) {
+            Some(Ok(profiles)) => {
+                let max_job_id = profiles.jobs.keys().copied().max().unwrap_or(0);
+                let profile_count = profiles.jobs.len();
+                let mut result = vec![None; (max_job_id + 1).max(job_count) as usize];
+
+                for (job_id, profile) in profiles.jobs {
+                    if (job_id as usize) < result.len() {
+                        result[job_id as usize] = Some(profile.into());
+                    }
+                }
+
+                tracing::info!(
+                    "Loaded {} job profiles from chain metadata (description field)",
+                    profile_count
+                );
+                result
+            }
+            Some(Err(e)) => {
+                tracing::warn!(
+                    "Failed to decode profiling data from description field: {}. Using defaults.",
+                    e
+                );
+                vec![None; job_count as usize]
+            }
+            None => {
+                tracing::debug!("No profiling data marker in description field");
+                vec![None; job_count as usize]
+            }
+        }
+    };
+
+    let job_profiles = if !definition.metadata.profilingData.is_empty() {
+        match decode_profiles_from_chain(definition.metadata.profilingData.as_str()) {
+            Ok(profiles) => {
+                tracing::info!(
+                    "Loaded {} job profiles from chain metadata (profilingData field)",
+                    profiles.iter().filter(|p| p.is_some()).count()
+                );
+                profiles
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to decode profilingData from chain: {}. Falling back to description metadata.",
+                    e
+                );
+                parse_description_profiles()
+            }
+        }
+    } else {
+        parse_description_profiles()
     };
 
     tracing::info!(

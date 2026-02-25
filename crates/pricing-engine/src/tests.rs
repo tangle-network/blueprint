@@ -686,6 +686,37 @@ resources = [
 }
 
 #[test]
+fn test_event_driven_pricing_toml_loading_without_subscription_fields() {
+    let toml = r#"
+[default]
+pricing_model = "event_driven"
+event_rate = 0.0002
+"#;
+
+    let config = load_subscription_pricing_from_toml(toml).unwrap();
+    let default = config
+        .get(&None)
+        .expect("should have default event-driven config");
+    assert_eq!(default.event_rate, Decimal::from_f64(0.0002).unwrap());
+    assert_eq!(default.subscription_rate, Decimal::ZERO);
+    assert_eq!(default.subscription_interval, 0);
+}
+
+#[test]
+fn test_event_driven_pricing_requires_event_rate() {
+    let toml = r#"
+[default]
+pricing_model = "event_driven"
+"#;
+
+    let err = load_subscription_pricing_from_toml(toml).unwrap_err();
+    assert!(
+        err.to_string().contains("Missing event_rate"),
+        "expected missing event_rate error, got: {err}"
+    );
+}
+
+#[test]
 fn test_subscription_pricing_blueprint_override() {
     let config_map = {
         let mut m = HashMap::new();

@@ -52,7 +52,6 @@ pub use signer::{OperatorId, OperatorSigner, SignableQuote, SignedJobQuote, Sign
 
 use blueprint_core::info;
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -95,10 +94,12 @@ pub async fn init_job_pricing_config(
 
 /// Load subscription pricing config from the same TOML file used for resource pricing.
 /// Sections with `pricing_model = "subscription"` are extracted.
-pub fn init_subscription_pricing_config(
+pub async fn init_subscription_pricing_config(
     config_path: impl AsRef<Path>,
 ) -> Result<SubscriptionPricingConfig> {
-    let content = fs::read_to_string(config_path.as_ref())?;
+    let content = tokio::fs::read_to_string(config_path.as_ref())
+        .await
+        .map_err(PricingError::Io)?;
     let config = pricing::load_subscription_pricing_from_toml(&content)?;
     if config.is_empty() {
         info!(

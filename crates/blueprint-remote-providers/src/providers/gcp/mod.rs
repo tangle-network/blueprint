@@ -3,8 +3,14 @@
 pub mod adapter;
 
 use crate::core::error::{Error, Result};
+#[cfg(feature = "gcp")]
+use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
+#[cfg(feature = "gcp")]
+use blueprint_core::{info, warn};
+#[cfg(feature = "gcp")]
+use blueprint_std::collections::HashMap;
 
 /// GCP Compute Engine provisioner
 pub struct GcpProvisioner {
@@ -172,7 +178,7 @@ impl GcpProvisioner {
         );
 
         // Wait for operation to complete
-        self.wait_for_operation(&operation["selfLink"].as_str().unwrap_or(""))
+        self.wait_for_operation(operation["selfLink"].as_str().unwrap_or(""))
             .await?;
 
         // Get instance details

@@ -198,7 +198,7 @@ async fn configure_aws() -> Result<()> {
         .map(|h| h.join(".aws").join("credentials"))
         .filter(|p| p.exists());
 
-    if let Some(_) = aws_config {
+    if aws_config.is_some() {
         println!("✓ Found AWS credentials in ~/.aws/credentials");
         return Ok(());
     }

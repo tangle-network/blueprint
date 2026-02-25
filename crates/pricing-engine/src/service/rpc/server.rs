@@ -16,7 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::pricing_engine::{
     AssetSecurityCommitment, GetJobPriceRequest, GetJobPriceResponse, GetPriceRequest,
-    GetPriceResponse, JobQuoteDetails as ProtoJobQuoteDetails, QuoteDetails,
+    GetPriceResponse, JobQuoteDetails as ProtoJobQuoteDetails, PricingModelHint, QuoteDetails,
     ResourcePricing as ProtoResourcePricing,
     pricing_engine_server::{PricingEngine, PricingEngineServer},
 };
@@ -88,7 +88,28 @@ pub struct PricingEngineService {
 }
 
 impl PricingEngineService {
+    /// Backward-compatible constructor for deployments that only need PAY_ONCE quotes.
+    /// `GetJobPrice` requests return NOT_FOUND unless job pricing is attached.
     pub fn new(
+        config: Arc<OperatorConfig>,
+        benchmark_cache: Arc<BenchmarkCache>,
+        pricing_config: Arc<
+            Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
+        >,
+        signer: Arc<Mutex<OperatorSigner>>,
+    ) -> Self {
+        Self::new_with_configs(
+            config,
+            benchmark_cache,
+            pricing_config,
+            Arc::new(Mutex::new(JobPricingConfig::new())),
+            SubscriptionPricingConfig::new(),
+            signer,
+        )
+    }
+
+    /// Fully configured constructor including per-job and subscription pricing maps.
+    pub fn new_with_configs(
         config: Arc<OperatorConfig>,
         benchmark_cache: Arc<BenchmarkCache>,
         pricing_config: Arc<
@@ -108,6 +129,37 @@ impl PricingEngineService {
             pow_difficulty: DEFAULT_POW_DIFFICULTY,
             x402_config: None,
         }
+    }
+
+    /// Backward-compatible constructor for deployments that only use per-job RFQ.
+    /// Subscription and event-driven GetPrice requests will return NOT_FOUND unless
+    /// subscription config is attached via `with_subscription_pricing`.
+    pub fn with_job_pricing(
+        config: Arc<OperatorConfig>,
+        benchmark_cache: Arc<BenchmarkCache>,
+        pricing_config: Arc<
+            Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
+        >,
+        job_pricing_config: Arc<Mutex<JobPricingConfig>>,
+        signer: Arc<Mutex<OperatorSigner>>,
+    ) -> Self {
+        Self::new_with_configs(
+            config,
+            benchmark_cache,
+            pricing_config,
+            job_pricing_config,
+            SubscriptionPricingConfig::new(),
+            signer,
+        )
+    }
+
+    /// Attach subscription/event-driven pricing config after construction.
+    pub fn with_subscription_pricing(
+        mut self,
+        subscription_config: SubscriptionPricingConfig,
+    ) -> Self {
+        self.subscription_config = Arc::new(Mutex::new(subscription_config));
+        self
     }
 
     /// Enable x402 settlement options in `GetJobPriceResponse`.
@@ -192,8 +244,13 @@ impl PricingEngine for PricingEngineService {
 
         // Branch on pricing model BEFORE benchmark lookup.
         // Subscription and event-driven modes don't need benchmarks.
-        let price_model = match pricing_model {
-            1 => {
+        let model = PricingModelHint::try_from(pricing_model).map_err(|_| {
+            Status::invalid_argument(format!(
+                "Unknown pricing_model value: {pricing_model}. Expected 0 (PAY_ONCE), 1 (SUBSCRIPTION), or 2 (EVENT_DRIVEN)"
+            ))
+        })?;
+        let price_model = match model {
+            PricingModelHint::Subscription => {
                 // SUBSCRIPTION: flat rate per billing interval
                 let sub_config = self.subscription_config.lock().await;
                 let pricing = sub_config
@@ -210,7 +267,7 @@ impl PricingEngine for PricingEngineService {
                 );
                 calculate_subscription_price(pricing, Some(&security_requirements))
             }
-            2 => {
+            PricingModelHint::EventDriven => {
                 // EVENT_DRIVEN: flat rate per event
                 let sub_config = self.subscription_config.lock().await;
                 let pricing = sub_config
@@ -223,7 +280,7 @@ impl PricingEngine for PricingEngineService {
                     })?;
                 calculate_event_price(pricing, Some(&security_requirements))
             }
-            0 => {
+            PricingModelHint::PayOnce => {
                 // PAY_ONCE: resource-based pricing with benchmarks
                 let benchmark_profile = match self.benchmark_cache.get_profile(blueprint_id) {
                     Ok(Some(profile)) => profile,
@@ -255,11 +312,6 @@ impl PricingEngine for PricingEngineService {
                         return Err(Status::internal("Failed to calculate price"));
                     }
                 }
-            }
-            _ => {
-                return Err(Status::invalid_argument(format!(
-                    "Unknown pricing_model value: {pricing_model}. Expected 0 (PAY_ONCE), 1 (SUBSCRIPTION), or 2 (EVENT_DRIVEN)"
-                )));
             }
         };
 
@@ -538,7 +590,7 @@ mod tests {
     const TEST_POW_DIFFICULTY: u32 = 1;
 
     fn make_service(job_entries: Vec<((u64, u32), U256)>) -> PricingEngineService {
-        let mut svc = PricingEngineService::new(
+        let mut svc = PricingEngineService::new_with_configs(
             test_config(),
             test_benchmark_cache(),
             test_pricing_config(),
@@ -777,7 +829,7 @@ mod tests {
         let mut config = OperatorConfig::default();
         config.quote_validity_duration_secs = 600; // 10 minutes
 
-        let mut svc = PricingEngineService::new(
+        let mut svc = PricingEngineService::new_with_configs(
             Arc::new(config),
             test_benchmark_cache(),
             test_pricing_config(),
@@ -849,7 +901,7 @@ mod tests {
     // ── Subscription pricing (GetPrice with pricing_model=1) ────────
 
     fn make_subscription_service(sub_config: SubscriptionPricingConfig) -> PricingEngineService {
-        let mut svc = PricingEngineService::new(
+        let mut svc = PricingEngineService::new_with_configs(
             test_config(),
             test_benchmark_cache(),
             test_pricing_config(),
@@ -958,7 +1010,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_price_subscription_no_config() {
         // Service has NO subscription config (empty map)
-        let mut svc = PricingEngineService::new(
+        let mut svc = PricingEngineService::new_with_configs(
             test_config(),
             test_benchmark_cache(),
             test_pricing_config(),
@@ -1158,7 +1210,7 @@ pub async fn run_rpc_server(
     let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
     info!("gRPC server listening on {}", addr);
 
-    let pricing_service = PricingEngineService::new(
+    let pricing_service = PricingEngineService::new_with_configs(
         config,
         benchmark_cache,
         pricing_config,
