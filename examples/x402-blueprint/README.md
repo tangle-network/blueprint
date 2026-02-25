@@ -89,6 +89,42 @@ cargo test -p x402-blueprint
 cargo test -p x402-blueprint --features uniswap
 ```
 
+## Restricted Auth Dry-Run (Signed + On-Chain Parity)
+
+The gateway exposes:
+
+- `POST /x402/jobs/{service_id}/{job_index}/auth-dry-run`
+
+For `restricted_paid` jobs, this route runs the same caller-auth and
+`eth_call isPermittedCaller` check as paid execution, but does not enqueue
+work or settle payment.
+
+Use the helper script:
+
+```bash
+scripts/x402-auth-dry-run.sh \
+  --gateway-url http://127.0.0.1:8402 \
+  --service-id 1 \
+  --job-index 1 \
+  --caller-private-key "$CALLER_PK" \
+  --body '{"input":"hello"}' \
+  --rpc-url http://127.0.0.1:8545 \
+  --tangle-contract 0xYourTangleContract
+```
+
+Delegated signature payload format used by the gateway:
+
+```text
+x402-authorize:{service_id}:{job_index}:{keccak(body)_hex_no_0x}:{nonce}:{expiry_unix_secs}
+```
+
+Headers sent by delegated mode:
+
+- `X-TANGLE-CALLER`
+- `X-TANGLE-CALLER-SIG`
+- `X-TANGLE-CALLER-NONCE`
+- `X-TANGLE-CALLER-EXPIRY`
+
 ## How It Works
 
 1. The operator writes `job_pricing.toml` and `x402.toml`.
