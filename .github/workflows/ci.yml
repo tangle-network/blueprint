@@ -16,6 +16,7 @@ env:
   CARGO_TERM_COLOR: always
   IN_CI: "true"
   TNT_CORE_PATH: ${{ github.workspace }}/../tnt-core
+  RUSTFMT_NIGHTLY: nightly-2026-02-24
 
 jobs:
   formatting:
@@ -37,11 +38,11 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2025-10-20
+          toolchain: ${{ env.RUSTFMT_NIGHTLY }}
           components: rustfmt
 
       - name: Check Formatting
-        run: cargo +nightly-2025-10-20 fmt -- --check
+        run: cargo +${RUSTFMT_NIGHTLY} fmt -- --check
 
   linting:
     timeout-minutes: 120

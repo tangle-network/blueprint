@@ -14,9 +14,9 @@ optimizer_runs = 200
 
 # Use soldeer-managed dependencies
 remappings = [
-    "@tnt-core/=dependencies/tnt-core-0.8.0/src/",
-    "@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.1.0/",
-    "forge-std/=dependencies/forge-std-1.9.4/src/"
+    "@tnt-core/=dependencies/tnt-core-0.10.4/src/",
+    "@openzeppelin/contracts/=dependencies/tnt-core-0.10.4/dependencies/@openzeppelin-contracts-5.1.0/",
+    "forge-std/=dependencies/tnt-core-0.10.4/dependencies/forge-std-1.9.4/src/"
 ]
 
 [soldeer]
@@ -25,6 +25,6 @@ remappings_location = "txt"
 remappings_version = false
 
 [dependencies]
-tnt-core = "0.8.0"
+tnt-core = "0.10.4"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

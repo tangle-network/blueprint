@@ -1,7 +1,9 @@
 use crate::benchmark_cache::BenchmarkCache;
 use crate::config::OperatorConfig;
 use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
-use crate::pricing::calculate_price;
+use crate::pricing::{
+    SubscriptionPricing, calculate_event_price, calculate_price, calculate_subscription_price,
+};
 use crate::signer::{OperatorSigner, SignableQuote, SignedQuote as SignerSignedQuote};
 use blueprint_core::{error, info, warn};
 use blueprint_crypto::BytesEncoding;
@@ -14,7 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::pricing_engine::{
     AssetSecurityCommitment, GetJobPriceRequest, GetJobPriceResponse, GetPriceRequest,
-    GetPriceResponse, JobQuoteDetails as ProtoJobQuoteDetails, QuoteDetails,
+    GetPriceResponse, JobQuoteDetails as ProtoJobQuoteDetails, PricingModelHint, QuoteDetails,
     ResourcePricing as ProtoResourcePricing,
     pricing_engine_server::{PricingEngine, PricingEngineServer},
 };
@@ -65,12 +67,19 @@ pub struct X402AcceptedToken {
     pub markup_bps: u16,
 }
 
+/// Subscription pricing config: `Option<blueprint_id>` → `SubscriptionPricing`.
+pub type SubscriptionPricingConfig = std::collections::HashMap<Option<u64>, SubscriptionPricing>;
+
+/// Maximum allowed clock drift between client and server for PoW challenge timestamps.
+const CHALLENGE_TIMESTAMP_TOLERANCE_SECS: u64 = 30;
+
 pub struct PricingEngineService {
     config: Arc<OperatorConfig>,
     benchmark_cache: Arc<BenchmarkCache>,
     pricing_config:
         Arc<Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>>,
     job_pricing_config: Arc<Mutex<JobPricingConfig>>,
+    subscription_config: Arc<Mutex<SubscriptionPricingConfig>>,
     signer: Arc<Mutex<OperatorSigner>>,
     pow_difficulty: u32,
     /// Optional x402 settlement config. When set, `GetJobPriceResponse` includes
@@ -79,6 +88,8 @@ pub struct PricingEngineService {
 }
 
 impl PricingEngineService {
+    /// Backward-compatible constructor for deployments that only need PAY_ONCE quotes.
+    /// `GetJobPrice` requests return NOT_FOUND unless job pricing is attached.
     pub fn new(
         config: Arc<OperatorConfig>,
         benchmark_cache: Arc<BenchmarkCache>,
@@ -87,18 +98,42 @@ impl PricingEngineService {
         >,
         signer: Arc<Mutex<OperatorSigner>>,
     ) -> Self {
+        Self::new_with_configs(
+            config,
+            benchmark_cache,
+            pricing_config,
+            Arc::new(Mutex::new(JobPricingConfig::new())),
+            SubscriptionPricingConfig::new(),
+            signer,
+        )
+    }
+
+    /// Fully configured constructor including per-job and subscription pricing maps.
+    pub fn new_with_configs(
+        config: Arc<OperatorConfig>,
+        benchmark_cache: Arc<BenchmarkCache>,
+        pricing_config: Arc<
+            Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
+        >,
+        job_pricing_config: Arc<Mutex<JobPricingConfig>>,
+        subscription_config: SubscriptionPricingConfig,
+        signer: Arc<Mutex<OperatorSigner>>,
+    ) -> Self {
         Self {
             config,
             benchmark_cache,
             pricing_config,
-            job_pricing_config: Arc::new(Mutex::new(JobPricingConfig::new())),
+            job_pricing_config,
+            subscription_config: Arc::new(Mutex::new(subscription_config)),
             signer,
             pow_difficulty: DEFAULT_POW_DIFFICULTY,
             x402_config: None,
         }
     }
 
-    /// Create with explicit job pricing config
+    /// Backward-compatible constructor for deployments that only use per-job RFQ.
+    /// Subscription and event-driven GetPrice requests will return NOT_FOUND unless
+    /// subscription config is attached via `with_subscription_pricing`.
     pub fn with_job_pricing(
         config: Arc<OperatorConfig>,
         benchmark_cache: Arc<BenchmarkCache>,
@@ -108,15 +143,23 @@ impl PricingEngineService {
         job_pricing_config: Arc<Mutex<JobPricingConfig>>,
         signer: Arc<Mutex<OperatorSigner>>,
     ) -> Self {
-        Self {
+        Self::new_with_configs(
             config,
             benchmark_cache,
             pricing_config,
             job_pricing_config,
+            SubscriptionPricingConfig::new(),
             signer,
-            pow_difficulty: DEFAULT_POW_DIFFICULTY,
-            x402_config: None,
-        }
+        )
+    }
+
+    /// Attach subscription/event-driven pricing config after construction.
+    pub fn with_subscription_pricing(
+        mut self,
+        subscription_config: SubscriptionPricingConfig,
+    ) -> Self {
+        self.subscription_config = Arc::new(Mutex::new(subscription_config));
+        self
     }
 
     /// Enable x402 settlement options in `GetJobPriceResponse`.
@@ -149,22 +192,25 @@ impl PricingEngine for PricingEngineService {
         let blueprint_id = req.blueprint_id;
         let ttl_blocks = req.ttl_blocks;
         let proof_of_work = req.proof_of_work;
+        let pricing_model = req.pricing_model; // 0=PayOnce, 1=Subscription, 2=EventDriven
 
         info!(
-            "Received GetPrice request for blueprint ID: {}",
-            blueprint_id
+            "Received GetPrice request for blueprint ID: {} (pricing_model={})",
+            blueprint_id, pricing_model
         );
 
         let current_timestamp = Utc::now().timestamp() as u64;
         let challenge_timestamp = if req.challenge_timestamp > 0 {
-            if req.challenge_timestamp < current_timestamp.saturating_sub(30) {
+            if req.challenge_timestamp
+                < current_timestamp.saturating_sub(CHALLENGE_TIMESTAMP_TOLERANCE_SECS)
+            {
                 warn!(
                     "Challenge timestamp is too old: {}",
                     req.challenge_timestamp
                 );
                 return Err(Status::invalid_argument("Challenge timestamp is too old"));
             }
-            if req.challenge_timestamp > current_timestamp + 30 {
+            if req.challenge_timestamp > current_timestamp + CHALLENGE_TIMESTAMP_TOLERANCE_SECS {
                 warn!(
                     "Challenge timestamp is too far in the future: {}",
                     req.challenge_timestamp
@@ -189,20 +235,6 @@ impl PricingEngine for PricingEngineService {
             return Err(Status::invalid_argument("Invalid proof of work"));
         }
 
-        // Get the benchmark profile from cache
-        let benchmark_profile = match self.benchmark_cache.get_profile(blueprint_id) {
-            Ok(Some(profile)) => profile,
-            _ => {
-                warn!(
-                    "No benchmark profile found for blueprint ID: {}",
-                    blueprint_id
-                );
-                return Err(Status::not_found(format!(
-                    "No benchmark profile found for blueprint ID: {blueprint_id}"
-                )));
-            }
-        };
-
         let security_requirements = match req.security_requirements {
             Some(requirements) => requirements.clone(),
             None => {
@@ -210,24 +242,76 @@ impl PricingEngine for PricingEngineService {
             }
         };
 
-        // Get the pricing configuration
-        let pricing_config = self.pricing_config.lock().await;
-
-        // Calculate the price based on the benchmark profile, pricing config, and TTL
-        let price_model = match calculate_price(
-            benchmark_profile,
-            &pricing_config,
-            Some(blueprint_id),
-            ttl_blocks,
-            Some(security_requirements.clone()),
-        ) {
-            Ok(model) => model,
-            Err(e) => {
-                error!(
-                    "Failed to calculate price for blueprint ID {}: {:?}",
-                    blueprint_id, e
+        // Branch on pricing model BEFORE benchmark lookup.
+        // Subscription and event-driven modes don't need benchmarks.
+        let model = PricingModelHint::try_from(pricing_model).map_err(|_| {
+            Status::invalid_argument(format!(
+                "Unknown pricing_model value: {pricing_model}. Expected 0 (PAY_ONCE), 1 (SUBSCRIPTION), or 2 (EVENT_DRIVEN)"
+            ))
+        })?;
+        let price_model = match model {
+            PricingModelHint::Subscription => {
+                // SUBSCRIPTION: flat rate per billing interval
+                let sub_config = self.subscription_config.lock().await;
+                let pricing = sub_config
+                    .get(&Some(blueprint_id))
+                    .or_else(|| sub_config.get(&None))
+                    .ok_or_else(|| {
+                        Status::not_found(format!(
+                            "No subscription pricing configured for blueprint {blueprint_id}"
+                        ))
+                    })?;
+                info!(
+                    "Subscription pricing for blueprint {}: rate={}, interval={}s",
+                    blueprint_id, pricing.subscription_rate, pricing.subscription_interval
                 );
-                return Err(Status::internal("Failed to calculate price"));
+                calculate_subscription_price(pricing, Some(&security_requirements))
+            }
+            PricingModelHint::EventDriven => {
+                // EVENT_DRIVEN: flat rate per event
+                let sub_config = self.subscription_config.lock().await;
+                let pricing = sub_config
+                    .get(&Some(blueprint_id))
+                    .or_else(|| sub_config.get(&None))
+                    .ok_or_else(|| {
+                        Status::not_found(format!(
+                            "No event pricing configured for blueprint {blueprint_id}"
+                        ))
+                    })?;
+                calculate_event_price(pricing, Some(&security_requirements))
+            }
+            PricingModelHint::PayOnce => {
+                // PAY_ONCE: resource-based pricing with benchmarks
+                let benchmark_profile = match self.benchmark_cache.get_profile(blueprint_id) {
+                    Ok(Some(profile)) => profile,
+                    _ => {
+                        warn!(
+                            "No benchmark profile found for blueprint ID: {}",
+                            blueprint_id
+                        );
+                        return Err(Status::not_found(format!(
+                            "No benchmark profile found for blueprint ID: {blueprint_id}"
+                        )));
+                    }
+                };
+
+                let pricing_config = self.pricing_config.lock().await;
+                match calculate_price(
+                    benchmark_profile,
+                    &pricing_config,
+                    Some(blueprint_id),
+                    ttl_blocks,
+                    Some(&security_requirements),
+                ) {
+                    Ok(model) => model,
+                    Err(e) => {
+                        error!(
+                            "Failed to calculate price for blueprint ID {}: {:?}",
+                            blueprint_id, e
+                        );
+                        return Err(Status::internal("Failed to calculate price"));
+                    }
+                }
             }
         };
 
@@ -250,20 +334,30 @@ impl PricingEngine for PricingEngineService {
         // Convert our internal resource pricing to proto resource pricing
         let proto_resources: Vec<ProtoResourcePricing> = price_resources
             .iter()
-            .map(|rp| ProtoResourcePricing {
-                kind: format!("{:?}", rp.kind),
-                count: rp.count,
-                // Convert Decimal to f64 for the proto type
-                price_per_unit_rate: rp.price_per_unit_rate.to_f64().unwrap_or(0.0),
+            .map(|rp| {
+                let rate = rp.price_per_unit_rate.to_f64().ok_or_else(|| {
+                    Status::internal(format!(
+                        "Price rate {} for {:?} exceeds f64 range",
+                        rp.price_per_unit_rate, rp.kind
+                    ))
+                })?;
+                Ok(ProtoResourcePricing {
+                    kind: format!("{:?}", rp.kind),
+                    count: rp.count,
+                    price_per_unit_rate: rate,
+                })
             })
-            .collect();
+            .collect::<std::result::Result<Vec<_>, Status>>()?;
+
+        let total_cost_f64 = total_cost.to_f64().ok_or_else(|| {
+            Status::internal(format!("Total cost {total_cost} exceeds f64 range"))
+        })?;
 
         // Create the quote details directly using proto types
         let quote_details = QuoteDetails {
             blueprint_id,
             ttl_blocks,
-            // Convert Decimal to f64 for the proto type
-            total_cost_rate: total_cost.to_f64().unwrap_or(0.0),
+            total_cost_rate: total_cost_f64,
             timestamp,
             expiry: expiry_time,
             resources: proto_resources,
@@ -330,10 +424,12 @@ impl PricingEngine for PricingEngineService {
         // Validate challenge timestamp
         let current_timestamp = Utc::now().timestamp() as u64;
         let challenge_timestamp = if req.challenge_timestamp > 0 {
-            if req.challenge_timestamp < current_timestamp.saturating_sub(30) {
+            if req.challenge_timestamp
+                < current_timestamp.saturating_sub(CHALLENGE_TIMESTAMP_TOLERANCE_SECS)
+            {
                 return Err(Status::invalid_argument("Challenge timestamp is too old"));
             }
-            if req.challenge_timestamp > current_timestamp + 30 {
+            if req.challenge_timestamp > current_timestamp + CHALLENGE_TIMESTAMP_TOLERANCE_SECS {
                 return Err(Status::invalid_argument(
                     "Challenge timestamp is too far in the future",
                 ));
@@ -494,11 +590,12 @@ mod tests {
     const TEST_POW_DIFFICULTY: u32 = 1;
 
     fn make_service(job_entries: Vec<((u64, u32), U256)>) -> PricingEngineService {
-        let mut svc = PricingEngineService::with_job_pricing(
+        let mut svc = PricingEngineService::new_with_configs(
             test_config(),
             test_benchmark_cache(),
             test_pricing_config(),
             test_job_pricing_config(job_entries),
+            SubscriptionPricingConfig::new(),
             test_signer(),
         );
         svc.pow_difficulty = TEST_POW_DIFFICULTY;
@@ -732,11 +829,12 @@ mod tests {
         let mut config = OperatorConfig::default();
         config.quote_validity_duration_secs = 600; // 10 minutes
 
-        let mut svc = PricingEngineService::with_job_pricing(
+        let mut svc = PricingEngineService::new_with_configs(
             Arc::new(config),
             test_benchmark_cache(),
             test_pricing_config(),
             test_job_pricing_config(vec![((1, 0), U256::from(100u64))]),
+            SubscriptionPricingConfig::new(),
             test_signer(),
         );
         svc.pow_difficulty = TEST_POW_DIFFICULTY;
@@ -784,7 +882,7 @@ mod tests {
         let details = resp.quote_details.unwrap();
 
         // Reconstruct the digest and verify the 65-byte signature (r||s||v)
-        let digest = crate::signer::job_quote_digest_eip712(&details, domain);
+        let digest = crate::signer::job_quote_digest_eip712(&details, domain).unwrap();
         assert_eq!(
             resp.signature.len(),
             65,
@@ -798,6 +896,247 @@ mod tests {
                 "signature should verify with the operator's key (prehash)"
             );
         }
+    }
+
+    // ── Subscription pricing (GetPrice with pricing_model=1) ────────
+
+    fn make_subscription_service(sub_config: SubscriptionPricingConfig) -> PricingEngineService {
+        let mut svc = PricingEngineService::new_with_configs(
+            test_config(),
+            test_benchmark_cache(),
+            test_pricing_config(),
+            Arc::new(Mutex::new(JobPricingConfig::new())),
+            sub_config,
+            test_signer(),
+        );
+        svc.pow_difficulty = TEST_POW_DIFFICULTY;
+        svc
+    }
+
+    fn default_sub_config() -> SubscriptionPricingConfig {
+        let mut m = SubscriptionPricingConfig::new();
+        m.insert(
+            None,
+            crate::pricing::SubscriptionPricing {
+                subscription_rate: rust_decimal::Decimal::from_str_exact("0.001").unwrap(),
+                subscription_interval: 86400,
+                event_rate: rust_decimal::Decimal::from_str_exact("0.0001").unwrap(),
+            },
+        );
+        m
+    }
+
+    /// Generate a valid PoW + timestamp for a GetPrice request.
+    async fn valid_price_pow(blueprint_id: u64) -> (u64, Vec<u8>) {
+        let timestamp = chrono::Utc::now().timestamp() as u64;
+        let challenge = crate::pow::generate_challenge(blueprint_id, timestamp);
+        let proof = crate::pow::generate_proof(&challenge, TEST_POW_DIFFICULTY)
+            .await
+            .unwrap();
+        (timestamp, proof)
+    }
+
+    #[tokio::test]
+    async fn test_get_price_subscription_mode() {
+        let svc = make_subscription_service(default_sub_config());
+        let (ts, pow) = valid_price_pow(1).await;
+
+        let req = Request::new(GetPriceRequest {
+            blueprint_id: 1,
+            ttl_blocks: 600,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            resource_requirements: vec![],
+            security_requirements: Some(crate::pricing_engine::AssetSecurityRequirements {
+                asset: Some(crate::pricing_engine::Asset {
+                    asset_type: Some(crate::pricing_engine::asset::AssetType::Erc20(vec![
+                        0u8;
+                        20
+                    ])),
+                }),
+                minimum_exposure_percent: 10,
+                maximum_exposure_percent: 100,
+            }),
+            pricing_model: 1, // SUBSCRIPTION
+        });
+
+        let resp = svc.get_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+
+        // total_cost_rate should match our subscription rate (0.001)
+        assert!(
+            (details.total_cost_rate - 0.001).abs() < 1e-9,
+            "expected subscription rate 0.001, got {}",
+            details.total_cost_rate
+        );
+        assert!(!resp.signature.is_empty());
+        assert!(!resp.operator_id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_price_subscription_no_benchmark_needed() {
+        // Service has NO benchmark profiles cached — subscription should still work
+        let svc = make_subscription_service(default_sub_config());
+        let (ts, pow) = valid_price_pow(999).await;
+
+        let req = Request::new(GetPriceRequest {
+            blueprint_id: 999, // no benchmark for this ID
+            ttl_blocks: 100,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            resource_requirements: vec![],
+            security_requirements: Some(crate::pricing_engine::AssetSecurityRequirements {
+                asset: Some(crate::pricing_engine::Asset {
+                    asset_type: Some(crate::pricing_engine::asset::AssetType::Erc20(vec![
+                        0u8;
+                        20
+                    ])),
+                }),
+                minimum_exposure_percent: 10,
+                maximum_exposure_percent: 100,
+            }),
+            pricing_model: 1, // SUBSCRIPTION
+        });
+
+        // Should succeed despite no benchmark profile
+        let resp = svc.get_price(req).await;
+        assert!(
+            resp.is_ok(),
+            "subscription should not need benchmark: {:?}",
+            resp.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_price_subscription_no_config() {
+        // Service has NO subscription config (empty map)
+        let mut svc = PricingEngineService::new_with_configs(
+            test_config(),
+            test_benchmark_cache(),
+            test_pricing_config(),
+            Arc::new(Mutex::new(JobPricingConfig::new())),
+            SubscriptionPricingConfig::new(),
+            test_signer(),
+        );
+        svc.pow_difficulty = TEST_POW_DIFFICULTY;
+
+        let (ts, pow) = valid_price_pow(1).await;
+        let req = Request::new(GetPriceRequest {
+            blueprint_id: 1,
+            ttl_blocks: 100,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            resource_requirements: vec![],
+            security_requirements: Some(crate::pricing_engine::AssetSecurityRequirements {
+                asset: Some(crate::pricing_engine::Asset {
+                    asset_type: Some(crate::pricing_engine::asset::AssetType::Erc20(vec![
+                        0u8;
+                        20
+                    ])),
+                }),
+                minimum_exposure_percent: 10,
+                maximum_exposure_percent: 100,
+            }),
+            pricing_model: 1, // SUBSCRIPTION
+        });
+
+        let err = svc.get_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        assert!(err.message().contains("subscription"));
+    }
+
+    #[tokio::test]
+    async fn test_get_price_default_is_payonce() {
+        // pricing_model = 0 (PAY_ONCE / default) — needs benchmark, fails without one
+        let svc = make_subscription_service(default_sub_config());
+        let (ts, pow) = valid_price_pow(1).await;
+
+        let req = Request::new(GetPriceRequest {
+            blueprint_id: 1,
+            ttl_blocks: 100,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            resource_requirements: vec![],
+            security_requirements: Some(crate::pricing_engine::AssetSecurityRequirements {
+                asset: Some(crate::pricing_engine::Asset {
+                    asset_type: Some(crate::pricing_engine::asset::AssetType::Erc20(vec![
+                        0u8;
+                        20
+                    ])),
+                }),
+                minimum_exposure_percent: 10,
+                maximum_exposure_percent: 100,
+            }),
+            pricing_model: 0, // PAY_ONCE (default)
+        });
+
+        // Should fail because no benchmark profile exists
+        let err = svc.get_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        assert!(err.message().contains("benchmark"));
+    }
+
+    #[tokio::test]
+    async fn test_get_price_event_driven_mode() {
+        let svc = make_subscription_service(default_sub_config());
+        let (ts, pow) = valid_price_pow(1).await;
+
+        let req = Request::new(GetPriceRequest {
+            blueprint_id: 1,
+            ttl_blocks: 100,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            resource_requirements: vec![],
+            security_requirements: Some(crate::pricing_engine::AssetSecurityRequirements {
+                asset: Some(crate::pricing_engine::Asset {
+                    asset_type: Some(crate::pricing_engine::asset::AssetType::Erc20(vec![
+                        0u8;
+                        20
+                    ])),
+                }),
+                minimum_exposure_percent: 10,
+                maximum_exposure_percent: 100,
+            }),
+            pricing_model: 2, // EVENT_DRIVEN
+        });
+
+        let resp = svc.get_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        // event_rate = 0.0001
+        assert!(
+            (details.total_cost_rate - 0.0001).abs() < 1e-9,
+            "expected event rate 0.0001, got {}",
+            details.total_cost_rate
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_price_unknown_pricing_model() {
+        let svc = make_subscription_service(default_sub_config());
+        let (ts, pow) = valid_price_pow(1).await;
+
+        let req = Request::new(GetPriceRequest {
+            blueprint_id: 1,
+            ttl_blocks: 100,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            resource_requirements: vec![],
+            security_requirements: Some(crate::pricing_engine::AssetSecurityRequirements {
+                asset: Some(crate::pricing_engine::Asset {
+                    asset_type: Some(crate::pricing_engine::asset::AssetType::Erc20(vec![
+                        0u8;
+                        20
+                    ])),
+                }),
+                minimum_exposure_percent: 10,
+                maximum_exposure_percent: 100,
+            }),
+            pricing_model: 99, // Unknown
+        });
+
+        let err = svc.get_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("Unknown pricing_model"));
     }
 }
 
@@ -816,33 +1155,43 @@ struct SettlementOptionInternal {
 /// Note: this conversion logic is intentionally kept in sync with
 /// `AcceptedToken::convert_wei_to_amount` in `crates/x402/src/config.rs`.
 /// A cyclic dependency prevents importing it directly.
+fn convert_settlement_token(
+    token: &X402AcceptedToken,
+    price_wei: alloy_primitives::U256,
+) -> std::result::Result<SettlementOptionInternal, String> {
+    let wei_decimal = rust_decimal::Decimal::from_str_exact(&price_wei.to_string())
+        .map_err(|e| format!("wei→Decimal: {e}"))?;
+    let native_unit = rust_decimal::Decimal::from(10u64.pow(18));
+    let native_amount = wei_decimal / native_unit;
+    let token_amount = native_amount * token.rate_per_native_unit;
+    let markup = rust_decimal::Decimal::ONE
+        + rust_decimal::Decimal::from(token.markup_bps) / rust_decimal::Decimal::from(10_000u32);
+    let final_amount = token_amount * markup;
+    let token_unit = rust_decimal::Decimal::from(10u64.pow(u32::from(token.decimals)));
+    let smallest_units = (final_amount * token_unit).floor().to_string();
+
+    Ok(SettlementOptionInternal {
+        network: token.network.clone(),
+        asset: token.asset.clone(),
+        symbol: token.symbol.clone(),
+        amount: smallest_units,
+        pay_to: token.pay_to.clone(),
+        scheme: "exact".into(),
+    })
+}
+
 fn compute_settlement_options(
     accepted_tokens: &[X402AcceptedToken],
     price_wei: alloy_primitives::U256,
 ) -> Vec<SettlementOptionInternal> {
     accepted_tokens
         .iter()
-        .filter_map(|token| {
-            // Convert wei -> native units -> token units
-            let wei_decimal = rust_decimal::Decimal::from_str_exact(&price_wei.to_string()).ok()?;
-            let native_unit = rust_decimal::Decimal::from(10u64.pow(18));
-            let native_amount = wei_decimal / native_unit;
-            let token_amount = native_amount * token.rate_per_native_unit;
-            let markup = rust_decimal::Decimal::ONE
-                + rust_decimal::Decimal::from(token.markup_bps)
-                    / rust_decimal::Decimal::from(10_000u32);
-            let final_amount = token_amount * markup;
-            let token_unit = rust_decimal::Decimal::from(10u64.pow(u32::from(token.decimals)));
-            let smallest_units = (final_amount * token_unit).floor().to_string();
-
-            Some(SettlementOptionInternal {
-                network: token.network.clone(),
-                asset: token.asset.clone(),
-                symbol: token.symbol.clone(),
-                amount: smallest_units,
-                pay_to: token.pay_to.clone(),
-                scheme: "exact".into(),
-            })
+        .filter_map(|token| match convert_settlement_token(token, price_wei) {
+            Ok(opt) => Some(opt),
+            Err(e) => {
+                warn!("Dropping settlement option for {}: {e}", token.symbol);
+                None
+            }
         })
         .collect()
 }
@@ -854,22 +1203,21 @@ pub async fn run_rpc_server(
     pricing_config: Arc<
         Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
     >,
-    job_pricing_config: Option<Arc<Mutex<JobPricingConfig>>>,
+    job_pricing_config: Arc<Mutex<JobPricingConfig>>,
+    subscription_config: SubscriptionPricingConfig,
     signer: Arc<Mutex<OperatorSigner>>,
 ) -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
     info!("gRPC server listening on {}", addr);
 
-    let pricing_service = match job_pricing_config {
-        Some(jpc) => PricingEngineService::with_job_pricing(
-            config,
-            benchmark_cache,
-            pricing_config,
-            jpc,
-            signer,
-        ),
-        None => PricingEngineService::new(config, benchmark_cache, pricing_config, signer),
-    };
+    let pricing_service = PricingEngineService::new_with_configs(
+        config,
+        benchmark_cache,
+        pricing_config,
+        job_pricing_config,
+        subscription_config,
+        signer,
+    );
     let server = PricingEngineServer::new(pricing_service);
 
     let cors = CorsLayer::new()

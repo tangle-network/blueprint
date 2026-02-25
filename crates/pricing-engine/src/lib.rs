@@ -8,7 +8,6 @@
 pub mod app;
 pub mod benchmark;
 pub mod benchmark_cache;
-pub mod cache;
 pub mod cloud;
 pub mod config;
 pub mod error;
@@ -34,7 +33,7 @@ pub use app::{
 pub use benchmark::cpu::CpuBenchmarkResult;
 pub use benchmark::{BenchmarkProfile, BenchmarkRunConfig, run_benchmark, run_benchmark_suite};
 pub use benchmark_cache::BenchmarkCache;
-pub use cache::{BlueprintId, PriceCache};
+pub use benchmark_cache::BlueprintId;
 pub use cloud::faas::{FaasPricing, FaasPricingFetcher};
 pub use cloud::vm::{InstanceInfo, PricingFetcher};
 pub use config::{OperatorConfig, load_config_from_path};
@@ -42,22 +41,20 @@ pub use error::{PricingError, Result};
 pub use handlers::handle_blueprint_update;
 pub use pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
 pub use pricing::{
-    PriceModel, ResourcePricing, calculate_price, load_job_pricing_from_toml,
-    load_pricing_from_toml,
+    PriceModel, ResourcePricing, SubscriptionPricing, calculate_price, load_job_pricing_from_toml,
+    load_pricing_from_toml, load_subscription_pricing_from_toml,
 };
 pub use service::blockchain::event::BlockchainEvent;
-pub use service::rpc::server::JobPricingConfig;
-pub use service::rpc::server::{PricingEngineService, run_rpc_server};
+pub use service::rpc::server::{
+    JobPricingConfig, PricingEngineService, SubscriptionPricingConfig, run_rpc_server,
+};
 pub use signer::{OperatorId, OperatorSigner, SignableQuote, SignedJobQuote, SignedQuote};
 
 use blueprint_core::info;
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
-pub const DEFAULT_CONFIG: &str = include_str!("../config/default_pricing.toml");
 
 pub async fn init_benchmark_cache(config: &OperatorConfig) -> Result<Arc<BenchmarkCache>> {
     let cache_path = format!("{}/benchmark_cache", config.database_path);
@@ -69,7 +66,9 @@ pub async fn init_benchmark_cache(config: &OperatorConfig) -> Result<Arc<Benchma
 pub async fn init_pricing_config(
     config_path: impl AsRef<Path>,
 ) -> Result<Arc<Mutex<HashMap<Option<u64>, Vec<ResourcePricing>>>>> {
-    let content = fs::read_to_string(config_path.as_ref())?;
+    let content = tokio::fs::read_to_string(config_path.as_ref())
+        .await
+        .map_err(|e| PricingError::Io(e))?;
     let pricing_config = pricing::load_pricing_from_toml(&content)?;
     info!(
         "Pricing configuration loaded from {}",
@@ -81,7 +80,9 @@ pub async fn init_pricing_config(
 pub async fn init_job_pricing_config(
     config_path: impl AsRef<Path>,
 ) -> Result<Arc<Mutex<service::rpc::server::JobPricingConfig>>> {
-    let content = fs::read_to_string(config_path.as_ref())?;
+    let content = tokio::fs::read_to_string(config_path.as_ref())
+        .await
+        .map_err(|e| PricingError::Io(e))?;
     let job_config = pricing::load_job_pricing_from_toml(&content)?;
     info!(
         "Job pricing configuration loaded from {} ({} entries)",
@@ -89,4 +90,28 @@ pub async fn init_job_pricing_config(
         job_config.len()
     );
     Ok(Arc::new(Mutex::new(job_config)))
+}
+
+/// Load subscription pricing config from the same TOML file used for resource pricing.
+/// Sections with `pricing_model = "subscription"` are extracted.
+pub async fn init_subscription_pricing_config(
+    config_path: impl AsRef<Path>,
+) -> Result<SubscriptionPricingConfig> {
+    let content = tokio::fs::read_to_string(config_path.as_ref())
+        .await
+        .map_err(PricingError::Io)?;
+    let config = pricing::load_subscription_pricing_from_toml(&content)?;
+    if config.is_empty() {
+        info!(
+            "No subscription pricing sections in {}; subscription/event requests will be rejected",
+            config_path.as_ref().display()
+        );
+    } else {
+        info!(
+            "Subscription pricing loaded from {} ({} entries)",
+            config_path.as_ref().display(),
+            config.len()
+        );
+    }
+    Ok(config)
 }

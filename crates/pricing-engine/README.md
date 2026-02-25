@@ -10,7 +10,7 @@ Used with `createServiceFromQuotes()` on the Tangle contract. The operator quote
 
 ```
 Consumer → GetPrice(blueprint_id, ttl_blocks) → Operator
-Operator → signs QuoteDetails{totalCost, blueprintId, ttl, securityCommitments}
+Operator → signs QuoteDetails{totalCost, blueprintId, ttlBlocks, securityCommitments, resourceCommitments}
 Consumer → createServiceFromQuotes(blueprintId, [signedQuotes], config, callers, ttl)
 ```
 
@@ -78,6 +78,12 @@ let service = PricingEngineService::with_job_pricing(
     Arc::new(Mutex::new(job_config)),
     signer,
 );
+```
+
+To enable subscription/event-driven `GetPrice` requests, attach a subscription config:
+
+```rust
+let service = service.with_subscription_pricing(subscription_config);
 ```
 
 ### Operator config (`operator.toml`)
@@ -150,7 +156,7 @@ verifyingContract: <tangle_proxy_address>
 
 **Service quotes** use `QUOTE_TYPEHASH`:
 ```
-QuoteDetails(uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,AssetSecurityCommitment[] securityCommitments)
+QuoteDetails(uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,AssetSecurityCommitment[] securityCommitments,ResourceCommitment[] resourceCommitments)
 ```
 
 **Job quotes** use `JOB_QUOTE_TYPEHASH`:

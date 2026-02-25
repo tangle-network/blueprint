@@ -41,6 +41,7 @@ mod evm_listener_tests {
         evm_listener::{EvmEventClient, EvmEventListener},
     };
     use blueprint_pricing_engine_lib::signer::{OperatorSigner, QuoteSigningDomain, verify_quote};
+    use blueprint_pricing_engine_lib::types::ResourceUnit;
     use blueprint_pricing_engine_lib::{
         BenchmarkCache, PricingEngineService, SignableQuote, SignedQuote, generate_challenge,
         generate_proof,
@@ -216,6 +217,7 @@ mod evm_listener_tests {
             resource_requirements: vec![],
             security_requirements,
             challenge_timestamp,
+            pricing_model: 0,
         };
 
         let response = client.get_price(request).await?.into_inner();
@@ -437,6 +439,7 @@ mod evm_listener_tests {
                 resource_requirements: vec![],
                 security_requirements,
                 challenge_timestamp,
+                pricing_model: 0,
             };
 
             let response = grpc_client.get_price(request).await?.into_inner();
@@ -569,6 +572,7 @@ mod evm_listener_tests {
                 maximum_exposure_percent: 75,
             }),
             challenge_timestamp: expired_timestamp,
+            pricing_model: 0,
         };
 
         let result = client.get_price(request).await;
@@ -651,6 +655,7 @@ mod evm_listener_tests {
                 maximum_exposure_percent: 75,
             }),
             challenge_timestamp,
+            pricing_model: 0,
         };
 
         let result = client.get_price(request).await;
@@ -731,6 +736,7 @@ mod evm_listener_tests {
                 maximum_exposure_percent: 75,
             }),
             challenge_timestamp,
+            pricing_model: 0,
         };
 
         let result = client.get_price(request).await;
@@ -803,6 +809,7 @@ mod evm_listener_tests {
                     maximum_exposure_percent: 75,
                 }),
                 challenge_timestamp,
+                pricing_model: 0,
             };
 
             let response = grpc_client.get_price(request).await?.into_inner();
@@ -891,6 +898,7 @@ mod evm_listener_tests {
                     timestamp: chrono::Utc::now().timestamp() as u64,
                     expiry: chrono::Utc::now().timestamp() as u64 + 3600,
                     securityCommitments: vec![].into(),
+                    resourceCommitments: vec![].into(),
                 },
                 signature: Bytes::from(vec![0u8; 65]), // Invalid signature
                 operator: Address::ZERO,
@@ -958,6 +966,7 @@ mod evm_listener_tests {
                     timestamp: now - 7200, // 2 hours ago
                     expiry: now - 3600,    // Expired 1 hour ago
                     securityCommitments: vec![].into(),
+                    resourceCommitments: vec![].into(),
                 },
                 signature: Bytes::from(vec![0u8; 65]),
                 operator: Address::ZERO,
@@ -1115,6 +1124,7 @@ mod evm_listener_tests {
                     timestamp: chrono::Utc::now().timestamp() as u64,
                     expiry: chrono::Utc::now().timestamp() as u64 + 3600,
                     securityCommitments: vec![].into(),
+                    resourceCommitments: vec![].into(),
                 },
                 signature: Bytes::from(vec![0u8; 65]),
                 operator: Address::ZERO,
@@ -1213,6 +1223,7 @@ mod evm_listener_tests {
             resource_requirements: vec![],
             security_requirements: None, // Missing!
             challenge_timestamp,
+            pricing_model: 0,
         };
 
         let result = client.get_price(request).await;
@@ -1297,6 +1308,7 @@ mod evm_listener_tests {
                 maximum_exposure_percent: 75,
             }),
             challenge_timestamp,
+            pricing_model: 0,
         };
 
         // Zero TTL should still be handled (quote can have zero TTL)
@@ -1398,6 +1410,7 @@ mod evm_listener_tests {
                 maximum_exposure_percent: 75,
             }),
             challenge_timestamp,
+            pricing_model: 0,
         };
 
         Ok(client.get_price(request).await?.into_inner())
@@ -1443,6 +1456,11 @@ mod evm_listener_tests {
 
         // Scale total cost (from float to U256 with 18 decimals)
         let total_cost_scaled = (quote_details.total_cost_rate * 1e18) as u128;
+        let resource_commitments = quote_details
+            .resources
+            .iter()
+            .filter_map(proto_resource_to_tangle_commitment)
+            .collect::<Vec<_>>();
 
         let details = ITangleServicesTypes::QuoteDetails {
             blueprintId: quote_details.blueprint_id,
@@ -1451,6 +1469,7 @@ mod evm_listener_tests {
             timestamp: quote_details.timestamp,
             expiry: quote_details.expiry,
             securityCommitments: security_commitments.into(),
+            resourceCommitments: resource_commitments.into(),
         };
 
         let operator_addr = Address::from_slice(&response.operator_id);
@@ -1459,6 +1478,24 @@ mod evm_listener_tests {
             details,
             signature: Bytes::from(response.signature.clone()),
             operator: operator_addr,
+        })
+    }
+
+    fn proto_resource_to_tangle_commitment(
+        resource: &pricing_engine::ResourcePricing,
+    ) -> Option<ITangleServicesTypes::ResourceCommitment> {
+        let kind = match ResourceUnit::from_str(resource.kind.as_str()).ok()? {
+            ResourceUnit::CPU => 0,
+            ResourceUnit::MemoryMB => 1,
+            ResourceUnit::StorageMB => 2,
+            ResourceUnit::NetworkEgressMB => 3,
+            ResourceUnit::NetworkIngressMB => 4,
+            ResourceUnit::GPU => 5,
+            _ => return None,
+        };
+        Some(ITangleServicesTypes::ResourceCommitment {
+            kind,
+            count: resource.count,
         })
     }
 

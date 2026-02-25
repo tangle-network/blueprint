@@ -490,9 +490,9 @@ async fn grant_permitted_caller(
     Ok(())
 }
 
-async fn echo_job(TangleArg(input): TangleArg<Vec<u8>>) -> TangleResult<Vec<u8>> {
+async fn echo_job(TangleArg((input,)): TangleArg<(Bytes,)>) -> TangleResult<Vec<u8>> {
     println!("echo_job invoked with {} bytes", input.len());
-    TangleResult(input)
+    TangleResult(input.to_vec())
 }
 
 #[derive(Clone)]

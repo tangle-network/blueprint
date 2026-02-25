@@ -5,7 +5,8 @@ use blueprint_core::info;
 use clap::Parser;
 use std::path::PathBuf;
 use std::str::FromStr;
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{Mutex, mpsc};
 use url::Url;
 
 // Import functions from the library
@@ -13,9 +14,9 @@ use blueprint_pricing_engine_lib::{
     cleanup,
     error::{PricingError, Result},
     handle_blueprint_update, init_benchmark_cache, init_job_pricing_config, init_operator_signer,
-    init_pricing_config, load_operator_config,
+    init_pricing_config, init_subscription_pricing_config, load_operator_config,
     service::blockchain::event::BlockchainEvent,
-    service::rpc::server::run_rpc_server,
+    service::rpc::server::{JobPricingConfig, run_rpc_server},
     signer::QuoteSigningDomain,
     spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
 };
@@ -24,72 +25,39 @@ use blueprint_pricing_engine_lib::{
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Path to the TOML configuration file.
-    #[arg(
-        short,
-        long,
-        value_name = "FILE",
-        env = "OPERATOR_CONFIG_PATH",
-        default_value = "config/operator.toml"
-    )]
+    /// Path to the TOML operator configuration file.
+    #[arg(short, long, value_name = "FILE", env = "OPERATOR_CONFIG_PATH")]
     pub config: PathBuf,
 
-    /// Path to the resource pricing configuration file (service creation quotes).
-    #[arg(
-        long,
-        value_name = "FILE",
-        env = "PRICING_CONFIG_PATH",
-        default_value = "config/default_pricing.toml"
-    )]
+    /// Path to the resource + subscription pricing configuration file.
+    #[arg(long, value_name = "FILE", env = "PRICING_CONFIG_PATH")]
     pub pricing_config: PathBuf,
 
     /// Path to the per-job pricing configuration file (job RFQ quotes).
-    /// If not provided, GetJobPrice returns NOT_FOUND for all jobs.
     #[arg(long, value_name = "FILE", env = "JOB_PRICING_CONFIG_PATH")]
     pub job_pricing_config: Option<PathBuf>,
 
-    /// Tangle node WebSocket URL (only used if 'tangle-listener' feature is enabled).
-    #[arg(
-        long,
-        value_name = "URL",
-        env = "OPERATOR_HTTP_RPC",
-        default_value = "http://127.0.0.1:8545"
-    )]
+    /// HTTP RPC endpoint for the EVM chain.
+    #[arg(long, value_name = "URL", env = "OPERATOR_HTTP_RPC")]
     pub http_rpc_endpoint: String,
 
-    #[arg(
-        long,
-        value_name = "URL",
-        env = "OPERATOR_WS_RPC",
-        default_value = "ws://127.0.0.1:8545"
-    )]
+    /// WebSocket RPC endpoint for the EVM chain.
+    #[arg(long, value_name = "URL", env = "OPERATOR_WS_RPC")]
     pub ws_rpc_endpoint: String,
 
-    #[arg(long, env = "OPERATOR_BLUEPRINT_ID", default_value_t = 0)]
+    #[arg(long, env = "OPERATOR_BLUEPRINT_ID")]
     pub blueprint_id: u64,
 
     #[arg(long, env = "OPERATOR_SERVICE_ID")]
     pub service_id: Option<u64>,
 
-    #[arg(
-        long,
-        env = "OPERATOR_TANGLE_CONTRACT",
-        default_value = "0x0000000000000000000000000000000000000000"
-    )]
+    #[arg(long, env = "OPERATOR_TANGLE_CONTRACT")]
     pub tangle_contract: String,
 
-    #[arg(
-        long,
-        env = "OPERATOR_RESTAKING_CONTRACT",
-        default_value = "0x0000000000000000000000000000000000000000"
-    )]
+    #[arg(long, env = "OPERATOR_RESTAKING_CONTRACT")]
     pub restaking_contract: String,
 
-    #[arg(
-        long,
-        env = "OPERATOR_STATUS_REGISTRY_CONTRACT",
-        default_value = "0x0000000000000000000000000000000000000000"
-    )]
+    #[arg(long, env = "OPERATOR_STATUS_REGISTRY_CONTRACT")]
     pub status_registry_contract: String,
 
     /// Log level (e.g., info, debug, trace)
@@ -107,7 +75,6 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     let tangle_contract = parse_address(&cli.tangle_contract)?;
     let restaking_contract = parse_address(&cli.restaking_contract)?;
     let status_registry_contract = parse_address(&cli.status_registry_contract)?;
-
     if tangle_contract == Address::ZERO {
         return Err(PricingError::Config(
             "missing OPERATOR_TANGLE_CONTRACT (required for EIP-712 quote signatures)".to_string(),
@@ -186,18 +153,23 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     }
 
     // Initialize pricing configuration
-    let pricing_config = init_pricing_config(
-        cli.pricing_config
-            .to_str()
-            .unwrap_or("config/default_pricing.toml"),
-    )
-    .await?;
+    let pricing_config_path = cli.pricing_config.to_str().ok_or_else(|| {
+        PricingError::Config("pricing config path is not valid UTF-8".to_string())
+    })?;
+    let pricing_config = init_pricing_config(pricing_config_path).await?;
 
-    // Initialize per-job pricing configuration (optional)
+    // Initialize per-job pricing configuration (optional).
+    // If not configured, GetJobPrice will return NOT_FOUND for all jobs.
     let job_pricing_config = match &cli.job_pricing_config {
-        Some(path) => Some(init_job_pricing_config(path).await?),
-        None => None,
+        Some(path) => init_job_pricing_config(path).await?,
+        None => {
+            info!("No job pricing config provided; GetJobPrice will return NOT_FOUND");
+            Arc::new(Mutex::new(JobPricingConfig::new()))
+        }
     };
+
+    // Initialize subscription pricing from the same pricing config file.
+    let subscription_config = init_subscription_pricing_config(pricing_config_path).await?;
 
     // Initialize operator signer
     let operator_signer = init_operator_signer(
@@ -220,6 +192,7 @@ pub async fn run_app(cli: Cli) -> Result<()> {
             benchmark_cache,
             pricing_config,
             job_pricing_config,
+            subscription_config,
             operator_signer,
         )
         .await

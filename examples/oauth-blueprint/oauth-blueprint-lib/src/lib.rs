@@ -56,7 +56,7 @@ pub async fn write_doc(
 
 #[debug_job]
 pub async fn admin_purge(
-    TangleArg(target_account): TangleArg<String>,
+    TangleArg((target_account,)): TangleArg<(String,)>,
 ) -> TangleResult<AdminPurgeResult> {
     let store = docs_store();
     let mut guard = store.write().await;
@@ -294,7 +294,7 @@ mod tests {
             assert_eq!(guard.get("tenant").unwrap().get("doc1").unwrap(), "secret");
         }
 
-        admin_purge(TangleArg("tenant".into())).await;
+        admin_purge(TangleArg(("tenant".into(),))).await;
         let guard = docs_store().read().await;
         assert!(guard.get("tenant").is_none());
     }

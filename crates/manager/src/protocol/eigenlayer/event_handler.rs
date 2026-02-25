@@ -404,7 +404,7 @@ impl EigenlayerEventHandler {
                         ctx,
                         limits,
                         crate::rt::hypervisor::ServiceVmConfig {
-                            _id: id,
+                            id,
                             ..Default::default()
                         },
                         &env.data_dir,

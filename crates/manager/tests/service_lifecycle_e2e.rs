@@ -350,7 +350,7 @@ async fn test_service_operator_weights() -> Result<()> {
 
 // Helper functions
 
-async fn square_job(TangleArg(x): TangleArg<u64>) -> TangleResult<u64> {
+async fn square_job(TangleArg((x,)): TangleArg<(u64,)>) -> TangleResult<u64> {
     TangleResult(x * x)
 }
 

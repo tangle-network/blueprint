@@ -1,4 +1,5 @@
 use crate::error::Result;
+use blueprint_core::warn;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use toml;
@@ -54,6 +55,10 @@ pub fn load_config_from_path<P: AsRef<Path>>(path: P) -> Result<OperatorConfig> 
     // Check if the file exists
     let path = path.as_ref();
     if !path.exists() {
+        warn!(
+            "Config file not found at {}, using defaults",
+            path.display()
+        );
         return Ok(OperatorConfig::default());
     }
 

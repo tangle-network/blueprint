@@ -22,6 +22,9 @@ cargo nextest run --profile ci
 # Format code
 cargo fmt
 
+# Format check in CI parity mode (required before push)
+cargo +nightly-2026-02-24 fmt -- --check
+
 # Lint code
 cargo clippy -- -D warnings
 cargo clippy --tests --examples -- -D warnings
@@ -81,9 +84,9 @@ examples/               # Example blueprints (incredible-squaring)
 ## Development Constraints
 
 ### Rust Configuration
-- Version: 1.86 (2024 edition)
+- Version: 1.88 (2024 edition)
 - Workspace resolver: v3
-- Nightly features used for formatting
+- Rustfmt in CI is pinned to: `nightly-2026-02-24`
 
 ### Linting Rules
 - Clippy pedantic enabled with specific allowances

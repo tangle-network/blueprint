@@ -175,7 +175,7 @@ async fn test_resource_price_calculation() -> Result<()> {
         count,
         price_per_unit,
         ttl_blocks,
-        Some(security_requirements),
+        Some(&security_requirements),
     );
 
     // With security requirements, the security factor is still 1.0 (default)

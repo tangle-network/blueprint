@@ -256,15 +256,14 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
     };
 
     // Confirm rollback
-    if !yes {
-        if !Confirm::with_theme(&ColorfulTheme::default())
+    if !yes
+        && !Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(format!("Rollback to version {}?", target_version))
             .default(false)
             .interact()?
-        {
-            println!("Rollback cancelled");
-            return Ok(());
-        }
+    {
+        println!("Rollback cancelled");
+        return Ok(());
     }
 
     // Create progress bar

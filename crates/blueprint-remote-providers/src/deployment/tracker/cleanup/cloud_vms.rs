@@ -1,7 +1,9 @@
 //! Cloud VM cleanup handlers
 
 use super::super::types::{CleanupHandler, DeploymentRecord};
-use crate::core::error::{Error, Result};
+#[cfg(feature = "aws")]
+use crate::core::error::Error;
+use crate::core::error::Result;
 use blueprint_core::info;
 
 /// AWS cleanup
@@ -65,7 +67,7 @@ impl CleanupHandler for GcpCleanup {
                 deployment.metadata.get("project_id"),
                 deployment.region.as_ref(),
             ) {
-                let mut provisioner = GcpProvisioner::new(project.clone()).await?;
+                let provisioner = GcpProvisioner::new(project.clone()).await?;
 
                 if let Some(instance_name) = deployment.resource_ids.get("instance_name") {
                     info!("Deleting GCP instance: {}", instance_name);

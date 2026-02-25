@@ -10,6 +10,7 @@ use tokio::fs::create_dir_all;
 use crate::blueprint::ActiveBlueprints;
 use crate::blueprint::native::FilteredBlueprint;
 use crate::config::BlueprintManagerContext;
+use crate::config::SourceType;
 use crate::error::{Error, Result};
 use crate::protocol::tangle::client::TangleProtocolClient;
 use crate::protocol::tangle::metadata::OnChainMetadataProvider;
@@ -110,7 +111,69 @@ impl TangleEventHandler {
 
         if let Some(evt) = client.client().latest_event().await {
             info!("Tangle client initialized at block {}", evt.block_number);
+            // Process historical events (e.g. ServiceActivated) that were emitted
+            // before the Manager started — catches up on pre-seeded state.
+            use crate::protocol::types::TangleProtocolEvent;
+            let proto_event = ProtocolEvent::Tangle(TangleProtocolEvent {
+                block_number: evt.block_number,
+                block_hash: evt.block_hash,
+                timestamp: evt.timestamp,
+                logs: evt.logs.clone(),
+                inner: evt,
+            });
+            self.handle_event(client, &proto_event, env, ctx, active_blueprints)
+                .await?;
         }
+
+        // Fallback: if no services were discovered via events (e.g. Anvil
+        // state-only snapshot with no log/receipt data), enumerate services
+        // directly from on-chain contract state.
+        if active_blueprints.is_empty() {
+            let operator = client.client().account();
+            let service_count = client.client().service_count().await.unwrap_or(0);
+            if service_count > 0 {
+                info!(
+                    service_count,
+                    %operator,
+                    "No services found via events; scanning contract state"
+                );
+            }
+            for service_id in 0..service_count {
+                match client
+                    .client()
+                    .is_service_operator(service_id, operator)
+                    .await
+                {
+                    Ok(true) => {
+                        info!(
+                            service_id,
+                            "Found active service for operator via contract state"
+                        );
+                        match self.metadata.resolve_service(client, service_id).await {
+                            Ok(Some(metadata)) => {
+                                if let Err(e) = self
+                                    .ensure_service_running(metadata, env, ctx, active_blueprints)
+                                    .await
+                                {
+                                    info!(service_id, error = %e, "Failed to start service from contract state");
+                                }
+                            }
+                            Ok(None) => {
+                                info!(service_id, "Service metadata unavailable");
+                            }
+                            Err(e) => {
+                                info!(service_id, error = %e, "Failed to resolve service metadata");
+                            }
+                        }
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        info!(service_id, error = %e, "Failed to check operator membership");
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -260,6 +323,87 @@ impl TangleEventHandler {
                     return Ok(());
                 }
                 Err(e) => last_err = Some(e),
+            }
+        }
+
+        // Fallback: when preferred_source is Native and all on-chain sources failed,
+        // try building from local cargo workspace if BLUEPRINT_CARGO_BIN is set.
+        if ctx.preferred_source == SourceType::Native {
+            if let Ok(cargo_bin) = std::env::var("BLUEPRINT_CARGO_BIN") {
+                let base_path = std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| ".".to_string());
+                info!(
+                    cargo_bin = %cargo_bin,
+                    base_path = %base_path,
+                    "On-chain sources failed; trying local cargo binary fallback"
+                );
+                let test_source = BlueprintSource::Testing(crate::sources::types::TestFetcher {
+                    cargo_package: cargo_bin.clone(),
+                    cargo_bin,
+                    base_path,
+                });
+                let mut handler = build_source_handler(
+                    &test_source,
+                    metadata.blueprint_id,
+                    metadata.name.clone(),
+                    ctx.allow_unchecked_attestations,
+                );
+                let env_vars = BlueprintEnvVars::new(
+                    env,
+                    ctx,
+                    metadata.blueprint_id,
+                    metadata.service_id,
+                    &filtered,
+                    &metadata.name,
+                );
+                let args = BlueprintArgs::new(ctx).with_dry_run(env.dry_run);
+                let limits = ResourceLimits::default();
+                let service_idx = metadata.service_id.try_into().unwrap_or(u32::MAX);
+
+                match handler
+                    .spawn(
+                        ctx,
+                        limits,
+                        env,
+                        service_idx,
+                        env_vars,
+                        args,
+                        &service_label,
+                        &cache_dir,
+                        &runtime_dir,
+                    )
+                    .await
+                {
+                    Ok(mut service) => {
+                        if let Some(health) = service.start().await? {
+                            if let Err(e) = health.await {
+                                last_err = Some(e);
+                            } else {
+                                active_blueprints
+                                    .entry(metadata.blueprint_id)
+                                    .or_default()
+                                    .insert(metadata.service_id, service);
+                                info!(
+                                    "Started Tangle blueprint {} service {} via local cargo fallback",
+                                    metadata.blueprint_id, metadata.service_id
+                                );
+                                return Ok(());
+                            }
+                        } else {
+                            active_blueprints
+                                .entry(metadata.blueprint_id)
+                                .or_default()
+                                .insert(metadata.service_id, service);
+                            info!(
+                                "Started Tangle blueprint {} service {} via local cargo fallback",
+                                metadata.blueprint_id, metadata.service_id
+                            );
+                            return Ok(());
+                        }
+                    }
+                    Err(e) => last_err = Some(e),
+                }
             }
         }
 

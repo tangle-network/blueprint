@@ -3,7 +3,7 @@ use blueprint_crypto::{KeyType, k256::K256Ecdsa};
 use blueprint_pricing_engine_lib::{
     OperatorSigner,
     error::{PricingError, Result},
-    signer::{QuoteSigningDomain, SignableQuote, verify_quote},
+    signer::{QuoteSigningDomain, SignableQuote, quote_digest_eip712, verify_quote},
 };
 use rust_decimal::prelude::FromPrimitive;
 
@@ -68,6 +68,43 @@ async fn test_sign_and_verify_quote() -> Result<()> {
     assert!(
         !is_valid_tampered,
         "Signature should be invalid for tampered quote"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_service_quote_digest_changes_with_resource_commitments() -> Result<()> {
+    let config = utils::create_test_config();
+    let secret = K256Ecdsa::generate_with_seed(None)
+        .map_err(|e| PricingError::Other(format!("Failed to generate keypair: {e}")))?;
+
+    let domain = QuoteSigningDomain {
+        chain_id: 1,
+        verifying_contract: alloy_primitives::Address::ZERO,
+    };
+
+    let mut signer = OperatorSigner::new(&config, secret, domain)?;
+    let quote_details = utils::create_test_quote_details();
+    let signable_quote = SignableQuote::new(
+        quote_details,
+        rust_decimal::Decimal::from_f64(0.0001)
+            .ok_or_else(|| PricingError::Other("invalid decimal".to_string()))?,
+    )?;
+    let signed_quote = signer.sign_quote(signable_quote, vec![1, 2, 3, 4])?;
+
+    let mut mutated = signed_quote.abi_details.clone();
+    assert!(
+        !mutated.resourceCommitments.is_empty(),
+        "test quote should include resource commitments"
+    );
+    mutated.resourceCommitments[0].count += 1;
+
+    let original = quote_digest_eip712(&signed_quote.abi_details, domain)?;
+    let changed = quote_digest_eip712(&mutated, domain)?;
+    assert_ne!(
+        original, changed,
+        "changing resource commitments must change the EIP-712 digest"
     );
 
     Ok(())

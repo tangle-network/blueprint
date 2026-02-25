@@ -282,7 +282,7 @@ impl PricingFetcher {
         // https://cloudbilling.googleapis.com/v1/services/6F81-5844-456A/skus (Compute Engine)
 
         let api_key = std::env::var("GCP_API_KEY").map_err(|_| {
-            PricingError::ConfigurationError(
+            PricingError::Config(
                 "GCP_API_KEY environment variable required for GCP pricing. \
                 Get API key from: https://console.cloud.google.com/apis/credentials"
                     .to_string(),
@@ -376,7 +376,7 @@ impl PricingFetcher {
             }
         }
 
-        Err(PricingError::ConfigurationError(
+        Err(PricingError::Config(
             "GCP pricing requires using GCP Compute API with service account credentials. \
             Cloud Billing Catalog API does not provide ready-to-use instance pricing. \
             Consider using gcloud CLI or Compute Engine API directly."
@@ -459,7 +459,7 @@ impl PricingFetcher {
     async fn fetch_vultr_instances(&self, _region: &str) -> Result<Vec<InstanceInfo>> {
         // Vultr API requires API key
         let api_key = std::env::var("VULTR_API_KEY").map_err(|_| {
-            PricingError::ConfigurationError(
+            PricingError::Config(
                 "VULTR_API_KEY environment variable required for Vultr pricing. \
                 Get API key from: https://my.vultr.com/settings/#settingsapi"
                     .to_string(),

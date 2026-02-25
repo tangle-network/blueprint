@@ -1,5 +1,5 @@
-use alloy_primitives::{Address, B256, ChainId, U256, keccak256};
-use alloy_sol_types::{SolType, SolValue};
+use alloy_primitives::{Address, ChainId, U256};
+use alloy_sol_types::SolStruct;
 use blueprint_client_tangle::contracts::ITangleTypes;
 use blueprint_crypto::k256::{K256Signature, K256SigningKey, K256VerifyingKey};
 use rust_decimal::Decimal;
@@ -7,6 +7,7 @@ use rust_decimal::Decimal;
 use crate::config::OperatorConfig;
 use crate::error::{PricingError, Result};
 use crate::pricing_engine::{self, asset::AssetType};
+use crate::types::ResourceUnit;
 use crate::utils::{decimal_to_scaled_amount, percent_to_bps};
 
 pub type BlueprintId = u64;
@@ -123,15 +124,13 @@ pub fn quote_digest_eip712(
     quote_details: &ITangleTypes::QuoteDetails,
     domain: QuoteSigningDomain,
 ) -> Result<[u8; 32]> {
-    let domain_separator = compute_domain_separator(domain);
-    let quote_hash = hash_quote_details(quote_details);
-
-    let mut payload = Vec::with_capacity(2 + 32 + 32);
-    payload.extend_from_slice(b"\x19\x01");
-    payload.extend_from_slice(domain_separator.as_slice());
-    payload.extend_from_slice(quote_hash.as_slice());
-
-    Ok(keccak256(payload).into())
+    let eip712_domain = alloy_sol_types::eip712_domain! {
+        name: "TangleQuote",
+        version: "1",
+        chain_id: domain.chain_id,
+        verifying_contract: domain.verifying_contract,
+    };
+    Ok(quote_details.eip712_signing_hash(&eip712_domain).into())
 }
 
 /// Verify a quote signature by checking the prehashed EIP-712 digest against the public key.
@@ -149,75 +148,6 @@ pub fn verify_quote(
         .0
         .verify_prehash(&hash, &quote.signature.0)
         .is_ok())
-}
-
-fn compute_domain_separator(domain: QuoteSigningDomain) -> B256 {
-    const DOMAIN_TYPEHASH_STR: &str =
-        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)";
-
-    // `tnt-core/src/v2/core/Base.sol` hardcodes this domain for quote signing.
-    const NAME: &str = "TangleQuote";
-    const VERSION: &str = "1";
-
-    let domain_typehash = keccak256(DOMAIN_TYPEHASH_STR.as_bytes());
-    let name_hash = keccak256(NAME.as_bytes());
-    let version_hash = keccak256(VERSION.as_bytes());
-
-    let encoded = (
-        domain_typehash,
-        name_hash,
-        version_hash,
-        U256::from(domain.chain_id),
-        domain.verifying_contract,
-    )
-        .abi_encode();
-
-    keccak256(encoded)
-}
-
-fn hash_quote_details(quote_details: &ITangleTypes::QuoteDetails) -> B256 {
-    const ASSET_TYPEHASH_STR: &str = "Asset(uint8 kind,address token)";
-    const COMMITMENT_TYPEHASH_STR: &str =
-        "AssetSecurityCommitment(Asset asset,uint16 exposureBps)Asset(uint8 kind,address token)";
-    const QUOTE_TYPEHASH_STR: &str = "QuoteDetails(uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,AssetSecurityCommitment[] securityCommitments)AssetSecurityCommitment(Asset asset,uint16 exposureBps)Asset(uint8 kind,address token)";
-
-    let quote_typehash = keccak256(QUOTE_TYPEHASH_STR.as_bytes());
-    let commitment_typehash = keccak256(COMMITMENT_TYPEHASH_STR.as_bytes());
-    let asset_typehash = keccak256(ASSET_TYPEHASH_STR.as_bytes());
-
-    let mut commitment_hashes: Vec<u8> =
-        Vec::with_capacity(quote_details.securityCommitments.len() * 32);
-    for commitment in quote_details.securityCommitments.iter() {
-        type AssetEncodeTuple = (
-            alloy_sol_types::sol_data::FixedBytes<32>,
-            alloy_sol_types::sol_data::Uint<8>,
-            alloy_sol_types::sol_data::Address,
-        );
-        let asset_hash = keccak256(<AssetEncodeTuple as SolType>::abi_encode(&(
-            asset_typehash,
-            commitment.asset.kind,
-            commitment.asset.token,
-        )));
-
-        let commitment_hash =
-            keccak256((commitment_typehash, asset_hash, commitment.exposureBps).abi_encode());
-
-        commitment_hashes.extend_from_slice(commitment_hash.as_slice());
-    }
-    let commitments_hash = keccak256(commitment_hashes);
-
-    keccak256(
-        (
-            quote_typehash,
-            quote_details.blueprintId,
-            quote_details.ttlBlocks,
-            quote_details.totalCost,
-            quote_details.timestamp,
-            quote_details.expiry,
-            commitments_hash,
-        )
-            .abi_encode(),
-    )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -251,7 +181,7 @@ impl OperatorSigner {
         details: &crate::pricing_engine::JobQuoteDetails,
         proof_of_work: Vec<u8>,
     ) -> Result<SignedJobQuote> {
-        let digest = job_quote_digest_eip712(details, self.domain);
+        let digest = job_quote_digest_eip712(details, self.domain)?;
         let (signature, recovery_id) = self
             .keypair
             .0
@@ -271,20 +201,27 @@ impl OperatorSigner {
 /// Convert proto `JobQuoteDetails` (bytes price) → native `job_quote::JobQuoteDetails` (U256 price).
 fn proto_to_native_job_quote(
     details: &crate::pricing_engine::JobQuoteDetails,
-) -> jq::JobQuoteDetails {
+) -> Result<jq::JobQuoteDetails> {
     let price = if details.price.is_empty() {
         U256::ZERO
     } else {
         U256::from_be_slice(&details.price)
     };
 
-    jq::JobQuoteDetails {
+    let job_index = u8::try_from(details.job_index).map_err(|_| {
+        PricingError::Signing(format!(
+            "job_index {} exceeds u8 range (max 255)",
+            details.job_index
+        ))
+    })?;
+
+    Ok(jq::JobQuoteDetails {
         service_id: details.service_id,
-        job_index: details.job_index as u8,
+        job_index,
         price,
         timestamp: details.timestamp,
         expiry: details.expiry,
-    }
+    })
 }
 
 /// Convert this crate's `QuoteSigningDomain` to the canonical `job_quote::QuoteSigningDomain`.
@@ -301,9 +238,9 @@ fn to_jq_domain(domain: QuoteSigningDomain) -> jq::QuoteSigningDomain {
 pub fn job_quote_digest_eip712(
     details: &crate::pricing_engine::JobQuoteDetails,
     domain: QuoteSigningDomain,
-) -> [u8; 32] {
-    let native = proto_to_native_job_quote(details);
-    jq::job_quote_digest_eip712(&native, to_jq_domain(domain))
+) -> Result<[u8; 32]> {
+    let native = proto_to_native_job_quote(details)?;
+    Ok(jq::job_quote_digest_eip712(&native, to_jq_domain(domain)))
 }
 
 fn build_abi_quote_details(
@@ -315,6 +252,11 @@ fn build_abi_quote_details(
         .iter()
         .map(proto_commitment_to_abi)
         .collect::<Result<Vec<_>>>()?;
+    let resource_commitments = details
+        .resources
+        .iter()
+        .map(proto_resource_commitment_to_abi)
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(ITangleTypes::QuoteDetails {
         blueprintId: details.blueprint_id,
@@ -323,6 +265,7 @@ fn build_abi_quote_details(
         timestamp: details.timestamp,
         expiry: details.expiry,
         securityCommitments: security_commitments.into(),
+        resourceCommitments: resource_commitments.into(),
     })
 }
 
@@ -367,4 +310,33 @@ fn proto_asset_to_abi(asset: &pricing_engine::Asset) -> Result<ITangleTypes::Ass
             "Custom assets are not supported on Tangle EVM".to_string(),
         )),
     }
+}
+
+fn proto_resource_commitment_to_abi(
+    resource: &pricing_engine::ResourcePricing,
+) -> Result<ITangleTypes::ResourceCommitment> {
+    // Matches tnt-core Types.ResourceCommitment.kind:
+    // 0=CPU, 1=MemoryMB, 2=StorageMB, 3=NetworkEgressMB, 4=NetworkIngressMB, 5=GPU
+    let kind =
+        match resource.kind.parse::<ResourceUnit>().map_err(|_| {
+            PricingError::Signing(format!("Invalid resource kind: {}", resource.kind))
+        })? {
+            ResourceUnit::CPU => 0,
+            ResourceUnit::MemoryMB => 1,
+            ResourceUnit::StorageMB => 2,
+            ResourceUnit::NetworkEgressMB => 3,
+            ResourceUnit::NetworkIngressMB => 4,
+            ResourceUnit::GPU => 5,
+            _ => {
+                return Err(PricingError::Signing(format!(
+                    "Unsupported resource kind for tnt-core quote commitments: {}",
+                    resource.kind
+                )));
+            }
+        };
+
+    Ok(ITangleTypes::ResourceCommitment {
+        kind,
+        count: resource.count,
+    })
 }
