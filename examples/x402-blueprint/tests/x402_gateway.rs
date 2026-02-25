@@ -5,6 +5,7 @@
 
 use alloy_primitives::U256;
 use blueprint_runner::BackgroundService;
+use blueprint_x402::config::X402InvocationMode;
 use blueprint_x402::producer::{VerifiedPayment, X402Producer};
 use blueprint_x402::{X402Config, X402Gateway};
 use bytes::Bytes;
@@ -118,6 +119,30 @@ async fn test_unknown_job_returns_404() {
 }
 
 #[tokio::test]
+async fn test_auth_dry_run_public_job() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!(
+            "http://127.0.0.1:{port}/x402/jobs/1/0/auth-dry-run"
+        ))
+        .body("hello")
+        .send()
+        .await
+        .expect("POST dry-run");
+
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["allowed"], true);
+    assert_eq!(body["mode"], "public_paid");
+
+    handle.abort();
+}
+
+#[tokio::test]
 async fn test_unpaid_request_returns_402() {
     let port = free_port();
     let pricing = load_example_pricing();
@@ -151,6 +176,7 @@ async fn test_router_dispatches_echo_job() {
         payment_network: "eip155:8453".into(),
         payment_token: "USDC".into(),
         call_id: 1,
+        caller: None,
     };
 
     let job_call = payment.into_job_call();
@@ -175,6 +201,7 @@ async fn test_router_dispatches_hash_job() {
         payment_network: "eip155:8453".into(),
         payment_token: "USDC".into(),
         call_id: 2,
+        caller: None,
     };
 
     let job_call = payment.into_job_call();
@@ -289,6 +316,8 @@ fn test_settlement_with_custom_token_address() {
             eip3009_name: None,
             eip3009_version: None,
         }],
+        default_invocation_mode: X402InvocationMode::Disabled,
+        job_policies: vec![],
 
         service_id: 1,
     };
@@ -337,6 +366,8 @@ fn test_settlement_with_multiple_tokens() {
                 eip3009_version: None,
             },
         ],
+        default_invocation_mode: X402InvocationMode::Disabled,
+        job_policies: vec![],
 
         service_id: 1,
     };

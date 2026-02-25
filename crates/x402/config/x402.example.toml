@@ -12,9 +12,30 @@ facilitator_url = "https://x402.org/facilitator"
 
 # How long (seconds) dynamically-generated quotes stay valid.
 quote_ttl_secs = 300
+default_invocation_mode = "disabled"
 
 # Service instance ID (set at runtime by the operator).
 service_id = 1
+
+# ─── Job Invocation Policies ───────────────────────────────────────────────
+#
+# Jobs are denied by default unless explicitly enabled here.
+# `restricted_paid` models on-chain permission checks via `eth_call`.
+#
+# Public paid job (payment-gated only)
+[[job_policies]]
+service_id = 1
+job_index = 0
+invocation_mode = "public_paid"
+
+# Restricted paid job (payment + on-chain caller permission parity)
+[[job_policies]]
+service_id = 1
+job_index = 1
+invocation_mode = "restricted_paid"
+auth_mode = "payer_is_caller"
+tangle_rpc_url = "http://127.0.0.1:8545"
+tangle_contract = "0x0000000000000000000000000000000000000001"
 
 # ─── Accepted Tokens ──────────────────────────────────────────────────────
 #

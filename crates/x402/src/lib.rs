@@ -54,7 +54,7 @@ pub mod producer;
 pub mod quote_registry;
 pub mod settlement;
 
-pub use config::X402Config;
+pub use config::{JobPolicyConfig, X402CallerAuthMode, X402Config, X402InvocationMode};
 pub use error::X402Error;
 pub use gateway::X402Gateway;
 pub use producer::X402Producer;

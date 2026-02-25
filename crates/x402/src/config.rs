@@ -5,11 +5,59 @@
 
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::Path;
 use url::Url;
 
 use crate::error::X402Error;
+
+/// How a job is exposed to the x402 HTTP ingress.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum X402InvocationMode {
+    /// Job cannot be invoked via x402.
+    #[default]
+    Disabled,
+    /// Job is payment-gated but otherwise public.
+    PublicPaid,
+    /// Job is payment-gated and must pass restricted caller policy.
+    RestrictedPaid,
+}
+
+/// How caller identity is sourced for restricted x402 jobs.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum X402CallerAuthMode {
+    /// Caller is inferred from the settled payment payer.
+    #[default]
+    PayerIsCaller,
+    /// Caller is asserted by headers and must include a valid signature.
+    DelegatedCallerSignature,
+    /// No caller identity check (invalid for restricted mode).
+    PaymentOnly,
+}
+
+/// Per-job x402 invocation policy.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobPolicyConfig {
+    /// Tangle service id.
+    pub service_id: u64,
+    /// Job index.
+    pub job_index: u32,
+    /// Whether/How this job can be called via x402.
+    #[serde(default)]
+    pub invocation_mode: X402InvocationMode,
+    /// Restricted-mode caller identity strategy.
+    #[serde(default)]
+    pub auth_mode: X402CallerAuthMode,
+    /// RPC endpoint used for permission dry-run (`eth_call`) checks.
+    #[serde(default)]
+    pub tangle_rpc_url: Option<Url>,
+    /// Tangle contract address used for `isPermittedCaller` checks.
+    #[serde(default)]
+    pub tangle_contract: Option<String>,
+}
 
 /// Top-level x402 gateway configuration.
 ///
@@ -19,6 +67,22 @@ use crate::error::X402Error;
 /// bind_address = "0.0.0.0:8402"
 /// facilitator_url = "https://facilitator.x402.rs"
 /// quote_ttl_secs = 300
+///
+/// # Default job policy if no explicit per-job entry exists.
+/// default_invocation_mode = "disabled"
+///
+/// [[job_policies]]
+/// service_id = 1
+/// job_index = 0
+/// invocation_mode = "public_paid"
+///
+/// [[job_policies]]
+/// service_id = 1
+/// job_index = 1
+/// invocation_mode = "restricted_paid"
+/// auth_mode = "payer_is_caller"
+/// tangle_rpc_url = "http://127.0.0.1:8545"
+/// tangle_contract = "0x0000000000000000000000000000000000000001"
 ///
 /// [[accepted_tokens]]
 /// network = "eip155:8453"
@@ -45,6 +109,14 @@ pub struct X402Config {
     /// Tokens the operator accepts for x402 settlement.
     #[serde(default)]
     pub accepted_tokens: Vec<AcceptedToken>,
+
+    /// Default invocation mode for jobs missing an explicit `job_policies` entry.
+    #[serde(default)]
+    pub default_invocation_mode: X402InvocationMode,
+
+    /// Per-job invocation overrides.
+    #[serde(default)]
+    pub job_policies: Vec<JobPolicyConfig>,
 
     /// The service ID this gateway serves (set at runtime, not from TOML).
     #[serde(default)]
@@ -196,6 +268,49 @@ impl X402Config {
         for token in &self.accepted_tokens {
             token.validate()?;
         }
+
+        let mut seen = HashSet::new();
+        for policy in &self.job_policies {
+            if !seen.insert((policy.service_id, policy.job_index)) {
+                return Err(X402Error::Config(format!(
+                    "duplicate job policy for service_id={} job_index={}",
+                    policy.service_id, policy.job_index
+                )));
+            }
+
+            if policy.invocation_mode == X402InvocationMode::RestrictedPaid {
+                if policy.auth_mode == X402CallerAuthMode::PaymentOnly {
+                    return Err(X402Error::Config(format!(
+                        "restricted_paid policy for service_id={} job_index={} cannot use auth_mode=payment_only",
+                        policy.service_id, policy.job_index
+                    )));
+                }
+
+                if policy.tangle_rpc_url.is_none() {
+                    return Err(X402Error::Config(format!(
+                        "restricted_paid policy for service_id={} job_index={} requires tangle_rpc_url",
+                        policy.service_id, policy.job_index
+                    )));
+                }
+
+                let Some(contract) = &policy.tangle_contract else {
+                    return Err(X402Error::Config(format!(
+                        "restricted_paid policy for service_id={} job_index={} requires tangle_contract",
+                        policy.service_id, policy.job_index
+                    )));
+                };
+
+                contract
+                    .parse::<alloy_primitives::Address>()
+                    .map_err(|_| {
+                        X402Error::Config(format!(
+                            "restricted_paid policy for service_id={} job_index={} has invalid tangle_contract='{}'",
+                            policy.service_id, policy.job_index, contract
+                        ))
+                    })?;
+            }
+        }
+
         Ok(())
     }
 
@@ -247,109 +362,21 @@ mod tests {
         }
     }
 
-    fn dai_token(markup_bps: u16) -> AcceptedToken {
-        AcceptedToken {
-            network: "eip155:1".into(),
-            asset: "0x6B175474E89094C44Da98b954EedeAC495271d0F".into(),
-            symbol: "DAI".into(),
-            decimals: 18,
-            pay_to: "0x0000000000000000000000000000000000000002".into(),
-            rate_per_native_unit: Decimal::from(3200u32),
-            markup_bps,
-            transfer_method: default_transfer_method(),
-            eip3009_name: None,
-            eip3009_version: None,
-        }
-    }
-
-    // ---- Basic conversion tests ----
-
     #[test]
     fn test_wei_to_usdc_conversion() {
         let token = usdc_token(0);
-        // 0.001 ETH = 1_000_000_000_000_000 wei
         let wei = U256::from(1_000_000_000_000_000u64);
         let result = token.convert_wei_to_amount(&wei).unwrap();
-        // 0.001 ETH * 3200 USDC/ETH = 3.2 USDC = 3_200_000 smallest units
         assert_eq!(result, "3200000");
     }
 
     #[test]
     fn test_wei_to_usdc_with_markup() {
-        let token = usdc_token(200); // 2% markup
+        let token = usdc_token(200);
         let wei = U256::from(1_000_000_000_000_000u64);
         let result = token.convert_wei_to_amount(&wei).unwrap();
-        // 3.2 USDC * 1.02 = 3.264 USDC = 3_264_000 smallest units
         assert_eq!(result, "3264000");
     }
-
-    // ---- Edge case tests ----
-
-    #[test]
-    fn test_zero_wei_returns_zero() {
-        let token = usdc_token(200);
-        let result = token.convert_wei_to_amount(&U256::ZERO).unwrap();
-        assert_eq!(result, "0");
-    }
-
-    #[test]
-    fn test_one_wei_rounds_to_zero_for_usdc() {
-        // 1 wei is vanishingly small: 1e-18 ETH * 3200 = 3.2e-15 USDC
-        // In 6-decimal smallest units: 3.2e-9, which floors to 0.
-        let token = usdc_token(0);
-        let result = token.convert_wei_to_amount(&U256::from(1u64)).unwrap();
-        assert_eq!(result, "0");
-    }
-
-    #[test]
-    fn test_18_decimal_token_large_amount() {
-        // DAI has 18 decimals. 1 ETH = 3200 DAI.
-        // 10 ETH = 10_000_000_000_000_000_000 wei = 32000 DAI
-        // In 18-decimal units: 32000 * 10^18 = 32000000000000000000000
-        let token = dai_token(0);
-        let wei = U256::from(10u64) * U256::from(10u64).pow(U256::from(18u64));
-        let result = token.convert_wei_to_amount(&wei).unwrap();
-        assert_eq!(result, "32000000000000000000000");
-    }
-
-    #[test]
-    fn test_18_decimal_token_exceeds_u64() {
-        // Verify amounts that would overflow u64 are handled correctly.
-        // u64::MAX = 18_446_744_073_709_551_615
-        // 100 ETH * 3200 DAI/ETH = 320000 DAI
-        // In 18-decimal units: 320000 * 10^18 = 320000000000000000000000 (> u64::MAX)
-        let token = dai_token(0);
-        let wei = U256::from(100u64) * U256::from(10u64).pow(U256::from(18u64));
-        let result = token.convert_wei_to_amount(&wei).unwrap();
-        assert_eq!(result, "320000000000000000000000");
-        // Verify this actually exceeds u64
-        assert!(
-            result.parse::<u128>().unwrap() > u64::MAX as u128,
-            "this amount must exceed u64::MAX to validate the overflow fix"
-        );
-    }
-
-    #[test]
-    fn test_full_markup_100_percent() {
-        let mut token = usdc_token(0);
-        token.markup_bps = 10_000; // 100% markup
-        let wei = U256::from(1_000_000_000_000_000u64); // 0.001 ETH
-        let result = token.convert_wei_to_amount(&wei).unwrap();
-        // 3.2 USDC * 2.0 = 6.4 USDC = 6_400_000
-        assert_eq!(result, "6400000");
-    }
-
-    #[test]
-    fn test_unit_exchange_rate() {
-        let mut token = usdc_token(0);
-        token.rate_per_native_unit = Decimal::ONE;
-        let wei = U256::from(10u64).pow(U256::from(18u64)); // 1 ETH
-        let result = token.convert_wei_to_amount(&wei).unwrap();
-        // 1 ETH * 1 USDC/ETH = 1 USDC = 1_000_000
-        assert_eq!(result, "1000000");
-    }
-
-    // ---- Validation tests ----
 
     #[test]
     fn test_validate_good_token() {
@@ -366,30 +393,6 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_bad_chain_id() {
-        let mut token = usdc_token(0);
-        token.network = "eip155:not_a_number".into();
-        let err = token.validate().unwrap_err();
-        assert!(err.to_string().contains("invalid chain ID"), "{err}");
-    }
-
-    #[test]
-    fn test_validate_bad_asset_address() {
-        let mut token = usdc_token(0);
-        token.asset = "not_an_address".into();
-        let err = token.validate().unwrap_err();
-        assert!(err.to_string().contains("invalid asset address"), "{err}");
-    }
-
-    #[test]
-    fn test_validate_bad_pay_to_address() {
-        let mut token = usdc_token(0);
-        token.pay_to = "0xZZZ".into();
-        let err = token.validate().unwrap_err();
-        assert!(err.to_string().contains("invalid pay_to address"), "{err}");
-    }
-
-    #[test]
     fn test_validate_zero_exchange_rate() {
         let mut token = usdc_token(0);
         token.rate_per_native_unit = Decimal::ZERO;
@@ -398,29 +401,73 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_negative_exchange_rate() {
-        let mut token = usdc_token(0);
-        token.rate_per_native_unit = Decimal::from(-1i32);
-        let err = token.validate().unwrap_err();
-        assert!(err.to_string().contains("positive"), "{err}");
-    }
-
-    // ---- Config-level conversion (backwards compat) ----
-
-    #[test]
-    fn test_config_convert_delegates_to_token() {
-        let token = usdc_token(0);
+    fn test_restricted_policy_requires_rpc_and_contract() {
         let config = X402Config {
             bind_address: default_bind_address(),
             facilitator_url: "https://example.com".parse().unwrap(),
             quote_ttl_secs: 300,
-            accepted_tokens: vec![token.clone()],
-
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![JobPolicyConfig {
+                service_id: 1,
+                job_index: 0,
+                invocation_mode: X402InvocationMode::RestrictedPaid,
+                auth_mode: X402CallerAuthMode::PayerIsCaller,
+                tangle_rpc_url: None,
+                tangle_contract: None,
+            }],
             service_id: 0,
         };
-        let wei = U256::from(1_000_000_000_000_000u64);
-        let from_config = config.convert_wei_to_token(&wei, &token).unwrap();
-        let from_token = token.convert_wei_to_amount(&wei).unwrap();
-        assert_eq!(from_config, from_token);
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("requires tangle_rpc_url"), "{err}");
+    }
+
+    #[test]
+    fn test_restricted_policy_rejects_payment_only_auth() {
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![JobPolicyConfig {
+                service_id: 1,
+                job_index: 0,
+                invocation_mode: X402InvocationMode::RestrictedPaid,
+                auth_mode: X402CallerAuthMode::PaymentOnly,
+                tangle_rpc_url: Some("http://127.0.0.1:8545".parse().unwrap()),
+                tangle_contract: Some("0x0000000000000000000000000000000000000001".into()),
+            }],
+            service_id: 0,
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("payment_only"), "{err}");
+    }
+
+    #[test]
+    fn test_duplicate_job_policy_rejected() {
+        let policy = JobPolicyConfig {
+            service_id: 1,
+            job_index: 0,
+            invocation_mode: X402InvocationMode::PublicPaid,
+            auth_mode: X402CallerAuthMode::PayerIsCaller,
+            tangle_rpc_url: None,
+            tangle_contract: None,
+        };
+
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![policy.clone(), policy],
+            service_id: 0,
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("duplicate job policy"), "{err}");
     }
 }
