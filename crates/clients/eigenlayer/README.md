@@ -1,12 +1,16 @@
 # blueprint-client-eigenlayer
 
-Eigenlayer client for Tangle Blueprints.
+EigenLayer-specific client implementation for Blueprint services.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- EigenLayer client bindings/wrappers.
+- EigenLayer-focused error types.
+
+## When to use
+
+Use this crate when your blueprint integrates with EigenLayer contract/operator flows.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/clients/eigenlayer
-

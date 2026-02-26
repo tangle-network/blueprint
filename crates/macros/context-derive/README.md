@@ -1,12 +1,16 @@
 # blueprint-context-derive
 
-Procedural macros for deriving Context Extension traits from blueprint-sdk.
+Derive macros for Blueprint context extension traits.
 
-## Scope
+## What it supports
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+Feature-aware derive paths for context integration across:
+
+- Tangle
+- EVM
+- EigenLayer
+- Keystore
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/macros/context-derive
-

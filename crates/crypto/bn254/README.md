@@ -1,12 +1,12 @@
 # blueprint-crypto-bn254
 
-Ark BN254 crypto primitives for Tangle Blueprints.
+BN254-focused crypto helpers for Blueprint services.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- BN254 aggregation helpers.
+- BN254-specific error types.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/crypto/bn254
-

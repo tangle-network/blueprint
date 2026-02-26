@@ -1,8 +1,20 @@
 # blueprint-crypto
 
-Metapackage for Blueprint cryptography crates.
+Meta-crate for Blueprint cryptography modules.
 
-This crate re-exports cryptographic primitives used across Blueprint runtimes, including ECDSA, sr25519, BLS/BN254, and hashing helpers.
+## What it re-exports
+
+- `blueprint-crypto-core`
+- `blueprint-crypto-k256`
+- `blueprint-crypto-sr25519`
+- `blueprint-crypto-ed25519`
+- `blueprint-crypto-bls`
+- `blueprint-crypto-bn254`
+- `blueprint-crypto-hashing`
+
+## When to use
+
+Use this crate when you want broad crypto coverage without managing per-algorithm dependencies.
 
 ## Related links
 

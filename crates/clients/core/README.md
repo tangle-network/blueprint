@@ -1,12 +1,16 @@
 # blueprint-client-core
 
-Core primitives for Tangle Blueprint clients.
+Core client traits and shared abstractions for Blueprint protocol clients.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- `BlueprintServicesClient` trait for operator-set and identity queries.
+- Shared error types and helper aliases (`OperatorSet`).
+
+## When to depend on this crate directly
+
+Use directly when implementing your own protocol client backend against Blueprint client traits.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/clients/core
-

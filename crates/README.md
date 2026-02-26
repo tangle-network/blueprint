@@ -42,4 +42,4 @@ This directory contains the Rust crates that make up the Blueprint SDK workspace
 - [`blueprint-std`](./std): shared std exports/utilities
 - [`blueprint-macros`](./macros): proc-macro support crates
 
-Each crate has a local `README.md` with crate-specific scope and links.
+Each crate has a local `README.md` with crate-specific purpose, usage guidance, and links.

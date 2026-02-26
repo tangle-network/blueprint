@@ -1,12 +1,17 @@
 # blueprint-macros
 
-Macros for the Tangle Blueprint SDK.
+Procedural macros for ergonomics in Blueprint services.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- Job/debug helper macros.
+- Context/ref helper macros.
+- EVM and attribute parsing support macros.
+
+## When to use
+
+Use when you want less boilerplate around job declarations and framework wiring.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/macros
-

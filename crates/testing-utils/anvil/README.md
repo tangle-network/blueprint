@@ -1,12 +1,13 @@
 # blueprint-anvil-testing-utils
 
-Anvil testing utilities for Tangle Blueprints.
+Anvil-focused test harness utilities.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- Local Anvil environment bootstrapping.
+- Blueprint test helpers on top of Anvil.
+- Multi-instance and Tangle-specific test wiring modules.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/testing-utils/anvil
-

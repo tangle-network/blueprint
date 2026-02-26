@@ -1,12 +1,16 @@
 # blueprint-crypto-hashing
 
-Hashing and key derivation primitives for Tangle Blueprints.
+Hashing and key-derivation primitives for Blueprint services.
 
-## Scope
+## Feature-gated capabilities
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- Hashing: SHA2, SHA3/Keccak, BLAKE3.
+- KDF: HKDF-SHA256 and Argon2id (`kdf` module).
+
+## When to use
+
+Use this crate for deterministic hashing/KDF logic shared by signing, auth, and protocol flows.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/crypto/hashing
-

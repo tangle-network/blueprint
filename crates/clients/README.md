@@ -1,8 +1,18 @@
 # blueprint-clients
 
-Metapackage for Blueprint client crates.
+Meta-crate that re-exports Blueprint client crates.
 
-Use this crate when you want a single dependency that re-exports client modules for Tangle, EVM, and EigenLayer surfaces.
+## When to use
+
+- You want one dependency that exposes Tangle, EVM, and EigenLayer client surfaces.
+- You prefer feature-gated client composition instead of importing each client crate directly.
+
+## Re-exports
+
+- `blueprint-client-core`
+- `blueprint-client-evm`
+- `blueprint-client-tangle`
+- `blueprint-client-eigenlayer`
 
 ## Related links
 

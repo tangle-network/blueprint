@@ -1,12 +1,12 @@
 # blueprint-crypto-ed25519
 
-Zebra ed25519 crypto primitives for Tangle Blueprints.
+`ed25519-zebra` primitives for Blueprint services.
 
-## Scope
+## What it provides
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- ed25519 signing/verification wrappers.
+- Consistent error handling across SDK crypto crates.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/crypto/ed25519
-

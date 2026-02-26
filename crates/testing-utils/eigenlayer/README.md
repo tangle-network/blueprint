@@ -1,12 +1,12 @@
 # blueprint-eigenlayer-testing-utils
 
-EigenLayer-specific testing utilities for Tangle Blueprints.
+EigenLayer-specific testing helpers for Blueprint services.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- Environment bootstrap helpers.
+- Harness and runner utilities for EigenLayer test flows.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/testing-utils/eigenlayer
-

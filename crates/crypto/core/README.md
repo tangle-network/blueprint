@@ -1,12 +1,12 @@
 # blueprint-crypto-core
 
-Core crypto primitives for Tangle Blueprints.
+Shared cryptographic traits and aggregation primitives for Blueprint crypto crates.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- Common trait definitions consumed by algorithm-specific crates.
+- Aggregation interfaces used by signature schemes.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/crypto/core
-

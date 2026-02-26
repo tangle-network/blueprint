@@ -1,12 +1,15 @@
 # blueprint-stores
 
-Storage providers for Tangle Blueprints.
+Meta-crate for Blueprint storage backends.
 
-## Scope
+## What it re-exports
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- `blueprint-store-local-database` as `local_database`.
+
+## When to use
+
+Use when you want storage providers through a single dependency entrypoint.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/stores
-

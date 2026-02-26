@@ -1,8 +1,16 @@
 # blueprint-testing-utils
 
-Metapackage for Blueprint testing utilities.
+Meta-crate for Blueprint testing helper crates.
 
-Use this crate to access shared testing helpers and protocol-specific test utility crates from one dependency surface.
+## What it re-exports
+
+- `blueprint-core-testing-utils`
+- `blueprint-anvil-testing-utils`
+- `blueprint-eigenlayer-testing-utils`
+
+## When to use
+
+Use as the default entrypoint for test harness utilities across Blueprint integration/unit tests.
 
 ## Related links
 

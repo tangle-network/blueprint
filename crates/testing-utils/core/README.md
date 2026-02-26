@@ -1,12 +1,13 @@
 # blueprint-core-testing-utils
 
-Core primitives for testing Tangle Blueprints.
+Core testing primitives shared across Blueprint test suites.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- `TestRunner` orchestration helpers.
+- Common testing error types.
+- Utility helpers for reading manifests and initializing logging.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/testing-utils/core
-

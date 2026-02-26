@@ -1,12 +1,17 @@
 # blueprint-store-local-database
 
-Local database storage provider for the Blueprint SDK.
+Local JSON-backed key/value storage provider.
 
-## Scope
+## What it provides
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- `LocalDatabase<T>` typed key/value API.
+- Atomic flush behavior (temp-file + rename) for safer writes.
+- Common operations: `set`, `get`, `remove`, `update`, `replace`, `entries`.
+
+## When to use
+
+Use for simple local persistence needs in development and lightweight runtime state.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/stores/local-database
-

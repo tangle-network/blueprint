@@ -1,12 +1,17 @@
 # blueprint-networking-round-based-extension
 
-round-based integration for Blueprint SDK networking.
+Adapter between Blueprint networking and `round-based` protocol APIs.
 
-## Scope
+## What it provides
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- `RoundBasedNetworkAdapter` implementing `round_based::Delivery`.
+- Sender/receiver adapters that translate between protocol messages and network transport payloads.
+- Party index <-> peer ID mapping utilities for round-based sessions.
+
+## When to use
+
+Use for MPC/threshold protocols that already target the `round-based` crate and need Blueprint network transport.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/networking/extensions/round-based
-

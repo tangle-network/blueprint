@@ -1,12 +1,15 @@
 # blueprint-metrics
 
-Metrics metapackage for Tangle Blueprints.
+Meta-crate for metrics instrumentation modules.
 
-## Scope
+## What it re-exports
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- `blueprint-metrics-rpc-calls`
+
+## When to use
+
+Use this crate as the entrypoint for metrics helpers when instrumenting blueprint infrastructure surfaces.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/metrics
-

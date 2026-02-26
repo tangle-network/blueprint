@@ -1,12 +1,13 @@
 # blueprint-crypto-bls
 
-tnt-bls crypto primitives for Tangle Blueprints.
+BLS primitives and aggregation helpers for Blueprint services.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- BLS aggregation module.
+- BLS error types.
+- Canonical serialization trait re-exports.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/crypto/bls
-

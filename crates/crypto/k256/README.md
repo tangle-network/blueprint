@@ -1,12 +1,12 @@
 # blueprint-crypto-k256
 
-k256 crypto primitives for Tangle Blueprints.
+`k256` (secp256k1) primitives for Blueprint services.
 
-## Scope
+## What it provides
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- ECDSA signing/verification helpers and types.
+- K256-specific error types and conversions.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/crypto/k256
-

@@ -1,12 +1,13 @@
 # blueprint-manager-bridge
 
-Bridge for Blueprint manager to service communication.
+Bridge types and APIs for manager <-> service communication.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- Shared API types used by both manager and runtime processes.
+- Optional client/server modules behind feature flags.
+- TLS profile and bridge error types.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/manager/bridge
-

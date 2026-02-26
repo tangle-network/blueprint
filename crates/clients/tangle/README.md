@@ -1,12 +1,17 @@
 # blueprint-client-tangle
 
-Tangle client for Blueprint SDK - connects to Tangle EVM contracts.
+Tangle contract-facing client for Blueprint services.
 
-## Scope
+## What it includes
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- Config + settings types (`TangleClientConfig`, `TangleSettings`).
+- Contract/service wrappers for Tangle interfaces.
+- High-level client entrypoints and typed errors.
+
+## When to use
+
+Use when your service needs direct calls into Tangle contract surfaces (service lifecycle, operators, jobs, payments).
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/clients/tangle
-

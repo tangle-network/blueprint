@@ -1,12 +1,12 @@
 # blueprint-crypto-sr25519
 
-Schnorrkel sr25519 crypto primitives for Tangle Blueprints.
+`schnorrkel`/sr25519 primitives for Blueprint services.
 
-## Scope
+## What it provides
 
-This crate is part of the Blueprint SDK workspace and is intended for Blueprint runtime and integration development.
+- sr25519 signing and verification helpers.
+- sr25519-specific error types.
 
 ## Related links
 
 - Source: https://github.com/tangle-network/blueprint/tree/main/crates/crypto/sr25519
-
