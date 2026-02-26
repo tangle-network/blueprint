@@ -6,7 +6,7 @@
 use alloy_primitives::Address;
 use blueprint_core::{
     __composite_rejection as composite_rejection, __define_rejection as define_rejection,
-    FromJobCallParts, job::call::Parts as JobCallParts,
+    FromJobCallParts, extract::OptionalFromJobCallParts, job::call::Parts as JobCallParts,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -69,6 +69,24 @@ where
         _: &Ctx,
     ) -> Result<Self, Self::Rejection> {
         Self::try_from(parts)
+    }
+}
+
+impl<Ctx> OptionalFromJobCallParts<Ctx> for ServiceId
+where
+    Ctx: Send + Sync,
+{
+    type Rejection = ServiceIdRejection;
+
+    async fn from_job_call_parts(
+        parts: &mut JobCallParts,
+        _: &Ctx,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        match Self::try_from(parts) {
+            Ok(value) => Ok(Some(value)),
+            Err(ServiceIdRejection::MissingServiceId(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -135,6 +153,24 @@ where
     }
 }
 
+impl<Ctx> OptionalFromJobCallParts<Ctx> for CallId
+where
+    Ctx: Send + Sync,
+{
+    type Rejection = CallIdRejection;
+
+    async fn from_job_call_parts(
+        parts: &mut JobCallParts,
+        _: &Ctx,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        match Self::try_from(parts) {
+            Ok(value) => Ok(Some(value)),
+            Err(CallIdRejection::MissingCallId(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // JOB INDEX
 // ═══════════════════════════════════════════════════════════════════════════
@@ -197,6 +233,24 @@ where
         _: &Ctx,
     ) -> Result<Self, Self::Rejection> {
         Self::try_from(parts)
+    }
+}
+
+impl<Ctx> OptionalFromJobCallParts<Ctx> for JobIndex
+where
+    Ctx: Send + Sync,
+{
+    type Rejection = JobIndexRejection;
+
+    async fn from_job_call_parts(
+        parts: &mut JobCallParts,
+        _: &Ctx,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        match Self::try_from(parts) {
+            Ok(value) => Ok(Some(value)),
+            Err(JobIndexRejection::MissingJobIndex(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -267,6 +321,24 @@ where
     }
 }
 
+impl<Ctx> OptionalFromJobCallParts<Ctx> for Caller
+where
+    Ctx: Send + Sync,
+{
+    type Rejection = CallerRejection;
+
+    async fn from_job_call_parts(
+        parts: &mut JobCallParts,
+        _: &Ctx,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        match Self::try_from(parts) {
+            Ok(value) => Ok(Some(value)),
+            Err(CallerRejection::MissingCaller(_)) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // JOB INPUTS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -325,5 +397,131 @@ where
         _: &Ctx,
     ) -> Result<Self, Self::Rejection> {
         Self::try_from(parts)
+    }
+}
+
+impl<Ctx> OptionalFromJobCallParts<Ctx> for JobInputs
+where
+    Ctx: Send + Sync,
+{
+    type Rejection = MissingJobInputs;
+
+    async fn from_job_call_parts(
+        parts: &mut JobCallParts,
+        _: &Ctx,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        match Self::try_from(parts) {
+            Ok(value) => Ok(Some(value)),
+            Err(MissingJobInputs) => Ok(None),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use blueprint_core::FromJobCallParts;
+
+    #[tokio::test]
+    async fn optional_service_id_missing_returns_none() {
+        let mut parts = JobCallParts::new(0);
+        let extracted = Option::<ServiceId>::from_job_call_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(extracted, None);
+    }
+
+    #[tokio::test]
+    async fn optional_service_id_invalid_returns_err() {
+        let mut parts = JobCallParts::new(0);
+        parts.metadata.insert(ServiceId::METADATA_KEY, [1u8]);
+
+        let extracted = Option::<ServiceId>::from_job_call_parts(&mut parts, &()).await;
+        assert!(matches!(
+            extracted,
+            Err(ServiceIdRejection::InvalidServiceId(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn optional_call_id_missing_returns_none() {
+        let mut parts = JobCallParts::new(0);
+        let extracted = Option::<CallId>::from_job_call_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(extracted, None);
+    }
+
+    #[tokio::test]
+    async fn optional_call_id_invalid_returns_err() {
+        let mut parts = JobCallParts::new(0);
+        parts.metadata.insert(CallId::METADATA_KEY, [1u8]);
+
+        let extracted = Option::<CallId>::from_job_call_parts(&mut parts, &()).await;
+        assert!(matches!(extracted, Err(CallIdRejection::InvalidCallId(_))));
+    }
+
+    #[tokio::test]
+    async fn optional_job_index_missing_returns_none() {
+        let mut parts = JobCallParts::new(0);
+        let extracted = Option::<JobIndex>::from_job_call_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(extracted, None);
+    }
+
+    #[tokio::test]
+    async fn optional_job_index_invalid_returns_err() {
+        let mut parts = JobCallParts::new(0);
+        parts
+            .metadata
+            .insert(JobIndex::METADATA_KEY, 256u64.to_be_bytes());
+
+        let extracted = Option::<JobIndex>::from_job_call_parts(&mut parts, &()).await;
+        assert!(matches!(
+            extracted,
+            Err(JobIndexRejection::InvalidJobIndex(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn optional_caller_missing_returns_none() {
+        let mut parts = JobCallParts::new(0);
+        let extracted = Option::<Caller>::from_job_call_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(extracted, None);
+    }
+
+    #[tokio::test]
+    async fn optional_caller_invalid_returns_err() {
+        let mut parts = JobCallParts::new(0);
+        parts.metadata.insert(Caller::METADATA_KEY, [0u8; 19]);
+
+        let extracted = Option::<Caller>::from_job_call_parts(&mut parts, &()).await;
+        assert!(matches!(extracted, Err(CallerRejection::InvalidCaller(_))));
+    }
+
+    #[tokio::test]
+    async fn optional_job_inputs_missing_returns_none() {
+        let mut parts = JobCallParts::new(0);
+        let extracted = Option::<JobInputs>::from_job_call_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(extracted, None);
+    }
+
+    #[tokio::test]
+    async fn optional_job_inputs_present_returns_some() {
+        let mut parts = JobCallParts::new(0);
+        parts.extensions.insert(bytes::Bytes::from_static(b"hello"));
+
+        let extracted = Option::<JobInputs>::from_job_call_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(
+            extracted,
+            Some(JobInputs::from(bytes::Bytes::from_static(b"hello")))
+        );
     }
 }
