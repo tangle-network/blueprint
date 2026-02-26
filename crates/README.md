@@ -1,24 +1,45 @@
-## The Blueprint Framework crates
+# Blueprint Crates
 
-The Blueprint Framework is a collection of crates that makes it easy to build Tangle Blueprints.
+This directory contains the Rust crates that make up the Blueprint SDK workspace.
 
-### Blueprint SDK
+## Core runtime
 
-This the Umbrella crate for the Blueprint Framework which exposes the core functionality of the framework to the user, and this crate is all what you need to get started with the framework.
+- [`blueprint-sdk`](./sdk): umbrella crate for most Blueprint applications
+- [`blueprint-core`](./core): core job and runtime primitives
+- [`blueprint-router`](./router): job ID to handler dispatch layer
+- [`blueprint-runner`](./runner): runtime loop and orchestration
 
-Each sub-crate provides a specific functionality of the framework, and they are all hidden behind a feature flag(s) that you can enable/disable in your project.
+## Trigger and ingress crates
 
-### Project crates
+- [`blueprint-producers-extra`](./producers-extra): protocol-agnostic producers (for example cron)
+- [`blueprint-webhooks`](./webhooks): authenticated HTTP webhook ingress
+- [`blueprint-x402`](./x402): paid HTTP ingress via x402 settlement
 
--   [`blueprint-core`](./core): The core functionality of the framework, including the core data structures and the core traits that is used and shared across the framework.
--   [`blueprint-router`](./router): Includes the job routing functionality of the framework, this usually used hand in hand with the [`blueprint-runner`](./runner) crate.
--   [`blueprint-runner`](./runner): Includes the job execution functionality of the framework, which is your entry point to your blueprint.
--   [`blueprint-evm-extra`](./evm-extra): This crate provides extra functionality to use the Blueprint SDK with any EVM compatible network.
--   [`blueprint-sdk`](./sdk): This the most outer layer for the Blueprint Framework which acts as an umbrella crate for the framework.
--   [`blueprint-macros`](./macros): This crate provides the procedural macros that are used across the framework.
+## Protocol and integration crates
 
-### Crate Naming Conventions
+- [`blueprint-tangle-extra`](./tangle-extra): Tangle protocol integrations
+- [`blueprint-evm-extra`](./evm-extra): EVM integration helpers
+- [`blueprint-eigenlayer-extra`](./eigenlayer-extra): EigenLayer integration helpers
+- [`blueprint-clients`](./clients): client metapackage and protocol client crates
 
-1. Each crate name starts with `blueprint-` followed by the name of the crate.
-2. Any integration with any other system or crate, it should start with `blueprint-` followed by the name of the system or crate and ends with `-extra`.
-3. The directory name should be in `crates/{name}` without the `blueprint-` prefix.
+## Security, ops, and support
+
+- [`blueprint-auth`](./auth): auth proxy and request auth primitives
+- [`blueprint-qos`](./qos): heartbeat/metrics/logging QoS surfaces
+- [`blueprint-manager`](./manager): manager runtime orchestration
+- [`blueprint-manager-bridge`](./manager/bridge): manager/service bridge types
+- [`blueprint-keystore`](./keystore): signing and key management
+- [`blueprint-pricing-engine`](./pricing-engine): RFQ and pricing server components
+
+## Utility families
+
+- [`blueprint-crypto`](./crypto): crypto metapackage and algorithm crates
+- [`blueprint-metrics`](./metrics): metrics metapackage and providers
+- [`blueprint-stores`](./stores): storage provider crates
+- [`blueprint-testing-utils`](./testing-utils): testing metapackage and helpers
+- [`blueprint-chain-setup`](./chain-setup): local chain setup helpers
+- [`blueprint-build-utils`](./build-utils): build-time helpers
+- [`blueprint-std`](./std): shared std exports/utilities
+- [`blueprint-macros`](./macros): proc-macro support crates
+
+Each crate has a local `README.md` with crate-specific purpose, usage guidance, and links.
