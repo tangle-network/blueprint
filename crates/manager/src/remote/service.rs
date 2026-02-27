@@ -461,8 +461,7 @@ impl RemoteDeploymentService {
             };
 
             // For Kubernetes, we need a container image
-            // Use the gadget registry with service name and version
-            let blueprint_image = format!("ghcr.io/tangle-network/gadget/{}:latest", service_name);
+            let blueprint_image = format!("ghcr.io/tangle-network/blueprint/{service_name}:latest");
 
             // Convert env_vars to HashMap
             let mut env_map = HashMap::new();
