@@ -199,6 +199,9 @@ blueprint-contexts = { version = "0.1.0-alpha.21", path = "./crates/contexts", d
 # Pricing Engine
 blueprint-pricing-engine = { version = "0.2.6", path = "./crates/pricing-engine", default-features = false }
 
+# TEE Support
+blueprint-tee = { version = "0.1.0-alpha.1", path = "./crates/tee", default-features = false }
+
 # x402 Payment Gateway
 blueprint-x402 = { version = "0.1.0-alpha.1", path = "./crates/x402", default-features = false }
 

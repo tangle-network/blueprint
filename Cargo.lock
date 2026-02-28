@@ -3843,6 +3843,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "blueprint-tee"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "blueprint-core",
+ "blueprint-router",
+ "blueprint-runner",
+ "blueprint-std",
+ "document-features",
+ "futures",
+ "futures-core",
+ "hex",
+ "pin-project-lite",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.17",
+ "tokio",
+ "tower 0.5.2",
+ "tracing",
+]
+
+[[package]]
 name = "blueprint-testing-utils"
 version = "0.1.0-alpha.20"
 dependencies = [

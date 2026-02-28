@@ -1,0 +1,80 @@
+[package]
+name = "blueprint-tee"
+version = "0.1.0-alpha.1"
+description = "First-class TEE (Trusted Execution Environment) support for the Blueprint SDK"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Blueprint core
+blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-runner = { workspace = true }
+blueprint-std = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time"] }
+futures = { workspace = true }
+futures-core = { workspace = true }
+
+# Tower middleware
+tower = { workspace = true }
+pin-project-lite = { workspace = true }
+
+# Error handling & logging
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Crypto
+rand = { workspace = true, features = ["std", "std_rng"] }
+sha2 = { workspace = true, features = ["std"] }
+hex = { workspace = true, features = ["std"] }
+
+# Utilities
+document-features = { workspace = true, features = ["default"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+blueprint-router = { workspace = true }
+
+[features]
+default = ["std"]
+
+#! ### Core
+
+## Enable standard library support
+std = ["blueprint-core/std", "blueprint-runner/std", "blueprint-std/std"]
+
+#! ### TEE Providers
+
+## Enable AWS Nitro Enclave attestation verification
+aws-nitro = []
+
+## Enable Azure SEV-SNP / SKR attestation verification
+azure-snp = []
+
+## Enable GCP Confidential Space attestation verification
+gcp-confidential = []
+
+## Enable Intel TDX attestation verification
+tdx = []
+
+## Enable AMD SEV-SNP attestation verification
+sev-snp = []
+
+## Enable all provider backends
+all-providers = ["aws-nitro", "azure-snp", "gcp-confidential", "tdx", "sev-snp"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
