@@ -15,7 +15,6 @@ workspace = true
 [dependencies]
 # Blueprint core
 blueprint-core = { workspace = true, features = ["tracing"] }
-blueprint-runner = { workspace = true }
 blueprint-std = { workspace = true }
 
 # Async runtime
@@ -33,7 +32,7 @@ tracing = { workspace = true }
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 
 # Crypto
 rand = { workspace = true, features = ["std", "std_rng"] }
@@ -53,7 +52,7 @@ default = ["std"]
 #! ### Core
 
 ## Enable standard library support
-std = ["blueprint-core/std", "blueprint-runner/std", "blueprint-std/std"]
+std = ["blueprint-core/std", "blueprint-std/std"]
 
 #! ### TEE Providers
 

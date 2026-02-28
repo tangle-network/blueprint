@@ -1,23 +1,25 @@
-//! TEE key exchange background service.
+//! TEE key exchange service.
 //!
-//! Implements [`BackgroundService`] for managing ephemeral key exchange
-//! sessions with TTL enforcement and capacity limits.
+//! Manages ephemeral key exchange sessions with TTL enforcement
+//! and capacity limits. Designed to be wrapped as a `BackgroundService`
+//! by the runner integration.
 
 use crate::config::TeeKeyExchangeConfig;
 use crate::errors::TeeError;
 use crate::exchange::protocol::KeyExchangeSession;
-use blueprint_runner::error::RunnerError;
-use blueprint_runner::BackgroundService;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::Mutex;
 
-/// Background service for TEE key exchange and session management.
+/// Service for TEE key exchange and session management.
 ///
 /// Manages ephemeral key exchange sessions with:
 /// - Configurable TTL for session keys
 /// - Maximum concurrent session limit
 /// - Automatic cleanup of expired sessions
+///
+/// When used with the Blueprint runner, enable the `tee` feature and use
+/// `.tee(config)` on the builder, which will register this service automatically.
 ///
 /// # Examples
 ///
@@ -26,12 +28,7 @@ use tokio::sync::{Mutex, oneshot};
 /// use blueprint_tee::TeeKeyExchangeConfig;
 ///
 /// let service = TeeAuthService::new(TeeKeyExchangeConfig::default());
-///
-/// // Register as a background service with the runner
-/// BlueprintRunner::builder(config, env)
-///     .background_service(service)
-///     .run()
-///     .await?;
+/// service.start_cleanup_loop();
 /// ```
 pub struct TeeAuthService {
     config: TeeKeyExchangeConfig,
@@ -127,18 +124,17 @@ impl TeeAuthService {
 
         Ok(session.public_key.clone())
     }
-}
-
-impl BackgroundService for TeeAuthService {
-    async fn start(&self) -> Result<oneshot::Receiver<Result<(), RunnerError>>, RunnerError> {
-        let (tx, rx) = oneshot::channel();
+    /// Start the background cleanup loop for expired sessions.
+    ///
+    /// Spawns a tokio task that periodically evicts expired sessions.
+    /// Returns a handle to the cleanup task.
+    pub fn start_cleanup_loop(&self) -> tokio::task::JoinHandle<()> {
         let sessions = self.sessions.clone();
         let ttl_secs = self.config.session_ttl_secs;
 
         tokio::spawn(async move {
-            tracing::info!("TEE auth service started");
+            tracing::info!("TEE auth service cleanup loop started");
 
-            // Periodic cleanup loop
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(ttl_secs.max(30))).await;
 
@@ -155,14 +151,16 @@ impl BackgroundService for TeeAuthService {
                     );
                 }
             }
+        })
+    }
 
-            // This loop runs indefinitely; if we ever exit, signal completion
-            #[allow(unreachable_code)]
-            {
-                let _ = tx.send(Ok(()));
-            }
-        });
+    /// Get the TTL configuration.
+    pub fn session_ttl_secs(&self) -> u64 {
+        self.config.session_ttl_secs
+    }
 
-        Ok(rx)
+    /// Get the max sessions configuration.
+    pub fn max_sessions(&self) -> usize {
+        self.config.max_sessions
     }
 }

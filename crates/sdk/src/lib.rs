@@ -203,6 +203,17 @@ pub mod webhooks {
     pub use blueprint_webhooks::*;
 }
 
+// TEE (Trusted Execution Environment) support
+#[cfg(feature = "tee")]
+/// TEE (Trusted Execution Environment) support for confidential compute.
+///
+/// Provides attestation verification, key exchange, and middleware for
+/// running blueprints in TEE environments (AWS Nitro, Azure CVM, GCP
+/// Confidential Space, Intel TDX, AMD SEV-SNP).
+pub mod tee {
+    pub use blueprint_tee::*;
+}
+
 // Remote cloud deployment providers
 #[cfg(feature = "remote-providers")]
 /// Remote cloud deployment providers for Blueprint instances

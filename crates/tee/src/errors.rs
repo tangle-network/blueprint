@@ -55,9 +55,3 @@ pub enum TeeError {
     #[error("serialization error: {0}")]
     Serialization(String),
 }
-
-impl From<TeeError> for blueprint_runner::error::RunnerError {
-    fn from(err: TeeError) -> Self {
-        blueprint_runner::error::RunnerError::Other(Box::new(err))
-    }
-}

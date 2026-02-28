@@ -3675,6 +3675,7 @@ dependencies = [
  "blueprint-router",
  "blueprint-sdk",
  "blueprint-std",
+ "blueprint-tee",
  "bytes",
  "clap",
  "crossbeam-channel",
@@ -3727,6 +3728,7 @@ dependencies = [
  "blueprint-std",
  "blueprint-stores",
  "blueprint-tangle-extra",
+ "blueprint-tee",
  "blueprint-testing-utils",
  "blueprint-webhooks",
  "blueprint-x402",
@@ -3848,7 +3850,6 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "blueprint-core",
  "blueprint-router",
- "blueprint-runner",
  "blueprint-std",
  "document-features",
  "futures",
