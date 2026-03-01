@@ -25,17 +25,22 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Configuration for the direct TEE backend.
+///
+/// Controls device passthrough, security hardening, and resource limits
+/// for workloads running directly on the local TEE host.
 #[derive(Debug, Clone)]
 pub struct DirectBackendConfig {
-    /// The TEE provider type of the local host.
+    /// The TEE provider type of the local host (e.g., `IntelTdx`, `AmdSevSnp`).
     pub provider: TeeProvider,
-    /// Device paths to pass through to workloads (e.g., `/dev/tdx_guest`).
+    /// Device paths to pass through to workloads (e.g., `/dev/tdx_guest`, `/dev/sev-guest`).
     pub device_paths: Vec<String>,
-    /// Whether to enable read-only root filesystem.
+    /// Whether to enable a read-only root filesystem for workloads.
+    ///
+    /// Defaults to `true` for defense-in-depth. Writable paths use tmpfs.
     pub readonly_rootfs: bool,
-    /// Memory limit in bytes (0 = no limit).
+    /// Memory limit in bytes for the workload (0 = no limit).
     pub memory_limit_bytes: u64,
-    /// CPU limit (number of cores, 0 = no limit).
+    /// CPU limit as the number of cores available to the workload (0 = no limit).
     pub cpu_limit: u32,
 }
 
@@ -117,8 +122,7 @@ impl TeeRuntimeBackend for DirectBackend {
         );
 
         // Build port mapping for extra ports (direct backend maps 1:1)
-        let port_mapping: BTreeMap<u16, u16> =
-            req.extra_ports.iter().map(|&p| (p, p)).collect();
+        let port_mapping: BTreeMap<u16, u16> = req.extra_ports.iter().map(|&p| (p, p)).collect();
 
         let state = DeploymentState {
             request: req,

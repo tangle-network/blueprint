@@ -126,10 +126,7 @@ fn test_key_exchange_config_defaults() {
 
 #[test]
 fn test_secret_injection_sealed_only_when_tee_enabled() {
-    let config = TeeConfig::builder()
-        .mode(TeeMode::Direct)
-        .build()
-        .unwrap();
+    let config = TeeConfig::builder().mode(TeeMode::Direct).build().unwrap();
     assert_eq!(config.secret_injection, SecretInjectionPolicy::SealedOnly);
 }
 
@@ -144,10 +141,7 @@ fn test_secret_injection_env_or_sealed_when_disabled() {
 
 #[test]
 fn test_lifecycle_policy_cloud_managed_when_enabled() {
-    let config = TeeConfig::builder()
-        .mode(TeeMode::Remote)
-        .build()
-        .unwrap();
+    let config = TeeConfig::builder().mode(TeeMode::Remote).build().unwrap();
     assert_eq!(
         config.lifecycle_policy(),
         RuntimeLifecyclePolicy::CloudManaged
@@ -157,10 +151,7 @@ fn test_lifecycle_policy_cloud_managed_when_enabled() {
 #[test]
 fn test_lifecycle_policy_container_when_disabled() {
     let config = TeeConfig::default();
-    assert_eq!(
-        config.lifecycle_policy(),
-        RuntimeLifecyclePolicy::Container
-    );
+    assert_eq!(config.lifecycle_policy(), RuntimeLifecyclePolicy::Container);
 }
 
 #[test]
@@ -221,4 +212,137 @@ fn test_hybrid_routing_source_policy_file() {
 fn test_public_key_policy_default() {
     let config = TeeConfig::default();
     assert_eq!(config.public_key_policy, TeePublicKeyPolicy::Required);
+}
+
+// Edge case tests
+
+#[test]
+fn test_provider_selector_empty_allowlist() {
+    let allow = TeeProviderSelector::AllowList(vec![]);
+    // An empty allowlist accepts nothing
+    assert!(!allow.accepts(TeeProvider::IntelTdx));
+    assert!(!allow.accepts(TeeProvider::AwsNitro));
+}
+
+#[test]
+fn test_config_serde_with_periodic_refresh() {
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Direct)
+        .attestation_freshness(AttestationFreshnessPolicy::PeriodicRefresh {
+            interval: Duration::from_secs(1800),
+        })
+        .build()
+        .unwrap();
+
+    let json = serde_json::to_string(&config).unwrap();
+    let parsed: TeeConfig = serde_json::from_str(&json).unwrap();
+
+    match &parsed.attestation_freshness {
+        AttestationFreshnessPolicy::PeriodicRefresh { interval } => {
+            assert_eq!(interval.as_secs(), 1800);
+        }
+        _ => panic!("expected PeriodicRefresh"),
+    }
+}
+
+#[test]
+fn test_secret_injection_sealed_only_for_all_tee_modes() {
+    for mode in [TeeMode::Direct, TeeMode::Remote, TeeMode::Hybrid] {
+        let config = TeeConfig::builder().mode(mode).build().unwrap();
+        assert_eq!(
+            config.secret_injection,
+            SecretInjectionPolicy::SealedOnly,
+            "mode {mode:?} should enforce SealedOnly"
+        );
+    }
+}
+
+#[test]
+fn test_lifecycle_policy_for_all_tee_modes() {
+    for mode in [TeeMode::Direct, TeeMode::Remote, TeeMode::Hybrid] {
+        let config = TeeConfig::builder().mode(mode).build().unwrap();
+        assert_eq!(
+            config.lifecycle_policy(),
+            RuntimeLifecyclePolicy::CloudManaged,
+            "mode {mode:?} should use CloudManaged lifecycle"
+        );
+    }
+}
+
+#[test]
+fn test_builder_all_options() {
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Hybrid)
+        .requirement(TeeRequirement::Required)
+        .provider_selector(TeeProviderSelector::AllowList(vec![
+            TeeProvider::IntelTdx,
+            TeeProvider::AmdSevSnp,
+        ]))
+        .key_exchange(TeeKeyExchangeConfig {
+            session_ttl_secs: 600,
+            max_sessions: 128,
+            on_chain_verification: true,
+        })
+        .max_attestation_age_secs(7200)
+        .attestation_freshness(AttestationFreshnessPolicy::PeriodicRefresh {
+            interval: Duration::from_secs(900),
+        })
+        .public_key_policy(TeePublicKeyPolicy::Optional)
+        .hybrid_routing_source(HybridRoutingSource::ContractDriven)
+        .build()
+        .unwrap();
+
+    assert_eq!(config.mode, TeeMode::Hybrid);
+    assert_eq!(config.requirement, TeeRequirement::Required);
+    assert_eq!(config.max_attestation_age_secs, 7200);
+    assert_eq!(config.key_exchange.session_ttl_secs, 600);
+    assert_eq!(config.key_exchange.max_sessions, 128);
+    assert!(config.key_exchange.on_chain_verification);
+    assert_eq!(config.public_key_policy, TeePublicKeyPolicy::Optional);
+    assert!(matches!(
+        config.hybrid_routing_source,
+        HybridRoutingSource::ContractDriven
+    ));
+}
+
+#[test]
+fn test_tee_mode_all_variants_serde() {
+    for (mode, expected) in [
+        (TeeMode::Disabled, "\"disabled\""),
+        (TeeMode::Direct, "\"direct\""),
+        (TeeMode::Remote, "\"remote\""),
+        (TeeMode::Hybrid, "\"hybrid\""),
+    ] {
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, expected);
+        let parsed: TeeMode = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, mode);
+    }
+}
+
+#[test]
+fn test_tee_requirement_serde() {
+    for (req, expected) in [
+        (TeeRequirement::Preferred, "\"preferred\""),
+        (TeeRequirement::Required, "\"required\""),
+    ] {
+        let json = serde_json::to_string(&req).unwrap();
+        assert_eq!(json, expected);
+        let parsed: TeeRequirement = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, req);
+    }
+}
+
+#[test]
+fn test_key_exchange_config_serde() {
+    let config = TeeKeyExchangeConfig {
+        session_ttl_secs: 600,
+        max_sessions: 32,
+        on_chain_verification: true,
+    };
+    let json = serde_json::to_string(&config).unwrap();
+    let parsed: TeeKeyExchangeConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.session_ttl_secs, 600);
+    assert_eq!(parsed.max_sessions, 32);
+    assert!(parsed.on_chain_verification);
 }

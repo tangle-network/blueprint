@@ -69,13 +69,17 @@ impl TeeDeployRequest {
 }
 
 /// A TEE-bound public key, used for encrypting sealed secrets.
+///
+/// Clients use this key to encrypt secrets before sending them to the TEE
+/// via the sealed-secret key-exchange flow. The key is derived from the
+/// TEE's hardware-bound key hierarchy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeePublicKey {
-    /// Raw public key bytes.
+    /// Raw public key bytes (encoding depends on `key_type`).
     pub key: Vec<u8>,
-    /// Key type (e.g., "x25519", "secp256k1").
+    /// The cryptographic key type (e.g., `"x25519"`, `"secp256k1"`).
     pub key_type: String,
-    /// Hex-encoded fingerprint of the key (for display/matching).
+    /// Hex-encoded fingerprint of the key for display and matching purposes.
     pub fingerprint: String,
 }
 

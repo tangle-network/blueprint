@@ -202,4 +202,49 @@ impl BackendRegistry {
             })?;
         backend.inner.derive_public_key(handle).await
     }
+
+    /// Get the current status of a deployment.
+    pub async fn status(
+        &self,
+        handle: &TeeDeploymentHandle,
+    ) -> Result<TeeDeploymentStatus, TeeError> {
+        let backend = self
+            .backends
+            .get(&handle.provider.to_string())
+            .ok_or_else(|| {
+                TeeError::UnsupportedProvider(format!(
+                    "no backend registered for {}",
+                    handle.provider
+                ))
+            })?;
+        backend.inner.status(handle).await
+    }
+
+    /// Gracefully stop a running deployment.
+    pub async fn stop(&self, handle: &TeeDeploymentHandle) -> Result<(), TeeError> {
+        let backend = self
+            .backends
+            .get(&handle.provider.to_string())
+            .ok_or_else(|| {
+                TeeError::UnsupportedProvider(format!(
+                    "no backend registered for {}",
+                    handle.provider
+                ))
+            })?;
+        backend.inner.stop(handle).await
+    }
+
+    /// Destroy a deployment and release all resources.
+    pub async fn destroy(&self, handle: &TeeDeploymentHandle) -> Result<(), TeeError> {
+        let backend = self
+            .backends
+            .get(&handle.provider.to_string())
+            .ok_or_else(|| {
+                TeeError::UnsupportedProvider(format!(
+                    "no backend registered for {}",
+                    handle.provider
+                ))
+            })?;
+        backend.inner.destroy(handle).await
+    }
 }

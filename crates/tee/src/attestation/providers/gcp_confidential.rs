@@ -4,6 +4,7 @@
 //! - Token signature verification
 //! - Workload identity validation
 //! - Machine family TEE type derivation
+//! - Debug mode detection
 
 use crate::attestation::report::AttestationReport;
 use crate::attestation::verifier::{AttestationVerifier, VerifiedAttestation};
@@ -14,6 +15,8 @@ use crate::errors::TeeError;
 pub struct GcpConfidentialVerifier {
     /// Expected measurement digest, if enforced.
     pub expected_measurement: Option<String>,
+    /// Whether to allow debug-mode VMs.
+    pub allow_debug: bool,
 }
 
 impl GcpConfidentialVerifier {
@@ -21,12 +24,19 @@ impl GcpConfidentialVerifier {
     pub fn new() -> Self {
         Self {
             expected_measurement: None,
+            allow_debug: false,
         }
     }
 
     /// Set the expected measurement.
     pub fn with_expected_measurement(mut self, measurement: impl Into<String>) -> Self {
         self.expected_measurement = Some(measurement.into());
+        self
+    }
+
+    /// Allow debug-mode VMs (not recommended for production).
+    pub fn allow_debug(mut self, allow: bool) -> Self {
+        self.allow_debug = allow;
         self
     }
 }
@@ -44,6 +54,12 @@ impl AttestationVerifier for GcpConfidentialVerifier {
                 "expected GCP Confidential provider, got {}",
                 report.provider
             )));
+        }
+
+        if report.claims.debug_mode && !self.allow_debug {
+            return Err(TeeError::AttestationVerification(
+                "debug mode VMs are not permitted".to_string(),
+            ));
         }
 
         if let Some(expected) = &self.expected_measurement {

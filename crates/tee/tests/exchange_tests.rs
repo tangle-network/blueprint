@@ -154,3 +154,124 @@ fn test_sealed_secret_result_serde() {
     let parsed: SealedSecretResult = serde_json::from_str(&json).unwrap();
     assert!(parsed.success);
 }
+
+// Edge case tests
+
+#[tokio::test]
+async fn test_auth_service_consume_expired_session() {
+    let config = TeeKeyExchangeConfig {
+        session_ttl_secs: 0, // immediate expiry
+        max_sessions: 64,
+        on_chain_verification: false,
+    };
+    let service = TeeAuthService::new(config);
+    let (session_id, _) = service.create_session().await.unwrap();
+
+    // Expiry uses second granularity: `elapsed > ttl_secs` where ttl_secs=0.
+    // We need at least 1 full second to elapse so elapsed=1 > 0.
+    tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+
+    // Consuming an expired session should fail
+    let result = service.consume_session(&session_id).await;
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("expired"),
+        "error should mention expired: {err}"
+    );
+}
+
+#[tokio::test]
+async fn test_auth_service_get_public_key_expired_session() {
+    let config = TeeKeyExchangeConfig {
+        session_ttl_secs: 0,
+        max_sessions: 64,
+        on_chain_verification: false,
+    };
+    let service = TeeAuthService::new(config);
+    let (session_id, _) = service.create_session().await.unwrap();
+
+    // Wait for at least 1 second so the session expires (second granularity)
+    tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+
+    // Getting public key for an expired session should fail
+    let result = service.get_session_public_key(&session_id).await;
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_key_exchange_session_unique_ids() {
+    let s1 = KeyExchangeSession::new(300);
+    let s2 = KeyExchangeSession::new(300);
+    assert_ne!(s1.session_id, s2.session_id, "session IDs must be unique");
+    assert_ne!(s1.public_key, s2.public_key, "public keys must be unique");
+}
+
+#[test]
+fn test_key_exchange_request_without_nonce() {
+    let req = KeyExchangeRequest { nonce: None };
+    let json = serde_json::to_string(&req).unwrap();
+    // nonce should be skipped
+    assert!(!json.contains("nonce"));
+    let parsed: KeyExchangeRequest = serde_json::from_str(&json).unwrap();
+    assert!(parsed.nonce.is_none());
+}
+
+#[test]
+fn test_sealed_secret_payload_without_nonce() {
+    let payload = SealedSecretPayload {
+        session_id: "sess-1".to_string(),
+        ciphertext: vec![1, 2, 3],
+        nonce: None,
+    };
+    let json = serde_json::to_string(&payload).unwrap();
+    assert!(!json.contains("nonce"));
+    let parsed: SealedSecretPayload = serde_json::from_str(&json).unwrap();
+    assert!(parsed.nonce.is_none());
+}
+
+#[tokio::test]
+async fn test_auth_service_evicts_expired_on_create() {
+    let config = TeeKeyExchangeConfig {
+        session_ttl_secs: 0,
+        max_sessions: 2,
+        on_chain_verification: false,
+    };
+    let service = TeeAuthService::new(config);
+
+    // Create 2 sessions (max)
+    let _ = service.create_session().await.unwrap();
+    let _ = service.create_session().await.unwrap();
+
+    // Wait for them to expire (second granularity)
+    tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+
+    // Creating a new session should succeed because expired sessions get evicted
+    let result = service.create_session().await;
+    assert!(
+        result.is_ok(),
+        "should evict expired sessions before checking limit"
+    );
+}
+
+#[test]
+fn test_key_exchange_session_consume_is_irreversible() {
+    let mut session = KeyExchangeSession::new(300);
+    session.consume();
+    assert!(!session.is_valid());
+    // Even though not expired, consumed sessions are invalid
+    assert!(!session.is_expired());
+    assert!(session.consumed);
+}
+
+#[tokio::test]
+async fn test_auth_service_ttl_and_max_sessions_accessors() {
+    let config = TeeKeyExchangeConfig {
+        session_ttl_secs: 600,
+        max_sessions: 128,
+        on_chain_verification: true,
+    };
+    let service = TeeAuthService::new(config);
+    assert_eq!(service.session_ttl_secs(), 600);
+    assert_eq!(service.max_sessions(), 128);
+}

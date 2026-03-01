@@ -11,17 +11,22 @@ use sha2::{Digest, Sha256};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// An ephemeral session for key exchange.
+///
+/// Each session generates a random 32-byte keypair. The private key is held
+/// in memory and zeroed on drop via `write_volatile`. Sessions are one-time
+/// use: once consumed, the session cannot be reused.
 #[derive(Debug)]
 pub struct KeyExchangeSession {
-    /// Unique session identifier.
+    /// Unique hex-encoded session identifier (16 random bytes).
     pub session_id: String,
-    /// The ephemeral public key (raw bytes).
+    /// The ephemeral public key (SHA-256 of the private key material).
     pub public_key: Vec<u8>,
     /// The ephemeral private key (raw bytes), held only in TEE memory.
+    /// Zeroed on drop.
     private_key: Vec<u8>,
-    /// When this session was created.
+    /// Unix timestamp when this session was created.
     pub created_at: u64,
-    /// Time-to-live in seconds.
+    /// Maximum lifetime in seconds from `created_at`.
     pub ttl_secs: u64,
     /// Whether this session has been consumed (one-time use).
     pub consumed: bool,

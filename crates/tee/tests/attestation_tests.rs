@@ -222,11 +222,217 @@ mod nitro_verifier {
 mod sev_snp_verifier {
     use super::*;
     use blueprint_tee::attestation::providers::sev_snp::SevSnpVerifier;
+    use blueprint_tee::errors::TeeError;
 
     #[test]
     fn test_sev_snp_verifier_accepts_sev_report() {
         let verifier = SevSnpVerifier::new();
         let report = sample_report(TeeProvider::AmdSevSnp);
         assert!(verifier.verify(&report).is_ok());
+    }
+
+    #[test]
+    fn test_sev_snp_verifier_rejects_wrong_provider() {
+        let verifier = SevSnpVerifier::new();
+        let report = sample_report(TeeProvider::AwsNitro);
+        assert!(verifier.verify(&report).is_err());
+    }
+
+    #[test]
+    fn test_sev_snp_verifier_rejects_debug_mode() {
+        let verifier = SevSnpVerifier::new();
+        let mut report = sample_report(TeeProvider::AmdSevSnp);
+        report.claims.debug_mode = true;
+        assert!(verifier.verify(&report).is_err());
+    }
+
+    #[test]
+    fn test_sev_snp_verifier_measurement_check() {
+        let verifier = SevSnpVerifier::new().with_expected_measurement("x".repeat(64));
+        let report = sample_report(TeeProvider::AmdSevSnp);
+        let result = verifier.verify(&report);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            TeeError::MeasurementMismatch { .. } => {}
+            other => panic!("expected MeasurementMismatch, got: {other:?}"),
+        }
+    }
+}
+
+#[cfg(feature = "azure-snp")]
+mod azure_snp_verifier {
+    use super::*;
+    use blueprint_tee::attestation::providers::azure_snp::AzureSnpVerifier;
+    use blueprint_tee::errors::TeeError;
+
+    #[test]
+    fn test_azure_snp_verifier_accepts_azure_report() {
+        let verifier = AzureSnpVerifier::new();
+        let report = sample_report(TeeProvider::AzureSnp);
+        assert!(verifier.verify(&report).is_ok());
+    }
+
+    #[test]
+    fn test_azure_snp_verifier_rejects_wrong_provider() {
+        let verifier = AzureSnpVerifier::new();
+        let report = sample_report(TeeProvider::IntelTdx);
+        assert!(verifier.verify(&report).is_err());
+    }
+
+    #[test]
+    fn test_azure_snp_verifier_rejects_debug_mode() {
+        let verifier = AzureSnpVerifier::new();
+        let mut report = sample_report(TeeProvider::AzureSnp);
+        report.claims.debug_mode = true;
+        assert!(verifier.verify(&report).is_err());
+    }
+
+    #[test]
+    fn test_azure_snp_verifier_measurement_check() {
+        let verifier = AzureSnpVerifier::new().with_expected_measurement("x".repeat(64));
+        let report = sample_report(TeeProvider::AzureSnp);
+        let result = verifier.verify(&report);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            TeeError::MeasurementMismatch { .. } => {}
+            other => panic!("expected MeasurementMismatch, got: {other:?}"),
+        }
+    }
+}
+
+#[cfg(feature = "gcp-confidential")]
+mod gcp_confidential_verifier {
+    use super::*;
+    use blueprint_tee::attestation::providers::gcp_confidential::GcpConfidentialVerifier;
+    use blueprint_tee::errors::TeeError;
+
+    #[test]
+    fn test_gcp_verifier_accepts_gcp_report() {
+        let verifier = GcpConfidentialVerifier::new();
+        let report = sample_report(TeeProvider::GcpConfidential);
+        assert!(verifier.verify(&report).is_ok());
+    }
+
+    #[test]
+    fn test_gcp_verifier_rejects_wrong_provider() {
+        let verifier = GcpConfidentialVerifier::new();
+        let report = sample_report(TeeProvider::IntelTdx);
+        assert!(verifier.verify(&report).is_err());
+    }
+
+    #[test]
+    fn test_gcp_verifier_rejects_debug_mode() {
+        let verifier = GcpConfidentialVerifier::new();
+        let mut report = sample_report(TeeProvider::GcpConfidential);
+        report.claims.debug_mode = true;
+        assert!(verifier.verify(&report).is_err());
+    }
+
+    #[test]
+    fn test_gcp_verifier_allows_debug_when_configured() {
+        let mut report = sample_report(TeeProvider::GcpConfidential);
+        report.claims.debug_mode = true;
+        let verifier = GcpConfidentialVerifier::new().allow_debug(true);
+        assert!(verifier.verify(&report).is_ok());
+    }
+
+    #[test]
+    fn test_gcp_verifier_measurement_check() {
+        let verifier = GcpConfidentialVerifier::new().with_expected_measurement("x".repeat(64));
+        let report = sample_report(TeeProvider::GcpConfidential);
+        let result = verifier.verify(&report);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            TeeError::MeasurementMismatch { .. } => {}
+            other => panic!("expected MeasurementMismatch, got: {other:?}"),
+        }
+    }
+}
+
+// Edge case tests
+
+#[test]
+fn test_attestation_report_expired_at_boundary() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let mut report = sample_report(TeeProvider::IntelTdx);
+    // Set issued_at to exactly max_age ago
+    report.issued_at_unix = now - 3600;
+    // At the boundary, saturating_sub == max_age, so `> max_age` is false
+    assert!(!report.is_expired(3600));
+    // One second past the boundary
+    report.issued_at_unix = now - 3601;
+    assert!(report.is_expired(3600));
+}
+
+#[test]
+fn test_attestation_report_zero_max_age() {
+    let report = sample_report(TeeProvider::IntelTdx);
+    // With max_age=0, any elapsed time makes it expired
+    // Since the report was just created, the elapsed time is 0,
+    // and 0 > 0 is false, so it's not expired
+    assert!(!report.is_expired(0));
+}
+
+#[test]
+fn test_measurement_sha384() {
+    let m = Measurement::sha384("abc123");
+    assert_eq!(m.algorithm, "sha384");
+    assert_eq!(m.digest, "abc123");
+    assert_eq!(m.to_string(), "sha384:abc123");
+}
+
+#[test]
+fn test_attestation_claims_all_fields() {
+    let claims = AttestationClaims {
+        platform_version: Some("3.0".to_string()),
+        debug_mode: false,
+        boot_measurements: vec!["pcr0".to_string()],
+        signer_id: Some("signer-abc".to_string()),
+        product_id: Some("product-xyz".to_string()),
+        user_data: Some(vec![1, 2, 3]),
+        custom: Default::default(),
+    };
+
+    let json = serde_json::to_string(&claims).unwrap();
+    let parsed: AttestationClaims = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.signer_id.as_deref(), Some("signer-abc"));
+    assert_eq!(parsed.product_id.as_deref(), Some("product-xyz"));
+    assert_eq!(parsed.user_data, Some(vec![1, 2, 3]));
+}
+
+#[test]
+fn test_public_key_binding_serde() {
+    let binding = PublicKeyBinding {
+        public_key: vec![10, 20, 30],
+        key_type: "ed25519".to_string(),
+        binding_digest: "deadbeef".to_string(),
+    };
+    let json = serde_json::to_string(&binding).unwrap();
+    let parsed: PublicKeyBinding = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.key_type, "ed25519");
+    assert_eq!(parsed.binding_digest, "deadbeef");
+}
+
+#[test]
+fn test_attestation_format_serde_all_variants() {
+    for (format, expected_str) in [
+        (AttestationFormat::NitroDocument, "\"nitro_document\""),
+        (AttestationFormat::TdxQuote, "\"tdx_quote\""),
+        (AttestationFormat::SevSnpReport, "\"sev_snp_report\""),
+        (AttestationFormat::AzureMaaToken, "\"azure_maa_token\""),
+        (
+            AttestationFormat::GcpConfidentialToken,
+            "\"gcp_confidential_token\"",
+        ),
+        (AttestationFormat::Mock, "\"mock\""),
+    ] {
+        let json = serde_json::to_string(&format).unwrap();
+        assert_eq!(json, expected_str, "format {format:?}");
+        let parsed: AttestationFormat = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, format);
     }
 }

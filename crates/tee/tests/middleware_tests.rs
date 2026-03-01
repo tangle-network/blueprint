@@ -132,3 +132,82 @@ async fn test_tee_layer_with_router() {
         }
     }
 }
+
+// Edge case: TeeLayer with no attestation should not inject metadata
+#[tokio::test]
+async fn test_tee_layer_without_attestation() {
+    use blueprint_core::{Bytes, JobCall};
+    use blueprint_router::Router;
+    use tower::Service;
+
+    // Layer with no attestation set
+    let tee_layer = TeeLayer::new();
+
+    let mut router = Router::new().route(0, async || vec![42u8]).layer(tee_layer);
+
+    let call = JobCall::new(0u32, Bytes::new());
+    let result = router.call(call).await;
+
+    let results = result
+        .expect("router call should succeed")
+        .expect("should return Some");
+    assert!(!results.is_empty());
+
+    match &results[0] {
+        blueprint_core::JobResult::Ok { head, .. } => {
+            // No TEE metadata should be attached when no attestation is set
+            assert!(
+                head.metadata.get(TEE_PROVIDER_KEY).is_none(),
+                "should not have provider metadata without attestation"
+            );
+            assert!(
+                head.metadata.get(TEE_ATTESTATION_DIGEST_KEY).is_none(),
+                "should not have digest metadata without attestation"
+            );
+            assert!(
+                head.metadata.get(TEE_MEASUREMENT_KEY).is_none(),
+                "should not have measurement metadata without attestation"
+            );
+        }
+        blueprint_core::JobResult::Err(_) => {
+            panic!("expected Ok result");
+        }
+    }
+}
+
+// TeeContext: verify is_tee_active with provider but no attestation
+#[test]
+fn test_tee_context_provider_without_attestation() {
+    let ctx = TeeContext {
+        attestation: None,
+        provider: Some(TeeProvider::IntelTdx),
+        deployment_id: None,
+    };
+    assert!(!ctx.is_attested());
+    assert!(ctx.is_tee_active());
+}
+
+// TeeLayer: attestation can be updated after construction
+#[tokio::test]
+async fn test_tee_layer_update_attestation() {
+    let layer = TeeLayer::new();
+
+    // Initially no attestation
+    {
+        let handle = layer.attestation_handle();
+        let guard = handle.lock().await;
+        assert!(guard.is_none());
+    }
+
+    // Set attestation
+    let report = sample_report();
+    layer.set_attestation(report.clone()).await;
+
+    // Verify it's set
+    {
+        let handle = layer.attestation_handle();
+        let guard = handle.lock().await;
+        assert!(guard.is_some());
+        assert_eq!(guard.as_ref().unwrap().provider, TeeProvider::IntelTdx);
+    }
+}
