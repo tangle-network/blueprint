@@ -1,11 +1,11 @@
 //! Provider-specific attestation verifiers.
 //!
-//! Each provider module is feature-gated and implements the [`AttestationVerifier`]
-//! trait for its specific TEE platform.
+//! Each provider module is feature-gated and implements the
+//! [`AttestationVerifier`](super::AttestationVerifier) trait for its specific TEE platform.
 //!
 //! TDX and SEV-SNP share the same ioctl-based attestation pattern (open device,
 //! write report data, read report, extract measurement). They are unified in the
-//! [`native`] module with platform dispatch. The separate `tdx` and `sev_snp`
+//! `native` module with platform dispatch. The separate `tdx` and `sev_snp`
 //! modules re-export convenience constructors for backward compatibility.
 
 #[cfg(feature = "aws-nitro")]

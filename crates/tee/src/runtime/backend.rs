@@ -143,15 +143,16 @@ pub enum TeeDeploymentStatus {
 ///
 /// # Idempotent provision
 ///
-/// When a provision is re-submitted, [`cached_attestation`] returns the
-/// attestation captured at first provision. This prevents on-chain reverts
-/// when the contract requires non-empty attestation.
+/// When a provision is re-submitted, [`TeeRuntimeBackend::cached_attestation`]
+/// returns the attestation captured at first provision. This prevents on-chain
+/// reverts when the contract requires non-empty attestation.
 ///
 /// # Secret injection
 ///
 /// TEE deployments use sealed secrets exclusively. Container recreation
 /// (env-var re-injection) is forbidden because it invalidates attestation.
-/// Use [`derive_public_key`] to get the key for encrypting sealed secrets.
+/// Use [`TeeRuntimeBackend::derive_public_key`] to get the key for encrypting
+/// sealed secrets.
 pub trait TeeRuntimeBackend: Send + Sync {
     /// Deploy a workload into a TEE environment.
     fn deploy(

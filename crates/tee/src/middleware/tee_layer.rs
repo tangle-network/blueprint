@@ -1,6 +1,6 @@
 //! TEE attestation layer for job results.
 //!
-//! Follows the same pattern as [`TangleLayer`] to inject TEE attestation
+//! Follows the same pattern as `TangleLayer` to inject TEE attestation
 //! metadata into successful job results, enabling downstream consumers
 //! to verify TEE provenance.
 
