@@ -18,10 +18,13 @@ pub struct Measurement {
 
 impl Measurement {
     /// Create a new measurement.
+    ///
+    /// The digest is normalized to lowercase hex to ensure consistent
+    /// comparison regardless of input casing.
     pub fn new(algorithm: impl Into<String>, digest: impl Into<String>) -> Self {
         Self {
             algorithm: algorithm.into(),
-            digest: digest.into(),
+            digest: digest.into().to_ascii_lowercase(),
         }
     }
 

@@ -10,4 +10,4 @@ pub mod verifier;
 
 pub use claims::AttestationClaims;
 pub use report::{AttestationFormat, AttestationReport, Measurement, PublicKeyBinding};
-pub use verifier::{AttestationVerifier, VerifiedAttestation};
+pub use verifier::{AttestationVerifier, VerificationLevel, VerifiedAttestation};

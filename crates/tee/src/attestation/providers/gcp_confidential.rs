@@ -50,6 +50,13 @@ impl Default for GcpConfidentialVerifier {
 }
 
 impl AttestationVerifier for GcpConfidentialVerifier {
+    /// Verify a GCP Confidential Space attestation report.
+    ///
+    /// # Security Warning
+    ///
+    /// This verifier performs structural validation only (provider match,
+    /// measurement, debug mode). It does **not** verify token signatures
+    /// or workload identity.
     fn verify(&self, report: &AttestationReport) -> Result<VerifiedAttestation, TeeError> {
         if report.provider != TeeProvider::GcpConfidential {
             return Err(TeeError::AttestationVerification(format!(
@@ -72,6 +79,8 @@ impl AttestationVerifier for GcpConfidentialVerifier {
                 });
             }
         }
+
+        tracing::warn!("structural validation only — no cryptographic signature verification");
 
         Ok(VerifiedAttestation::new(
             report.clone(),

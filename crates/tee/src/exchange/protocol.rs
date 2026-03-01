@@ -9,17 +9,28 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use zeroize::Zeroize;
 
 /// An ephemeral session for key exchange.
 ///
 /// Each session generates a random 32-byte keypair. The private key is held
 /// in memory and zeroed on drop via `write_volatile`. Sessions are one-time
 /// use: once consumed, the session cannot be reused.
+///
+/// # WARNING: Placeholder — not production crypto
+///
+/// The current public key derivation uses `SHA-256(private_key)` instead of
+/// proper X25519 point multiplication. This is a structural placeholder.
+/// A production implementation must use `x25519-dalek` or equivalent for
+/// real Diffie-Hellman key exchange.
 #[derive(Debug)]
 pub struct KeyExchangeSession {
     /// Unique hex-encoded session identifier (16 random bytes).
     pub session_id: String,
-    /// The ephemeral public key (SHA-256 of the private key material).
+    /// The ephemeral public key.
+    ///
+    /// WARNING: Currently `SHA-256(private_key)` — not a real X25519 public point.
+    /// See struct-level docs for details.
     pub public_key: Vec<u8>,
     /// The ephemeral private key (raw bytes), held only in TEE memory.
     /// Zeroed on drop.
@@ -28,15 +39,13 @@ pub struct KeyExchangeSession {
     pub created_at: u64,
     /// Maximum lifetime in seconds from `created_at`.
     pub ttl_secs: u64,
-    /// Whether this session has been consumed (one-time use).
-    pub consumed: bool,
 }
 
 impl KeyExchangeSession {
     /// Create a new ephemeral key exchange session.
     ///
-    /// Generates a random 32-byte keypair (suitable as X25519 seed or
-    /// similar key material).
+    /// Generates a random 32-byte keypair. The public key is currently derived
+    /// as `SHA-256(private_key)` — **not** proper X25519. See struct-level docs.
     pub fn new(ttl_secs: u64) -> Self {
         let mut rng = rand::thread_rng();
 
@@ -44,9 +53,11 @@ impl KeyExchangeSession {
         let mut private_key = vec![0u8; 32];
         rng.fill_bytes(&mut private_key);
 
-        // Derive public key hash (in a real implementation, this would be
-        // proper X25519 or similar key derivation)
+        // WARNING: placeholder key derivation — production must use x25519-dalek
+        // or equivalent for real Diffie-Hellman key exchange.
         let public_key = Sha256::digest(&private_key).to_vec();
+
+        tracing::warn!("key exchange uses placeholder SHA-256 derivation, not real X25519");
 
         // Generate session ID
         let mut session_id_bytes = [0u8; 16];
@@ -64,7 +75,6 @@ impl KeyExchangeSession {
             private_key,
             created_at: now,
             ttl_secs,
-            consumed: false,
         }
     }
 
@@ -75,16 +85,6 @@ impl KeyExchangeSession {
             .map(|d| d.as_secs())
             .unwrap_or(0);
         now.saturating_sub(self.created_at) > self.ttl_secs
-    }
-
-    /// Check if this session is still valid (not expired and not consumed).
-    pub fn is_valid(&self) -> bool {
-        !self.consumed && !self.is_expired()
-    }
-
-    /// Mark this session as consumed.
-    pub fn consume(&mut self) {
-        self.consumed = true;
     }
 
     /// Get the public key hash for binding in an attestation report.
@@ -105,15 +105,7 @@ impl KeyExchangeSession {
 
 impl Drop for KeyExchangeSession {
     fn drop(&mut self) {
-        // Zero out the private key material before deallocation.
-        // This reduces the window during which secrets remain in memory.
-        for byte in &mut self.private_key {
-            // Use write_volatile to prevent the compiler from optimizing away the zeroing.
-            // SAFETY: we are writing to a valid, properly-aligned byte within a live allocation.
-            unsafe {
-                core::ptr::write_volatile(core::ptr::from_mut::<u8>(byte), 0);
-            }
-        }
+        self.private_key.zeroize();
     }
 }
 

@@ -13,26 +13,27 @@ use tokio::sync::Mutex;
 
 /// Service for TEE key exchange and session management.
 ///
-/// Manages ephemeral key exchange sessions with:
-/// - Configurable TTL for session keys
-/// - Maximum concurrent session limit
-/// - Automatic cleanup of expired sessions
+/// Manages ephemeral key exchange sessions with configurable TTL,
+/// capacity limits, and background cleanup. This is an adapter that
+/// wraps session state and provides the API consumed by the runner's
+/// TEE key-exchange endpoint.
 ///
-/// When used with the Blueprint runner, enable the `tee` feature and use
-/// `.tee(config)` on the builder, which will register this service automatically.
-///
-/// # Examples
+/// # Usage
 ///
 /// ```rust,ignore
 /// use blueprint_tee::exchange::TeeAuthService;
 /// use blueprint_tee::TeeKeyExchangeConfig;
 ///
-/// let service = TeeAuthService::new(TeeKeyExchangeConfig::default());
+/// let mut service = TeeAuthService::new(TeeKeyExchangeConfig::default());
 /// service.start_cleanup_loop();
 /// ```
 pub struct TeeAuthService {
     config: TeeKeyExchangeConfig,
     sessions: Arc<Mutex<BTreeMap<String, KeyExchangeSession>>>,
+    /// Abort handle to the background cleanup task, if started.
+    /// Stored so the task can be cancelled on drop and to prevent the
+    /// caller from silently discarding it.
+    cleanup_handle: Option<tokio::task::AbortHandle>,
 }
 
 impl TeeAuthService {
@@ -41,6 +42,7 @@ impl TeeAuthService {
         Self {
             config,
             sessions: Arc::new(Mutex::new(BTreeMap::new())),
+            cleanup_handle: None,
         }
     }
 
@@ -73,25 +75,27 @@ impl TeeAuthService {
 
     /// Consume a session by ID, returning the session if valid.
     ///
-    /// A consumed session cannot be reused (one-time handoff).
+    /// Sessions are atomically removed from the map on consumption (one-time use).
+    /// Validation (expiry check) is performed before removal to avoid losing
+    /// error context.
     pub async fn consume_session(&self, session_id: &str) -> Result<KeyExchangeSession, TeeError> {
         let mut sessions = self.sessions.lock().await;
 
+        // Check validity before removing so we can return precise errors
         let session = sessions
-            .remove(session_id)
+            .get(session_id)
             .ok_or_else(|| TeeError::KeyExchange(format!("session not found: {session_id}")))?;
 
         if session.is_expired() {
+            // Remove the expired session from the map as cleanup
+            sessions.remove(session_id);
             return Err(TeeError::KeyExchange(format!(
                 "session expired: {session_id}"
             )));
         }
 
-        if session.consumed {
-            return Err(TeeError::KeyExchange(format!(
-                "session already consumed: {session_id}"
-            )));
-        }
+        // Session is valid — remove and return it
+        let session = sessions.remove(session_id).expect("session exists; checked above");
 
         tracing::debug!(session_id = %session_id, "consumed key exchange session");
         Ok(session)
@@ -100,7 +104,7 @@ impl TeeAuthService {
     /// Get the number of active (non-expired) sessions.
     pub async fn active_session_count(&self) -> usize {
         let sessions = self.sessions.lock().await;
-        sessions.values().filter(|s| s.is_valid()).count()
+        sessions.values().filter(|s| !s.is_expired()).count()
     }
 
     /// Get the public key for a session, if it exists and is valid.
@@ -110,9 +114,9 @@ impl TeeAuthService {
             .get(session_id)
             .ok_or_else(|| TeeError::KeyExchange(format!("session not found: {session_id}")))?;
 
-        if !session.is_valid() {
+        if session.is_expired() {
             return Err(TeeError::KeyExchange(format!(
-                "session no longer valid: {session_id}"
+                "session expired: {session_id}"
             )));
         }
 
@@ -122,12 +126,13 @@ impl TeeAuthService {
     /// Start the background cleanup loop for expired sessions.
     ///
     /// Spawns a tokio task that periodically evicts expired sessions.
-    /// Returns a handle to the cleanup task.
-    pub fn start_cleanup_loop(&self) -> tokio::task::JoinHandle<()> {
+    /// The `JoinHandle` is stored internally so the task is not silently dropped.
+    /// Returns a clone of the handle for external monitoring if needed.
+    pub fn start_cleanup_loop(&mut self) -> tokio::task::JoinHandle<()> {
         let sessions = self.sessions.clone();
         let ttl_secs = self.config.session_ttl_secs;
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             tracing::info!("TEE auth service cleanup loop started");
 
             loop {
@@ -146,7 +151,10 @@ impl TeeAuthService {
                     );
                 }
             }
-        })
+        });
+
+        self.cleanup_handle = Some(handle.abort_handle());
+        handle
     }
 
     /// Get the TTL configuration.
@@ -157,5 +165,13 @@ impl TeeAuthService {
     /// Get the max sessions configuration.
     pub fn max_sessions(&self) -> usize {
         self.config.max_sessions
+    }
+}
+
+impl Drop for TeeAuthService {
+    fn drop(&mut self) {
+        if let Some(handle) = self.cleanup_handle.take() {
+            handle.abort();
+        }
     }
 }

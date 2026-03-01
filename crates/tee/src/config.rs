@@ -35,7 +35,7 @@ pub enum TeeRequirement {
 }
 
 /// Supported TEE hardware/cloud providers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TeeProvider {
     /// AWS Nitro Enclaves.
@@ -256,6 +256,7 @@ impl Default for TeeKeyExchangeConfig {
 ///     .expect("valid config");
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "TeeConfigRaw")]
 pub struct TeeConfig {
     /// Whether TEE is required or preferred.
     pub requirement: TeeRequirement,
@@ -333,6 +334,70 @@ impl TeeConfig {
         } else {
             RuntimeLifecyclePolicy::Container
         }
+    }
+
+    /// Validate invariants that the builder enforces.
+    ///
+    /// Called automatically during deserialization via `#[serde(try_from)]`
+    /// to ensure configs loaded from JSON/TOML satisfy the same invariants
+    /// as configs produced by [`TeeConfigBuilder::build`].
+    pub fn validate(&self) -> Result<(), TeeError> {
+        if self.requirement == TeeRequirement::Required && self.mode == TeeMode::Disabled {
+            return Err(TeeError::Config(
+                "TEE requirement is Required but mode is Disabled".to_string(),
+            ));
+        }
+
+        // TEE-enabled configs must use SealedOnly
+        if self.mode != TeeMode::Disabled
+            && self.secret_injection != SecretInjectionPolicy::SealedOnly
+        {
+            return Err(TeeError::Config(
+                "TEE-enabled configs must use SealedOnly secret injection".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+/// Raw deserialization target for [`TeeConfig`], used with `#[serde(try_from)]`
+/// to enforce builder invariants on deserialized configs.
+#[derive(Deserialize)]
+struct TeeConfigRaw {
+    requirement: TeeRequirement,
+    mode: TeeMode,
+    provider_selector: TeeProviderSelector,
+    key_exchange: TeeKeyExchangeConfig,
+    #[serde(default = "default_max_attestation_age_secs")]
+    max_attestation_age_secs: u64,
+    #[serde(default)]
+    secret_injection: SecretInjectionPolicy,
+    #[serde(default)]
+    attestation_freshness: AttestationFreshnessPolicy,
+    #[serde(default)]
+    public_key_policy: TeePublicKeyPolicy,
+    #[serde(default)]
+    hybrid_routing_source: HybridRoutingSource,
+}
+
+impl TryFrom<TeeConfigRaw> for TeeConfig {
+    type Error = TeeError;
+
+    fn try_from(raw: TeeConfigRaw) -> Result<Self, Self::Error> {
+        let config = TeeConfig {
+            requirement: raw.requirement,
+            mode: raw.mode,
+            provider_selector: raw.provider_selector,
+            key_exchange: raw.key_exchange,
+            max_attestation_age_secs: raw.max_attestation_age_secs,
+            secret_injection: raw.secret_injection,
+            attestation_freshness: raw.attestation_freshness,
+            public_key_policy: raw.public_key_policy,
+            hybrid_routing_source: raw.hybrid_routing_source,
+        };
+        config.validate()?;
+        Ok(config)
     }
 }
 
@@ -434,6 +499,21 @@ impl TeeConfigBuilder {
             SecretInjectionPolicy::EnvOrSealed
         };
 
+        let attestation_freshness = self.attestation_freshness.unwrap_or_default();
+        let hybrid_routing_source = self.hybrid_routing_source.unwrap_or_default();
+
+        // PeriodicRefresh is not yet implemented
+        if matches!(attestation_freshness, AttestationFreshnessPolicy::PeriodicRefresh { .. }) {
+            tracing::warn!("PeriodicRefresh not yet implemented, falling back to ProvisionTimeOnly");
+        }
+
+        // ContractDriven hybrid routing is not yet implemented
+        if mode == TeeMode::Hybrid
+            && matches!(hybrid_routing_source, HybridRoutingSource::ContractDriven)
+        {
+            tracing::warn!("ContractDriven hybrid routing is not yet implemented; routing decisions will need manual configuration");
+        }
+
         Ok(TeeConfig {
             requirement,
             mode,
@@ -443,9 +523,9 @@ impl TeeConfigBuilder {
                 .max_attestation_age_secs
                 .unwrap_or_else(default_max_attestation_age_secs),
             secret_injection,
-            attestation_freshness: self.attestation_freshness.unwrap_or_default(),
+            attestation_freshness,
             public_key_policy: self.public_key_policy.unwrap_or_default(),
-            hybrid_routing_source: self.hybrid_routing_source.unwrap_or_default(),
+            hybrid_routing_source,
         })
     }
 }

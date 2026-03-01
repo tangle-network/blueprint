@@ -10,9 +10,7 @@ fn test_key_exchange_session_creation() {
     assert!(!session.session_id.is_empty());
     assert!(!session.public_key.is_empty());
     assert_eq!(session.public_key.len(), 32); // SHA-256 output
-    assert!(!session.consumed);
     assert!(!session.is_expired());
-    assert!(session.is_valid());
 }
 
 #[test]
@@ -24,12 +22,9 @@ fn test_key_exchange_session_ttl() {
 }
 
 #[test]
-fn test_key_exchange_session_consume() {
-    let mut session = KeyExchangeSession::new(300);
-    assert!(session.is_valid());
-    session.consume();
-    assert!(session.consumed);
-    assert!(!session.is_valid());
+fn test_key_exchange_session_not_expired_with_long_ttl() {
+    let session = KeyExchangeSession::new(300);
+    assert!(!session.is_expired());
 }
 
 #[test]
@@ -255,13 +250,11 @@ async fn test_auth_service_evicts_expired_on_create() {
 }
 
 #[test]
-fn test_key_exchange_session_consume_is_irreversible() {
-    let mut session = KeyExchangeSession::new(300);
-    session.consume();
-    assert!(!session.is_valid());
-    // Even though not expired, consumed sessions are invalid
+fn test_key_exchange_session_not_expired_fresh() {
+    // A freshly created session with positive TTL should not be expired
+    let session = KeyExchangeSession::new(300);
     assert!(!session.is_expired());
-    assert!(session.consumed);
+    assert!(session.remaining_ttl().as_secs() > 0);
 }
 
 #[tokio::test]
@@ -312,7 +305,6 @@ fn test_key_exchange_response_serde() {
 fn test_key_exchange_session_long_ttl() {
     let session = KeyExchangeSession::new(86400); // 24 hours
     assert!(!session.is_expired());
-    assert!(session.is_valid());
     assert!(session.remaining_ttl().as_secs() > 86390);
 }
 

@@ -50,6 +50,13 @@ impl Default for AzureSnpVerifier {
 }
 
 impl AttestationVerifier for AzureSnpVerifier {
+    /// Verify an Azure SEV-SNP attestation report.
+    ///
+    /// # Security Warning
+    ///
+    /// This verifier performs structural validation only (provider match,
+    /// measurement, debug mode). It does **not** verify MAA token signatures
+    /// or guest policy enforcement.
     fn verify(&self, report: &AttestationReport) -> Result<VerifiedAttestation, TeeError> {
         if report.provider != TeeProvider::AzureSnp {
             return Err(TeeError::AttestationVerification(format!(
@@ -72,6 +79,8 @@ impl AttestationVerifier for AzureSnpVerifier {
                 });
             }
         }
+
+        tracing::warn!("structural validation only — no cryptographic signature verification");
 
         Ok(VerifiedAttestation::new(
             report.clone(),

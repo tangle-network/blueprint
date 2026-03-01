@@ -108,7 +108,7 @@ fn test_attestation_claims_serde() {
 #[test]
 fn test_verified_attestation() {
     let report = sample_report(TeeProvider::IntelTdx);
-    let verified = VerifiedAttestation::new(report.clone(), TeeProvider::IntelTdx);
+    let verified = VerifiedAttestation::new_for_test(report.clone(), TeeProvider::IntelTdx);
 
     assert_eq!(verified.verified_by(), TeeProvider::IntelTdx);
     assert_eq!(verified.report().provider, TeeProvider::IntelTdx);
@@ -460,6 +460,18 @@ fn test_measurement_equality() {
     let m3 = Measurement::sha256("def");
     assert_eq!(m1, m2);
     assert_ne!(m1, m3);
+}
+
+#[test]
+fn test_measurement_digest_normalized_to_lowercase() {
+    let upper = Measurement::sha256("AABBCC");
+    assert_eq!(upper.digest, "aabbcc", "digest should be normalized to lowercase");
+
+    let mixed = Measurement::new("sha384", "AaBbCc");
+    assert_eq!(mixed.digest, "aabbcc", "mixed case should be normalized");
+
+    let already_lower = Measurement::sha256("aabbcc");
+    assert_eq!(already_lower.digest, "aabbcc", "lowercase should be unchanged");
 }
 
 #[test]

@@ -29,6 +29,7 @@ use crate::errors::TeeError;
 use crate::runtime::backend::{
     TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeePublicKey, TeeRuntimeBackend,
 };
+use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -69,9 +70,8 @@ impl Default for DirectBackendConfig {
 /// State for a deployment managed by the direct backend.
 #[derive(Debug)]
 struct DeploymentState {
-    /// The original deploy request. Retained for potential restart-with-same-config
-    /// and audit/diagnostics purposes.
-    _request: TeeDeployRequest,
+    /// The original deploy request image and resources (env vars cleared after deploy).
+    _image: String,
     status: TeeDeploymentStatus,
     cached_attestation: Option<AttestationReport>,
 }
@@ -84,15 +84,22 @@ pub struct DirectBackend {
     config: DirectBackendConfig,
     deployments: Arc<Mutex<BTreeMap<String, DeploymentState>>>,
     next_id: Arc<Mutex<u64>>,
+    /// Random secret generated at backend initialization, used for key derivation.
+    /// Keys are derived as HMAC-SHA256(secret, deployment_id) instead of bare
+    /// SHA-256(deployment_id) to prevent prediction.
+    key_derivation_secret: [u8; 32],
 }
 
 impl DirectBackend {
     /// Create a new direct backend with the given configuration.
     pub fn new(config: DirectBackendConfig) -> Self {
+        let mut secret = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut secret);
         Self {
             config,
             deployments: Arc::new(Mutex::new(BTreeMap::new())),
             next_id: Arc::new(Mutex::new(0)),
+            key_derivation_secret: secret,
         }
     }
 
@@ -136,10 +143,11 @@ impl TeeRuntimeBackend for DirectBackend {
         let port_mapping: BTreeMap<u16, u16> = req.extra_ports.iter().map(|&p| (p, p)).collect();
 
         let state = DeploymentState {
-            _request: req,
+            _image: req.image.clone(),
             status: TeeDeploymentStatus::Running,
             cached_attestation: None,
         };
+        // req is consumed here; env vars are not retained in DeploymentState
 
         let mut metadata = BTreeMap::new();
         metadata.insert("backend".to_string(), "direct".to_string());
@@ -188,7 +196,9 @@ impl TeeRuntimeBackend for DirectBackend {
             provider: self.config.provider,
             format,
             issued_at_unix: now,
-            measurement: Measurement::sha256("0".repeat(64)),
+            measurement: Measurement::sha256(
+                "PLACEHOLDER_NEEDS_REAL_TEE_HARDWARE_MEASUREMENT",
+            ),
             public_key_binding: None,
             claims: AttestationClaims::new(),
             evidence: Vec::new(),
@@ -222,8 +232,13 @@ impl TeeRuntimeBackend for DirectBackend {
 
         // In a real implementation, this would derive a key from the TEE's
         // hardware-bound key hierarchy (e.g., TDX sealing key, SEV VCEK).
-        // For now, derive a deterministic key from the deployment ID.
-        let key = Sha256::digest(handle.id.as_bytes()).to_vec();
+        // Derive from HMAC-SHA256(backend_secret, deployment_id) to prevent
+        // prediction from deployment ID alone.
+        let key = Sha256::new()
+            .chain_update(&self.key_derivation_secret)
+            .chain_update(handle.id.as_bytes())
+            .finalize()
+            .to_vec();
         let fingerprint = hex::encode(&key[..8]);
 
         Ok(TeePublicKey {

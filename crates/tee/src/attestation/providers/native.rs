@@ -109,6 +109,13 @@ impl NativeVerifier {
 }
 
 impl AttestationVerifier for NativeVerifier {
+    /// Verify a native TDX or SEV-SNP attestation report.
+    ///
+    /// # Security Warning
+    ///
+    /// This verifier performs structural validation only (provider match,
+    /// measurement, debug mode). It does **not** verify ioctl-based
+    /// attestation evidence or platform-specific cryptographic signatures.
     fn verify(&self, report: &AttestationReport) -> Result<VerifiedAttestation, TeeError> {
         let expected_provider = self.expected_provider();
 
@@ -135,6 +142,8 @@ impl AttestationVerifier for NativeVerifier {
                 });
             }
         }
+
+        tracing::warn!("structural validation only — no cryptographic signature verification");
 
         Ok(VerifiedAttestation::new(report.clone(), expected_provider))
     }

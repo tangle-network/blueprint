@@ -20,8 +20,9 @@ impl VerifiedAttestation {
     /// Create a new verified attestation.
     ///
     /// This should only be called by [`AttestationVerifier`] implementations
-    /// after successful verification.
-    pub fn new(report: AttestationReport, verified_by: TeeProvider) -> Self {
+    /// after successful verification. Restricted to `pub(crate)` to prevent
+    /// external callers from bypassing verification.
+    pub(crate) fn new(report: AttestationReport, verified_by: TeeProvider) -> Self {
         Self {
             report,
             verified_by,
@@ -44,29 +45,32 @@ impl VerifiedAttestation {
     }
 }
 
+impl VerifiedAttestation {
+    /// Test-only constructor for creating a `VerifiedAttestation` without a verifier.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn new_for_test(report: AttestationReport, verified_by: TeeProvider) -> Self {
+        Self::new(report, verified_by)
+    }
+}
+
+/// The level of verification performed by an [`AttestationVerifier`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerificationLevel {
+    /// Structural validation only: provider match, debug mode, measurement comparison.
+    /// No cryptographic signature verification is performed.
+    Structural,
+    /// Full cryptographic verification: signature validation, certificate chain, etc.
+    Cryptographic,
+}
+
 /// Trait for verifying TEE attestation reports.
 ///
 /// Implementations are provider-specific and validate the cryptographic
 /// evidence, claims freshness, and measurement policy compliance.
 ///
-/// # Examples
-///
-/// ```rust,ignore
-/// use blueprint_tee::{AttestationVerifier, AttestationReport, VerifiedAttestation, TeeError};
-///
-/// struct MyVerifier;
-///
-/// impl AttestationVerifier for MyVerifier {
-///     fn verify(&self, report: &AttestationReport) -> Result<VerifiedAttestation, TeeError> {
-///         // Validate evidence, check measurements, verify signatures...
-///         Ok(VerifiedAttestation::new(report.clone(), report.provider))
-///     }
-///
-///     fn supported_provider(&self) -> TeeProvider {
-///         TeeProvider::IntelTdx
-///     }
-/// }
-/// ```
+/// Implementors construct [`VerifiedAttestation`] via the crate-internal
+/// `VerifiedAttestation::new()` method, which is `pub(crate)` to prevent
+/// external code from bypassing verification.
 pub trait AttestationVerifier: Send + Sync {
     /// Verify an attestation report.
     ///
@@ -76,4 +80,13 @@ pub trait AttestationVerifier: Send + Sync {
 
     /// The TEE provider this verifier supports.
     fn supported_provider(&self) -> TeeProvider;
+
+    /// The level of verification this implementation performs.
+    ///
+    /// All built-in verifiers currently return [`VerificationLevel::Structural`]
+    /// because cryptographic signature verification requires provider-specific
+    /// dependencies that are not yet integrated.
+    fn verification_level(&self) -> VerificationLevel {
+        VerificationLevel::Structural
+    }
 }

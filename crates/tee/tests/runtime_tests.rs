@@ -120,7 +120,7 @@ async fn test_backend_registry() {
 
     let providers = registry.providers();
     assert_eq!(providers.len(), 1);
-    assert!(providers.contains(&"intel_tdx".to_string()));
+    assert!(providers.contains(&TeeProvider::IntelTdx));
 }
 
 #[tokio::test]
@@ -578,4 +578,28 @@ async fn test_backend_registry_derive_public_key() {
     let pubkey = registry.derive_public_key(&handle).await.unwrap();
     assert!(!pubkey.key.is_empty());
     assert_eq!(pubkey.key_type, "x25519");
+}
+
+// Test BackendRegistry rejects operations for a handle whose provider is not registered
+#[tokio::test]
+async fn test_backend_registry_mismatched_provider_lookup() {
+    let mut registry = BackendRegistry::new();
+    registry.register(TeeProvider::IntelTdx, DirectBackend::tdx());
+
+    // Deploy via TDX, then create a fake handle with a different provider
+    let handle = TeeDeploymentHandle {
+        id: "test-mismatch".to_string(),
+        provider: TeeProvider::AmdSevSnp,
+        metadata: Default::default(),
+        cached_attestation: None,
+        port_mapping: Default::default(),
+        lifecycle_policy: blueprint_tee::RuntimeLifecyclePolicy::CloudManaged,
+    };
+
+    // All operations should fail — AmdSevSnp backend is not registered
+    assert!(registry.status(&handle).await.is_err());
+    assert!(registry.get_attestation(&handle).await.is_err());
+    assert!(registry.derive_public_key(&handle).await.is_err());
+    assert!(registry.stop(&handle).await.is_err());
+    assert!(registry.destroy(&handle).await.is_err());
 }

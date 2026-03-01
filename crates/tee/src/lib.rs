@@ -53,7 +53,7 @@ pub use errors::TeeError;
 
 pub use attestation::{
     AttestationClaims, AttestationFormat, AttestationReport, AttestationVerifier, Measurement,
-    PublicKeyBinding, VerifiedAttestation,
+    PublicKeyBinding, VerificationLevel, VerifiedAttestation,
 };
 
 pub use exchange::TeeAuthService;

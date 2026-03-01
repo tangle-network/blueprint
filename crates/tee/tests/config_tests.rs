@@ -451,6 +451,49 @@ fn test_public_key_policy_serde() {
     }
 }
 
+// Deserialization invariant enforcement tests (Fix #9)
+
+#[test]
+fn test_config_deser_rejects_required_disabled() {
+    // JSON with Required + Disabled should fail deserialization
+    let json = r#"{
+        "requirement": "required",
+        "mode": "disabled",
+        "provider_selector": "any",
+        "key_exchange": { "session_ttl_secs": 300, "max_sessions": 64, "on_chain_verification": false }
+    }"#;
+    let result: Result<TeeConfig, _> = serde_json::from_str(json);
+    assert!(result.is_err(), "Required + Disabled should be rejected on deserialization");
+}
+
+#[test]
+fn test_config_deser_rejects_tee_enabled_with_env_or_sealed() {
+    // JSON with TEE enabled but EnvOrSealed should fail deserialization
+    let json = r#"{
+        "requirement": "preferred",
+        "mode": "direct",
+        "provider_selector": "any",
+        "key_exchange": { "session_ttl_secs": 300, "max_sessions": 64, "on_chain_verification": false },
+        "secret_injection": "env_or_sealed"
+    }"#;
+    let result: Result<TeeConfig, _> = serde_json::from_str(json);
+    assert!(result.is_err(), "TEE-enabled config with EnvOrSealed should be rejected");
+}
+
+#[test]
+fn test_config_deser_accepts_valid_tee_config() {
+    let json = r#"{
+        "requirement": "required",
+        "mode": "direct",
+        "provider_selector": "any",
+        "key_exchange": { "session_ttl_secs": 300, "max_sessions": 64, "on_chain_verification": false },
+        "secret_injection": "sealed_only"
+    }"#;
+    let config: TeeConfig = serde_json::from_str(json).expect("valid config should deserialize");
+    assert_eq!(config.mode, TeeMode::Direct);
+    assert_eq!(config.secret_injection, SecretInjectionPolicy::SealedOnly);
+}
+
 // Error type tests
 
 #[test]

@@ -52,6 +52,14 @@ impl Default for NitroVerifier {
 }
 
 impl AttestationVerifier for NitroVerifier {
+    /// Verify an AWS Nitro attestation report.
+    ///
+    /// # Security Warning
+    ///
+    /// This verifier performs structural validation only (provider match, PCR0,
+    /// debug mode). It does **not** verify COSE signatures or the AWS Nitro root
+    /// CA certificate chain. Full cryptographic verification requires the
+    /// `aws-nitro-enclaves-cose` crate.
     fn verify(&self, report: &AttestationReport) -> Result<VerifiedAttestation, TeeError> {
         if report.provider != TeeProvider::AwsNitro {
             return Err(TeeError::AttestationVerification(format!(
@@ -81,6 +89,8 @@ impl AttestationVerifier for NitroVerifier {
         // `aws-nitro-enclaves-cose` crate and will be added when provider-specific
         // dependencies are integrated. Until then, the evidence blob should be
         // verified externally (e.g., by the on-chain contract's attestation hash).
+
+        tracing::warn!("structural validation only — no cryptographic signature verification");
 
         Ok(VerifiedAttestation::new(
             report.clone(),

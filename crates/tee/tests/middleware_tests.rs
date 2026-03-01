@@ -37,7 +37,7 @@ fn test_tee_context_none() {
 #[test]
 fn test_tee_context_with_attestation() {
     let report = sample_report();
-    let verified = VerifiedAttestation::new(report, TeeProvider::IntelTdx);
+    let verified = VerifiedAttestation::new_for_test(report, TeeProvider::IntelTdx);
     let ctx = TeeContext::with_attestation(verified);
 
     assert!(ctx.is_attested());
@@ -48,7 +48,7 @@ fn test_tee_context_with_attestation() {
 #[test]
 fn test_tee_context_with_deployment_id() {
     let report = sample_report();
-    let verified = VerifiedAttestation::new(report, TeeProvider::IntelTdx);
+    let verified = VerifiedAttestation::new_for_test(report, TeeProvider::IntelTdx);
     let ctx = TeeContext::with_attestation(verified).with_deployment_id("deploy-123");
 
     assert_eq!(ctx.deployment_id.as_deref(), Some("deploy-123"));
@@ -216,7 +216,7 @@ async fn test_tee_layer_update_attestation() {
 #[test]
 fn test_tee_context_clone() {
     let report = sample_report();
-    let verified = VerifiedAttestation::new(report, TeeProvider::IntelTdx);
+    let verified = VerifiedAttestation::new_for_test(report, TeeProvider::IntelTdx);
     let ctx = TeeContext::with_attestation(verified).with_deployment_id("dep-1");
     let cloned = ctx.clone();
     assert_eq!(cloned.provider, Some(TeeProvider::IntelTdx));
@@ -236,7 +236,7 @@ fn test_tee_context_all_providers() {
     ] {
         let mut report = sample_report();
         report.provider = provider;
-        let verified = VerifiedAttestation::new(report, provider);
+        let verified = VerifiedAttestation::new_for_test(report, provider);
         let ctx = TeeContext::with_attestation(verified);
         assert_eq!(ctx.provider, Some(provider));
         assert!(ctx.is_attested());
@@ -278,6 +278,46 @@ async fn test_tee_layer_with_error_result() {
             // If for some reason it's Ok (router wraps errors differently),
             // at least verify the layer ran
             let _ = head;
+        }
+    }
+}
+
+// TeeLayer: lock contention gracefully skips metadata injection
+#[tokio::test]
+async fn test_tee_layer_lock_contention_skips_metadata() {
+    use blueprint_core::{Bytes, JobCall};
+    use blueprint_router::Router;
+    use tower::Service;
+
+    let report = sample_report();
+    let tee_layer = TeeLayer::with_attestation(report);
+    let handle = tee_layer.attestation_handle();
+
+    let mut router = Router::new()
+        .route(0, async || vec![42u8])
+        .layer(tee_layer);
+
+    // Hold the lock so try_lock in the service will fail
+    let _guard = handle.lock().await;
+
+    let call = JobCall::new(0u32, Bytes::new());
+    let result = router.call(call).await;
+
+    let results = result
+        .expect("router call should succeed even with lock contention")
+        .expect("should return Some");
+    assert!(!results.is_empty());
+
+    match &results[0] {
+        blueprint_core::JobResult::Ok { head, .. } => {
+            // Metadata should NOT be injected due to lock contention
+            assert!(
+                head.metadata.get(TEE_PROVIDER_KEY).is_none(),
+                "lock contention should skip metadata injection"
+            );
+        }
+        blueprint_core::JobResult::Err(_) => {
+            panic!("expected Ok result");
         }
     }
 }

@@ -38,6 +38,7 @@ serde_json = { workspace = true, features = ["std"] }
 rand = { workspace = true, features = ["std", "std_rng"] }
 sha2 = { workspace = true, features = ["std"] }
 hex = { workspace = true, features = ["std"] }
+zeroize = { workspace = true }
 
 # Utilities
 document-features = { workspace = true, features = ["default"] }
@@ -47,7 +48,7 @@ tokio = { workspace = true, features = ["full"] }
 blueprint-router = { workspace = true }
 
 [features]
-default = ["std"]
+default = ["std", "test-utils"]
 
 #! ### Core
 
@@ -73,6 +74,9 @@ sev-snp = []
 
 ## Enable all provider backends
 all-providers = ["aws-nitro", "azure-snp", "gcp-confidential", "tdx", "sev-snp"]
+
+## Enable test utilities (e.g., VerifiedAttestation::new_for_test)
+test-utils = []
 
 [package.metadata.docs.rs]
 all-features = true

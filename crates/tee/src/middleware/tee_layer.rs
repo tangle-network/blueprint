@@ -166,7 +166,10 @@ where
                 ),
                 None => (None, None, None),
             },
-            Err(_) => (None, None, None),
+            Err(_) => {
+                tracing::warn!("TEE attestation unavailable due to lock contention");
+                (None, None, None)
+            }
         };
 
         TeeServiceFuture {

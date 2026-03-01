@@ -120,7 +120,7 @@ impl core::fmt::Debug for DynBackend {
 /// based on the provider.
 #[derive(Debug, Default)]
 pub struct BackendRegistry {
-    backends: BTreeMap<String, DynBackend>,
+    backends: BTreeMap<TeeProvider, DynBackend>,
 }
 
 impl BackendRegistry {
@@ -132,7 +132,7 @@ impl BackendRegistry {
     /// Register a backend for a provider.
     pub fn register(&mut self, provider: TeeProvider, backend: impl TeeRuntimeBackend + 'static) {
         self.backends.insert(
-            provider.to_string(),
+            provider,
             DynBackend {
                 inner: Arc::new(backend),
             },
@@ -141,12 +141,12 @@ impl BackendRegistry {
 
     /// Check if a provider is registered.
     pub fn has_provider(&self, provider: TeeProvider) -> bool {
-        self.backends.contains_key(&provider.to_string())
+        self.backends.contains_key(&provider)
     }
 
     /// List all registered providers.
-    pub fn providers(&self) -> Vec<String> {
-        self.backends.keys().cloned().collect()
+    pub fn providers(&self) -> Vec<TeeProvider> {
+        self.backends.keys().copied().collect()
     }
 
     /// Deploy using the backend registered for the given provider.
@@ -155,10 +155,16 @@ impl BackendRegistry {
         provider: TeeProvider,
         req: TeeDeployRequest,
     ) -> Result<TeeDeploymentHandle, TeeError> {
-        let backend = self.backends.get(&provider.to_string()).ok_or_else(|| {
+        let backend = self.backends.get(&provider).ok_or_else(|| {
             TeeError::UnsupportedProvider(format!("no backend registered for {provider}"))
         })?;
         backend.inner.deploy(req).await
+    }
+
+    fn get_backend(&self, provider: TeeProvider) -> Result<&DynBackend, TeeError> {
+        self.backends.get(&provider).ok_or_else(|| {
+            TeeError::UnsupportedProvider(format!("no backend registered for {provider}"))
+        })
     }
 
     /// Get attestation from the backend registered for a deployment's provider.
@@ -166,16 +172,10 @@ impl BackendRegistry {
         &self,
         handle: &TeeDeploymentHandle,
     ) -> Result<crate::attestation::report::AttestationReport, TeeError> {
-        let backend = self
-            .backends
-            .get(&handle.provider.to_string())
-            .ok_or_else(|| {
-                TeeError::UnsupportedProvider(format!(
-                    "no backend registered for {}",
-                    handle.provider
-                ))
-            })?;
-        backend.inner.get_attestation(handle).await
+        self.get_backend(handle.provider)?
+            .inner
+            .get_attestation(handle)
+            .await
     }
 
     /// Get cached attestation from the backend registered for a deployment's provider.
@@ -183,16 +183,10 @@ impl BackendRegistry {
         &self,
         handle: &TeeDeploymentHandle,
     ) -> Result<Option<crate::attestation::report::AttestationReport>, TeeError> {
-        let backend = self
-            .backends
-            .get(&handle.provider.to_string())
-            .ok_or_else(|| {
-                TeeError::UnsupportedProvider(format!(
-                    "no backend registered for {}",
-                    handle.provider
-                ))
-            })?;
-        backend.inner.cached_attestation(handle).await
+        self.get_backend(handle.provider)?
+            .inner
+            .cached_attestation(handle)
+            .await
     }
 
     /// Derive the public key for a deployment.
@@ -200,16 +194,10 @@ impl BackendRegistry {
         &self,
         handle: &TeeDeploymentHandle,
     ) -> Result<TeePublicKey, TeeError> {
-        let backend = self
-            .backends
-            .get(&handle.provider.to_string())
-            .ok_or_else(|| {
-                TeeError::UnsupportedProvider(format!(
-                    "no backend registered for {}",
-                    handle.provider
-                ))
-            })?;
-        backend.inner.derive_public_key(handle).await
+        self.get_backend(handle.provider)?
+            .inner
+            .derive_public_key(handle)
+            .await
     }
 
     /// Get the current status of a deployment.
@@ -217,43 +205,25 @@ impl BackendRegistry {
         &self,
         handle: &TeeDeploymentHandle,
     ) -> Result<TeeDeploymentStatus, TeeError> {
-        let backend = self
-            .backends
-            .get(&handle.provider.to_string())
-            .ok_or_else(|| {
-                TeeError::UnsupportedProvider(format!(
-                    "no backend registered for {}",
-                    handle.provider
-                ))
-            })?;
-        backend.inner.status(handle).await
+        self.get_backend(handle.provider)?
+            .inner
+            .status(handle)
+            .await
     }
 
     /// Gracefully stop a running deployment.
     pub async fn stop(&self, handle: &TeeDeploymentHandle) -> Result<(), TeeError> {
-        let backend = self
-            .backends
-            .get(&handle.provider.to_string())
-            .ok_or_else(|| {
-                TeeError::UnsupportedProvider(format!(
-                    "no backend registered for {}",
-                    handle.provider
-                ))
-            })?;
-        backend.inner.stop(handle).await
+        self.get_backend(handle.provider)?
+            .inner
+            .stop(handle)
+            .await
     }
 
     /// Destroy a deployment and release all resources.
     pub async fn destroy(&self, handle: &TeeDeploymentHandle) -> Result<(), TeeError> {
-        let backend = self
-            .backends
-            .get(&handle.provider.to_string())
-            .ok_or_else(|| {
-                TeeError::UnsupportedProvider(format!(
-                    "no backend registered for {}",
-                    handle.provider
-                ))
-            })?;
-        backend.inner.destroy(handle).await
+        self.get_backend(handle.provider)?
+            .inner
+            .destroy(handle)
+            .await
     }
 }
