@@ -37,6 +37,12 @@ impl SevSnpVerifier {
         self
     }
 
+    /// Allow debug-mode guests (not recommended for production).
+    pub fn allow_debug(mut self, allow: bool) -> Self {
+        self.allow_debug = allow;
+        self
+    }
+
     fn to_native(&self) -> NativeVerifier {
         let mut v = NativeVerifier::sev_snp().with_allow_debug(self.allow_debug);
         if let Some(m) = &self.expected_measurement {

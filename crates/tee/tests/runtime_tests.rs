@@ -392,3 +392,190 @@ async fn test_direct_backend_stop_nonexistent() {
     // Stop of non-existent deployment should error
     assert!(backend.stop(&handle).await.is_err());
 }
+
+// Test BackendRegistry is re-exported at crate root
+#[test]
+fn test_backend_registry_reexport() {
+    let _registry: blueprint_tee::BackendRegistry = blueprint_tee::BackendRegistry::new();
+}
+
+// Test DirectBackend with custom config
+#[tokio::test]
+async fn test_direct_backend_custom_config() {
+    let config = DirectBackendConfig {
+        provider: TeeProvider::AmdSevSnp,
+        device_paths: vec!["/dev/sev-guest".to_string(), "/dev/sev-snp".to_string()],
+        readonly_rootfs: false,
+        memory_limit_bytes: 1024 * 1024 * 512,
+        cpu_limit: 4,
+    };
+    let backend = DirectBackend::new(config);
+    let req = TeeDeployRequest::new("test:latest");
+    let handle = backend.deploy(req).await.unwrap();
+    assert_eq!(handle.provider, TeeProvider::AmdSevSnp);
+    // readonly_rootfs is false, so metadata should not have it
+    assert!(!handle.metadata.contains_key("readonly_rootfs"));
+}
+
+// Test deploy request with multiple env vars
+#[test]
+fn test_deploy_request_multiple_env() {
+    let req = TeeDeployRequest::new("img")
+        .with_env("A", "1")
+        .with_env("B", "2")
+        .with_env("C", "3");
+    assert_eq!(req.env.len(), 3);
+    assert_eq!(req.env.get("B").unwrap(), "2");
+}
+
+// Test deployment handle serde with cached attestation
+#[test]
+fn test_deployment_handle_serde_with_cached_attestation() {
+    use blueprint_tee::attestation::claims::AttestationClaims;
+    use blueprint_tee::attestation::report::*;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let handle = TeeDeploymentHandle {
+        id: "test-cached".to_string(),
+        provider: TeeProvider::IntelTdx,
+        metadata: Default::default(),
+        cached_attestation: Some(AttestationReport {
+            provider: TeeProvider::IntelTdx,
+            format: AttestationFormat::TdxQuote,
+            issued_at_unix: now,
+            measurement: Measurement::sha256("a".repeat(64)),
+            public_key_binding: None,
+            claims: AttestationClaims::new(),
+            evidence: vec![1, 2, 3],
+        }),
+        port_mapping: Default::default(),
+        lifecycle_policy: blueprint_tee::RuntimeLifecyclePolicy::CloudManaged,
+    };
+
+    let json = serde_json::to_string(&handle).unwrap();
+    let parsed: TeeDeploymentHandle = serde_json::from_str(&json).unwrap();
+    assert!(parsed.cached_attestation.is_some());
+    assert_eq!(
+        parsed.cached_attestation.unwrap().provider,
+        TeeProvider::IntelTdx
+    );
+}
+
+// Test deployment status serde
+#[test]
+fn test_deployment_status_serde() {
+    for (status, expected) in [
+        (TeeDeploymentStatus::Provisioning, "\"provisioning\""),
+        (TeeDeploymentStatus::Running, "\"running\""),
+        (TeeDeploymentStatus::Stopping, "\"stopping\""),
+        (TeeDeploymentStatus::Stopped, "\"stopped\""),
+        (TeeDeploymentStatus::Failed, "\"failed\""),
+    ] {
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, expected);
+        let parsed: TeeDeploymentStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, status);
+    }
+}
+
+// Test TeePublicKey serde
+#[test]
+fn test_public_key_serde() {
+    use blueprint_tee::TeePublicKey;
+    let key = TeePublicKey {
+        key: vec![1, 2, 3, 4, 5],
+        key_type: "x25519".to_string(),
+        fingerprint: "0102030405".to_string(),
+    };
+    let json = serde_json::to_string(&key).unwrap();
+    let parsed: TeePublicKey = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.key, vec![1, 2, 3, 4, 5]);
+    assert_eq!(parsed.key_type, "x25519");
+    assert_eq!(parsed.fingerprint, "0102030405");
+}
+
+// Test that get_attestation for nonexistent deployment errors
+#[tokio::test]
+async fn test_direct_backend_get_attestation_nonexistent() {
+    let backend = DirectBackend::tdx();
+    let handle = TeeDeploymentHandle {
+        id: "nonexistent".to_string(),
+        provider: TeeProvider::IntelTdx,
+        metadata: Default::default(),
+        cached_attestation: None,
+        port_mapping: Default::default(),
+        lifecycle_policy: blueprint_tee::RuntimeLifecyclePolicy::CloudManaged,
+    };
+    assert!(backend.get_attestation(&handle).await.is_err());
+}
+
+// Test that derive_public_key for nonexistent deployment errors
+#[tokio::test]
+async fn test_direct_backend_derive_public_key_nonexistent() {
+    let backend = DirectBackend::tdx();
+    let handle = TeeDeploymentHandle {
+        id: "nonexistent".to_string(),
+        provider: TeeProvider::IntelTdx,
+        metadata: Default::default(),
+        cached_attestation: None,
+        port_mapping: Default::default(),
+        lifecycle_policy: blueprint_tee::RuntimeLifecyclePolicy::CloudManaged,
+    };
+    assert!(backend.derive_public_key(&handle).await.is_err());
+}
+
+// Test derive_public_key is deterministic for same deployment
+#[tokio::test]
+async fn test_direct_backend_derive_public_key_deterministic() {
+    let backend = DirectBackend::tdx();
+    let req = TeeDeployRequest::new("test:latest");
+    let handle = backend.deploy(req).await.unwrap();
+
+    let key1 = backend.derive_public_key(&handle).await.unwrap();
+    let key2 = backend.derive_public_key(&handle).await.unwrap();
+    assert_eq!(key1.key, key2.key, "same deployment should produce same key");
+    assert_eq!(key1.fingerprint, key2.fingerprint);
+}
+
+// Test registry cached_attestation and derive_public_key delegation
+#[tokio::test]
+async fn test_backend_registry_cached_attestation() {
+    let mut registry = BackendRegistry::new();
+    registry.register(TeeProvider::IntelTdx, DirectBackend::tdx());
+
+    let handle = registry
+        .deploy(TeeProvider::IntelTdx, TeeDeployRequest::new("test"))
+        .await
+        .unwrap();
+
+    // Before attestation, cache should be empty
+    let cached = registry.cached_attestation(&handle).await.unwrap();
+    assert!(cached.is_none());
+
+    // Get attestation (caches it)
+    registry.get_attestation(&handle).await.unwrap();
+
+    // Now cache should have data
+    let cached = registry.cached_attestation(&handle).await.unwrap();
+    assert!(cached.is_some());
+}
+
+// Test registry derive_public_key delegation
+#[tokio::test]
+async fn test_backend_registry_derive_public_key() {
+    let mut registry = BackendRegistry::new();
+    registry.register(TeeProvider::IntelTdx, DirectBackend::tdx());
+
+    let handle = registry
+        .deploy(TeeProvider::IntelTdx, TeeDeployRequest::new("test"))
+        .await
+        .unwrap();
+
+    let pubkey = registry.derive_public_key(&handle).await.unwrap();
+    assert!(!pubkey.key.is_empty());
+    assert_eq!(pubkey.key_type, "x25519");
+}

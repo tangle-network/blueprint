@@ -436,3 +436,174 @@ fn test_attestation_format_serde_all_variants() {
         assert_eq!(parsed, format);
     }
 }
+
+#[test]
+fn test_attestation_report_future_issued_at() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let mut report = sample_report(TeeProvider::IntelTdx);
+    // Set issued_at to the future — should never be expired
+    report.issued_at_unix = now + 3600;
+    assert!(
+        !report.is_expired(0),
+        "report from the future should not be expired even with max_age=0"
+    );
+}
+
+#[test]
+fn test_measurement_equality() {
+    let m1 = Measurement::sha256("abc");
+    let m2 = Measurement::sha256("abc");
+    let m3 = Measurement::sha256("def");
+    assert_eq!(m1, m2);
+    assert_ne!(m1, m3);
+}
+
+#[test]
+fn test_attestation_report_evidence_digest_deterministic() {
+    let r1 = sample_report(TeeProvider::IntelTdx);
+    let r2 = r1.clone();
+    assert_eq!(
+        r1.evidence_digest(),
+        r2.evidence_digest(),
+        "same evidence should produce same digest"
+    );
+}
+
+#[test]
+fn test_attestation_report_empty_evidence_digest() {
+    let mut report = sample_report(TeeProvider::IntelTdx);
+    report.evidence = Vec::new();
+    let digest = report.evidence_digest();
+    assert_eq!(digest.len(), 64, "SHA-256 produces 64 hex chars");
+    // SHA-256 of empty input is the well-known value
+    assert_eq!(
+        digest,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+}
+
+// NativeVerifier direct usage tests (feature-gated)
+
+#[cfg(feature = "tdx")]
+mod native_verifier_tdx {
+    use super::*;
+    use blueprint_tee::attestation::providers::native::NativeVerifier;
+
+    #[test]
+    fn test_native_tdx_verifier_basic() {
+        let verifier = NativeVerifier::tdx();
+        let report = sample_report(TeeProvider::IntelTdx);
+        assert!(verifier.verify(&report).is_ok());
+    }
+
+    #[test]
+    fn test_native_tdx_with_measurement() {
+        let verifier = NativeVerifier::tdx().with_expected_measurement("a".repeat(64));
+        let report = sample_report(TeeProvider::IntelTdx);
+        assert!(verifier.verify(&report).is_ok());
+    }
+
+    #[test]
+    fn test_native_tdx_debug_control() {
+        let mut report = sample_report(TeeProvider::IntelTdx);
+        report.claims.debug_mode = true;
+
+        let verifier = NativeVerifier::tdx();
+        assert!(verifier.verify(&report).is_err());
+
+        let verifier = NativeVerifier::tdx().with_allow_debug(true);
+        assert!(verifier.verify(&report).is_ok());
+    }
+}
+
+#[cfg(feature = "sev-snp")]
+mod native_verifier_sev {
+    use super::*;
+    use blueprint_tee::attestation::providers::native::NativeVerifier;
+
+    #[test]
+    fn test_native_sev_verifier_basic() {
+        let verifier = NativeVerifier::sev_snp();
+        let report = sample_report(TeeProvider::AmdSevSnp);
+        assert!(verifier.verify(&report).is_ok());
+    }
+
+    #[test]
+    fn test_native_sev_rejects_tdx_report() {
+        let verifier = NativeVerifier::sev_snp();
+        let report = sample_report(TeeProvider::IntelTdx);
+        assert!(verifier.verify(&report).is_err());
+    }
+}
+
+// Test the new allow_debug() builder methods
+
+#[cfg(feature = "tdx")]
+#[test]
+fn test_tdx_verifier_allow_debug_builder() {
+    use blueprint_tee::attestation::providers::tdx::TdxVerifier;
+
+    let mut report = sample_report(TeeProvider::IntelTdx);
+    report.claims.debug_mode = true;
+
+    let verifier = TdxVerifier::new().allow_debug(true);
+    assert!(verifier.verify(&report).is_ok());
+}
+
+#[cfg(feature = "sev-snp")]
+#[test]
+fn test_sev_snp_verifier_allow_debug_builder() {
+    use blueprint_tee::attestation::providers::sev_snp::SevSnpVerifier;
+
+    let mut report = sample_report(TeeProvider::AmdSevSnp);
+    report.claims.debug_mode = true;
+
+    let verifier = SevSnpVerifier::new().allow_debug(true);
+    assert!(verifier.verify(&report).is_ok());
+}
+
+#[cfg(feature = "azure-snp")]
+#[test]
+fn test_azure_snp_verifier_allow_debug_builder() {
+    use blueprint_tee::attestation::providers::azure_snp::AzureSnpVerifier;
+
+    let mut report = sample_report(TeeProvider::AzureSnp);
+    report.claims.debug_mode = true;
+
+    let verifier = AzureSnpVerifier::new().allow_debug(true);
+    assert!(verifier.verify(&report).is_ok());
+}
+
+#[cfg(feature = "aws-nitro")]
+#[test]
+fn test_nitro_verifier_measurement_check() {
+    use blueprint_tee::attestation::providers::aws_nitro::NitroVerifier;
+
+    let verifier = NitroVerifier::new().with_expected_pcr0("x".repeat(64));
+    let report = sample_report(TeeProvider::AwsNitro);
+    let result = verifier.verify(&report);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        blueprint_tee::errors::TeeError::MeasurementMismatch { .. } => {}
+        other => panic!("expected MeasurementMismatch, got: {other:?}"),
+    }
+}
+
+#[cfg(feature = "aws-nitro")]
+#[test]
+fn test_nitro_verifier_debug_mode() {
+    use blueprint_tee::attestation::providers::aws_nitro::NitroVerifier;
+
+    let mut report = sample_report(TeeProvider::AwsNitro);
+    report.claims.debug_mode = true;
+
+    let verifier = NitroVerifier::new();
+    assert!(verifier.verify(&report).is_err());
+
+    let verifier = NitroVerifier::new().allow_debug(true);
+    assert!(verifier.verify(&report).is_ok());
+}

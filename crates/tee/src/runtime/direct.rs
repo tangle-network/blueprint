@@ -11,6 +11,16 @@
 //! - No new privileges (`no_new_privileges: true`)
 //! - tmpfs for writable paths
 //! - Resource limits enforced
+//!
+//! # Current Limitations
+//!
+//! Attestation and key derivation currently produce placeholder values:
+//! - `get_attestation()` returns a report with a zero-filled measurement and
+//!   empty evidence. A production implementation would perform native ioctl
+//!   attestation via `/dev/tdx_guest` or `/dev/sev-guest`.
+//! - `derive_public_key()` returns a SHA-256 hash of the deployment ID.
+//!   A production implementation would derive from the TEE's hardware-bound
+//!   key hierarchy (e.g., TDX sealing key, SEV VCEK).
 
 use crate::attestation::claims::AttestationClaims;
 use crate::attestation::report::{AttestationFormat, AttestationReport, Measurement};
@@ -59,8 +69,9 @@ impl Default for DirectBackendConfig {
 /// State for a deployment managed by the direct backend.
 #[derive(Debug)]
 struct DeploymentState {
-    #[allow(dead_code)]
-    request: TeeDeployRequest,
+    /// The original deploy request. Retained for potential restart-with-same-config
+    /// and audit/diagnostics purposes.
+    _request: TeeDeployRequest,
     status: TeeDeploymentStatus,
     cached_attestation: Option<AttestationReport>,
 }
@@ -125,7 +136,7 @@ impl TeeRuntimeBackend for DirectBackend {
         let port_mapping: BTreeMap<u16, u16> = req.extra_ports.iter().map(|&p| (p, p)).collect();
 
         let state = DeploymentState {
-            request: req,
+            _request: req,
             status: TeeDeploymentStatus::Running,
             cached_attestation: None,
         };

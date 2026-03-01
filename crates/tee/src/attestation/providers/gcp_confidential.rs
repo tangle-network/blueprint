@@ -1,10 +1,12 @@
 //! GCP Confidential Space attestation verifier.
 //!
-//! Validates GCP Confidential Space attestation tokens including:
-//! - Token signature verification
-//! - Workload identity validation
-//! - Machine family TEE type derivation
+//! Currently validates GCP Confidential Space attestation structurally:
+//! - Measurement comparison
 //! - Debug mode detection
+//!
+//! **Limitation:** Token signature verification, workload identity validation,
+//! and machine family TEE type derivation are not yet implemented. These require
+//! provider-specific dependencies that will be added in a future release.
 
 use crate::attestation::report::AttestationReport;
 use crate::attestation::verifier::{AttestationVerifier, VerifiedAttestation};

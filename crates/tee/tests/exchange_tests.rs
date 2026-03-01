@@ -275,3 +275,92 @@ async fn test_auth_service_ttl_and_max_sessions_accessors() {
     assert_eq!(service.session_ttl_secs(), 600);
     assert_eq!(service.max_sessions(), 128);
 }
+
+#[test]
+fn test_key_exchange_response_serde() {
+    use blueprint_tee::attestation::claims::AttestationClaims;
+    use blueprint_tee::attestation::report::*;
+    use blueprint_tee::config::TeeProvider;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let response = KeyExchangeResponse {
+        session_id: "sess-abc".to_string(),
+        public_key_hex: "deadbeef".to_string(),
+        attestation: AttestationReport {
+            provider: TeeProvider::IntelTdx,
+            format: AttestationFormat::TdxQuote,
+            issued_at_unix: now,
+            measurement: Measurement::sha256("a".repeat(64)),
+            public_key_binding: None,
+            claims: AttestationClaims::new(),
+            evidence: vec![1, 2, 3],
+        },
+    };
+
+    let json = serde_json::to_string(&response).unwrap();
+    let parsed: KeyExchangeResponse = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.session_id, "sess-abc");
+    assert_eq!(parsed.public_key_hex, "deadbeef");
+    assert_eq!(parsed.attestation.provider, TeeProvider::IntelTdx);
+}
+
+#[test]
+fn test_key_exchange_session_long_ttl() {
+    let session = KeyExchangeSession::new(86400); // 24 hours
+    assert!(!session.is_expired());
+    assert!(session.is_valid());
+    assert!(session.remaining_ttl().as_secs() > 86390);
+}
+
+#[tokio::test]
+async fn test_auth_service_consume_removes_from_count() {
+    let service = TeeAuthService::new(TeeKeyExchangeConfig::default());
+    let (id1, _) = service.create_session().await.unwrap();
+    let (id2, _) = service.create_session().await.unwrap();
+    assert_eq!(service.active_session_count().await, 2);
+
+    service.consume_session(&id1).await.unwrap();
+    assert_eq!(service.active_session_count().await, 1);
+
+    service.consume_session(&id2).await.unwrap();
+    assert_eq!(service.active_session_count().await, 0);
+}
+
+#[tokio::test]
+async fn test_auth_service_double_consume_fails() {
+    let service = TeeAuthService::new(TeeKeyExchangeConfig::default());
+    let (id, _) = service.create_session().await.unwrap();
+
+    // First consume succeeds
+    service.consume_session(&id).await.unwrap();
+    // Second consume fails (session was removed)
+    assert!(service.consume_session(&id).await.is_err());
+}
+
+#[test]
+fn test_sealed_secret_result_failure() {
+    let result = SealedSecretResult {
+        success: false,
+        attestation_digest: "".to_string(),
+        key_fingerprint: "".to_string(),
+    };
+    let json = serde_json::to_string(&result).unwrap();
+    let parsed: SealedSecretResult = serde_json::from_str(&json).unwrap();
+    assert!(!parsed.success);
+}
+
+#[test]
+fn test_sealed_secret_payload_large_ciphertext() {
+    let payload = SealedSecretPayload {
+        session_id: "sess-1".to_string(),
+        ciphertext: vec![0u8; 1024 * 1024], // 1 MB
+        nonce: Some(vec![0u8; 12]),
+    };
+    let json = serde_json::to_string(&payload).unwrap();
+    let parsed: SealedSecretPayload = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.ciphertext.len(), 1024 * 1024);
+}

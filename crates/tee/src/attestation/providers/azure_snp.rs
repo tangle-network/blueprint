@@ -1,9 +1,12 @@
 //! Azure SEV-SNP / SKR attestation verifier.
 //!
-//! Validates Azure Confidential VM attestation including:
-//! - MAA (Microsoft Azure Attestation) token validation
-//! - SEV-SNP measurement verification
-//! - Guest policy enforcement
+//! Currently validates Azure CVM attestation structurally:
+//! - SEV-SNP measurement comparison
+//! - Debug mode detection
+//!
+//! **Limitation:** MAA (Microsoft Azure Attestation) token signature validation
+//! and guest policy enforcement are not yet implemented. These require
+//! provider-specific dependencies that will be added in a future release.
 
 use crate::attestation::report::AttestationReport;
 use crate::attestation::verifier::{AttestationVerifier, VerifiedAttestation};
@@ -30,6 +33,12 @@ impl AzureSnpVerifier {
     /// Set the expected measurement.
     pub fn with_expected_measurement(mut self, measurement: impl Into<String>) -> Self {
         self.expected_measurement = Some(measurement.into());
+        self
+    }
+
+    /// Allow debug-mode VMs (not recommended for production).
+    pub fn allow_debug(mut self, allow: bool) -> Self {
+        self.allow_debug = allow;
         self
     }
 }

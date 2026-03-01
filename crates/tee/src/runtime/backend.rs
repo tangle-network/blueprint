@@ -157,6 +157,13 @@ pub enum TeeDeploymentStatus {
 /// (env-var re-injection) is forbidden because it invalidates attestation.
 /// Use [`TeeRuntimeBackend::derive_public_key`] to get the key for encrypting
 /// sealed secrets.
+///
+/// # Object safety
+///
+/// This trait uses return-position `impl Future` (RPITIT) and is **not**
+/// directly `dyn`-compatible. You cannot write `Box<dyn TeeRuntimeBackend>`.
+/// Use [`BackendRegistry`](crate::runtime::BackendRegistry) for type-erased
+/// dispatch across multiple backend implementations.
 pub trait TeeRuntimeBackend: Send + Sync {
     /// Deploy a workload into a TEE environment.
     fn deploy(

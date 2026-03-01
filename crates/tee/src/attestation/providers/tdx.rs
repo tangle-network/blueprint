@@ -37,6 +37,12 @@ impl TdxVerifier {
         self
     }
 
+    /// Allow debug TDs (not recommended for production).
+    pub fn allow_debug(mut self, allow: bool) -> Self {
+        self.allow_debug = allow;
+        self
+    }
+
     fn to_native(&self) -> NativeVerifier {
         let mut v = NativeVerifier::tdx().with_allow_debug(self.allow_debug);
         if let Some(mrtd) = &self.expected_mrtd {

@@ -337,6 +337,13 @@ impl TeeConfig {
 }
 
 /// Builder for [`TeeConfig`].
+///
+/// Use [`TeeConfig::builder()`] to create a new builder instance, then chain
+/// setter methods and call [`build()`](Self::build) to produce a validated config.
+///
+/// The builder enforces two invariants:
+/// - `TeeRequirement::Required` + `TeeMode::Disabled` is rejected.
+/// - Any enabled TEE mode forces `SecretInjectionPolicy::SealedOnly`.
 #[derive(Debug, Default)]
 pub struct TeeConfigBuilder {
     requirement: Option<TeeRequirement>,

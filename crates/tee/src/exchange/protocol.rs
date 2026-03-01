@@ -125,7 +125,12 @@ pub struct KeyExchangeRequest {
     pub nonce: Option<String>,
 }
 
-/// Response containing the ephemeral public key and attestation.
+/// Response to a [`KeyExchangeRequest`], containing the ephemeral public key
+/// and the attestation report that binds it to the TEE.
+///
+/// The client uses this to verify the TEE's identity (both locally and
+/// optionally against the on-chain attestation hash) before encrypting
+/// secrets to the ephemeral key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyExchangeResponse {
     /// The session identifier.
@@ -136,7 +141,11 @@ pub struct KeyExchangeResponse {
     pub attestation: AttestationReport,
 }
 
-/// A sealed secret payload encrypted to the ephemeral public key.
+/// A sealed secret payload encrypted to the TEE's ephemeral public key.
+///
+/// Clients construct this after verifying the [`KeyExchangeResponse`] attestation.
+/// The ciphertext is encrypted to the session's ephemeral public key and can only
+/// be decrypted inside the TEE that holds the corresponding private key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SealedSecretPayload {
     /// The session ID this payload is sealed for.
@@ -148,7 +157,11 @@ pub struct SealedSecretPayload {
     pub nonce: Option<Vec<u8>>,
 }
 
-/// Result of a sealed secret injection.
+/// Result of a sealed secret injection into the TEE.
+///
+/// Returned after the TEE decrypts and installs the sealed secret. Contains
+/// the attestation digest and key fingerprint at the time of injection for
+/// audit purposes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SealedSecretResult {
     /// Whether the injection was successful.

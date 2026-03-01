@@ -346,3 +346,166 @@ fn test_key_exchange_config_serde() {
     assert_eq!(parsed.max_sessions, 32);
     assert!(parsed.on_chain_verification);
 }
+
+#[test]
+fn test_config_from_json_string() {
+    let json = r#"{
+        "requirement": "required",
+        "mode": "direct",
+        "provider_selector": "any",
+        "key_exchange": {
+            "session_ttl_secs": 120,
+            "max_sessions": 10,
+            "on_chain_verification": false
+        },
+        "max_attestation_age_secs": 1800,
+        "secret_injection": "sealed_only",
+        "attestation_freshness": "provision_time_only",
+        "public_key_policy": "required",
+        "hybrid_routing_source": "contract_driven"
+    }"#;
+
+    let config: TeeConfig = serde_json::from_str(json).unwrap();
+    assert_eq!(config.mode, TeeMode::Direct);
+    assert_eq!(config.requirement, TeeRequirement::Required);
+    assert_eq!(config.max_attestation_age_secs, 1800);
+    assert_eq!(config.key_exchange.session_ttl_secs, 120);
+    assert_eq!(config.key_exchange.max_sessions, 10);
+}
+
+#[test]
+fn test_config_preferred_disabled_is_valid() {
+    // Preferred + Disabled is fine — TEE is simply not used
+    let config = TeeConfig::builder()
+        .requirement(TeeRequirement::Preferred)
+        .mode(TeeMode::Disabled)
+        .build();
+    assert!(config.is_ok());
+    assert!(!config.unwrap().is_enabled());
+}
+
+#[test]
+fn test_builder_mode_without_requirement() {
+    // Setting mode without requirement should default to Preferred
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Remote)
+        .build()
+        .unwrap();
+    assert_eq!(config.requirement, TeeRequirement::Preferred);
+    assert_eq!(config.mode, TeeMode::Remote);
+    assert!(config.is_enabled());
+}
+
+#[test]
+fn test_provider_selector_serde() {
+    let any = TeeProviderSelector::Any;
+    let json = serde_json::to_string(&any).unwrap();
+    let parsed: TeeProviderSelector = serde_json::from_str(&json).unwrap();
+    assert!(matches!(parsed, TeeProviderSelector::Any));
+
+    let allowlist = TeeProviderSelector::AllowList(vec![TeeProvider::IntelTdx]);
+    let json = serde_json::to_string(&allowlist).unwrap();
+    let parsed: TeeProviderSelector = serde_json::from_str(&json).unwrap();
+    match parsed {
+        TeeProviderSelector::AllowList(list) => assert_eq!(list.len(), 1),
+        _ => panic!("expected AllowList"),
+    }
+}
+
+#[test]
+fn test_lifecycle_policy_serde() {
+    for (policy, expected) in [
+        (RuntimeLifecyclePolicy::Container, "\"container\""),
+        (RuntimeLifecyclePolicy::CloudManaged, "\"cloud_managed\""),
+    ] {
+        let json = serde_json::to_string(&policy).unwrap();
+        assert_eq!(json, expected);
+        let parsed: RuntimeLifecyclePolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, policy);
+    }
+}
+
+#[test]
+fn test_secret_injection_policy_serde() {
+    for (policy, expected) in [
+        (SecretInjectionPolicy::EnvOrSealed, "\"env_or_sealed\""),
+        (SecretInjectionPolicy::SealedOnly, "\"sealed_only\""),
+    ] {
+        let json = serde_json::to_string(&policy).unwrap();
+        assert_eq!(json, expected);
+        let parsed: SecretInjectionPolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, policy);
+    }
+}
+
+#[test]
+fn test_public_key_policy_serde() {
+    for (policy, expected) in [
+        (TeePublicKeyPolicy::Required, "\"required\""),
+        (TeePublicKeyPolicy::Optional, "\"optional\""),
+    ] {
+        let json = serde_json::to_string(&policy).unwrap();
+        assert_eq!(json, expected);
+        let parsed: TeePublicKeyPolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, policy);
+    }
+}
+
+// Error type tests
+
+#[test]
+fn test_error_display_variants() {
+    let errors: Vec<TeeError> = vec![
+        TeeError::Config("bad config".into()),
+        TeeError::AttestationVerification("bad attestation".into()),
+        TeeError::AttestationExpired {
+            issued_at: 1000,
+            max_age_secs: 3600,
+        },
+        TeeError::UnsupportedProvider("unknown".into()),
+        TeeError::DeploymentFailed("deploy failed".into()),
+        TeeError::RuntimeUnavailable("runtime down".into()),
+        TeeError::KeyExchange("key exchange failed".into()),
+        TeeError::SealedSecret("sealed secret error".into()),
+        TeeError::MeasurementMismatch {
+            expected: "aaa".into(),
+            actual: "bbb".into(),
+        },
+        TeeError::PublicKeyBinding("binding error".into()),
+        TeeError::Backend("backend error".into()),
+        TeeError::Serialization("ser error".into()),
+    ];
+
+    for err in &errors {
+        // Every error variant should have a non-empty Display
+        let msg = err.to_string();
+        assert!(!msg.is_empty(), "error display should be non-empty");
+    }
+
+    // Check specific formatting
+    let config_err = TeeError::Config("test".into());
+    assert!(config_err.to_string().contains("test"));
+
+    let mismatch_err = TeeError::MeasurementMismatch {
+        expected: "abc".into(),
+        actual: "def".into(),
+    };
+    let msg = mismatch_err.to_string();
+    assert!(msg.contains("abc"));
+    assert!(msg.contains("def"));
+
+    let expired_err = TeeError::AttestationExpired {
+        issued_at: 1000,
+        max_age_secs: 3600,
+    };
+    let msg = expired_err.to_string();
+    assert!(msg.contains("1000"));
+    assert!(msg.contains("3600"));
+}
+
+#[test]
+fn test_error_from_io() {
+    let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+    let tee_err: TeeError = io_err.into();
+    assert!(tee_err.to_string().contains("file not found"));
+}

@@ -61,5 +61,6 @@ pub use exchange::TeeAuthService;
 pub use middleware::{TeeContext, TeeLayer};
 
 pub use runtime::{
-    TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeePublicKey, TeeRuntimeBackend,
+    BackendRegistry, TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeePublicKey,
+    TeeRuntimeBackend,
 };

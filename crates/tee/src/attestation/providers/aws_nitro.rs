@@ -1,9 +1,14 @@
 //! AWS Nitro Enclave attestation verifier.
 //!
-//! Validates COSE-signed Nitro attestation documents including:
-//! - Certificate chain verification against the Nitro root of trust
-//! - PCR measurement validation
+//! Currently validates Nitro attestation structurally:
+//! - PCR0 measurement comparison (enclave image hash)
 //! - Enclave debug mode detection
+//!
+//! **Limitation:** COSE signature verification and certificate chain validation
+//! against the AWS Nitro root CA are not yet implemented. These require
+//! provider-specific dependencies (`aws-nitro-enclaves-cose`) that will be
+//! added in a future release. Until then, the evidence blob should be
+//! verified externally or via the on-chain attestation hash.
 
 use crate::attestation::report::AttestationReport;
 use crate::attestation::verifier::{AttestationVerifier, VerifiedAttestation};
@@ -70,9 +75,12 @@ impl AttestationVerifier for NitroVerifier {
             }
         }
 
-        // TODO: Implement full COSE signature verification and certificate chain
-        // validation against the AWS Nitro root CA when `aws-nitro` provider
-        // dependencies are added.
+        // NOTE: This verifier performs structural checks (provider, PCR0, debug mode)
+        // but does not yet validate COSE signatures or the certificate chain against
+        // the AWS Nitro root CA. Full cryptographic verification requires the
+        // `aws-nitro-enclaves-cose` crate and will be added when provider-specific
+        // dependencies are integrated. Until then, the evidence blob should be
+        // verified externally (e.g., by the on-chain contract's attestation hash).
 
         Ok(VerifiedAttestation::new(
             report.clone(),

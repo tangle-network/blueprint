@@ -109,6 +109,15 @@ impl core::fmt::Debug for DynBackend {
 }
 
 /// Registry of TEE runtime backends, keyed by provider.
+///
+/// This provides type-erased dispatch over multiple [`TeeRuntimeBackend`]
+/// implementations. Since `TeeRuntimeBackend` uses RPITIT and is not
+/// `dyn`-compatible directly, the registry wraps backends in an internal
+/// `ErasedBackend` trait with boxed futures.
+///
+/// Register backends with [`register`](Self::register), then call lifecycle
+/// methods (deploy, stop, destroy, etc.) which dispatch to the correct backend
+/// based on the provider.
 #[derive(Debug, Default)]
 pub struct BackendRegistry {
     backends: BTreeMap<String, DynBackend>,
