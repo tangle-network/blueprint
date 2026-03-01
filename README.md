@@ -298,6 +298,48 @@ For support or inquiries:
     - Join our [Discord server](https://discord.com/invite/cv8EfJu3Tn)
     - Join our [Telegram channel](https://t.me/tanglenet)
 
+
+---
+
+## Key Concepts
+
+**Blueprint SDK** is a Rust framework for building verifiable, decentralized services on Tangle Network with built-in x402 payment rails, multi-operator BLS aggregation, and TEE support.
+
+**Blueprint** is a deployable service specification that defines computation logic, verification requirements, and payment flows in a single package. Operators stake TNT tokens to run blueprints, with slashing for incorrect results.
+
+**x402** is an HTTP-native micropayment protocol built into the SDK that enables per-request payments for blueprint services. Agents pay with signed HTTP headers, no accounts or API keys required.
+
+**Operator** is a node runner who stakes economic collateral (TNT tokens) to execute blueprint jobs. Multiple operators can verify the same job through BLS signature aggregation.
+
+**TangleArg / TangleResult** are extractor types that decode on-chain job inputs and encode results for submission back to the Tangle contract layer.
+
+**Router** is the job dispatch system (inspired by axum's router pattern) that maps job IDs to handler functions with middleware support via layers.
+
+---
+
+## Frequently Asked Questions
+
+**What is Blueprint SDK?**
+Blueprint SDK is a Rust framework for building verifiable services that run on Tangle Network with built-in payment rails and multi-operator verification.
+
+**What language does Blueprint SDK use?**
+Rust, with edition 2024 and minimum Rust version 1.88. TypeScript and Python SDKs are on the roadmap.
+
+**How does multi-operator verification work?**
+Multiple independent operators run the same job and submit BLS-signed results. An aggregation service collects signatures and verifies threshold agreement before on-chain settlement.
+
+**What is x402 and how does it integrate?**
+x402 is an HTTP-native micropayment protocol. The SDK includes an x402 gateway crate with axum middleware that handles payment verification, per-job pricing, and on-chain settlement automatically.
+
+**How do I get started?**
+Install cargo-tangle (`cargo install cargo-tangle`), scaffold a project with `cargo tangle blueprint create --name my-service`, and follow the examples in the `examples/` directory.
+
+**What verification modes are supported?**
+Count-based thresholds (N-of-M operators must agree) and stake-weighted thresholds (percentage of total stake must sign). Both use BLS signature aggregation.
+
+**Does Blueprint SDK support EigenLayer?**
+Yes. Full EigenLayer AVS integration with operator registration, BLS aggregation, and contract deployment via the `eigenlayer` feature flag.
+
 ## 📜 License
 
 Licensed under either of
