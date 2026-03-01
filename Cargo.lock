@@ -3851,6 +3851,7 @@ dependencies = [
  "blueprint-core",
  "blueprint-router",
  "blueprint-std",
+ "chacha20poly1305",
  "document-features",
  "futures",
  "futures-core",
@@ -3864,6 +3865,7 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
+ "x25519-dalek",
  "zeroize",
 ]
 

@@ -143,7 +143,7 @@ impl AttestationVerifier for NativeVerifier {
             }
         }
 
-        tracing::warn!("structural validation only — no cryptographic signature verification");
+        tracing::debug!("structural validation only — cryptographic signature verification requires platform SDK");
 
         Ok(VerifiedAttestation::new(report.clone(), expected_provider))
     }

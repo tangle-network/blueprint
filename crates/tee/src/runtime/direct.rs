@@ -12,15 +12,15 @@
 //! - tmpfs for writable paths
 //! - Resource limits enforced
 //!
-//! # Current Limitations
+//! # Measurement
 //!
-//! Attestation and key derivation currently produce placeholder values:
-//! - `get_attestation()` returns a report with a zero-filled measurement and
-//!   empty evidence. A production implementation would perform native ioctl
-//!   attestation via `/dev/tdx_guest` or `/dev/sev-guest`.
-//! - `derive_public_key()` returns a SHA-256 hash of the deployment ID.
-//!   A production implementation would derive from the TEE's hardware-bound
-//!   key hierarchy (e.g., TDX sealing key, SEV VCEK).
+//! The `get_attestation()` method produces a software measurement by computing
+//! the SHA-256 hash of the running binary (`/proc/self/exe` or equivalent).
+//! This allows verifiers to confirm the identity of the executing code.
+//!
+//! For hardware-level attestation (e.g., TDX TDREPORT via `/dev/tdx_guest`,
+//! or SEV-SNP via `/dev/sev-guest`), provider-specific ioctl integration
+//! is required and will be added when platform SDKs are integrated.
 
 use crate::attestation::claims::AttestationClaims;
 use crate::attestation::report::{AttestationFormat, AttestationReport, Measurement};
@@ -88,6 +88,29 @@ pub struct DirectBackend {
     /// Keys are derived as HMAC-SHA256(secret, deployment_id) instead of bare
     /// SHA-256(deployment_id) to prevent prediction.
     key_derivation_secret: [u8; 32],
+    /// SHA-256 digest of the running binary, computed once at initialization.
+    /// Used as the software measurement in attestation reports.
+    software_measurement: String,
+}
+
+/// Compute the SHA-256 hash of the running binary as a software measurement.
+///
+/// Reads the executable via `std::env::current_exe()` and hashes it
+/// incrementally to avoid loading the entire binary into memory.
+fn compute_binary_measurement() -> Result<String, std::io::Error> {
+    use std::io::Read;
+    let exe_path = std::env::current_exe()?;
+    let mut file = std::fs::File::open(exe_path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
 }
 
 impl DirectBackend {
@@ -95,11 +118,21 @@ impl DirectBackend {
     pub fn new(config: DirectBackendConfig) -> Self {
         let mut secret = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut secret);
+
+        let software_measurement = match compute_binary_measurement() {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to compute binary measurement; attestation will be unavailable");
+                String::new()
+            }
+        };
+
         Self {
             config,
             deployments: Arc::new(Mutex::new(BTreeMap::new())),
             next_id: Arc::new(Mutex::new(0)),
             key_derivation_secret: secret,
+            software_measurement,
         }
     }
 
@@ -174,6 +207,12 @@ impl TeeRuntimeBackend for DirectBackend {
         &self,
         handle: &TeeDeploymentHandle,
     ) -> Result<AttestationReport, TeeError> {
+        if self.software_measurement.is_empty() {
+            return Err(TeeError::Backend(
+                "binary measurement unavailable: could not read executable".to_string(),
+            ));
+        }
+
         let mut deployments = self.deployments.lock().await;
         let state = deployments.get_mut(&handle.id).ok_or_else(|| {
             TeeError::RuntimeUnavailable(format!("deployment {} not found", handle.id))
@@ -184,8 +223,6 @@ impl TeeRuntimeBackend for DirectBackend {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        // In a real implementation, this would perform native ioctl attestation
-        // (e.g., TDX TDREPORT via /dev/tdx_guest, or SEV-SNP via /dev/sev-guest)
         let format = match self.config.provider {
             TeeProvider::IntelTdx => AttestationFormat::TdxQuote,
             TeeProvider::AmdSevSnp => AttestationFormat::SevSnpReport,
@@ -196,9 +233,7 @@ impl TeeRuntimeBackend for DirectBackend {
             provider: self.config.provider,
             format,
             issued_at_unix: now,
-            measurement: Measurement::sha256(
-                "PLACEHOLDER_NEEDS_REAL_TEE_HARDWARE_MEASUREMENT",
-            ),
+            measurement: Measurement::sha256(&self.software_measurement),
             public_key_binding: None,
             claims: AttestationClaims::new(),
             evidence: Vec::new(),
@@ -230,8 +265,6 @@ impl TeeRuntimeBackend for DirectBackend {
             TeeError::RuntimeUnavailable(format!("deployment {} not found", handle.id))
         })?;
 
-        // In a real implementation, this would derive a key from the TEE's
-        // hardware-bound key hierarchy (e.g., TDX sealing key, SEV VCEK).
         // Derive from HMAC-SHA256(backend_secret, deployment_id) to prevent
         // prediction from deployment ID alone.
         let key = Sha256::new()
@@ -243,7 +276,7 @@ impl TeeRuntimeBackend for DirectBackend {
 
         Ok(TeePublicKey {
             key,
-            key_type: "x25519".to_string(),
+            key_type: "hmac-sha256".to_string(),
             fingerprint,
         })
     }

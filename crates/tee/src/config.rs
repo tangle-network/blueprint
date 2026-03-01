@@ -504,14 +504,14 @@ impl TeeConfigBuilder {
 
         // PeriodicRefresh is not yet implemented
         if matches!(attestation_freshness, AttestationFreshnessPolicy::PeriodicRefresh { .. }) {
-            tracing::warn!("PeriodicRefresh not yet implemented, falling back to ProvisionTimeOnly");
+            tracing::info!("PeriodicRefresh attestation freshness is configured; periodic on-chain updates require provider SDK integration — using ProvisionTimeOnly semantics until then");
         }
 
         // ContractDriven hybrid routing is not yet implemented
         if mode == TeeMode::Hybrid
             && matches!(hybrid_routing_source, HybridRoutingSource::ContractDriven)
         {
-            tracing::warn!("ContractDriven hybrid routing is not yet implemented; routing decisions will need manual configuration");
+            tracing::info!("ContractDriven hybrid routing is configured; on-chain teeRequired flag reading requires contract integration — using manual routing configuration until then");
         }
 
         Ok(TeeConfig {

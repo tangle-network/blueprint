@@ -9,7 +9,7 @@ fn test_key_exchange_session_creation() {
     let session = KeyExchangeSession::new(300);
     assert!(!session.session_id.is_empty());
     assert!(!session.public_key.is_empty());
-    assert_eq!(session.public_key.len(), 32); // SHA-256 output
+    assert_eq!(session.public_key.len(), 32); // X25519 public key
     assert!(!session.is_expired());
 }
 
@@ -131,6 +131,7 @@ fn test_sealed_secret_payload_serde() {
         session_id: "sess-1".to_string(),
         ciphertext: vec![1, 2, 3],
         nonce: Some(vec![4, 5, 6]),
+        ephemeral_public_key: None,
     };
     let json = serde_json::to_string(&payload).unwrap();
     let parsed: SealedSecretPayload = serde_json::from_str(&json).unwrap();
@@ -218,6 +219,7 @@ fn test_sealed_secret_payload_without_nonce() {
         session_id: "sess-1".to_string(),
         ciphertext: vec![1, 2, 3],
         nonce: None,
+        ephemeral_public_key: None,
     };
     let json = serde_json::to_string(&payload).unwrap();
     assert!(!json.contains("nonce"));
@@ -351,8 +353,142 @@ fn test_sealed_secret_payload_large_ciphertext() {
         session_id: "sess-1".to_string(),
         ciphertext: vec![0u8; 1024 * 1024], // 1 MB
         nonce: Some(vec![0u8; 12]),
+        ephemeral_public_key: None,
     };
     let json = serde_json::to_string(&payload).unwrap();
     let parsed: SealedSecretPayload = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.ciphertext.len(), 1024 * 1024);
+}
+
+#[test]
+fn test_seal_open_roundtrip() {
+    let session = KeyExchangeSession::new(300);
+    let plaintext = b"super secret database password";
+
+    let sealed = SealedSecretPayload::seal(
+        session.session_id.clone(),
+        plaintext,
+        &session.public_key,
+    )
+    .unwrap();
+
+    assert_eq!(sealed.session_id, session.session_id);
+    assert!(sealed.nonce.is_some());
+    assert!(sealed.ephemeral_public_key.is_some());
+    assert_eq!(sealed.ephemeral_public_key.as_ref().unwrap().len(), 32);
+    // Ciphertext is larger than plaintext due to AEAD tag (16 bytes)
+    assert_eq!(sealed.ciphertext.len(), plaintext.len() + 16);
+
+    let decrypted = session.open(&sealed).unwrap();
+    assert_eq!(decrypted, plaintext);
+}
+
+#[test]
+fn test_seal_open_empty_plaintext() {
+    let session = KeyExchangeSession::new(300);
+    let plaintext = b"";
+
+    let sealed =
+        SealedSecretPayload::seal(session.session_id.clone(), plaintext, &session.public_key)
+            .unwrap();
+
+    let decrypted = session.open(&sealed).unwrap();
+    assert_eq!(decrypted, plaintext);
+}
+
+#[test]
+fn test_seal_open_wrong_session_fails() {
+    let session1 = KeyExchangeSession::new(300);
+    let session2 = KeyExchangeSession::new(300);
+    let plaintext = b"secret";
+
+    // Seal to session1's public key
+    let sealed = SealedSecretPayload::seal(
+        session1.session_id.clone(),
+        plaintext,
+        &session1.public_key,
+    )
+    .unwrap();
+
+    // Try to open with session2's private key — should fail (different DH shared secret)
+    let result = session2.open(&sealed);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_seal_invalid_public_key_length() {
+    let result = SealedSecretPayload::seal("sess".into(), b"data", &[0u8; 16]);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("32 bytes"));
+}
+
+#[test]
+fn test_open_missing_ephemeral_key() {
+    let session = KeyExchangeSession::new(300);
+    let payload = SealedSecretPayload {
+        session_id: session.session_id.clone(),
+        ciphertext: vec![1, 2, 3],
+        nonce: Some(vec![0u8; 12]),
+        ephemeral_public_key: None,
+    };
+    let result = session.open(&payload);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("ephemeral"));
+}
+
+#[test]
+fn test_open_missing_nonce() {
+    let session = KeyExchangeSession::new(300);
+    let payload = SealedSecretPayload {
+        session_id: session.session_id.clone(),
+        ciphertext: vec![1, 2, 3],
+        nonce: None,
+        ephemeral_public_key: Some(vec![0u8; 32]),
+    };
+    let result = session.open(&payload);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("nonce"));
+}
+
+#[test]
+fn test_open_invalid_nonce_length() {
+    let session = KeyExchangeSession::new(300);
+    let payload = SealedSecretPayload {
+        session_id: session.session_id.clone(),
+        ciphertext: vec![1, 2, 3],
+        nonce: Some(vec![0u8; 8]), // wrong: should be 12
+        ephemeral_public_key: Some(vec![0u8; 32]),
+    };
+    let result = session.open(&payload);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("12 bytes"));
+}
+
+#[test]
+fn test_sealed_payload_serde_with_ephemeral_key() {
+    let session = KeyExchangeSession::new(300);
+    let sealed =
+        SealedSecretPayload::seal(session.session_id.clone(), b"test", &session.public_key)
+            .unwrap();
+
+    let json = serde_json::to_string(&sealed).unwrap();
+    let parsed: SealedSecretPayload = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.session_id, sealed.session_id);
+    assert_eq!(parsed.ciphertext, sealed.ciphertext);
+    assert_eq!(parsed.nonce, sealed.nonce);
+    assert_eq!(parsed.ephemeral_public_key, sealed.ephemeral_public_key);
+
+    // Verify decryption still works after serde round-trip
+    let decrypted = session.open(&parsed).unwrap();
+    assert_eq!(decrypted, b"test");
+}
+
+#[test]
+fn test_sealed_payload_backward_compat_no_ephemeral_key() {
+    // Simulate deserializing a payload from an older version without ephemeral_public_key
+    let json = r#"{"session_id":"old","ciphertext":[1,2,3]}"#;
+    let parsed: SealedSecretPayload = serde_json::from_str(json).unwrap();
+    assert_eq!(parsed.session_id, "old");
+    assert!(parsed.nonce.is_none());
+    assert!(parsed.ephemeral_public_key.is_none());
 }

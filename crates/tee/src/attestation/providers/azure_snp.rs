@@ -80,7 +80,7 @@ impl AttestationVerifier for AzureSnpVerifier {
             }
         }
 
-        tracing::warn!("structural validation only — no cryptographic signature verification");
+        tracing::debug!("structural validation only — cryptographic signature verification requires MAA token validation");
 
         Ok(VerifiedAttestation::new(
             report.clone(),

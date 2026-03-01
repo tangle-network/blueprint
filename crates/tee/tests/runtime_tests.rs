@@ -172,7 +172,7 @@ async fn test_direct_backend_derive_public_key() {
 
     let pubkey = backend.derive_public_key(&handle).await.unwrap();
     assert!(!pubkey.key.is_empty());
-    assert_eq!(pubkey.key_type, "x25519");
+    assert_eq!(pubkey.key_type, "hmac-sha256");
     assert!(!pubkey.fingerprint.is_empty());
 }
 
@@ -577,7 +577,7 @@ async fn test_backend_registry_derive_public_key() {
 
     let pubkey = registry.derive_public_key(&handle).await.unwrap();
     assert!(!pubkey.key.is_empty());
-    assert_eq!(pubkey.key_type, "x25519");
+    assert_eq!(pubkey.key_type, "hmac-sha256");
 }
 
 // Test BackendRegistry rejects operations for a handle whose provider is not registered

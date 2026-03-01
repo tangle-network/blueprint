@@ -276,6 +276,7 @@ dotenv = { version = "0.15", default-features = false }
 # Cryptography & Blockchain
 bip39 = { version = "2.2.0", default-features = false }
 chacha20poly1305 = { version = "0.10.1", default-features = false }
+x25519-dalek = { version = "2", default-features = false, features = ["static_secrets", "zeroize"] }
 ed25519-zebra = { version = "4", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 k256 = { version = "0.13.3", default-features = false }
