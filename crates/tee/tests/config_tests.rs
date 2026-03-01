@@ -2,6 +2,7 @@
 
 use blueprint_tee::config::*;
 use blueprint_tee::errors::TeeError;
+use std::time::Duration;
 
 #[test]
 fn test_default_config() {
@@ -120,4 +121,104 @@ fn test_key_exchange_config_defaults() {
     let config = TeeKeyExchangeConfig::default();
     assert_eq!(config.session_ttl_secs, 300);
     assert_eq!(config.max_sessions, 64);
+    assert!(!config.on_chain_verification);
+}
+
+#[test]
+fn test_secret_injection_sealed_only_when_tee_enabled() {
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Direct)
+        .build()
+        .unwrap();
+    assert_eq!(config.secret_injection, SecretInjectionPolicy::SealedOnly);
+}
+
+#[test]
+fn test_secret_injection_env_or_sealed_when_disabled() {
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Disabled)
+        .build()
+        .unwrap();
+    assert_eq!(config.secret_injection, SecretInjectionPolicy::EnvOrSealed);
+}
+
+#[test]
+fn test_lifecycle_policy_cloud_managed_when_enabled() {
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Remote)
+        .build()
+        .unwrap();
+    assert_eq!(
+        config.lifecycle_policy(),
+        RuntimeLifecyclePolicy::CloudManaged
+    );
+}
+
+#[test]
+fn test_lifecycle_policy_container_when_disabled() {
+    let config = TeeConfig::default();
+    assert_eq!(
+        config.lifecycle_policy(),
+        RuntimeLifecyclePolicy::Container
+    );
+}
+
+#[test]
+fn test_attestation_freshness_default() {
+    let config = TeeConfig::default();
+    assert!(matches!(
+        config.attestation_freshness,
+        AttestationFreshnessPolicy::ProvisionTimeOnly
+    ));
+}
+
+#[test]
+fn test_attestation_freshness_periodic() {
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Direct)
+        .attestation_freshness(AttestationFreshnessPolicy::PeriodicRefresh {
+            interval: Duration::from_secs(3600),
+        })
+        .build()
+        .unwrap();
+
+    match &config.attestation_freshness {
+        AttestationFreshnessPolicy::PeriodicRefresh { interval } => {
+            assert_eq!(interval.as_secs(), 3600);
+        }
+        _ => panic!("expected PeriodicRefresh"),
+    }
+}
+
+#[test]
+fn test_hybrid_routing_source_default() {
+    let config = TeeConfig::default();
+    assert!(matches!(
+        config.hybrid_routing_source,
+        HybridRoutingSource::ContractDriven
+    ));
+}
+
+#[test]
+fn test_hybrid_routing_source_policy_file() {
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Hybrid)
+        .hybrid_routing_source(HybridRoutingSource::PolicyFile(
+            "/etc/tee/routing.yaml".into(),
+        ))
+        .build()
+        .unwrap();
+
+    match &config.hybrid_routing_source {
+        HybridRoutingSource::PolicyFile(path) => {
+            assert_eq!(path.to_str().unwrap(), "/etc/tee/routing.yaml");
+        }
+        _ => panic!("expected PolicyFile"),
+    }
+}
+
+#[test]
+fn test_public_key_policy_default() {
+    let config = TeeConfig::default();
+    assert_eq!(config.public_key_policy, TeePublicKeyPolicy::Required);
 }

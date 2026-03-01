@@ -14,11 +14,12 @@
 
 use crate::attestation::claims::AttestationClaims;
 use crate::attestation::report::{AttestationFormat, AttestationReport, Measurement};
-use crate::config::TeeProvider;
+use crate::config::{RuntimeLifecyclePolicy, TeeProvider};
 use crate::errors::TeeError;
 use crate::runtime::backend::{
-    TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeeRuntimeBackend,
+    TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeePublicKey, TeeRuntimeBackend,
 };
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -53,8 +54,10 @@ impl Default for DirectBackendConfig {
 /// State for a deployment managed by the direct backend.
 #[derive(Debug)]
 struct DeploymentState {
+    #[allow(dead_code)]
     request: TeeDeployRequest,
     status: TeeDeploymentStatus,
+    cached_attestation: Option<AttestationReport>,
 }
 
 /// Direct TEE backend implementation.
@@ -113,9 +116,14 @@ impl TeeRuntimeBackend for DirectBackend {
             "deploying workload on direct TEE backend"
         );
 
+        // Build port mapping for extra ports (direct backend maps 1:1)
+        let port_mapping: BTreeMap<u16, u16> =
+            req.extra_ports.iter().map(|&p| (p, p)).collect();
+
         let state = DeploymentState {
             request: req,
             status: TeeDeploymentStatus::Running,
+            cached_attestation: None,
         };
 
         let mut metadata = BTreeMap::new();
@@ -129,6 +137,9 @@ impl TeeRuntimeBackend for DirectBackend {
             id: id.clone(),
             provider: self.config.provider,
             metadata,
+            cached_attestation: None,
+            port_mapping,
+            lifecycle_policy: RuntimeLifecyclePolicy::CloudManaged,
         };
 
         self.deployments.lock().await.insert(id, state);
@@ -140,8 +151,8 @@ impl TeeRuntimeBackend for DirectBackend {
         &self,
         handle: &TeeDeploymentHandle,
     ) -> Result<AttestationReport, TeeError> {
-        let deployments = self.deployments.lock().await;
-        let _state = deployments.get(&handle.id).ok_or_else(|| {
+        let mut deployments = self.deployments.lock().await;
+        let state = deployments.get_mut(&handle.id).ok_or_else(|| {
             TeeError::RuntimeUnavailable(format!("deployment {} not found", handle.id))
         })?;
 
@@ -158,7 +169,7 @@ impl TeeRuntimeBackend for DirectBackend {
             _ => AttestationFormat::Mock,
         };
 
-        Ok(AttestationReport {
+        let report = AttestationReport {
             provider: self.config.provider,
             format,
             issued_at_unix: now,
@@ -166,6 +177,44 @@ impl TeeRuntimeBackend for DirectBackend {
             public_key_binding: None,
             claims: AttestationClaims::new(),
             evidence: Vec::new(),
+        };
+
+        // Cache the attestation for idempotent re-submission
+        state.cached_attestation = Some(report.clone());
+
+        Ok(report)
+    }
+
+    async fn cached_attestation(
+        &self,
+        handle: &TeeDeploymentHandle,
+    ) -> Result<Option<AttestationReport>, TeeError> {
+        let deployments = self.deployments.lock().await;
+        let state = deployments.get(&handle.id).ok_or_else(|| {
+            TeeError::RuntimeUnavailable(format!("deployment {} not found", handle.id))
+        })?;
+        Ok(state.cached_attestation.clone())
+    }
+
+    async fn derive_public_key(
+        &self,
+        handle: &TeeDeploymentHandle,
+    ) -> Result<TeePublicKey, TeeError> {
+        let deployments = self.deployments.lock().await;
+        let _state = deployments.get(&handle.id).ok_or_else(|| {
+            TeeError::RuntimeUnavailable(format!("deployment {} not found", handle.id))
+        })?;
+
+        // In a real implementation, this would derive a key from the TEE's
+        // hardware-bound key hierarchy (e.g., TDX sealing key, SEV VCEK).
+        // For now, derive a deterministic key from the deployment ID.
+        let key = Sha256::digest(handle.id.as_bytes()).to_vec();
+        let fingerprint = hex::encode(&key[..8]);
+
+        Ok(TeePublicKey {
+            key,
+            key_type: "x25519".to_string(),
+            fingerprint,
         })
     }
 

@@ -98,6 +98,9 @@ fn test_deployment_handle_serde() {
         id: "test-1".to_string(),
         provider: TeeProvider::IntelTdx,
         metadata: Default::default(),
+        cached_attestation: None,
+        port_mapping: Default::default(),
+        lifecycle_policy: blueprint_tee::RuntimeLifecyclePolicy::CloudManaged,
     };
     let json = serde_json::to_string(&handle).unwrap();
     let parsed: TeeDeploymentHandle = serde_json::from_str(&json).unwrap();
@@ -139,6 +142,63 @@ async fn test_backend_registry_deploy_unregistered() {
         .deploy(TeeProvider::AwsNitro, TeeDeployRequest::new("test"))
         .await;
     assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_direct_backend_cached_attestation() {
+    let backend = DirectBackend::tdx();
+    let req = TeeDeployRequest::new("test-image:latest");
+    let handle = backend.deploy(req).await.unwrap();
+
+    // Before any attestation, cache should be None
+    let cached = backend.cached_attestation(&handle).await.unwrap();
+    assert!(cached.is_none());
+
+    // Get attestation (which caches it)
+    let report = backend.get_attestation(&handle).await.unwrap();
+    assert_eq!(report.provider, TeeProvider::IntelTdx);
+
+    // Now cached attestation should be Some
+    let cached = backend.cached_attestation(&handle).await.unwrap();
+    assert!(cached.is_some());
+    assert_eq!(cached.unwrap().provider, TeeProvider::IntelTdx);
+}
+
+#[tokio::test]
+async fn test_direct_backend_derive_public_key() {
+    let backend = DirectBackend::tdx();
+    let req = TeeDeployRequest::new("test-image:latest");
+    let handle = backend.deploy(req).await.unwrap();
+
+    let pubkey = backend.derive_public_key(&handle).await.unwrap();
+    assert!(!pubkey.key.is_empty());
+    assert_eq!(pubkey.key_type, "x25519");
+    assert!(!pubkey.fingerprint.is_empty());
+}
+
+#[tokio::test]
+async fn test_deploy_request_extra_ports() {
+    let backend = DirectBackend::tdx();
+    let req = TeeDeployRequest::new("test-image:latest")
+        .with_extra_ports([8080, 9090]);
+    let handle = backend.deploy(req).await.unwrap();
+
+    // Direct backend maps 1:1
+    assert_eq!(handle.port_mapping.len(), 2);
+    assert_eq!(handle.port_mapping.get(&8080), Some(&8080));
+    assert_eq!(handle.port_mapping.get(&9090), Some(&9090));
+}
+
+#[tokio::test]
+async fn test_deployment_handle_lifecycle_policy() {
+    let backend = DirectBackend::tdx();
+    let req = TeeDeployRequest::new("test-image:latest");
+    let handle = backend.deploy(req).await.unwrap();
+
+    assert_eq!(
+        handle.lifecycle_policy,
+        blueprint_tee::RuntimeLifecyclePolicy::CloudManaged
+    );
 }
 
 #[tokio::test]

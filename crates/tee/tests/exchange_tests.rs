@@ -90,6 +90,7 @@ async fn test_auth_service_max_sessions() {
     let config = TeeKeyExchangeConfig {
         session_ttl_secs: 300,
         max_sessions: 2,
+        on_chain_verification: false,
     };
     let service = TeeAuthService::new(config);
 

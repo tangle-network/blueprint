@@ -6,7 +6,7 @@
 use crate::config::TeeProvider;
 use crate::errors::TeeError;
 use crate::runtime::backend::{
-    TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeeRuntimeBackend,
+    TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeePublicKey, TeeRuntimeBackend,
 };
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -24,6 +24,16 @@ trait ErasedBackend: Send + Sync {
         &'a self,
         handle: &'a TeeDeploymentHandle,
     ) -> BoxFuture<'a, Result<crate::attestation::report::AttestationReport, TeeError>>;
+
+    fn cached_attestation<'a>(
+        &'a self,
+        handle: &'a TeeDeploymentHandle,
+    ) -> BoxFuture<'a, Result<Option<crate::attestation::report::AttestationReport>, TeeError>>;
+
+    fn derive_public_key<'a>(
+        &'a self,
+        handle: &'a TeeDeploymentHandle,
+    ) -> BoxFuture<'a, Result<TeePublicKey, TeeError>>;
 
     fn status<'a>(
         &'a self,
@@ -51,6 +61,21 @@ impl<T: TeeRuntimeBackend + 'static> ErasedBackend for T {
         handle: &'a TeeDeploymentHandle,
     ) -> BoxFuture<'a, Result<crate::attestation::report::AttestationReport, TeeError>> {
         Box::pin(TeeRuntimeBackend::get_attestation(self, handle))
+    }
+
+    fn cached_attestation<'a>(
+        &'a self,
+        handle: &'a TeeDeploymentHandle,
+    ) -> BoxFuture<'a, Result<Option<crate::attestation::report::AttestationReport>, TeeError>>
+    {
+        Box::pin(TeeRuntimeBackend::cached_attestation(self, handle))
+    }
+
+    fn derive_public_key<'a>(
+        &'a self,
+        handle: &'a TeeDeploymentHandle,
+    ) -> BoxFuture<'a, Result<TeePublicKey, TeeError>> {
+        Box::pin(TeeRuntimeBackend::derive_public_key(self, handle))
     }
 
     fn status<'a>(
@@ -142,5 +167,39 @@ impl BackendRegistry {
                 ))
             })?;
         backend.inner.get_attestation(handle).await
+    }
+
+    /// Get cached attestation from the backend registered for a deployment's provider.
+    pub async fn cached_attestation(
+        &self,
+        handle: &TeeDeploymentHandle,
+    ) -> Result<Option<crate::attestation::report::AttestationReport>, TeeError> {
+        let backend = self
+            .backends
+            .get(&handle.provider.to_string())
+            .ok_or_else(|| {
+                TeeError::UnsupportedProvider(format!(
+                    "no backend registered for {}",
+                    handle.provider
+                ))
+            })?;
+        backend.inner.cached_attestation(handle).await
+    }
+
+    /// Derive the public key for a deployment.
+    pub async fn derive_public_key(
+        &self,
+        handle: &TeeDeploymentHandle,
+    ) -> Result<TeePublicKey, TeeError> {
+        let backend = self
+            .backends
+            .get(&handle.provider.to_string())
+            .ok_or_else(|| {
+                TeeError::UnsupportedProvider(format!(
+                    "no backend registered for {}",
+                    handle.provider
+                ))
+            })?;
+        backend.inner.derive_public_key(handle).await
     }
 }

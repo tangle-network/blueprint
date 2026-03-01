@@ -7,5 +7,7 @@ pub mod backend;
 pub mod direct;
 pub mod registry;
 
-pub use backend::{TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeeRuntimeBackend};
+pub use backend::{
+    TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeePublicKey, TeeRuntimeBackend,
+};
 pub use registry::BackendRegistry;

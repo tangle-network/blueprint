@@ -1,16 +1,20 @@
 //! Intel TDX attestation verifier.
 //!
-//! Validates Intel TDX (Trust Domain Extensions) attestation quotes including:
-//! - TD Report and Quote verification
-//! - MRTD / RTMR measurement validation
-//! - TDX module version checks
+//! This module provides a backward-compatible `TdxVerifier` type that wraps
+//! the unified [`NativeVerifier`](super::native::NativeVerifier).
 
 use crate::attestation::report::AttestationReport;
 use crate::attestation::verifier::{AttestationVerifier, VerifiedAttestation};
 use crate::config::TeeProvider;
 use crate::errors::TeeError;
 
+use super::native::NativeVerifier;
+
 /// Verifier for Intel TDX attestation quotes.
+///
+/// Wraps [`NativeVerifier`] with TDX-specific defaults. TDX and SEV-SNP share
+/// the same ioctl-based attestation pattern; see the `native` module for the
+/// unified implementation.
 pub struct TdxVerifier {
     /// Expected MRTD (TD measurement register) value, if enforced.
     pub expected_mrtd: Option<String>,
@@ -32,6 +36,14 @@ impl TdxVerifier {
         self.expected_mrtd = Some(mrtd.into());
         self
     }
+
+    fn to_native(&self) -> NativeVerifier {
+        let mut v = NativeVerifier::tdx().with_allow_debug(self.allow_debug);
+        if let Some(mrtd) = &self.expected_mrtd {
+            v = v.with_expected_measurement(mrtd.clone());
+        }
+        v
+    }
 }
 
 impl Default for TdxVerifier {
@@ -42,32 +54,7 @@ impl Default for TdxVerifier {
 
 impl AttestationVerifier for TdxVerifier {
     fn verify(&self, report: &AttestationReport) -> Result<VerifiedAttestation, TeeError> {
-        if report.provider != TeeProvider::IntelTdx {
-            return Err(TeeError::AttestationVerification(format!(
-                "expected Intel TDX provider, got {}",
-                report.provider
-            )));
-        }
-
-        if report.claims.debug_mode && !self.allow_debug {
-            return Err(TeeError::AttestationVerification(
-                "debug mode TDs are not permitted".to_string(),
-            ));
-        }
-
-        if let Some(expected) = &self.expected_mrtd {
-            if report.measurement.digest != *expected {
-                return Err(TeeError::MeasurementMismatch {
-                    expected: expected.clone(),
-                    actual: report.measurement.digest.clone(),
-                });
-            }
-        }
-
-        Ok(VerifiedAttestation::new(
-            report.clone(),
-            TeeProvider::IntelTdx,
-        ))
+        self.to_native().verify(report)
     }
 
     fn supported_provider(&self) -> TeeProvider {
