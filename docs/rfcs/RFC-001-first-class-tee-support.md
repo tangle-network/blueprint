@@ -513,3 +513,108 @@ Priority key: P0 critical, P1 high, P2 medium
 - Remote providers architecture: `crates/blueprint-remote-providers/src/core/deployment_target.rs`, `infra/traits.rs`, `infra/provisioner.rs`, `secure_bridge.rs`, `deployment/*`
 - x402 background-service model: `crates/x402/src/gateway.rs`
 - Tangle metadata layer model: `crates/tangle-extra/src/layers.rs`
+
+---
+
+## Appendix B: External Review — Sandbox Blueprint TEE Hardening
+
+> Reviewed after completing TEE hardening pass on `ai-agent-sandbox-blueprint` (5 bug fixes, integration tests, documentation). Comments grounded in production failure modes discovered during that work.
+
+### B.1 Strengths
+
+1. **Concrete code anchors throughout.** Every claim references specific file paths and line ranges in both the sandbox blueprint and the SDK. This isn't hand-wavy architecture; someone can audit every assertion.
+
+2. **Section 9 ("Lessons Learned") is accurate.** The "patterns to avoid" correctly identifies:
+   - Global `OnceCell` singleton backend — works for single-operator sandbox blueprint, breaks in SDK-level multi-runner contexts.
+   - Weak `Vec<u8>` attestation model — the proposed `AttestationReport` with typed `Measurement`, `AttestationClaims`, and `PublicKeyBinding` is a real improvement.
+   - Store scan for deployment routing (`sidecar_info_for_deployment`) — correctly flagged as non-scalable.
+
+3. **Deployment modes are well-defined.** Remote/Direct/Hybrid cleanly maps to real deployment scenarios. Hybrid with per-job routing policy is particularly valuable for gradual adoption.
+
+4. **Integration points are realistic.** Extending `DeploymentTarget` for TEE targets rather than building a parallel provisioning stack is the right call. Same for wiring `TeeAuthService` as a `BackgroundService` following the x402 pattern.
+
+5. **Migration path is pragmatic.** Starting with attestation types + verifier (Phase 1) before any runtime behavior means clients can start verifying attestations from existing sandbox-blueprint operators before the SDK can produce them.
+
+### B.2 Missing failure modes (from production bugs)
+
+These are bugs we hit and fixed in the sandbox blueprint. A clean-room SDK implementation will hit them again unless the RFC addresses them explicitly.
+
+#### B.2.1 Idempotent provision must preserve attestation
+
+**Bug:** Both `tee_provision` and `instance_provision` had idempotent early-return paths that hardcoded `tee_attestation_json: String::new()`. When `teeRequired=true`, the Solidity `_handleProvisionResult` reverts with `MissingTeeAttestation` on empty attestation — so the second provision call (which is supposed to be a harmless no-op) causes an on-chain revert.
+
+**Fix applied:** Re-read attestation from stored `record.tee_attestation_json` in the early return path.
+
+**RFC implication:** The `TeeRuntimeBackend` trait's `deploy → get_attestation → stop → destroy` shape doesn't account for cached attestation on re-submission. `TeeDeploymentHandle` (or the SDK's provision orchestrator) must carry cached attestation data for idempotent re-submission. Consider adding this to Section 6.1:
+
+```rust
+async fn cached_attestation(&self, handle: &TeeDeploymentHandle)
+    -> Result<Option<AttestationReport>, TeeError>;
+```
+
+#### B.2.2 GC/reaper must skip TEE deployments
+
+**Bug:** `reaper_tick()` called `commit_container()` after stopping TEE sandboxes — no Docker container exists to commit. `gc_tick()` tried Docker-tier transitions (Hot→Warm→Cold→Gone) on TEE records — all Docker ops fail.
+
+**Fix applied:** Skip `commit_container` when `tee_deployment_id.is_some()`. Skip TEE records entirely in `gc_tick()` since their lifecycle is cloud-managed.
+
+**RFC implication:** Section 4.2 (Manager runtime targets) doesn't address lifecycle cleanup for TEE deployments. Cloud backends (Phala, GCP, Azure, Nitro) have real cleanup costs (orphaned VMs, billing). The SDK needs an explicit teardown contract beyond just `destroy()` on the trait — the manager's GC/reaper must be aware that TEE deployments have a fundamentally different lifecycle than Docker containers. Add a `RuntimeLifecyclePolicy` or similar that the manager consults before attempting container-level operations.
+
+#### B.2.3 Secret re-injection must be blocked for TEE
+
+**Bug:** `recreate_sidecar_with_env` destroys and recreates the Docker container to inject new env vars. For TEE deployments this invalidates attestation, breaks sealed secrets, and loses the deployment ID referenced on-chain.
+
+**Fix applied:** Guard at the top of `recreate_sidecar_with_env` that returns an error for TEE sandboxes, directing users to the sealed-secrets API instead.
+
+**RFC implication:** Section 5 covers sealed secrets but doesn't address the problem of someone bypassing the sealed-secret flow by using the container recreation path. The SDK should make this impossible at the type level — sealed secrets should be the *only* secret injection path for TEE deployments, enforced by `TeeConfig` or the runtime backend, not just a runtime guard.
+
+### B.3 API gaps
+
+#### B.3.1 `TeeRuntimeBackend` trait is missing `get_public_key`
+
+Section 6.1 defines `deploy`, `get_attestation`, `stop`, `destroy`. But the sealed-secret flow in Section 5 requires public key derivation — the client needs the TEE-bound public key to encrypt secrets. The sandbox blueprint exposes this as a separate sidecar endpoint (`GET /tee/public-key`). The trait should include:
+
+```rust
+async fn derive_public_key(&self, handle: &TeeDeploymentHandle)
+    -> Result<TeePublicKey, TeeError>;
+```
+
+Note: this can fail non-fatally (the contract doesn't enforce `tee_public_key_json`). We added a `tracing::warn!` for this case — the SDK should define whether public key derivation failure is fatal or degraded.
+
+#### B.3.2 Extra ports not addressed
+
+We added `extra_ports: Vec<u16>` to `TeeDeployParams` and `extra_ports: HashMap<u16, u16>` to `TeeDeployment` across all backends. Port mapping varies significantly between backends:
+- **Direct:** Docker port publish (identical to non-TEE path)
+- **AWS Nitro:** Security group rules on the EC2 instance
+- **GCP:** Firewall rules on the Confidential Space VM
+- **Azure:** NSG rules on the CVM's NIC
+- **Phala:** Compose service port declarations
+
+The RFC's `TeeDeployRequest` should account for port mapping. Currently only the Direct backend fully supports extra ports; the cloud backends log a warning and return empty maps.
+
+#### B.3.3 Attestation freshness model undefined
+
+Section 4.1 mentions `TeeRuntimeHealthService` for "optional attestation freshness polling" but doesn't specify the freshness model. Attestations are point-in-time; the contract stores `keccak256(attestationJsonBytes)` once at provision. Questions the RFC should answer:
+- Should the SDK support attestation rotation (re-attest periodically)?
+- If the enclave is rebooted, does the attestation hash on-chain become stale?
+- Should there be a `reattestationInterval` config, or is attestation strictly a provision-time artifact?
+
+The sandbox blueprint treats attestation as provision-time only. A first-class SDK probably should support rotation, but the contract interaction model needs to be defined.
+
+### B.4 Design suggestions
+
+#### B.4.1 Hybrid mode routing mechanism
+
+Section 4.2 says routing uses "`tee_required_jobs`, labels, or policy file" but doesn't define the mechanism. Since Tangle contracts already have a `teeRequired` flag, the routing should be contract-driven (read from on-chain config) rather than config-driven (operator YAML). This avoids drift between what the contract enforces and what the manager schedules.
+
+#### B.4.2 Native attestation module structure
+
+Section 2.2 has `providers/tdx.rs` and `providers/sev_snp.rs` as separate files, but the sandbox blueprint's native attestation (`attestation.rs`) handles both TDX and SEV via the same ioctl pattern with different device nodes and report sizes. A single `native.rs` with platform dispatch might be cleaner — the code is 90% shared (open device, write report data, read report, extract measurement at known offset).
+
+#### B.4.3 Key exchange flow should show dual verification
+
+Section 5.1's flow diagram shows the client verifying attestation locally. But the contract also stores an attestation hash on-chain (`keccak256(attestationJsonBytes)` in `getAttestationHash(serviceId, operator)`). The flow should show the dual verification path: local evidence check (is this a real TEE with the right measurement?) + on-chain hash comparison (does this match what was submitted at provision time?).
+
+### B.5 Verdict
+
+Solid foundation for a first-class implementation. The main risk is that it's designed top-down without having hit the production failure modes listed in B.2. Adding a "Known Failure Modes" section drawing from the sandbox blueprint's bug fixes would prevent a clean-room implementation from stepping on the same landmines.
