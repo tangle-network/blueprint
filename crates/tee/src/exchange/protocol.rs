@@ -98,6 +98,20 @@ impl KeyExchangeSession {
     }
 }
 
+impl Drop for KeyExchangeSession {
+    fn drop(&mut self) {
+        // Zero out the private key material before deallocation.
+        // This reduces the window during which secrets remain in memory.
+        for byte in &mut self.private_key {
+            // Use write_volatile to prevent the compiler from optimizing away the zeroing.
+            // SAFETY: we are writing to a valid, properly-aligned byte within a live allocation.
+            unsafe {
+                core::ptr::write_volatile(core::ptr::from_mut::<u8>(byte), 0);
+            }
+        }
+    }
+}
+
 /// A request to retrieve an ephemeral public key for key exchange.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyExchangeRequest {

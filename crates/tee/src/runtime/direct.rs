@@ -103,10 +103,7 @@ impl DirectBackend {
 }
 
 impl TeeRuntimeBackend for DirectBackend {
-    async fn deploy(
-        &self,
-        req: TeeDeployRequest,
-    ) -> Result<TeeDeploymentHandle, TeeError> {
+    async fn deploy(&self, req: TeeDeployRequest) -> Result<TeeDeploymentHandle, TeeError> {
         let id = self.generate_id().await;
 
         tracing::info!(
@@ -172,10 +169,7 @@ impl TeeRuntimeBackend for DirectBackend {
         })
     }
 
-    async fn status(
-        &self,
-        handle: &TeeDeploymentHandle,
-    ) -> Result<TeeDeploymentStatus, TeeError> {
+    async fn status(&self, handle: &TeeDeploymentHandle) -> Result<TeeDeploymentStatus, TeeError> {
         let deployments = self.deployments.lock().await;
         let state = deployments.get(&handle.id).ok_or_else(|| {
             TeeError::RuntimeUnavailable(format!("deployment {} not found", handle.id))

@@ -17,7 +17,8 @@ type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Internal trait for type-erased backends (dyn compatible via boxed futures).
 trait ErasedBackend: Send + Sync {
-    fn deploy(&self, req: TeeDeployRequest) -> BoxFuture<'_, Result<TeeDeploymentHandle, TeeError>>;
+    fn deploy(&self, req: TeeDeployRequest)
+    -> BoxFuture<'_, Result<TeeDeploymentHandle, TeeError>>;
 
     fn get_attestation<'a>(
         &'a self,
@@ -29,10 +30,7 @@ trait ErasedBackend: Send + Sync {
         handle: &'a TeeDeploymentHandle,
     ) -> BoxFuture<'a, Result<TeeDeploymentStatus, TeeError>>;
 
-    fn stop<'a>(
-        &'a self,
-        handle: &'a TeeDeploymentHandle,
-    ) -> BoxFuture<'a, Result<(), TeeError>>;
+    fn stop<'a>(&'a self, handle: &'a TeeDeploymentHandle) -> BoxFuture<'a, Result<(), TeeError>>;
 
     fn destroy<'a>(
         &'a self,
@@ -62,10 +60,7 @@ impl<T: TeeRuntimeBackend + 'static> ErasedBackend for T {
         Box::pin(TeeRuntimeBackend::status(self, handle))
     }
 
-    fn stop<'a>(
-        &'a self,
-        handle: &'a TeeDeploymentHandle,
-    ) -> BoxFuture<'a, Result<(), TeeError>> {
+    fn stop<'a>(&'a self, handle: &'a TeeDeploymentHandle) -> BoxFuture<'a, Result<(), TeeError>> {
         Box::pin(TeeRuntimeBackend::stop(self, handle))
     }
 
@@ -126,12 +121,9 @@ impl BackendRegistry {
         provider: TeeProvider,
         req: TeeDeployRequest,
     ) -> Result<TeeDeploymentHandle, TeeError> {
-        let backend = self
-            .backends
-            .get(&provider.to_string())
-            .ok_or_else(|| {
-                TeeError::UnsupportedProvider(format!("no backend registered for {provider}"))
-            })?;
+        let backend = self.backends.get(&provider.to_string()).ok_or_else(|| {
+            TeeError::UnsupportedProvider(format!("no backend registered for {provider}"))
+        })?;
         backend.inner.deploy(req).await
     }
 

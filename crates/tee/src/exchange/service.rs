@@ -74,15 +74,12 @@ impl TeeAuthService {
     /// Consume a session by ID, returning the session if valid.
     ///
     /// A consumed session cannot be reused (one-time handoff).
-    pub async fn consume_session(
-        &self,
-        session_id: &str,
-    ) -> Result<KeyExchangeSession, TeeError> {
+    pub async fn consume_session(&self, session_id: &str) -> Result<KeyExchangeSession, TeeError> {
         let mut sessions = self.sessions.lock().await;
 
-        let session = sessions.remove(session_id).ok_or_else(|| {
-            TeeError::KeyExchange(format!("session not found: {session_id}"))
-        })?;
+        let session = sessions
+            .remove(session_id)
+            .ok_or_else(|| TeeError::KeyExchange(format!("session not found: {session_id}")))?;
 
         if session.is_expired() {
             return Err(TeeError::KeyExchange(format!(
@@ -107,14 +104,11 @@ impl TeeAuthService {
     }
 
     /// Get the public key for a session, if it exists and is valid.
-    pub async fn get_session_public_key(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<u8>, TeeError> {
+    pub async fn get_session_public_key(&self, session_id: &str) -> Result<Vec<u8>, TeeError> {
         let sessions = self.sessions.lock().await;
-        let session = sessions.get(session_id).ok_or_else(|| {
-            TeeError::KeyExchange(format!("session not found: {session_id}"))
-        })?;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| TeeError::KeyExchange(format!("session not found: {session_id}")))?;
 
         if !session.is_valid() {
             return Err(TeeError::KeyExchange(format!(
@@ -124,6 +118,7 @@ impl TeeAuthService {
 
         Ok(session.public_key.clone())
     }
+
     /// Start the background cleanup loop for expired sessions.
     ///
     /// Spawns a tokio task that periodically evicts expired sessions.

@@ -157,18 +157,17 @@ where
     fn call(&mut self, call: JobCall) -> Self::Future {
         // Try to get the current attestation snapshot synchronously.
         // We use try_lock to avoid blocking the service call path.
-        let (attestation_digest, provider, measurement) =
-            match self.attestation.try_lock() {
-                Ok(guard) => match guard.as_ref() {
-                    Some(report) => (
-                        Some(report.evidence_digest()),
-                        Some(report.provider.to_string()),
-                        Some(report.measurement.to_string()),
-                    ),
-                    None => (None, None, None),
-                },
-                Err(_) => (None, None, None),
-            };
+        let (attestation_digest, provider, measurement) = match self.attestation.try_lock() {
+            Ok(guard) => match guard.as_ref() {
+                Some(report) => (
+                    Some(report.evidence_digest()),
+                    Some(report.provider.to_string()),
+                    Some(report.measurement.to_string()),
+                ),
+                None => (None, None, None),
+            },
+            Err(_) => (None, None, None),
+        };
 
         TeeServiceFuture {
             inner: self.service.call(call),

@@ -3,8 +3,8 @@
 //! Provides the core [`AttestationReport`] type that captures a TEE attestation
 //! with typed claims, measurement, provider identity, and optional public key binding.
 
-use crate::config::TeeProvider;
 use crate::attestation::claims::AttestationClaims;
+use crate::config::TeeProvider;
 use serde::{Deserialize, Serialize};
 
 /// A hardware or platform measurement (PCR values, MRTD, etc.).

@@ -45,8 +45,8 @@ pub mod runtime;
 
 // Re-exports
 pub use config::{
-    TeeConfig, TeeConfigBuilder, TeeKeyExchangeConfig, TeeMode, TeeProvider,
-    TeeProviderSelector, TeeRequirement,
+    TeeConfig, TeeConfigBuilder, TeeKeyExchangeConfig, TeeMode, TeeProvider, TeeProviderSelector,
+    TeeRequirement,
 };
 pub use errors::TeeError;
 
@@ -59,6 +59,4 @@ pub use exchange::TeeAuthService;
 
 pub use middleware::{TeeContext, TeeLayer};
 
-pub use runtime::{
-    TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeeRuntimeBackend,
-};
+pub use runtime::{TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeeRuntimeBackend};
