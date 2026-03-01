@@ -541,6 +541,70 @@ where
         self
     }
 
+    /// Enable TEE (Trusted Execution Environment) support for this runner.
+    ///
+    /// Registers the [`TeeAuthService`](blueprint_tee::TeeAuthService) as a background service
+    /// for key exchange session management.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use blueprint_runner::BlueprintRunner;
+    /// use blueprint_tee::{TeeConfig, TeeMode, TeeRequirement};
+    ///
+    /// let tee = TeeConfig::builder()
+    ///     .requirement(TeeRequirement::Required)
+    ///     .mode(TeeMode::Direct)
+    ///     .build()?;
+    ///
+    /// BlueprintRunner::builder(config, env)
+    ///     .tee(tee)
+    ///     .router(router)
+    ///     .run()
+    ///     .await?;
+    /// ```
+    #[cfg(feature = "tee")]
+    #[must_use]
+    pub fn tee(mut self, config: blueprint_tee::TeeConfig) -> Self {
+        if config.is_enabled() {
+            // Wrap TeeAuthService in a BackgroundService adapter
+            struct TeeAuthServiceAdapter {
+                auth_service: blueprint_tee::TeeAuthService,
+            }
+
+            impl BackgroundService for TeeAuthServiceAdapter {
+                async fn start(
+                    &self,
+                ) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
+                    let (tx, rx) = oneshot::channel();
+
+                    // Start the cleanup loop
+                    self.auth_service.start_cleanup_loop();
+
+                    // Signal successful start
+                    tokio::spawn(async move {
+                        tracing::info!("TEE auth service started");
+                        let _ = tx.send(Ok(()));
+                    });
+
+                    Ok(rx)
+                }
+            }
+
+            let auth_service =
+                blueprint_tee::TeeAuthService::new(config.key_exchange.clone());
+            let adapter = TeeAuthServiceAdapter { auth_service };
+            self.background_services
+                .push(DynBackgroundService::boxed(adapter));
+            tracing::info!(
+                mode = ?config.mode,
+                requirement = ?config.requirement,
+                "TEE support enabled"
+            );
+        }
+        self
+    }
+
     /// Append a background service to the list
     ///
     /// # Examples

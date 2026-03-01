@@ -77,6 +77,9 @@ blueprint-x402 = { workspace = true, optional = true }
 # Webhook Producer
 blueprint-webhooks = { workspace = true, optional = true }
 
+# TEE Support
+blueprint-tee = { workspace = true, optional = true }
+
 # Remote cloud deployments
 blueprint-remote-providers = { workspace = true, optional = true }
 
@@ -239,6 +242,11 @@ x402 = ["dep:blueprint-x402"]
 
 ## Enable webhook producer for external HTTP event triggers
 webhooks = ["dep:blueprint-webhooks"]
+
+#! ### TEE
+
+## Enable Trusted Execution Environment (TEE) support
+tee = ["dep:blueprint-tee", "blueprint-runner/tee"]
 
 [package.metadata.docs.rs]
 features = ["tangle", "tangle-aggregation", "tangle-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]

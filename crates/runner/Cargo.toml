@@ -22,6 +22,7 @@ blueprint-qos = { workspace = true }
 blueprint-manager-bridge = { workspace = true, features = ["client"] }
 blueprint-faas = { workspace = true, optional = true }
 blueprint-auth = { workspace = true, optional = true }
+blueprint-tee = { workspace = true, optional = true }
 k256 = { workspace = true, optional = true }
 
 futures-core.workspace = true
@@ -80,7 +81,7 @@ std = ["blueprint-evm-extra?/std", "blueprint-keystore/std", "blueprint-std/std"
 networking = ["dep:blueprint-networking", "dep:crossbeam-channel", "dep:libp2p", "blueprint-keystore/zebra"]
 
 ## Enable Trusted Execution Environment (TEE) support for the runner
-tee = []
+tee = ["dep:blueprint-tee"]
 
 ## Enable TLS support for service registration
 tls = ["dep:blueprint-auth"]

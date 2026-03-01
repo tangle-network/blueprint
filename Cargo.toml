@@ -199,6 +199,9 @@ blueprint-contexts = { version = "0.1.0-alpha.21", path = "./crates/contexts", d
 # Pricing Engine
 blueprint-pricing-engine = { version = "0.2.6", path = "./crates/pricing-engine", default-features = false }
 
+# TEE Support
+blueprint-tee = { version = "0.1.0-alpha.1", path = "./crates/tee", default-features = false }
+
 # x402 Payment Gateway
 blueprint-x402 = { version = "0.1.0-alpha.1", path = "./crates/x402", default-features = false }
 
@@ -273,6 +276,7 @@ dotenv = { version = "0.15", default-features = false }
 # Cryptography & Blockchain
 bip39 = { version = "2.2.0", default-features = false }
 chacha20poly1305 = { version = "0.10.1", default-features = false }
+x25519-dalek = { version = "2", default-features = false, features = ["static_secrets", "zeroize"] }
 ed25519-zebra = { version = "4", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 k256 = { version = "0.13.3", default-features = false }

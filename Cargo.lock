@@ -3675,6 +3675,7 @@ dependencies = [
  "blueprint-router",
  "blueprint-sdk",
  "blueprint-std",
+ "blueprint-tee",
  "bytes",
  "clap",
  "crossbeam-channel",
@@ -3727,6 +3728,7 @@ dependencies = [
  "blueprint-std",
  "blueprint-stores",
  "blueprint-tangle-extra",
+ "blueprint-tee",
  "blueprint-testing-utils",
  "blueprint-webhooks",
  "blueprint-x402",
@@ -3840,6 +3842,31 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.22",
  "url",
+]
+
+[[package]]
+name = "blueprint-tee"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "blueprint-core",
+ "blueprint-router",
+ "blueprint-std",
+ "chacha20poly1305",
+ "document-features",
+ "futures",
+ "futures-core",
+ "hex",
+ "pin-project-lite",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.17",
+ "tokio",
+ "tower 0.5.2",
+ "tracing",
+ "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]
