@@ -33,7 +33,8 @@ pub struct TeeAuthService {
     /// Abort handle to the background cleanup task, if started.
     /// Stored so the task can be cancelled on drop and to prevent the
     /// caller from silently discarding it.
-    cleanup_handle: Option<tokio::task::AbortHandle>,
+    /// Uses `std::sync::Mutex` so `start_cleanup_loop` can work with `&self`.
+    cleanup_handle: std::sync::Mutex<Option<tokio::task::AbortHandle>>,
 }
 
 impl TeeAuthService {
@@ -42,7 +43,7 @@ impl TeeAuthService {
         Self {
             config,
             sessions: Arc::new(Mutex::new(BTreeMap::new())),
-            cleanup_handle: None,
+            cleanup_handle: std::sync::Mutex::new(None),
         }
     }
 
@@ -130,7 +131,7 @@ impl TeeAuthService {
     /// Spawns a tokio task that periodically evicts expired sessions.
     /// The `JoinHandle` is stored internally so the task is not silently dropped.
     /// Returns a clone of the handle for external monitoring if needed.
-    pub fn start_cleanup_loop(&mut self) -> tokio::task::JoinHandle<()> {
+    pub fn start_cleanup_loop(&self) -> tokio::task::JoinHandle<()> {
         let sessions = self.sessions.clone();
         let ttl_secs = self.config.session_ttl_secs;
 
@@ -155,7 +156,7 @@ impl TeeAuthService {
             }
         });
 
-        self.cleanup_handle = Some(handle.abort_handle());
+        *self.cleanup_handle.lock().unwrap() = Some(handle.abort_handle());
         handle
     }
 
@@ -172,7 +173,7 @@ impl TeeAuthService {
 
 impl Drop for TeeAuthService {
     fn drop(&mut self) {
-        if let Some(handle) = self.cleanup_handle.take() {
+        if let Some(handle) = self.cleanup_handle.lock().unwrap().take() {
             handle.abort();
         }
     }
