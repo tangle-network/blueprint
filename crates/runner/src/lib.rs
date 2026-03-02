@@ -573,9 +573,7 @@ where
             }
 
             impl BackgroundService for TeeAuthServiceAdapter {
-                async fn start(
-                    &self,
-                ) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
+                async fn start(&self) -> Result<oneshot::Receiver<Result<(), Error>>, Error> {
                     let (tx, rx) = oneshot::channel();
 
                     // Start the cleanup loop
@@ -591,8 +589,7 @@ where
                 }
             }
 
-            let auth_service =
-                blueprint_tee::TeeAuthService::new(config.key_exchange.clone());
+            let auth_service = blueprint_tee::TeeAuthService::new(config.key_exchange.clone());
             let adapter = TeeAuthServiceAdapter { auth_service };
             self.background_services
                 .push(DynBackgroundService::boxed(adapter));
