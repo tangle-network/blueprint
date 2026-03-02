@@ -33,7 +33,7 @@ base64 = { version = "0.22", optional = true }
 # AWS SDK
 aws-config = { version = "1.5", optional = true }
 aws-sdk-lambda = { version = "1.52", optional = true }
-aws-smithy-types = { version = "1.2", optional = true }
+aws-smithy-types = { version = "1.4", optional = true }
 
 # GCP SDK
 gcp_auth = { version = "0.12", optional = true }

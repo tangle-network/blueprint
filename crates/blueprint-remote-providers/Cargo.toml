@@ -79,7 +79,7 @@ mockito = "1.0"
 # Official AWS mocking library
 aws-smithy-mocks-experimental = "0.2"
 aws-smithy-runtime = { version = "1.7", features = ["test-util"] }
-aws-smithy-types = "1.2"
+aws-smithy-types = "1.4"
 http = "1.0"
 # Additional dependencies for integration tests
 chrono = { workspace = true, features = ["serde", "clock"] }
