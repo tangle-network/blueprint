@@ -45,6 +45,14 @@ chacha20poly1305 = { workspace = true, features = ["alloc", "getrandom"] }
 # Utilities
 document-features = { workspace = true, features = ["default"] }
 
+# Cloud providers (feature-gated)
+aws-sdk-ec2 = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true }
+gcp_auth = { workspace = true, optional = true }
+reqwest = { workspace = true, features = ["json"], optional = true }
+base64 = { workspace = true, features = ["std"], optional = true }
+uuid = { workspace = true, features = ["v4"], optional = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 blueprint-router = { workspace = true }
@@ -59,14 +67,17 @@ std = ["blueprint-core/std", "blueprint-std/std"]
 
 #! ### TEE Providers
 
-## Enable AWS Nitro Enclave attestation verification
-aws-nitro = []
+## Enable AWS Nitro Enclave runtime backend and attestation verification.
+## Adds `aws-sdk-ec2` and `aws-config` for EC2 instance management.
+aws-nitro = ["dep:aws-sdk-ec2", "dep:aws-config", "dep:base64", "dep:uuid"]
 
-## Enable Azure SEV-SNP / SKR attestation verification
-azure-snp = []
+## Enable Azure SEV-SNP / SKR runtime backend and attestation verification.
+## Adds `reqwest` for ARM REST API and MAA token retrieval.
+azure-snp = ["dep:reqwest", "dep:base64", "dep:uuid"]
 
-## Enable GCP Confidential Space attestation verification
-gcp-confidential = []
+## Enable GCP Confidential Space runtime backend and attestation verification.
+## Adds `gcp-auth` for service account auth and `reqwest` for Compute Engine API.
+gcp-confidential = ["dep:gcp_auth", "dep:reqwest", "dep:uuid"]
 
 ## Enable Intel TDX attestation verification
 tdx = []

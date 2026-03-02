@@ -47,7 +47,7 @@ pub mod runtime;
 pub use config::{
     AttestationFreshnessPolicy, HybridRoutingSource, RuntimeLifecyclePolicy, SecretInjectionPolicy,
     TeeConfig, TeeConfigBuilder, TeeKeyExchangeConfig, TeeMode, TeeProvider, TeeProviderSelector,
-    TeePublicKeyPolicy, TeeRequirement,
+    TeePublicKeyPolicy, TeeRequirement, TeeRequirements,
 };
 pub use errors::TeeError;
 

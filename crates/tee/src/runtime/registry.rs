@@ -223,4 +223,101 @@ impl BackendRegistry {
             .destroy(handle)
             .await
     }
+
+    /// Create a registry populated from the `TEE_BACKEND` environment variable.
+    ///
+    /// The `TEE_BACKEND` variable accepts a comma-separated list of backend names:
+    /// `direct`, `aws-nitro`, `gcp-confidential`, `azure-snp`.
+    ///
+    /// If `TEE_BACKEND` is not set, returns an empty registry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a requested backend's feature is not compiled in, or
+    /// if a backend's configuration is invalid (e.g., missing required env vars).
+    ///
+    /// # Examples
+    ///
+    /// ```bash
+    /// # Register only the direct backend
+    /// TEE_BACKEND=direct
+    ///
+    /// # Register AWS Nitro and GCP
+    /// TEE_BACKEND=aws-nitro,gcp-confidential
+    /// ```
+    pub async fn from_env() -> Result<Self, TeeError> {
+        let mut registry = Self::new();
+
+        let backends = match std::env::var("TEE_BACKEND") {
+            Ok(val) => val,
+            Err(_) => return Ok(registry),
+        };
+
+        for backend in backends.split(',').map(str::trim) {
+            match backend {
+                "direct" | "direct-tdx" => {
+                    registry.register(
+                        TeeProvider::IntelTdx,
+                        crate::runtime::direct::DirectBackend::tdx(),
+                    );
+                }
+                "direct-sev-snp" => {
+                    registry.register(
+                        TeeProvider::AmdSevSnp,
+                        crate::runtime::direct::DirectBackend::sev_snp(),
+                    );
+                }
+                #[cfg(feature = "aws-nitro")]
+                "aws-nitro" => {
+                    let backend = crate::runtime::aws_nitro::NitroBackend::from_env().await?;
+                    registry.register(TeeProvider::AwsNitro, backend);
+                }
+                #[cfg(not(feature = "aws-nitro"))]
+                "aws-nitro" => {
+                    return Err(TeeError::UnsupportedProvider(
+                        "aws-nitro backend requested but the 'aws-nitro' feature is not enabled; \
+                         recompile with --features aws-nitro"
+                            .to_string(),
+                    ));
+                }
+                #[cfg(feature = "gcp-confidential")]
+                "gcp-confidential" => {
+                    let backend =
+                        crate::runtime::gcp_confidential::GcpConfidentialBackend::from_env()
+                            .await?;
+                    registry.register(TeeProvider::GcpConfidential, backend);
+                }
+                #[cfg(not(feature = "gcp-confidential"))]
+                "gcp-confidential" => {
+                    return Err(TeeError::UnsupportedProvider(
+                        "gcp-confidential backend requested but the 'gcp-confidential' feature \
+                         is not enabled; recompile with --features gcp-confidential"
+                            .to_string(),
+                    ));
+                }
+                #[cfg(feature = "azure-snp")]
+                "azure-snp" => {
+                    let backend = crate::runtime::azure_skr::AzureSkrBackend::from_env()?;
+                    registry.register(TeeProvider::AzureSnp, backend);
+                }
+                #[cfg(not(feature = "azure-snp"))]
+                "azure-snp" => {
+                    return Err(TeeError::UnsupportedProvider(
+                        "azure-snp backend requested but the 'azure-snp' feature is not enabled; \
+                         recompile with --features azure-snp"
+                            .to_string(),
+                    ));
+                }
+                other => {
+                    return Err(TeeError::Config(format!(
+                        "unknown TEE_BACKEND value: '{other}'; \
+                         valid options: direct, direct-tdx, direct-sev-snp, \
+                         aws-nitro, gcp-confidential, azure-snp"
+                    )));
+                }
+            }
+        }
+
+        Ok(registry)
+    }
 }

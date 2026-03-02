@@ -3848,6 +3848,9 @@ dependencies = [
 name = "blueprint-tee"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "aws-config",
+ "aws-sdk-ec2",
+ "base64 0.22.1",
  "blueprint-core",
  "blueprint-router",
  "blueprint-std",
@@ -3855,9 +3858,11 @@ dependencies = [
  "document-features",
  "futures",
  "futures-core",
+ "gcp_auth",
  "hex",
  "pin-project-lite",
  "rand 0.8.5",
+ "reqwest 0.12.25",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3865,6 +3870,7 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
+ "uuid 1.19.0",
  "x25519-dalek",
  "zeroize",
 ]

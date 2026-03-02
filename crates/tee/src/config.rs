@@ -5,7 +5,6 @@
 use crate::errors::TeeError;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::time::Duration;
 
 /// The operational mode for TEE integration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -88,6 +87,67 @@ impl TeeProviderSelector {
     }
 }
 
+/// Declares that a blueprint requires or prefers TEE execution.
+///
+/// This struct is embedded in blueprint metadata/manifests and is read by the
+/// blueprint manager at deploy time to route the workload to an appropriate
+/// TEE-capable host. Without this, the manager has no way to know whether a
+/// blueprint binary needs TEE before starting the runner.
+///
+/// # Examples
+///
+/// ```rust
+/// use blueprint_tee::config::{TeeProviderSelector, TeeRequirement, TeeRequirements};
+///
+/// let requirements = TeeRequirements {
+///     requirement: TeeRequirement::Required,
+///     providers: TeeProviderSelector::Any,
+///     min_attestation_age_secs: Some(3600),
+/// };
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeeRequirements {
+    /// Whether TEE is required (fail if unavailable) or preferred (degrade gracefully).
+    pub requirement: TeeRequirement,
+    /// Acceptable providers. If `Any`, the manager chooses the best available.
+    #[serde(default)]
+    pub providers: TeeProviderSelector,
+    /// Maximum acceptable age of attestation reports, in seconds.
+    /// If `None`, the manager uses its own default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_attestation_age_secs: Option<u64>,
+}
+
+impl Default for TeeRequirements {
+    fn default() -> Self {
+        Self {
+            requirement: TeeRequirement::Preferred,
+            providers: TeeProviderSelector::Any,
+            min_attestation_age_secs: None,
+        }
+    }
+}
+
+impl TeeRequirements {
+    /// Create requirements that mandate TEE execution.
+    pub fn required() -> Self {
+        Self {
+            requirement: TeeRequirement::Required,
+            ..Self::default()
+        }
+    }
+
+    /// Create requirements that prefer but don't mandate TEE execution.
+    pub fn preferred() -> Self {
+        Self::default()
+    }
+
+    /// Returns true if TEE is mandatory.
+    pub fn is_required(&self) -> bool {
+        self.requirement == TeeRequirement::Required
+    }
+}
+
 /// Lifecycle policy for deployments, used by the manager's GC/reaper.
 ///
 /// TEE deployments have a fundamentally different lifecycle than Docker containers:
@@ -145,58 +205,48 @@ pub enum TeePublicKeyPolicy {
 
 /// Attestation freshness policy.
 ///
-/// Controls whether attestation is a one-time provision artifact or periodically
-/// refreshed. The tradeoffs:
+/// Currently only `ProvisionTimeOnly` is supported: attestation is captured once
+/// at provision and its hash is stored on-chain. If the enclave reboots, the
+/// on-chain hash becomes stale but is not automatically updated. Suitable for
+/// long-running enclaves with stable workloads.
 ///
-/// - **`ProvisionTimeOnly`**: Simplest model. Attestation is captured once at
-///   provision and its hash is stored on-chain. If the enclave reboots, the
-///   on-chain hash becomes stale but is not automatically updated. Suitable for
-///   long-running enclaves with stable workloads.
+/// # Future work
 ///
-/// - **`PeriodicRefresh`**: The runtime periodically re-attests and updates the
-///   on-chain attestation hash. This catches enclave reboots and measurement
-///   drift, but requires gas for each on-chain update. The `interval` should
-///   balance freshness against transaction costs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Periodic refresh (re-attest on a timer and update the on-chain hash) is
+/// planned but requires provider SDK integration for live re-attestation and
+/// on-chain transaction submission. Track progress in the TEE roadmap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AttestationFreshnessPolicy {
     /// Attestation is captured once at provision time. The on-chain hash is
     /// never updated. This is the default and matches the sandbox blueprint's
     /// current behavior.
+    #[default]
     ProvisionTimeOnly,
-    /// Attestation is periodically refreshed and the on-chain hash is updated.
-    PeriodicRefresh {
-        /// How often to re-attest and submit updated attestation on-chain.
-        #[serde(with = "duration_secs")]
-        interval: Duration,
-    },
-}
-
-impl Default for AttestationFreshnessPolicy {
-    fn default() -> Self {
-        Self::ProvisionTimeOnly
-    }
 }
 
 /// Where hybrid mode reads its TEE routing decisions from.
 ///
-/// The default is `ContractDriven`: the on-chain contract's `teeRequired` flag
-/// determines which jobs run in TEE. This avoids drift between what the contract
-/// enforces and what the manager schedules.
+/// Currently only `PolicyFile` is supported: routing decisions come from a
+/// local file that maps job IDs or service names to TEE/non-TEE execution.
+///
+/// # Future work
+///
+/// Contract-driven routing (reading `teeRequired` from the on-chain contract)
+/// is planned but requires contract integration and ABI bindings. This would
+/// be the recommended production approach to avoid config drift. Track progress
+/// in the TEE roadmap.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HybridRoutingSource {
-    /// Read `teeRequired` from the on-chain contract configuration.
-    /// This is the default and recommended approach to avoid config drift.
-    ContractDriven,
-    /// Read routing policy from a local file. Useful for development/testing
-    /// but risks drift with on-chain contract state in production.
+    /// Read routing policy from a local file. Maps job IDs or service names
+    /// to TEE/non-TEE execution targets.
     PolicyFile(PathBuf),
 }
 
 impl Default for HybridRoutingSource {
     fn default() -> Self {
-        Self::ContractDriven
+        Self::PolicyFile(PathBuf::from("/etc/tee/routing.json"))
     }
 }
 
@@ -502,25 +552,6 @@ impl TeeConfigBuilder {
         let attestation_freshness = self.attestation_freshness.unwrap_or_default();
         let hybrid_routing_source = self.hybrid_routing_source.unwrap_or_default();
 
-        // PeriodicRefresh is not yet implemented
-        if matches!(
-            attestation_freshness,
-            AttestationFreshnessPolicy::PeriodicRefresh { .. }
-        ) {
-            tracing::info!(
-                "PeriodicRefresh attestation freshness is configured; periodic on-chain updates require provider SDK integration — using ProvisionTimeOnly semantics until then"
-            );
-        }
-
-        // ContractDriven hybrid routing is not yet implemented
-        if mode == TeeMode::Hybrid
-            && matches!(hybrid_routing_source, HybridRoutingSource::ContractDriven)
-        {
-            tracing::info!(
-                "ContractDriven hybrid routing is configured; on-chain teeRequired flag reading requires contract integration — using manual routing configuration until then"
-            );
-        }
-
         Ok(TeeConfig {
             requirement,
             mode,
@@ -534,20 +565,5 @@ impl TeeConfigBuilder {
             public_key_policy: self.public_key_policy.unwrap_or_default(),
             hybrid_routing_source,
         })
-    }
-}
-
-/// Serde helper for `Duration` as seconds.
-mod duration_secs {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::time::Duration;
-
-    pub fn serialize<S: Serializer>(duration: &Duration, s: S) -> Result<S::Ok, S::Error> {
-        duration.as_secs().serialize(s)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
-        let secs = u64::deserialize(d)?;
-        Ok(Duration::from_secs(secs))
     }
 }
