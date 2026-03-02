@@ -387,10 +387,7 @@ fn test_config_preferred_disabled_is_valid() {
 #[test]
 fn test_builder_mode_without_requirement() {
     // Setting mode without requirement should default to Preferred
-    let config = TeeConfig::builder()
-        .mode(TeeMode::Remote)
-        .build()
-        .unwrap();
+    let config = TeeConfig::builder().mode(TeeMode::Remote).build().unwrap();
     assert_eq!(config.requirement, TeeRequirement::Preferred);
     assert_eq!(config.mode, TeeMode::Remote);
     assert!(config.is_enabled());
@@ -463,7 +460,10 @@ fn test_config_deser_rejects_required_disabled() {
         "key_exchange": { "session_ttl_secs": 300, "max_sessions": 64, "on_chain_verification": false }
     }"#;
     let result: Result<TeeConfig, _> = serde_json::from_str(json);
-    assert!(result.is_err(), "Required + Disabled should be rejected on deserialization");
+    assert!(
+        result.is_err(),
+        "Required + Disabled should be rejected on deserialization"
+    );
 }
 
 #[test]
@@ -477,7 +477,10 @@ fn test_config_deser_rejects_tee_enabled_with_env_or_sealed() {
         "secret_injection": "env_or_sealed"
     }"#;
     let result: Result<TeeConfig, _> = serde_json::from_str(json);
-    assert!(result.is_err(), "TEE-enabled config with EnvOrSealed should be rejected");
+    assert!(
+        result.is_err(),
+        "TEE-enabled config with EnvOrSealed should be rejected"
+    );
 }
 
 #[test]

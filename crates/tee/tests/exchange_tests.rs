@@ -365,12 +365,9 @@ fn test_seal_open_roundtrip() {
     let session = KeyExchangeSession::new(300);
     let plaintext = b"super secret database password";
 
-    let sealed = SealedSecretPayload::seal(
-        session.session_id.clone(),
-        plaintext,
-        &session.public_key,
-    )
-    .unwrap();
+    let sealed =
+        SealedSecretPayload::seal(session.session_id.clone(), plaintext, &session.public_key)
+            .unwrap();
 
     assert_eq!(sealed.session_id, session.session_id);
     assert!(sealed.nonce.is_some());
@@ -403,12 +400,9 @@ fn test_seal_open_wrong_session_fails() {
     let plaintext = b"secret";
 
     // Seal to session1's public key
-    let sealed = SealedSecretPayload::seal(
-        session1.session_id.clone(),
-        plaintext,
-        &session1.public_key,
-    )
-    .unwrap();
+    let sealed =
+        SealedSecretPayload::seal(session1.session_id.clone(), plaintext, &session1.public_key)
+            .unwrap();
 
     // Try to open with session2's private key — should fail (different DH shared secret)
     let result = session2.open(&sealed);

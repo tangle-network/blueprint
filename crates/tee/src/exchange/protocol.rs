@@ -9,8 +9,8 @@
 
 use crate::attestation::report::AttestationReport;
 use crate::errors::TeeError;
-use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::ChaCha20Poly1305;
+use chacha20poly1305::aead::{Aead, KeyInit};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

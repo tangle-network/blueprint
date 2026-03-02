@@ -213,10 +213,7 @@ impl BackendRegistry {
 
     /// Gracefully stop a running deployment.
     pub async fn stop(&self, handle: &TeeDeploymentHandle) -> Result<(), TeeError> {
-        self.get_backend(handle.provider)?
-            .inner
-            .stop(handle)
-            .await
+        self.get_backend(handle.provider)?.inner.stop(handle).await
     }
 
     /// Destroy a deployment and release all resources.

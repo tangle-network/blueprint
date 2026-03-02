@@ -254,10 +254,9 @@ async fn test_tee_layer_with_error_result() {
     let tee_layer = TeeLayer::with_attestation(report);
 
     let mut router = Router::new()
-        .route(
-            0,
-            async || -> Result<Vec<u8>, String> { Err("job failed".to_string()) },
-        )
+        .route(0, async || -> Result<Vec<u8>, String> {
+            Err("job failed".to_string())
+        })
         .layer(tee_layer);
 
     let call = JobCall::new(0u32, Bytes::new());
@@ -293,9 +292,7 @@ async fn test_tee_layer_lock_contention_skips_metadata() {
     let tee_layer = TeeLayer::with_attestation(report);
     let handle = tee_layer.attestation_handle();
 
-    let mut router = Router::new()
-        .route(0, async || vec![42u8])
-        .layer(tee_layer);
+    let mut router = Router::new().route(0, async || vec![42u8]).layer(tee_layer);
 
     // Hold the lock so try_lock in the service will fail
     let _guard = handle.lock().await;

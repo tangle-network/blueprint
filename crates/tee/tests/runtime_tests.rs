@@ -537,7 +537,10 @@ async fn test_direct_backend_derive_public_key_deterministic() {
 
     let key1 = backend.derive_public_key(&handle).await.unwrap();
     let key2 = backend.derive_public_key(&handle).await.unwrap();
-    assert_eq!(key1.key, key2.key, "same deployment should produce same key");
+    assert_eq!(
+        key1.key, key2.key,
+        "same deployment should produce same key"
+    );
     assert_eq!(key1.fingerprint, key2.fingerprint);
 }
 

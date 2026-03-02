@@ -90,7 +90,9 @@ impl AttestationVerifier for NitroVerifier {
         // dependencies are integrated. Until then, the evidence blob should be
         // verified externally (e.g., by the on-chain contract's attestation hash).
 
-        tracing::debug!("structural validation only — cryptographic signature verification requires aws-nitro-enclaves-cose");
+        tracing::debug!(
+            "structural validation only — cryptographic signature verification requires aws-nitro-enclaves-cose"
+        );
 
         Ok(VerifiedAttestation::new(
             report.clone(),

@@ -80,7 +80,9 @@ impl AttestationVerifier for GcpConfidentialVerifier {
             }
         }
 
-        tracing::debug!("structural validation only — cryptographic signature verification requires token validation");
+        tracing::debug!(
+            "structural validation only — cryptographic signature verification requires token validation"
+        );
 
         Ok(VerifiedAttestation::new(
             report.clone(),

@@ -465,13 +465,19 @@ fn test_measurement_equality() {
 #[test]
 fn test_measurement_digest_normalized_to_lowercase() {
     let upper = Measurement::sha256("AABBCC");
-    assert_eq!(upper.digest, "aabbcc", "digest should be normalized to lowercase");
+    assert_eq!(
+        upper.digest, "aabbcc",
+        "digest should be normalized to lowercase"
+    );
 
     let mixed = Measurement::new("sha384", "AaBbCc");
     assert_eq!(mixed.digest, "aabbcc", "mixed case should be normalized");
 
     let already_lower = Measurement::sha256("aabbcc");
-    assert_eq!(already_lower.digest, "aabbcc", "lowercase should be unchanged");
+    assert_eq!(
+        already_lower.digest, "aabbcc",
+        "lowercase should be unchanged"
+    );
 }
 
 #[test]

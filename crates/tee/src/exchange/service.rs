@@ -95,7 +95,9 @@ impl TeeAuthService {
         }
 
         // Session is valid — remove and return it
-        let session = sessions.remove(session_id).expect("session exists; checked above");
+        let session = sessions
+            .remove(session_id)
+            .expect("session exists; checked above");
 
         tracing::debug!(session_id = %session_id, "consumed key exchange session");
         Ok(session)
