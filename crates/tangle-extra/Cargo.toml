@@ -57,7 +57,7 @@ tracing-subscriber = { workspace = true }
 url = { workspace = true }
 anyhow = { workspace = true }
 hex = { workspace = true }
-hex-literal = "0.4"
+hex-literal = "1.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 
