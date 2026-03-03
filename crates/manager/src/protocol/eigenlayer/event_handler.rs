@@ -113,6 +113,25 @@ fn format_address(addr: &alloy_primitives::Address) -> String {
     format!("{:x}", addr)
 }
 
+#[cfg(feature = "tee")]
+fn parse_tee_backend(env_value: Option<String>) -> Result<String> {
+    let backend = env_value
+        .map(|value| value.trim().to_string())
+        .unwrap_or_default();
+    if backend.is_empty() {
+        return Err(Error::TeePrerequisiteMissing {
+            prerequisite: "TEE_BACKEND".to_string(),
+            hint: "Set TEE_BACKEND (for example: direct,aws-nitro,gcp-confidential) before selecting runtime_target='tee'".to_string(),
+        });
+    }
+    Ok(backend)
+}
+
+#[cfg(feature = "tee")]
+fn resolve_tee_backend() -> Result<String> {
+    parse_tee_backend(std::env::var("TEE_BACKEND").ok())
+}
+
 impl EigenlayerEventHandler {
     /// Create a new EigenLayer event handler
     #[must_use]
@@ -382,9 +401,19 @@ impl EigenlayerEventHandler {
         })?;
 
         // Spawn the blueprint process using the runtime target from registration config
-        let mut service = match registration.config.runtime_target {
+        let runtime_target = registration.config.runtime_target;
+        info!(
+            blueprint_id,
+            service_id,
+            runtime_target = %runtime_target,
+            "Selecting EigenLayer runtime target"
+        );
+        let mut service = match runtime_target {
             blueprint_eigenlayer_extra::RuntimeTarget::Native => {
-                info!("Using Native runtime (no sandbox) - testing only!");
+                info!(
+                    runtime_path = "native",
+                    "Using Native runtime (no sandbox) - testing only!"
+                );
                 crate::rt::service::Service::new_native(
                     ctx,
                     limits,
@@ -399,7 +428,10 @@ impl EigenlayerEventHandler {
             blueprint_eigenlayer_extra::RuntimeTarget::Hypervisor => {
                 #[cfg(feature = "vm-sandbox")]
                 {
-                    info!("Using Hypervisor runtime (cloud-hypervisor VM)");
+                    info!(
+                        runtime_path = "hypervisor",
+                        "Using Hypervisor runtime (cloud-hypervisor VM)"
+                    );
                     crate::rt::service::Service::new_vm(
                         ctx,
                         limits,
@@ -436,7 +468,7 @@ impl EigenlayerEventHandler {
                             )
                         })?;
 
-                    info!("Using Container runtime with image: {}", container_image);
+                    info!(runtime_path = "container", image = %container_image, "Using Container runtime");
                     crate::rt::service::Service::new_container(
                         ctx,
                         limits,
@@ -445,6 +477,7 @@ impl EigenlayerEventHandler {
                         container_image,
                         blueprint_env.clone(),
                         args.clone(),
+                        false,
                         false, // debug mode
                     )
                     .await?
@@ -455,6 +488,52 @@ impl EigenlayerEventHandler {
                     return Err(Error::Other(
                         "Container runtime not available. Recompile with --features containers or use 'native' for testing.".into()
                     ));
+                }
+            }
+            blueprint_eigenlayer_extra::RuntimeTarget::Tee => {
+                #[cfg(feature = "tee")]
+                {
+                    #[cfg(feature = "containers")]
+                    {
+                        let container_image =
+                            registration.config.container_image.clone().ok_or_else(|| {
+                                Error::TeePrerequisiteMissing {
+                                    prerequisite: "container_image".to_string(),
+                                    hint: "TEE runtime requires container_image in EigenLayer registration config".to_string(),
+                                }
+                            })?;
+                        let tee_backend = resolve_tee_backend()?;
+                        info!(
+                            runtime_path = "container+tee-gate",
+                            image = %container_image,
+                            tee_backend = %tee_backend,
+                            "Using TEE runtime target"
+                        );
+                        crate::rt::service::Service::new_container(
+                            ctx,
+                            limits,
+                            &runtime_dir,
+                            &service_str,
+                            container_image,
+                            blueprint_env.clone(),
+                            args.clone(),
+                            true,
+                            false, // debug mode
+                        )
+                        .await?
+                    }
+                    #[cfg(not(feature = "containers"))]
+                    {
+                        return Err(Error::TeeRuntimeUnavailable {
+                            reason: "TEE runtime requires container runtime support. Recompile with --features tee,containers".to_string(),
+                        });
+                    }
+                }
+                #[cfg(not(feature = "tee"))]
+                {
+                    return Err(Error::TeeRuntimeUnavailable {
+                        reason: "TEE runtime requested but manager was compiled without tee support. Recompile with --features tee".to_string(),
+                    });
                 }
             }
         };

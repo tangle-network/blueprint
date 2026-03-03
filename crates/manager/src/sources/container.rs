@@ -84,6 +84,7 @@ impl BlueprintSourceHandler for ContainerSource {
             env,
             args,
             false,
+            false,
         )
         .await
     }

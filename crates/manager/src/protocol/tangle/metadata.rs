@@ -132,10 +132,37 @@ impl OnChainMetadataProvider {
     fn convert_container_source(
         source: &OnChainImageRegistrySource,
     ) -> Option<ImageRegistryFetcher> {
-        let registry = source.registry.clone().to_string();
-        let image = source.image.clone().to_string();
-        let tag = source.tag.clone().to_string();
+        let registry = source.registry.clone().to_string().trim().to_string();
+        let image = source.image.clone().to_string().trim().to_string();
+        let tag = source.tag.clone().to_string().trim().to_string();
         if registry.is_empty() && image.is_empty() && tag.is_empty() {
+            return None;
+        }
+
+        let mut lint_issues = Vec::new();
+        if registry.is_empty() {
+            lint_issues.push("missing registry");
+        }
+        if image.is_empty() {
+            lint_issues.push("missing image");
+        }
+        if tag.is_empty() {
+            lint_issues.push("missing tag");
+        }
+        if registry.contains("://") {
+            lint_issues.push("registry must not include URL scheme");
+        }
+        if registry.chars().any(char::is_whitespace)
+            || image.chars().any(char::is_whitespace)
+            || tag.chars().any(char::is_whitespace)
+        {
+            lint_issues.push("registry/image/tag must not contain whitespace");
+        }
+        if !lint_issues.is_empty() {
+            warn!(
+                "Skipping malformed container source metadata: {}",
+                lint_issues.join(", ")
+            );
             return None;
         }
 
@@ -562,5 +589,39 @@ mod tests {
             }
             other => panic!("expected remote source, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn skips_malformed_container_source_missing_tag() {
+        let mut container: OnChainBlueprintSource = Default::default();
+        container.kind = SOURCE_KIND_CONTAINER;
+        container.container = ITangleTypes::ImageRegistrySource {
+            registry: "ghcr.io".into(),
+            image: "demo/app".into(),
+            tag: "".into(),
+        };
+
+        let converted = OnChainMetadataProvider::convert_sources(&[container]);
+        assert!(
+            converted.is_empty(),
+            "container source with missing tag should be rejected"
+        );
+    }
+
+    #[test]
+    fn skips_malformed_container_source_with_registry_scheme() {
+        let mut container: OnChainBlueprintSource = Default::default();
+        container.kind = SOURCE_KIND_CONTAINER;
+        container.container = ITangleTypes::ImageRegistrySource {
+            registry: "https://ghcr.io".into(),
+            image: "demo/app".into(),
+            tag: "v1".into(),
+        };
+
+        let converted = OnChainMetadataProvider::convert_sources(&[container]);
+        assert!(
+            converted.is_empty(),
+            "container source with registry scheme should be rejected"
+        );
     }
 }
