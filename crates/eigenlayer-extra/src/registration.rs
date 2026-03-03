@@ -31,6 +31,7 @@ pub enum RegistrationStatus {
 /// - Native: Direct process execution (blueprint_path)
 /// - Hypervisor: VM-based isolation (blueprint_path)
 /// - Container: Docker/Kata containers (container_image)
+/// - Tee: TEE-gated container runtime (container_image + manager tee prerequisites)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RuntimeTarget {
@@ -43,6 +44,9 @@ pub enum RuntimeTarget {
     /// Container runtime (Docker/Kata)
     /// Requires container_image field in config
     Container,
+    /// TEE runtime (strict container sandbox requirements + tee capability gate)
+    /// Requires container_image field in config
+    Tee,
 }
 
 impl Default for RuntimeTarget {
@@ -58,6 +62,7 @@ impl std::fmt::Display for RuntimeTarget {
             Self::Native => write!(f, "native"),
             Self::Hypervisor => write!(f, "hypervisor"),
             Self::Container => write!(f, "container"),
+            Self::Tee => write!(f, "tee"),
         }
     }
 }
@@ -70,8 +75,9 @@ impl std::str::FromStr for RuntimeTarget {
             "native" => Ok(Self::Native),
             "hypervisor" | "vm" => Ok(Self::Hypervisor),
             "container" | "docker" | "kata" => Ok(Self::Container),
+            "tee" | "confidential" | "confidential-container" => Ok(Self::Tee),
             _ => Err(format!(
-                "Invalid runtime target: '{s}'. Valid options: 'native', 'hypervisor', 'container'"
+                "Invalid runtime target: '{s}'. Valid options: 'native', 'hypervisor', 'container', 'tee'"
             )),
         }
     }
@@ -189,7 +195,10 @@ impl AvsRegistrationConfig {
         }
 
         // Pre-compiled binaries not yet supported for Native/Hypervisor runtimes
-        if self.blueprint_path.is_file() && self.runtime_target != RuntimeTarget::Container {
+        if self.blueprint_path.is_file()
+            && self.runtime_target != RuntimeTarget::Container
+            && self.runtime_target != RuntimeTarget::Tee
+        {
             return Err(format!(
                 "Pre-compiled binaries are not yet supported for {:?} runtime. \
                 Please use one of these options:\n\
@@ -221,39 +230,42 @@ impl AvsRegistrationConfig {
                 }
             }
             RuntimeTarget::Container => {
-                // Container runtime requires container_image field
-                if self.container_image.is_none() {
-                    return Err(
-                        "Container runtime requires 'container_image' field in config. \
-                        Example: \"ghcr.io/my-org/my-avs:latest\""
-                            .to_string(),
-                    );
-                }
-
-                // Validate image format
-                if let Some(ref image) = self.container_image {
-                    if image.trim().is_empty() {
-                        return Err("Container image cannot be empty".to_string());
-                    }
-
-                    // Validate format: should be "name:tag" or "registry/name:tag"
-                    let parts: Vec<&str> = image.split(':').collect();
-                    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
-                        return Err(format!(
-                            "Container image must be 'name:tag' or 'registry/name:tag' format (got: '{image}'). \
-                            Example: \"ghcr.io/my-org/my-avs:latest\" or \"my-image:latest\""
-                        ));
-                    }
-
-                    // Check for common mistakes
-                    if parts[0].contains("://") {
-                        return Err(
-                            "Container image should not include protocol (http:// or https://)"
-                                .to_string(),
-                        );
-                    }
-                }
+                Self::validate_container_image(self.container_image.as_deref(), "Container")?;
             }
+            RuntimeTarget::Tee => {
+                Self::validate_container_image(self.container_image.as_deref(), "TEE")?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_container_image(image: Option<&str>, runtime_label: &str) -> Result<(), String> {
+        let Some(image) = image else {
+            return Err(format!(
+                "{runtime_label} runtime requires 'container_image' field in config. \
+                Example: \"ghcr.io/my-org/my-avs:latest\""
+            ));
+        };
+
+        if image.trim().is_empty() {
+            return Err("Container image cannot be empty".to_string());
+        }
+
+        // Validate format: should be "name:tag" or "registry/name:tag"
+        let parts: Vec<&str> = image.split(':').collect();
+        if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
+            return Err(format!(
+                "Container image must be 'name:tag' or 'registry/name:tag' format (got: '{image}'). \
+                Example: \"ghcr.io/my-org/my-avs:latest\" or \"my-image:latest\""
+            ));
+        }
+
+        // Check for common mistakes
+        if parts[0].contains("://") {
+            return Err(
+                "Container image should not include protocol (http:// or https://)".to_string(),
+            );
         }
 
         Ok(())
@@ -628,6 +640,45 @@ mod tests {
 
         let result = config.validate();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_runtime_target_parses_tee() {
+        let parsed: RuntimeTarget = "tee".parse().expect("tee runtime should parse");
+        assert_eq!(parsed, RuntimeTarget::Tee);
+        assert_eq!(parsed.to_string(), "tee");
+    }
+
+    #[test]
+    fn test_validation_tee_requires_container_image() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let blueprint_path = temp_dir.path().join("test_blueprint");
+        std::fs::create_dir_all(&blueprint_path).unwrap();
+
+        let config = AvsRegistrationConfig {
+            service_manager: Address::ZERO,
+            registry_coordinator: Address::ZERO,
+            operator_state_retriever: Address::ZERO,
+            strategy_manager: Address::ZERO,
+            delegation_manager: Address::ZERO,
+            avs_directory: Address::ZERO,
+            rewards_coordinator: Address::ZERO,
+            permission_controller: Address::ZERO,
+            allocation_manager: Address::ZERO,
+            strategy_address: Address::ZERO,
+            stake_registry: Address::ZERO,
+            blueprint_path,
+            runtime_target: RuntimeTarget::Tee,
+            allocation_delay: 0,
+            deposit_amount: 1000,
+            stake_amount: 100,
+            operator_sets: vec![0],
+            container_image: None,
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("container_image"));
     }
 
     #[test]

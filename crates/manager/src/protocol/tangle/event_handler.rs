@@ -3,7 +3,7 @@ use std::sync::Arc;
 use alloy_sol_types::sol;
 use async_trait::async_trait;
 use blueprint_client_tangle::contracts::ITangle;
-use blueprint_core::info;
+use blueprint_core::{info, warn};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol};
 use tokio::fs::create_dir_all;
 
@@ -59,6 +59,74 @@ pub trait BlueprintMetadataProvider: Send + Sync {
 /// Handles Tangle events and translates them into blueprint lifecycle actions.
 pub struct TangleEventHandler {
     metadata: Arc<dyn BlueprintMetadataProvider>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum SourceCategory {
+    Native,
+    Container,
+    Testing,
+}
+
+fn source_category(source: &BlueprintSource) -> SourceCategory {
+    match source {
+        BlueprintSource::Github(_) | BlueprintSource::Remote(_) => SourceCategory::Native,
+        BlueprintSource::Container(_) => SourceCategory::Container,
+        BlueprintSource::Testing(_) => SourceCategory::Testing,
+    }
+}
+
+fn source_kind_label(source: &BlueprintSource) -> &'static str {
+    match source {
+        BlueprintSource::Github(_) => "github",
+        BlueprintSource::Remote(_) => "remote",
+        BlueprintSource::Container(_) => "container",
+        BlueprintSource::Testing(_) => "testing",
+    }
+}
+
+fn source_priority(source: &BlueprintSource, preferred_source: SourceType) -> u8 {
+    match preferred_source {
+        SourceType::Container => match source_category(source) {
+            SourceCategory::Container => 0,
+            SourceCategory::Native => 1,
+            SourceCategory::Testing => 2,
+        },
+        // WASM is currently unsupported in manager source handling.
+        SourceType::Native | SourceType::Wasm => match source_category(source) {
+            SourceCategory::Native => 0,
+            SourceCategory::Container => 1,
+            SourceCategory::Testing => 2,
+        },
+    }
+}
+
+fn ordered_source_indices(sources: &[BlueprintSource], preferred_source: SourceType) -> Vec<usize> {
+    let mut indexed: Vec<(usize, u8)> = sources
+        .iter()
+        .enumerate()
+        .map(|(idx, source)| (idx, source_priority(source, preferred_source)))
+        .collect();
+    indexed.sort_by_key(|(idx, priority)| (*priority, *idx));
+    indexed.into_iter().map(|(idx, _)| idx).collect()
+}
+
+fn planned_runtime_path_for_source(
+    source: &BlueprintSource,
+    ctx: &BlueprintManagerContext,
+) -> &'static str {
+    match source {
+        BlueprintSource::Container(_) => "container",
+        BlueprintSource::Github(_) | BlueprintSource::Remote(_) | BlueprintSource::Testing(_) => {
+            #[cfg(feature = "vm-sandbox")]
+            {
+                if !ctx.vm_sandbox_options.no_vm {
+                    return "hypervisor";
+                }
+            }
+            "native"
+        }
+    }
 }
 
 impl TangleEventHandler {
@@ -271,7 +339,39 @@ impl TangleEventHandler {
 
         let mut last_err: Option<Error> = None;
 
-        for source in &metadata.sources {
+        if ctx.preferred_source == SourceType::Wasm {
+            warn!(
+                preferred_source = %ctx.preferred_source,
+                "WASM source preference is not yet supported; using native/container/testing fallback ordering"
+            );
+        }
+
+        let ordered_source_idxs = ordered_source_indices(&metadata.sources, ctx.preferred_source);
+        let ordered_source_labels: Vec<&str> = ordered_source_idxs
+            .iter()
+            .map(|idx| source_kind_label(&metadata.sources[*idx]))
+            .collect();
+        info!(
+            blueprint_id = metadata.blueprint_id,
+            service_id = metadata.service_id,
+            preferred_source = %ctx.preferred_source,
+            source_order = ?ordered_source_labels,
+            "Resolved deterministic source fallback ordering"
+        );
+
+        for (attempt, source_idx) in ordered_source_idxs.iter().enumerate() {
+            let source = &metadata.sources[*source_idx];
+            let source_kind = source_kind_label(source);
+            let runtime_path = planned_runtime_path_for_source(source, ctx);
+            info!(
+                blueprint_id = metadata.blueprint_id,
+                service_id = metadata.service_id,
+                attempt = attempt + 1,
+                source_index = *source_idx,
+                source_kind,
+                runtime_path,
+                "Attempting source launch"
+            );
             let mut handler = build_source_handler(
                 source,
                 metadata.blueprint_id,
@@ -307,6 +407,14 @@ impl TangleEventHandler {
                 Ok(mut service) => {
                     if let Some(health) = service.start().await? {
                         if let Err(e) = health.await {
+                            info!(
+                                blueprint_id = metadata.blueprint_id,
+                                service_id = metadata.service_id,
+                                source_kind,
+                                runtime_path,
+                                error = %e,
+                                "Source launch failed health check; trying next fallback"
+                            );
                             last_err = Some(e);
                             continue;
                         }
@@ -317,12 +425,25 @@ impl TangleEventHandler {
                         .or_default()
                         .insert(metadata.service_id, service);
                     info!(
-                        "Started Tangle blueprint {} service {}",
-                        metadata.blueprint_id, metadata.service_id
+                        blueprint_id = metadata.blueprint_id,
+                        service_id = metadata.service_id,
+                        source_kind,
+                        runtime_path,
+                        "Started Tangle blueprint service"
                     );
                     return Ok(());
                 }
-                Err(e) => last_err = Some(e),
+                Err(e) => {
+                    info!(
+                        blueprint_id = metadata.blueprint_id,
+                        service_id = metadata.service_id,
+                        source_kind,
+                        runtime_path,
+                        error = %e,
+                        "Source launch attempt failed; trying next fallback"
+                    );
+                    last_err = Some(e);
+                }
             }
         }
 
@@ -469,5 +590,96 @@ fn build_source_handler(
             blueprint_id,
             blueprint_name,
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sources::types::{
+        BlueprintBinary, GithubFetcher, ImageRegistryFetcher, RemoteFetcher, TestFetcher,
+    };
+
+    fn test_source() -> BlueprintSource {
+        BlueprintSource::Testing(TestFetcher {
+            cargo_package: "pkg".to_string(),
+            cargo_bin: "bin".to_string(),
+            base_path: "/tmp".to_string(),
+        })
+    }
+
+    fn container_source() -> BlueprintSource {
+        BlueprintSource::Container(ImageRegistryFetcher {
+            registry: "ghcr.io".to_string(),
+            image: "tangle/demo".to_string(),
+            tag: "v1".to_string(),
+        })
+    }
+
+    fn remote_source() -> BlueprintSource {
+        BlueprintSource::Remote(RemoteFetcher {
+            dist_url: "https://example.com/dist.json".to_string(),
+            archive_url: "https://example.com/archive.tar.xz".to_string(),
+            binaries: vec![BlueprintBinary {
+                arch: "amd64".to_string(),
+                os: "linux".to_string(),
+                name: "demo".to_string(),
+                sha256: [0x11; 32],
+                blake3: None,
+            }],
+        })
+    }
+
+    fn github_source() -> BlueprintSource {
+        BlueprintSource::Github(GithubFetcher {
+            owner: "owner".to_string(),
+            repo: "repo".to_string(),
+            tag: "v1".to_string(),
+            binaries: vec![BlueprintBinary {
+                arch: "amd64".to_string(),
+                os: "linux".to_string(),
+                name: "demo".to_string(),
+                sha256: [0x22; 32],
+                blake3: None,
+            }],
+        })
+    }
+
+    #[test]
+    fn deterministic_order_prefers_native_then_container_then_testing() {
+        let sources = vec![
+            test_source(),
+            container_source(),
+            remote_source(),
+            github_source(),
+        ];
+        let ordered = ordered_source_indices(&sources, SourceType::Native);
+        assert_eq!(ordered, vec![2, 3, 1, 0]);
+    }
+
+    #[test]
+    fn deterministic_order_prefers_container_when_requested() {
+        let sources = vec![
+            test_source(),
+            container_source(),
+            remote_source(),
+            github_source(),
+        ];
+        let ordered = ordered_source_indices(&sources, SourceType::Container);
+        assert_eq!(ordered, vec![1, 2, 3, 0]);
+    }
+
+    #[test]
+    fn deterministic_order_is_stable_for_wasm_preference() {
+        let sources = vec![
+            github_source(),
+            test_source(),
+            remote_source(),
+            container_source(),
+        ];
+        let first = ordered_source_indices(&sources, SourceType::Wasm);
+        let second = ordered_source_indices(&sources, SourceType::Wasm);
+        assert_eq!(first, second);
+        assert_eq!(first, vec![0, 2, 3, 1]);
     }
 }

@@ -46,6 +46,7 @@ pub struct ContainerInstance {
     image: String,
     env: BlueprintEnvVars,
     args: BlueprintArgs,
+    require_tee: bool,
 
     // TODO: Debug logging for containers
     /// Whether this instance should run in debug mode
@@ -69,6 +70,7 @@ impl ContainerInstance {
         image: String,
         env: BlueprintEnvVars,
         args: BlueprintArgs,
+        require_tee: bool,
         debug: bool,
     ) -> Result<ContainerInstance> {
         let client = ctx.containers.kube_client.clone().ok_or_else(|| {
@@ -89,6 +91,7 @@ impl ContainerInstance {
             image,
             env,
             args,
+            require_tee,
             debug,
         })
     }
@@ -117,7 +120,24 @@ impl ContainerInstance {
         self.ensure_host_service().await?;
         self.ensure_host_endpoints().await?;
 
-        let runtime = if matches!(detect_kata(self.client.clone()).await, Ok(true)) {
+        let kata_available = match detect_kata(self.client.clone()).await {
+            Ok(v) => v,
+            Err(err) => {
+                if self.require_tee {
+                    return Err(err);
+                }
+                warn!("Failed to detect kata runtime class, continuing without kata: {err}");
+                false
+            }
+        };
+        if self.require_tee && !kata_available {
+            return Err(crate::error::Error::TeePrerequisiteMissing {
+                prerequisite: "kata runtime class".to_string(),
+                hint: "TEE runtime requires Kubernetes RuntimeClass 'kata' to enforce sandbox isolation".to_string(),
+            });
+        }
+
+        let runtime = if kata_available {
             Some(String::from("kata"))
         } else {
             None

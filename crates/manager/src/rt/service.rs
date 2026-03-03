@@ -230,6 +230,7 @@ impl Service {
         image: String,
         mut env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
+        require_tee: bool,
         debug: bool,
     ) -> Result<Service> {
         let (bridge_base_socket, bridge_handle, alive_rx) =
@@ -237,9 +238,17 @@ impl Service {
 
         env_vars.bridge_socket_path = Some(bridge_base_socket);
 
-        let instance =
-            ContainerInstance::new(ctx, limits, service_name, image, env_vars, arguments, debug)
-                .await?;
+        let instance = ContainerInstance::new(
+            ctx,
+            limits,
+            service_name,
+            image,
+            env_vars,
+            arguments,
+            require_tee,
+            debug,
+        )
+        .await?;
 
         Ok(Self {
             runtime: Runtime::Container(instance),

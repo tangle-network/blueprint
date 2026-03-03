@@ -15,7 +15,7 @@ use std::path::Path;
 ///
 /// * `config_path` - Path to the JSON configuration file containing AVS details
 /// * `keystore_uri` - URI for the keystore containing operator keys
-/// * `runtime_target` - Optional runtime target (native, hypervisor, container). Defaults to hypervisor.
+/// * `runtime_target` - Optional runtime target (native, hypervisor, container, tee). Defaults to hypervisor.
 /// * `verify` - Whether to perform on-chain verification after registration
 ///
 /// # Errors

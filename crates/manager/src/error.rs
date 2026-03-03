@@ -50,6 +50,11 @@ pub enum Error {
     #[error("Failed to determine the local IP: {0}")]
     LocalIp(#[from] local_ip_address::Error),
 
+    #[error("TEE runtime is not available: {reason}")]
+    TeeRuntimeUnavailable { reason: String },
+    #[error("TEE runtime prerequisite missing: {prerequisite}. {hint}")]
+    TeePrerequisiteMissing { prerequisite: String, hint: String },
+
     #[error("Failed to get initial block hash")]
     InitialBlock,
     #[error("Finality Notification stream died")]
