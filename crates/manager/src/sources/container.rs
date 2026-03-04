@@ -70,6 +70,7 @@ impl BlueprintSourceHandler for ContainerSource {
         _id: u32,
         env: BlueprintEnvVars,
         args: BlueprintArgs,
+        require_tee: bool,
         sub_service_str: &str,
         cache_dir: &Path,
         runtime_dir: &Path,
@@ -83,7 +84,7 @@ impl BlueprintSourceHandler for ContainerSource {
             image.to_string_lossy().to_string(),
             env,
             args,
-            false,
+            require_tee,
             false,
         )
         .await

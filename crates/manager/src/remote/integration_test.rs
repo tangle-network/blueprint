@@ -13,6 +13,7 @@ async fn test_provider_selection_integration() -> Result<(), Box<dyn std::error:
         storage_gb: 100.0,
         gpu_count: Some(1),
         allow_spot: false,
+        tee_required: false,
     };
 
     let provider = selector.select_provider(&gpu_spec)?;
@@ -29,6 +30,7 @@ async fn test_provider_selection_integration() -> Result<(), Box<dyn std::error:
         storage_gb: 200.0,
         gpu_count: None,
         allow_spot: false,
+        tee_required: false,
     };
 
     let provider = selector.select_provider(&cpu_spec)?;
@@ -45,6 +47,7 @@ async fn test_provider_selection_integration() -> Result<(), Box<dyn std::error:
         storage_gb: 20.0,
         gpu_count: None,
         allow_spot: true,
+        tee_required: false,
     };
 
     let provider = selector.select_provider(&cost_spec)?;
@@ -64,6 +67,8 @@ async fn test_remote_deployment_service_integration() -> Result<(), Box<dyn std:
         max_hourly_cost: Some(10.0),
         prefer_spot: true,
         auto_terminate_hours: Some(2),
+        tee_required: false,
+        tee_backend: None,
     };
 
     let service = RemoteDeploymentService::new(policy).await?;
@@ -88,6 +93,7 @@ async fn test_custom_provider_preferences() -> Result<(), Box<dyn std::error::Er
         cpu_intensive: vec![CloudProvider::DigitalOcean, CloudProvider::GCP],
         memory_intensive: vec![CloudProvider::Azure, CloudProvider::Vultr],
         cost_optimized: vec![CloudProvider::DigitalOcean, CloudProvider::Vultr],
+        tee_capable: vec![CloudProvider::Azure, CloudProvider::AWS],
     };
 
     let selector = ProviderSelector::new(custom_preferences);
@@ -99,6 +105,7 @@ async fn test_custom_provider_preferences() -> Result<(), Box<dyn std::error::Er
         storage_gb: 100.0,
         gpu_count: Some(1),
         allow_spot: false,
+        tee_required: false,
     };
 
     let provider = selector.select_provider(&gpu_spec)?;
@@ -121,6 +128,7 @@ async fn test_fallback_providers() -> Result<(), Box<dyn std::error::Error>> {
         storage_gb: 100.0,
         gpu_count: Some(1),
         allow_spot: false,
+        tee_required: false,
     };
 
     let fallbacks = selector.get_fallback_providers(&gpu_spec);

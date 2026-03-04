@@ -88,7 +88,16 @@ impl GcpProvisioner {
         spec: &ResourceSpec,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
-        let instance_selection = Self::map_instance(spec);
+        let instance_selection =
+            if let Some(override_type) = config.custom_config.get("instance_type") {
+                InstanceSelection {
+                    instance_type: override_type.clone(),
+                    spot_capable: false,
+                    estimated_hourly_cost: None,
+                }
+            } else {
+                Self::map_instance(spec)
+            };
         let zone = format!("{}-a", config.region); // e.g., us-central1-a
 
         info!(

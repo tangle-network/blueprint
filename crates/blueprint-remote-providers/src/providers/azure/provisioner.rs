@@ -128,7 +128,11 @@ impl AzureProvisioner {
             .await?;
 
         // Determine VM size based on spec
-        let vm_size = self.select_vm_size(spec);
+        let vm_size = config
+            .custom_config
+            .get("vm_size")
+            .cloned()
+            .unwrap_or_else(|| self.select_vm_size(spec).to_string());
 
         // Create VM
         let vm_body = serde_json::json!({
@@ -200,7 +204,7 @@ impl AzureProvisioner {
         let public_ip = self.wait_for_vm(&vm_name, &token).await?;
 
         let mut metadata = std::collections::HashMap::new();
-        metadata.insert("vm_size".to_string(), vm_size.to_string());
+        metadata.insert("vm_size".to_string(), vm_size.clone());
         metadata.insert("location".to_string(), location.to_string());
         metadata.insert("os".to_string(), "Ubuntu 22.04 LTS".to_string());
 
@@ -213,7 +217,7 @@ impl AzureProvisioner {
             public_ip: Some(public_ip),
             private_ip: None,
             region: location.to_string(),
-            instance_type: vm_size.to_string(),
+            instance_type: vm_size,
             metadata,
         })
     }

@@ -37,6 +37,7 @@ pub struct BlueprintMetadata {
     pub service_id: u64,
     pub name: String,
     pub sources: Vec<BlueprintSource>,
+    pub tee_required: bool,
     pub registration_mode: bool,
     pub registration_capture_only: bool,
 }
@@ -101,10 +102,19 @@ fn source_priority(source: &BlueprintSource, preferred_source: SourceType) -> u8
     }
 }
 
-fn ordered_source_indices(sources: &[BlueprintSource], preferred_source: SourceType) -> Vec<usize> {
+fn supports_tee(source: &BlueprintSource) -> bool {
+    matches!(source, BlueprintSource::Container(_))
+}
+
+fn ordered_source_indices(
+    sources: &[BlueprintSource],
+    preferred_source: SourceType,
+    require_tee: bool,
+) -> Vec<usize> {
     let mut indexed: Vec<(usize, u8)> = sources
         .iter()
         .enumerate()
+        .filter(|(_, source)| !require_tee || supports_tee(source))
         .map(|(idx, source)| (idx, source_priority(source, preferred_source)))
         .collect();
     indexed.sort_by_key(|(idx, priority)| (*priority, *idx));
@@ -346,7 +356,17 @@ impl TangleEventHandler {
             );
         }
 
-        let ordered_source_idxs = ordered_source_indices(&metadata.sources, ctx.preferred_source);
+        let ordered_source_idxs = ordered_source_indices(
+            &metadata.sources,
+            ctx.preferred_source,
+            metadata.tee_required,
+        );
+        if metadata.tee_required && ordered_source_idxs.is_empty() {
+            return Err(Error::TeeRuntimeUnavailable {
+                reason: "Blueprint requires TEE execution but exposes no container source"
+                    .to_string(),
+            });
+        }
         let ordered_source_labels: Vec<&str> = ordered_source_idxs
             .iter()
             .map(|idx| source_kind_label(&metadata.sources[*idx]))
@@ -354,6 +374,7 @@ impl TangleEventHandler {
         info!(
             blueprint_id = metadata.blueprint_id,
             service_id = metadata.service_id,
+            tee_required = metadata.tee_required,
             preferred_source = %ctx.preferred_source,
             source_order = ?ordered_source_labels,
             "Resolved deterministic source fallback ordering"
@@ -398,6 +419,7 @@ impl TangleEventHandler {
                     service_idx,
                     env_vars,
                     args,
+                    metadata.tee_required,
                     &service_label,
                     &cache_dir,
                     &runtime_dir,
@@ -449,7 +471,7 @@ impl TangleEventHandler {
 
         // Fallback: when preferred_source is Native and all on-chain sources failed,
         // try building from local cargo workspace if BLUEPRINT_CARGO_BIN is set.
-        if ctx.preferred_source == SourceType::Native {
+        if ctx.preferred_source == SourceType::Native && !metadata.tee_required {
             if let Ok(cargo_bin) = std::env::var("BLUEPRINT_CARGO_BIN") {
                 let base_path = std::env::current_dir()
                     .map(|p| p.display().to_string())
@@ -490,6 +512,7 @@ impl TangleEventHandler {
                         service_idx,
                         env_vars,
                         args,
+                        false,
                         &service_label,
                         &cache_dir,
                         &runtime_dir,
@@ -653,7 +676,7 @@ mod tests {
             remote_source(),
             github_source(),
         ];
-        let ordered = ordered_source_indices(&sources, SourceType::Native);
+        let ordered = ordered_source_indices(&sources, SourceType::Native, false);
         assert_eq!(ordered, vec![2, 3, 1, 0]);
     }
 
@@ -665,7 +688,7 @@ mod tests {
             remote_source(),
             github_source(),
         ];
-        let ordered = ordered_source_indices(&sources, SourceType::Container);
+        let ordered = ordered_source_indices(&sources, SourceType::Container, false);
         assert_eq!(ordered, vec![1, 2, 3, 0]);
     }
 
@@ -677,9 +700,28 @@ mod tests {
             remote_source(),
             container_source(),
         ];
-        let first = ordered_source_indices(&sources, SourceType::Wasm);
-        let second = ordered_source_indices(&sources, SourceType::Wasm);
+        let first = ordered_source_indices(&sources, SourceType::Wasm, false);
+        let second = ordered_source_indices(&sources, SourceType::Wasm, false);
         assert_eq!(first, second);
         assert_eq!(first, vec![0, 2, 3, 1]);
+    }
+
+    #[test]
+    fn tee_required_filters_to_container_sources_only() {
+        let sources = vec![
+            test_source(),
+            container_source(),
+            remote_source(),
+            github_source(),
+        ];
+        let ordered = ordered_source_indices(&sources, SourceType::Native, true);
+        assert_eq!(ordered, vec![1]);
+    }
+
+    #[test]
+    fn tee_required_without_container_sources_returns_empty_order() {
+        let sources = vec![test_source(), remote_source(), github_source()];
+        let ordered = ordered_source_indices(&sources, SourceType::Container, true);
+        assert!(ordered.is_empty());
     }
 }

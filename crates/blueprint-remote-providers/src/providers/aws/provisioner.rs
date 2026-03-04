@@ -38,7 +38,10 @@ impl AwsProvisioner {
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         // Map requirements to instance type
-        let instance_selection = AwsInstanceMapper::map(spec);
+        let mut instance_selection = AwsInstanceMapper::map(spec);
+        if let Some(override_type) = config.custom_config.get("instance_type") {
+            instance_selection.instance_type = override_type.clone();
+        }
 
         // Run EC2 instance
         let result = self

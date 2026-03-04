@@ -25,6 +25,8 @@ pub struct RemoteDeploymentPolicy {
     pub max_hourly_cost: Option<f32>,
     pub prefer_spot: bool,
     pub auto_terminate_hours: Option<u32>,
+    pub tee_required: bool,
+    pub tee_backend: Option<String>,
 }
 
 impl Default for RemoteDeploymentPolicy {
@@ -34,8 +36,31 @@ impl Default for RemoteDeploymentPolicy {
             max_hourly_cost: Some(5.0),
             prefer_spot: true,
             auto_terminate_hours: Some(24),
+            tee_required: env_bool("BLUEPRINT_REMOTE_TEE_REQUIRED"),
+            tee_backend: std::env::var("TEE_BACKEND")
+                .ok()
+                .and_then(|value| parse_tee_backend(&value)),
         }
     }
+}
+
+fn env_bool(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn parse_tee_backend(raw: &str) -> Option<String> {
+    raw.split(',').find_map(|entry| {
+        let trimmed = entry.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
 }
 
 /// Remote deployment service for Blueprint Manager.
@@ -270,9 +295,16 @@ impl RemoteDeploymentService {
         info!("🚀 Deploying to cloud provider: {:?}", provider);
         info!("   Service: {}", service_name);
         info!(
-            "   Resources: {:.1} CPU, {:.0} GB RAM",
-            resource_spec.cpu, resource_spec.memory_gb
+            "   Resources: {:.1} CPU, {:.0} GB RAM (tee_required={})",
+            resource_spec.cpu, resource_spec.memory_gb, resource_spec.tee_required
         );
+
+        if resource_spec.tee_required && !provider.supports_tee() {
+            return Err(Error::TeePrerequisiteMissing {
+                prerequisite: format!("{provider} confidential-compute support"),
+                hint: "Select AWS, GCP, or Azure when tee_required=true".to_string(),
+            });
+        }
 
         #[cfg(feature = "remote-providers")]
         {
@@ -305,10 +337,11 @@ impl RemoteDeploymentService {
 
             // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
-                .provision(
+                .provision_with_requirements(
                     convert_provider(provider),
                     &convert_resource_spec(&resource_spec),
                     &region,
+                    resource_spec.tee_required,
                 )
                 .await
                 .map_err(|e| Error::Other(format!("Failed to provision instance: {}", e)))?;
@@ -331,6 +364,22 @@ impl RemoteDeploymentService {
             let encoded_args = arguments.encode(false);
             for (i, arg) in encoded_args.iter().enumerate() {
                 env_map.insert(format!("ARG_{}", i), arg.clone());
+            }
+
+            if resource_spec.tee_required {
+                let backend = self
+                    .policy
+                    .tee_backend
+                    .clone()
+                    .or_else(|| provider_default_tee_backend(provider).map(str::to_string))
+                    .ok_or_else(|| Error::TeePrerequisiteMissing {
+                        prerequisite: "TEE_BACKEND".to_string(),
+                        hint: format!(
+                            "Set TEE_BACKEND or use a provider with a known default backend. provider={provider}"
+                        ),
+                    })?;
+                env_map.insert("TEE_REQUIRED".to_string(), "true".to_string());
+                env_map.entry("TEE_BACKEND".to_string()).or_insert(backend);
             }
 
             // Deploy blueprint using the adapter's deploy_blueprint_with_target
@@ -547,6 +596,7 @@ impl RemoteDeploymentService {
             storage_gb: (limits.storage_space as f32) / (1024.0 * 1024.0 * 1024.0), // Convert bytes to GB
             gpu_count: limits.gpu_count.map(u32::from), // Use actual GPU count if specified
             allow_spot: self.policy.prefer_spot,
+            tee_required: self.policy.tee_required,
         })
     }
 
@@ -812,7 +862,7 @@ impl RemoteDeploymentService {
 fn convert_resource_spec(
     spec: &ResourceSpec,
 ) -> blueprint_remote_providers::resources::ResourceSpec {
-    // Direct conversion since both structs now have the same flat structure
+    // Remote provider spec does not carry TEE policy; TEE policy is passed separately.
     blueprint_remote_providers::resources::ResourceSpec {
         cpu: spec.cpu,
         memory_gb: spec.memory_gb,
@@ -852,5 +902,14 @@ fn convert_provider(
             // For now mapping to DigitalOcean as placeholder or we should handle it.
             blueprint_remote_providers::CloudProvider::DigitalOcean
         }
+    }
+}
+
+fn provider_default_tee_backend(provider: CloudProvider) -> Option<&'static str> {
+    match provider {
+        CloudProvider::AWS => Some("aws-nitro"),
+        CloudProvider::GCP => Some("gcp-confidential"),
+        CloudProvider::Azure => Some("azure-skr"),
+        _ => None,
     }
 }

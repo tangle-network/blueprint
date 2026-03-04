@@ -30,6 +30,7 @@ pub trait BlueprintSourceHandler: Send + Sync {
         id: u32,
         env: BlueprintEnvVars,
         args: BlueprintArgs,
+        require_tee: bool,
         sub_service_str: &str,
         cache_dir: &Path,
         runtime_dir: &Path,
