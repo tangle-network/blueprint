@@ -1,5 +1,5 @@
 use blueprint_client_tangle::TangleClient;
-use blueprint_client_tangle::resolve_tee_required;
+use blueprint_client_tangle::resolve_tee_deployment_profile;
 use blueprint_client_tangle::services::BlueprintInfo;
 use color_eyre::Result;
 use dialoguer::console::style;
@@ -9,6 +9,7 @@ pub struct BlueprintListEntry {
     pub blueprint_id: u64,
     pub info: BlueprintInfo,
     pub tee_required: Option<bool>,
+    pub tee_supported: Option<bool>,
 }
 
 /// Fetch all registered blueprints.
@@ -20,15 +21,16 @@ pub async fn list_blueprints(client: &TangleClient) -> Result<Vec<BlueprintListE
 
     let mut entries = Vec::with_capacity(blueprints.len());
     for (blueprint_id, info) in blueprints {
-        let tee_required = client
+        let tee_profile = client
             .get_blueprint_definition(blueprint_id)
             .await
             .ok()
-            .and_then(|definition| resolve_tee_required(&definition.metadata));
+            .and_then(|definition| resolve_tee_deployment_profile(&definition.metadata));
         entries.push(BlueprintListEntry {
             blueprint_id,
             info,
-            tee_required,
+            tee_required: tee_profile.map(|profile| profile.tee_required),
+            tee_supported: tee_profile.map(|profile| profile.supports_tee),
         });
     }
 
@@ -53,6 +55,7 @@ pub fn print_blueprints(blueprints: &[BlueprintListEntry]) {
             blueprint_id,
             info,
             tee_required,
+            tee_supported,
         } = entry;
         println!(
             "{}: {}",
@@ -73,12 +76,22 @@ pub fn print_blueprints(blueprints: &[BlueprintListEntry]) {
             info.membership
         );
         println!("{}: {:?}", style("Pricing Model").green(), info.pricing);
-        let tee_label = match tee_required {
-            Some(true) => "required (fail closed)",
-            Some(false) => "not required",
+        let compatibility_label = match tee_supported {
+            Some(true) => "yes",
+            Some(false) => "no",
             None => "unspecified",
         };
-        println!("{}: {}", style("TEE Deployment").green(), tee_label);
+        println!(
+            "{}: {}",
+            style("TEE Compatible").green(),
+            compatibility_label
+        );
+        let policy_label = match tee_required {
+            Some(true) => "required (fail closed)",
+            Some(false) => "optional",
+            None => "unspecified",
+        };
+        println!("{}: {}", style("TEE Policy").green(), policy_label);
         println!("{}: {}", style("Active").green(), info.active);
         println!(
             "{}",

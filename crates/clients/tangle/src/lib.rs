@@ -73,8 +73,9 @@ pub mod services;
 
 // Re-exports
 pub use blueprint_metadata::{
-    extract_job_profiles_blob, inject_tee_required, resolve_tee_required,
-    resolve_tee_required_from_fields,
+    TeeDeploymentProfile, extract_job_profiles_blob, inject_tee_deployment_profile,
+    resolve_tee_deployment_profile, resolve_tee_deployment_profile_from_profiling_data,
+    resolve_tee_required, resolve_tee_support,
 };
 pub use client::{
     AggregationConfig, AssetInfo, AssetKind, BlueprintSelectionMode, DelegationInfo,

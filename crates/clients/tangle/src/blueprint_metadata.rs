@@ -3,97 +3,132 @@
 use crate::contracts::ITangleTypes;
 use alloc::borrow::ToOwned;
 use alloc::string::{String, ToString};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 /// Schema marker for structured blueprint metadata payloads.
 pub const METADATA_SCHEMA_V1: &str = "tangle.blueprint.metadata.v1";
 
-const TEE_REQUIRED_KEYS: [&str; 2] = ["tee_required", "teeRequired"];
-const PROFILE_KEYS: [&str; 4] = [
-    "runtime_profile",
-    "runtimeProfile",
-    "deployment_profile",
-    "deploymentProfile",
-];
-const LEGACY_PROFILES_BLOB_KEYS: [&str; 3] = [
-    "job_profiles_b64_gzip",
-    "profiling_data_b64_gzip",
-    "profilingDataB64Gzip",
-];
+const DEPLOYMENT_PROFILE_KEY: &str = "deployment_profile";
+const JOB_PROFILES_BLOB_KEY: &str = "job_profiles_b64_gzip";
 
-/// Resolve explicit TEE requirement from on-chain blueprint metadata.
+/// Blueprint deployment policy related to TEE placement.
 ///
-/// Returns:
-/// - `Some(true)` when metadata requires TEE.
-/// - `Some(false)` when metadata explicitly marks non-TEE runtime.
-/// - `None` when runtime intent is unspecified.
+/// - `tee_required=true` means manager must fail-closed when TEE is unavailable.
+/// - `supports_tee=true` means the blueprint can run in TEE mode.
+///
+/// A dual-mode blueprint (TEE and non-TEE) should set:
+/// `tee_required=false`, `supports_tee=true`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeeDeploymentProfile {
+    /// Whether TEE placement is mandatory (fail-closed).
+    pub tee_required: bool,
+    /// Whether this blueprint can run on TEE-capable infrastructure.
+    pub supports_tee: bool,
+}
+
+impl TeeDeploymentProfile {
+    /// Normalize profile invariants.
+    #[must_use]
+    pub fn normalized(self) -> Self {
+        if self.tee_required && !self.supports_tee {
+            return Self {
+                tee_required: true,
+                supports_tee: true,
+            };
+        }
+        self
+    }
+}
+
+/// Resolve TEE deployment profile from on-chain metadata.
 #[must_use]
-pub fn resolve_tee_required(metadata: &ITangleTypes::BlueprintMetadata) -> Option<bool> {
-    resolve_tee_required_from_fields(
-        metadata.profilingData.as_str(),
-        metadata.description.as_str(),
-        metadata.category.as_str(),
+pub fn resolve_tee_deployment_profile(
+    metadata: &ITangleTypes::BlueprintMetadata,
+) -> Option<TeeDeploymentProfile> {
+    resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
+}
+
+/// Resolve TEE deployment profile from `profiling_data` payload.
+///
+/// Clean path only: expects structured JSON metadata in `profiling_data`.
+#[must_use]
+pub fn resolve_tee_deployment_profile_from_profiling_data(
+    profiling_data: &str,
+) -> Option<TeeDeploymentProfile> {
+    let trimmed = profiling_data.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let root: Value = serde_json::from_str(trimmed).ok()?;
+    let profile = root.get(DEPLOYMENT_PROFILE_KEY)?.as_object()?;
+
+    let tee_required = profile
+        .get("tee_required")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let supports_tee = profile
+        .get("supports_tee")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if !tee_required && !supports_tee {
+        return None;
+    }
+
+    Some(
+        TeeDeploymentProfile {
+            tee_required,
+            supports_tee,
+        }
+        .normalized(),
     )
 }
 
-/// Resolve explicit TEE requirement from metadata string fields.
-///
-/// Resolution order:
-/// 1. `profiling_data` structured payload.
-/// 2. Legacy `description`/`category` payloads for backward compatibility.
+/// Resolve explicit `tee_required` deployment enforcement from metadata.
 #[must_use]
-pub fn resolve_tee_required_from_fields(
-    profiling_data: &str,
-    description: &str,
-    category: &str,
-) -> Option<bool> {
-    if let Some(tee_required) = parse_tee_required_hint(profiling_data) {
-        return Some(tee_required);
-    }
-
-    for raw in [description, category] {
-        if let Some(tee_required) = parse_tee_required_hint(raw) {
-            return Some(tee_required);
-        }
-    }
-
-    None
+pub fn resolve_tee_required(metadata: &ITangleTypes::BlueprintMetadata) -> Option<bool> {
+    resolve_tee_deployment_profile(metadata).map(|profile| profile.tee_required)
 }
 
-/// Inject or update explicit `tee_required` intent inside `profiling_data`.
-///
-/// If `profiling_data` already contains JSON metadata, this updates it in-place.
-/// If `profiling_data` is a legacy compressed/base64 blob, the blob is preserved
-/// under `job_profiles_b64_gzip` inside a structured metadata object.
+/// Resolve explicit `supports_tee` capability from metadata.
 #[must_use]
-pub fn inject_tee_required(profiling_data: &str, tee_required: bool) -> String {
+pub fn resolve_tee_support(metadata: &ITangleTypes::BlueprintMetadata) -> Option<bool> {
+    resolve_tee_deployment_profile(metadata).map(|profile| profile.supports_tee)
+}
+
+/// Inject or update structured TEE deployment profile inside `profiling_data`.
+///
+/// If `profiling_data` currently contains a legacy plain blob, it is preserved
+/// under `job_profiles_b64_gzip`.
+#[must_use]
+pub fn inject_tee_deployment_profile(
+    profiling_data: &str,
+    profile: TeeDeploymentProfile,
+) -> String {
+    let profile = profile.normalized();
     let trimmed = profiling_data.trim();
     if trimmed.is_empty() {
-        return default_metadata_payload(tee_required).to_string();
+        return default_metadata_payload(profile).to_string();
     }
 
     if let Ok(mut value) = serde_json::from_str::<Value>(trimmed) {
         if let Some(root) = value.as_object_mut() {
-            upsert_tee_required(root, tee_required);
+            upsert_deployment_profile(root, profile);
             return value.to_string();
         }
     }
 
     json!({
         "schema": METADATA_SCHEMA_V1,
-        "deployment_profile": {
-            "tee_required": tee_required,
-        },
-        "job_profiles_b64_gzip": trimmed,
+        DEPLOYMENT_PROFILE_KEY: profile_to_value(profile),
+        JOB_PROFILES_BLOB_KEY: trimmed,
     })
     .to_string()
 }
 
-/// Extract compressed/base64 job profile payload, if present.
-///
-/// Supports:
-/// - legacy plain payload (`profiling_data` as base64+gzip string),
-/// - structured metadata payloads carrying `job_profiles_b64_gzip`.
+/// Extract compressed/base64 job profile payload from structured metadata.
 #[must_use]
 pub fn extract_job_profiles_blob(profiling_data: &str) -> Option<String> {
     let trimmed = profiling_data.trim();
@@ -101,119 +136,37 @@ pub fn extract_job_profiles_blob(profiling_data: &str) -> Option<String> {
         return None;
     }
 
-    if !trimmed.starts_with('{') {
-        return Some(trimmed.to_owned());
-    }
-
     let value: Value = serde_json::from_str(trimmed).ok()?;
-    let object = value.as_object()?;
-    LEGACY_PROFILES_BLOB_KEYS.iter().find_map(|key| {
-        object
-            .get(*key)
-            .and_then(Value::as_str)
-            .map(ToOwned::to_owned)
-    })
+    value
+        .as_object()?
+        .get(JOB_PROFILES_BLOB_KEY)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
 }
 
-fn default_metadata_payload(tee_required: bool) -> Value {
+fn default_metadata_payload(profile: TeeDeploymentProfile) -> Value {
     json!({
         "schema": METADATA_SCHEMA_V1,
-        "deployment_profile": {
-            "tee_required": tee_required,
-        }
+        DEPLOYMENT_PROFILE_KEY: profile_to_value(profile),
     })
 }
 
-fn upsert_tee_required(root: &mut Map<String, Value>, tee_required: bool) {
-    root.entry("schema".to_string())
-        .or_insert_with(|| Value::String(METADATA_SCHEMA_V1.to_string()));
-
-    let profile_key = if root.contains_key("deployment_profile") {
-        "deployment_profile"
-    } else if root.contains_key("deploymentProfile") {
-        "deploymentProfile"
-    } else if root.contains_key("runtime_profile") {
-        "runtime_profile"
-    } else if root.contains_key("runtimeProfile") {
-        "runtimeProfile"
-    } else {
-        "deployment_profile"
-    };
-
-    let existing = root.remove(profile_key);
-    let mut profile = match existing {
-        Some(Value::Object(map)) => map,
-        Some(Value::String(mode)) => {
-            let mut map = Map::new();
-            map.insert("mode".to_string(), Value::String(mode));
-            map
-        }
-        _ => Map::new(),
-    };
-    profile.insert("tee_required".to_string(), Value::Bool(tee_required));
-    root.insert(profile_key.to_string(), Value::Object(profile));
+fn profile_to_value(profile: TeeDeploymentProfile) -> Value {
+    json!({
+        "tee_required": profile.tee_required,
+        "supports_tee": profile.supports_tee,
+    })
 }
 
-fn parse_tee_required_hint(raw: &str) -> Option<bool> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    if trimmed.starts_with('{') {
-        let value: Value = serde_json::from_str(trimmed).ok()?;
-        return extract_tee_required_from_value(&value);
-    }
-
-    parse_runtime_profile_mode(trimmed)
-}
-
-fn extract_tee_required_from_value(value: &Value) -> Option<bool> {
-    for key in TEE_REQUIRED_KEYS {
-        if let Some(tee_required) = value.get(key).and_then(Value::as_bool) {
-            return Some(tee_required);
-        }
-    }
-
-    for key in PROFILE_KEYS {
-        if let Some(profile) = value.get(key) {
-            if let Some(tee_required) = extract_tee_required_from_value(profile) {
-                return Some(tee_required);
-            }
-            if let Some(mode) = profile.as_str() {
-                if let Some(tee_required) = parse_runtime_profile_mode(mode) {
-                    return Some(tee_required);
-                }
-            }
-        }
-    }
-
-    if let Some(mode) = value.get("mode").and_then(Value::as_str) {
-        if let Some(tee_required) = parse_runtime_profile_mode(mode) {
-            return Some(tee_required);
-        }
-    }
-    if let Some(mode) = value.get("runtime").and_then(Value::as_str) {
-        if let Some(tee_required) = parse_runtime_profile_mode(mode) {
-            return Some(tee_required);
-        }
-    }
-
-    None
-}
-
-fn parse_runtime_profile_mode(mode: &str) -> Option<bool> {
-    let normalized = mode.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "tee"
-        | "trusted_execution"
-        | "trusted-execution"
-        | "confidential"
-        | "confidential_compute"
-        | "confidential-compute" => Some(true),
-        "native" | "container" | "wasm" | "none" | "disabled" => Some(false),
-        _ => None,
-    }
+fn upsert_deployment_profile(root: &mut Map<String, Value>, profile: TeeDeploymentProfile) {
+    root.insert(
+        "schema".to_string(),
+        Value::String(METADATA_SCHEMA_V1.to_string()),
+    );
+    root.insert(
+        DEPLOYMENT_PROFILE_KEY.to_string(),
+        profile_to_value(profile),
+    );
 }
 
 #[cfg(test)]
@@ -222,34 +175,70 @@ mod tests {
     use crate::contracts::ITangleTypes;
 
     #[test]
-    fn resolves_from_structured_profiling_data() {
+    fn resolves_required_profile() {
         let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
-        metadata.profilingData = r#"{"deployment_profile":{"tee_required":true}}"#.into();
-        assert_eq!(resolve_tee_required(&metadata), Some(true));
+        metadata.profilingData =
+            r#"{"deployment_profile":{"tee_required":true,"supports_tee":true}}"#.into();
+        assert_eq!(
+            resolve_tee_deployment_profile(&metadata),
+            Some(TeeDeploymentProfile {
+                tee_required: true,
+                supports_tee: true,
+            })
+        );
     }
 
     #[test]
-    fn resolves_from_runtime_profile_mode() {
+    fn resolves_optional_profile() {
         let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
-        metadata.profilingData = r#"{"runtimeProfile":"native"}"#.into();
-        assert_eq!(resolve_tee_required(&metadata), Some(false));
+        metadata.profilingData =
+            r#"{"deployment_profile":{"tee_required":false,"supports_tee":true}}"#.into();
+        assert_eq!(
+            resolve_tee_deployment_profile(&metadata),
+            Some(TeeDeploymentProfile {
+                tee_required: false,
+                supports_tee: true,
+            })
+        );
     }
 
     #[test]
-    fn preserves_legacy_description_hints() {
+    fn ignores_non_structured_payloads() {
         let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
-        metadata.description = "tee".into();
-        assert_eq!(resolve_tee_required(&metadata), Some(true));
+        metadata.profilingData = "tee".into();
+        assert_eq!(resolve_tee_deployment_profile(&metadata), None);
+    }
+
+    #[test]
+    fn required_implies_supports() {
+        let profile = TeeDeploymentProfile {
+            tee_required: true,
+            supports_tee: false,
+        }
+        .normalized();
+        assert_eq!(
+            profile,
+            TeeDeploymentProfile {
+                tee_required: true,
+                supports_tee: true,
+            }
+        );
     }
 
     #[test]
     fn injects_into_empty_payload() {
-        let payload = inject_tee_required("", true);
+        let payload = inject_tee_deployment_profile(
+            "",
+            TeeDeploymentProfile {
+                tee_required: false,
+                supports_tee: true,
+            },
+        );
         let value: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(
             value
-                .get("deployment_profile")
-                .and_then(|v| v.get("tee_required"))
+                .get(DEPLOYMENT_PROFILE_KEY)
+                .and_then(|v| v.get("supports_tee"))
                 .and_then(Value::as_bool),
             Some(true)
         );
@@ -257,11 +246,17 @@ mod tests {
 
     #[test]
     fn injects_into_existing_object_payload() {
-        let payload = inject_tee_required(r#"{"runtime_profile":"native"}"#, true);
+        let payload = inject_tee_deployment_profile(
+            r#"{"job_profiles_b64_gzip":"abc"}"#,
+            TeeDeploymentProfile {
+                tee_required: true,
+                supports_tee: true,
+            },
+        );
         let value: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(
             value
-                .get("runtime_profile")
+                .get(DEPLOYMENT_PROFILE_KEY)
                 .and_then(|v| v.get("tee_required"))
                 .and_then(Value::as_bool),
             Some(true)
@@ -270,34 +265,28 @@ mod tests {
 
     #[test]
     fn wraps_legacy_blob_payload() {
-        let payload = inject_tee_required("H4sIAAAAA...", true);
+        let payload = inject_tee_deployment_profile(
+            "H4sIAAAAA...",
+            TeeDeploymentProfile {
+                tee_required: true,
+                supports_tee: true,
+            },
+        );
         let value: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(
-            value
-                .get("job_profiles_b64_gzip")
-                .and_then(Value::as_str)
-                .unwrap(),
-            "H4sIAAAAA..."
-        );
-        assert_eq!(
-            value
-                .get("deployment_profile")
-                .and_then(|v| v.get("tee_required"))
-                .and_then(Value::as_bool),
-            Some(true)
+            value.get(JOB_PROFILES_BLOB_KEY).and_then(Value::as_str),
+            Some("H4sIAAAAA...")
         );
     }
 
     #[test]
     fn extracts_profiles_blob_from_structured_payload() {
-        let payload =
-            r#"{"deployment_profile":{"tee_required":true},"job_profiles_b64_gzip":"abc"}"#;
+        let payload = r#"{"deployment_profile":{"tee_required":true,"supports_tee":true},"job_profiles_b64_gzip":"abc"}"#;
         assert_eq!(extract_job_profiles_blob(payload), Some("abc".to_string()));
     }
 
     #[test]
-    fn extract_profiles_blob_returns_none_for_tee_only_payload() {
-        let payload = r#"{"deployment_profile":{"tee_required":true}}"#;
-        assert_eq!(extract_job_profiles_blob(payload), None);
+    fn extract_profiles_blob_requires_structured_payload() {
+        assert_eq!(extract_job_profiles_blob("H4sIAAAAA..."), None);
     }
 }

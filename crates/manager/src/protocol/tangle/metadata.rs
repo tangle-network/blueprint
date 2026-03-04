@@ -634,47 +634,40 @@ mod tests {
     }
 
     #[test]
-    fn resolve_tee_required_from_top_level_bool() {
-        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields(
-            r#"{"tee_required":true}"#,
-            "",
-            "",
+    fn resolve_tee_required_from_structured_required_profile() {
+        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
+            r#"{"deployment_profile":{"tee_required":true,"supports_tee":true}}"#,
         );
-        assert_eq!(parsed, Some(true));
+        assert_eq!(parsed.map(|profile| profile.tee_required), Some(true));
     }
 
     #[test]
-    fn resolve_tee_required_from_runtime_profile_object() {
-        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields(
-            r#"{"runtime_profile":{"tee_required":false}}"#,
-            "",
-            "",
+    fn resolve_tee_required_from_structured_optional_profile() {
+        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
+            r#"{"deployment_profile":{"tee_required":false,"supports_tee":true}}"#,
         );
-        assert_eq!(parsed, Some(false));
+        assert_eq!(parsed.map(|profile| profile.tee_required), Some(false));
     }
 
     #[test]
-    fn resolve_tee_required_from_runtime_profile_mode() {
-        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields(
-            r#"{"runtimeProfile":"tee"}"#,
-            "",
-            "",
+    fn resolve_tee_required_normalizes_missing_supports_flag() {
+        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
+            r#"{"deployment_profile":{"tee_required":true}}"#,
         );
-        assert_eq!(parsed, Some(true));
+        assert_eq!(parsed.map(|profile| profile.tee_required), Some(true));
     }
 
     #[test]
-    fn resolve_tee_required_from_plain_mode_string() {
-        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields("native", "", "");
-        assert_eq!(parsed, Some(false));
+    fn resolve_tee_required_ignores_non_structured_payloads() {
+        let parsed =
+            blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data("native");
+        assert_eq!(parsed, None);
     }
 
     #[test]
-    fn resolve_tee_required_ignores_unrelated_or_non_json_payloads() {
-        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields(
+    fn resolve_tee_required_ignores_legacy_profile_markers() {
+        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
             "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
-            "",
-            "",
         );
         assert_eq!(parsed, None);
     }

@@ -3,7 +3,7 @@ use alloy_json_abi::Param;
 use alloy_primitives::{Address, Bytes, FixedBytes, U256};
 use alloy_sol_types::{SolType, SolValue};
 use blueprint_client_tangle::contracts::ITangleTypes;
-use blueprint_client_tangle::inject_tee_required;
+use blueprint_client_tangle::{TeeDeploymentProfile, inject_tee_deployment_profile};
 use color_eyre::eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -358,8 +358,6 @@ struct MetadataSpec {
     #[serde(default)]
     profiling_data: String,
     #[serde(default)]
-    tee_required: Option<bool>,
-    #[serde(default)]
     deployment_profile: Option<DeploymentProfileSpec>,
 }
 
@@ -375,7 +373,6 @@ impl Default for MetadataSpec {
             website: default_website(),
             license: default_license(),
             profiling_data: String::new(),
-            tee_required: None,
             deployment_profile: None,
         }
     }
@@ -383,13 +380,12 @@ impl Default for MetadataSpec {
 
 impl MetadataSpec {
     fn into_metadata(self) -> BlueprintMetadata {
-        let tee_required = self
+        let deployment_profile = self
             .deployment_profile
             .as_ref()
-            .and_then(DeploymentProfileSpec::tee_required)
-            .or(self.tee_required);
-        let profiling_data = tee_required
-            .map(|required| inject_tee_required(&self.profiling_data, required))
+            .map(DeploymentProfileSpec::to_profile);
+        let profiling_data = deployment_profile
+            .map(|profile| inject_tee_deployment_profile(&self.profiling_data, profile))
             .unwrap_or(self.profiling_data);
 
         BlueprintMetadata {
@@ -409,19 +405,17 @@ impl MetadataSpec {
 #[derive(Debug, Deserialize, Clone)]
 struct DeploymentProfileSpec {
     #[serde(default)]
-    mode: Option<String>,
+    tee_required: bool,
     #[serde(default)]
-    tee_required: Option<bool>,
+    supports_tee: bool,
 }
 
 impl DeploymentProfileSpec {
-    fn tee_required(&self) -> Option<bool> {
-        if let Some(tee_required) = self.tee_required {
-            return Some(tee_required);
+    fn to_profile(&self) -> TeeDeploymentProfile {
+        TeeDeploymentProfile {
+            tee_required: self.tee_required,
+            supports_tee: self.supports_tee || self.tee_required,
         }
-        self.mode
-            .as_deref()
-            .and_then(parse_runtime_profile_mode_to_tee_required)
     }
 }
 
@@ -1354,20 +1348,6 @@ fn default_memberships() -> Vec<MembershipModelSpec> {
     vec![MembershipModelSpec::Fixed]
 }
 
-fn parse_runtime_profile_mode_to_tee_required(mode: &str) -> Option<bool> {
-    let normalized = mode.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "tee"
-        | "trusted_execution"
-        | "trusted-execution"
-        | "confidential"
-        | "confidential_compute"
-        | "confidential-compute" => Some(true),
-        "native" | "container" | "wasm" | "none" | "disabled" => Some(false),
-        _ => None,
-    }
-}
-
 fn default_name() -> String {
     "Blueprint".into()
 }
@@ -1516,7 +1496,9 @@ mod tests {
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
                 "name": "TEE Blueprint",
-                "tee_required": true
+                "deployment_profile": {
+                    "tee_required": true
+                }
             },
             "jobs": [
                 { "name": "square" }
@@ -1550,17 +1532,24 @@ mod tests {
                 .and_then(serde_json::Value::as_bool),
             Some(true)
         );
+        assert_eq!(
+            metadata_json
+                .get("deployment_profile")
+                .and_then(|v| v.get("supports_tee"))
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
     }
 
     #[test]
-    fn metadata_deployment_profile_mode_derives_tee_required() {
+    fn metadata_deployment_profile_supports_tee_only_is_optional() {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
-                "deployment_profile": { "mode": "tee" }
+                "deployment_profile": { "supports_tee": true }
             },
             "jobs": [
                 { "name": "square" }
@@ -1591,6 +1580,13 @@ mod tests {
             metadata_json
                 .get("deployment_profile")
                 .and_then(|v| v.get("tee_required"))
+                .and_then(serde_json::Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            metadata_json
+                .get("deployment_profile")
+                .and_then(|v| v.get("supports_tee"))
                 .and_then(serde_json::Value::as_bool),
             Some(true)
         );
@@ -1606,7 +1602,9 @@ mod tests {
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
                 "profiling_data": legacy_blob,
-                "tee_required": true
+                "deployment_profile": {
+                    "tee_required": true
+                }
             },
             "jobs": [
                 { "name": "square" }
