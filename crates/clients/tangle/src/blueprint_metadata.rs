@@ -56,34 +56,45 @@ pub fn resolve_tee_deployment_profile(
 pub fn resolve_tee_deployment_profile_from_profiling_data(
     profiling_data: &str,
 ) -> Option<TeeDeploymentProfile> {
+    try_resolve_tee_deployment_profile_from_profiling_data(profiling_data)
+        .ok()
+        .flatten()
+}
+
+/// Resolve TEE deployment profile from `profiling_data` payload with strict errors.
+///
+/// Returns an error when metadata is present but malformed.
+pub fn try_resolve_tee_deployment_profile_from_profiling_data(
+    profiling_data: &str,
+) -> Result<Option<TeeDeploymentProfile>, String> {
     let trimmed = profiling_data.trim();
     if trimmed.is_empty() {
-        return None;
+        return Ok(None);
     }
 
-    let root: Value = serde_json::from_str(trimmed).ok()?;
-    let profile = root.get(DEPLOYMENT_PROFILE_KEY)?.as_object()?;
+    let root: Value = serde_json::from_str(trimmed)
+        .map_err(|e| format!("profiling_data must be valid JSON: {e}"))?;
+    let Some(raw_profile) = root.get(DEPLOYMENT_PROFILE_KEY) else {
+        return Ok(None);
+    };
+    let profile = raw_profile
+        .as_object()
+        .ok_or_else(|| "deployment_profile must be an object".to_string())?;
 
-    let tee_required = profile
-        .get("tee_required")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let supports_tee = profile
-        .get("supports_tee")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let tee_required = parse_optional_bool(profile, "tee_required")?.unwrap_or(false);
+    let supports_tee = parse_optional_bool(profile, "supports_tee")?.unwrap_or(false);
 
     if !tee_required && !supports_tee {
-        return None;
+        return Ok(None);
     }
 
-    Some(
+    Ok(Some(
         TeeDeploymentProfile {
             tee_required,
             supports_tee,
         }
         .normalized(),
-    )
+    ))
 }
 
 /// Resolve explicit `tee_required` deployment enforcement from metadata.
@@ -159,14 +170,22 @@ fn profile_to_value(profile: TeeDeploymentProfile) -> Value {
 }
 
 fn upsert_deployment_profile(root: &mut Map<String, Value>, profile: TeeDeploymentProfile) {
-    root.insert(
-        "schema".to_string(),
-        Value::String(METADATA_SCHEMA_V1.to_string()),
-    );
+    root.entry("schema".to_string())
+        .or_insert_with(|| Value::String(METADATA_SCHEMA_V1.to_string()));
     root.insert(
         DEPLOYMENT_PROFILE_KEY.to_string(),
         profile_to_value(profile),
     );
+}
+
+fn parse_optional_bool(profile: &Map<String, Value>, field: &str) -> Result<Option<bool>, String> {
+    match profile.get(field) {
+        Some(value) => value
+            .as_bool()
+            .map(Some)
+            .ok_or_else(|| format!("deployment_profile.{field} must be a boolean")),
+        None => Ok(None),
+    }
 }
 
 #[cfg(test)]
@@ -207,6 +226,22 @@ mod tests {
         let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
         metadata.profilingData = "tee".into();
         assert_eq!(resolve_tee_deployment_profile(&metadata), None);
+    }
+
+    #[test]
+    fn strict_parser_errors_on_non_json_payloads() {
+        let err = try_resolve_tee_deployment_profile_from_profiling_data("tee")
+            .expect_err("expected parse error");
+        assert!(err.contains("valid JSON"));
+    }
+
+    #[test]
+    fn strict_parser_errors_on_non_boolean_fields() {
+        let err = try_resolve_tee_deployment_profile_from_profiling_data(
+            r#"{"deployment_profile":{"tee_required":"true"}}"#,
+        )
+        .expect_err("expected type error");
+        assert!(err.contains("tee_required"));
     }
 
     #[test]

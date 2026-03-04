@@ -15,7 +15,7 @@ use crate::sources::types::{
     GithubFetcher as ManagerGithubFetcher, ImageRegistryFetcher, RemoteFetcher, TestFetcher,
 };
 use blueprint_client_tangle::contracts::ITangleTypes;
-use blueprint_client_tangle::resolve_tee_required;
+use blueprint_client_tangle::try_resolve_tee_deployment_profile_from_profiling_data;
 use serde::Deserialize;
 use serde_json;
 type OnChainBlueprintSource = <ITangleTypes::BlueprintSource as SolType>::RustType;
@@ -81,16 +81,14 @@ impl OnChainMetadataProvider {
         let definition = match inner.get_blueprint_definition(blueprint_id).await {
             Ok(definition) => definition,
             Err(err) => {
-                warn!(
-                    blueprint_id,
-                    "Failed to fetch blueprint definition for metadata resolution: {err}"
-                );
-                return Ok(None);
+                return Err(Error::Other(format!(
+                    "failed to fetch blueprint definition {blueprint_id}: {err}"
+                )));
             }
         };
 
         let blueprint_name = definition.metadata.name.clone().to_string();
-        let tee_required = Self::resolve_tee_required(&definition.metadata);
+        let tee_required = Self::resolve_tee_required(&definition.metadata)?;
         let onchain_sources = definition.sources;
 
         let sources = Self::convert_sources(&onchain_sources);
@@ -106,8 +104,15 @@ impl OnChainMetadataProvider {
         Ok(Some((blueprint_name, sources, tee_required)))
     }
 
-    fn resolve_tee_required(metadata: &OnChainBlueprintMetadata) -> bool {
-        resolve_tee_required(metadata).unwrap_or(false)
+    fn resolve_tee_required(metadata: &OnChainBlueprintMetadata) -> Result<bool> {
+        let profile =
+            try_resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
+                .map_err(|err| {
+                    Error::Other(format!(
+                        "invalid profilingData for TEE deployment profile: {err}"
+                    ))
+                })?;
+        Ok(profile.map(|value| value.tee_required).unwrap_or(false))
     }
 
     fn convert_sources(sources: &[OnChainBlueprintSource]) -> Vec<ManagerBlueprintSource> {
@@ -670,5 +675,19 @@ mod tests {
             "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
         );
         assert_eq!(parsed, None);
+    }
+
+    #[test]
+    fn resolve_tee_required_errors_on_malformed_json() {
+        let metadata = ITangleTypes::BlueprintMetadata {
+            profilingData: "not-json".into(),
+            ..Default::default()
+        };
+        let err = OnChainMetadataProvider::resolve_tee_required(&metadata).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("invalid profilingData for TEE deployment profile"),
+            "unexpected error: {err}"
+        );
     }
 }
