@@ -62,6 +62,7 @@ extern crate alloc;
 
 use core::future::Future;
 
+pub mod blueprint_metadata;
 pub mod client;
 pub mod config;
 #[allow(missing_docs)]
@@ -71,6 +72,10 @@ pub mod error;
 pub mod services;
 
 // Re-exports
+pub use blueprint_metadata::{
+    extract_job_profiles_blob, inject_tee_required, resolve_tee_required,
+    resolve_tee_required_from_fields,
+};
 pub use client::{
     AggregationConfig, AssetInfo, AssetKind, BlueprintSelectionMode, DelegationInfo,
     DelegationMode, DelegationRecord, DepositInfo, EcdsaPublicKey, JobSubmissionResult, LockInfo,

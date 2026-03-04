@@ -15,9 +15,9 @@ use crate::sources::types::{
     GithubFetcher as ManagerGithubFetcher, ImageRegistryFetcher, RemoteFetcher, TestFetcher,
 };
 use blueprint_client_tangle::contracts::ITangleTypes;
+use blueprint_client_tangle::resolve_tee_required;
 use serde::Deserialize;
 use serde_json;
-use serde_json::Value;
 type OnChainBlueprintSource = <ITangleTypes::BlueprintSource as SolType>::RustType;
 type OnChainBlueprintBinary = <ITangleTypes::BlueprintBinary as SolType>::RustType;
 type OnChainBlueprintMetadata = <ITangleTypes::BlueprintMetadata as SolType>::RustType;
@@ -107,85 +107,7 @@ impl OnChainMetadataProvider {
     }
 
     fn resolve_tee_required(metadata: &OnChainBlueprintMetadata) -> bool {
-        for raw in [
-            metadata.profilingData.as_str(),
-            metadata.description.as_str(),
-            metadata.category.as_str(),
-        ] {
-            if let Some(tee_required) = Self::parse_tee_required_hint(raw) {
-                return tee_required;
-            }
-        }
-
-        false
-    }
-
-    fn parse_tee_required_hint(raw: &str) -> Option<bool> {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-
-        if trimmed.starts_with('{') {
-            let value: Value = serde_json::from_str(trimmed).ok()?;
-            return Self::extract_tee_required_from_value(&value);
-        }
-
-        Self::parse_runtime_profile_mode(trimmed)
-    }
-
-    fn extract_tee_required_from_value(value: &Value) -> Option<bool> {
-        if let Some(tee_required) = value.get("tee_required").and_then(Value::as_bool) {
-            return Some(tee_required);
-        }
-        if let Some(tee_required) = value.get("teeRequired").and_then(Value::as_bool) {
-            return Some(tee_required);
-        }
-
-        for key in [
-            "runtime_profile",
-            "runtimeProfile",
-            "deployment_profile",
-            "deploymentProfile",
-        ] {
-            if let Some(profile) = value.get(key) {
-                if let Some(tee_required) = Self::extract_tee_required_from_value(profile) {
-                    return Some(tee_required);
-                }
-                if let Some(mode) = profile.as_str() {
-                    if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
-                        return Some(tee_required);
-                    }
-                }
-            }
-        }
-
-        if let Some(mode) = value.get("mode").and_then(Value::as_str) {
-            if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
-                return Some(tee_required);
-            }
-        }
-        if let Some(mode) = value.get("runtime").and_then(Value::as_str) {
-            if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
-                return Some(tee_required);
-            }
-        }
-
-        None
-    }
-
-    fn parse_runtime_profile_mode(mode: &str) -> Option<bool> {
-        let normalized = mode.trim().to_ascii_lowercase();
-        match normalized.as_str() {
-            "tee"
-            | "trusted_execution"
-            | "trusted-execution"
-            | "confidential"
-            | "confidential_compute"
-            | "confidential-compute" => Some(true),
-            "native" | "container" | "wasm" | "none" | "disabled" => Some(false),
-            _ => None,
-        }
+        resolve_tee_required(metadata).unwrap_or(false)
     }
 
     fn convert_sources(sources: &[OnChainBlueprintSource]) -> Vec<ManagerBlueprintSource> {
@@ -712,36 +634,47 @@ mod tests {
     }
 
     #[test]
-    fn parse_tee_required_from_top_level_bool() {
-        let payload = r#"{"tee_required":true}"#;
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
+    fn resolve_tee_required_from_top_level_bool() {
+        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields(
+            r#"{"tee_required":true}"#,
+            "",
+            "",
+        );
         assert_eq!(parsed, Some(true));
     }
 
     #[test]
-    fn parse_tee_required_from_runtime_profile_object() {
-        let payload = r#"{"runtime_profile":{"tee_required":false}}"#;
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
+    fn resolve_tee_required_from_runtime_profile_object() {
+        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields(
+            r#"{"runtime_profile":{"tee_required":false}}"#,
+            "",
+            "",
+        );
         assert_eq!(parsed, Some(false));
     }
 
     #[test]
-    fn parse_tee_required_from_runtime_profile_mode() {
-        let payload = r#"{"runtimeProfile":"tee"}"#;
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
+    fn resolve_tee_required_from_runtime_profile_mode() {
+        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields(
+            r#"{"runtimeProfile":"tee"}"#,
+            "",
+            "",
+        );
         assert_eq!(parsed, Some(true));
     }
 
     #[test]
-    fn parse_tee_required_from_plain_mode_string() {
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint("native");
+    fn resolve_tee_required_from_plain_mode_string() {
+        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields("native", "", "");
         assert_eq!(parsed, Some(false));
     }
 
     #[test]
-    fn parse_tee_required_ignores_unrelated_or_non_json_payloads() {
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint(
+    fn resolve_tee_required_ignores_unrelated_or_non_json_payloads() {
+        let parsed = blueprint_client_tangle::resolve_tee_required_from_fields(
             "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
+            "",
+            "",
         );
         assert_eq!(parsed, None);
     }

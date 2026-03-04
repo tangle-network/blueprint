@@ -3,6 +3,7 @@ use alloy_json_abi::Param;
 use alloy_primitives::{Address, Bytes, FixedBytes, U256};
 use alloy_sol_types::{SolType, SolValue};
 use blueprint_client_tangle::contracts::ITangleTypes;
+use blueprint_client_tangle::inject_tee_required;
 use color_eyre::eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -356,6 +357,10 @@ struct MetadataSpec {
     license: String,
     #[serde(default)]
     profiling_data: String,
+    #[serde(default)]
+    tee_required: Option<bool>,
+    #[serde(default)]
+    deployment_profile: Option<DeploymentProfileSpec>,
 }
 
 impl Default for MetadataSpec {
@@ -370,12 +375,23 @@ impl Default for MetadataSpec {
             website: default_website(),
             license: default_license(),
             profiling_data: String::new(),
+            tee_required: None,
+            deployment_profile: None,
         }
     }
 }
 
 impl MetadataSpec {
     fn into_metadata(self) -> BlueprintMetadata {
+        let tee_required = self
+            .deployment_profile
+            .as_ref()
+            .and_then(DeploymentProfileSpec::tee_required)
+            .or(self.tee_required);
+        let profiling_data = tee_required
+            .map(|required| inject_tee_required(&self.profiling_data, required))
+            .unwrap_or(self.profiling_data);
+
         BlueprintMetadata {
             name: self.name,
             description: self.description,
@@ -385,8 +401,27 @@ impl MetadataSpec {
             logo: self.logo,
             website: self.website,
             license: self.license,
-            profilingData: self.profiling_data,
+            profilingData: profiling_data,
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct DeploymentProfileSpec {
+    #[serde(default)]
+    mode: Option<String>,
+    #[serde(default)]
+    tee_required: Option<bool>,
+}
+
+impl DeploymentProfileSpec {
+    fn tee_required(&self) -> Option<bool> {
+        if let Some(tee_required) = self.tee_required {
+            return Some(tee_required);
+        }
+        self.mode
+            .as_deref()
+            .and_then(parse_runtime_profile_mode_to_tee_required)
     }
 }
 
@@ -1319,6 +1354,20 @@ fn default_memberships() -> Vec<MembershipModelSpec> {
     vec![MembershipModelSpec::Fixed]
 }
 
+fn parse_runtime_profile_mode_to_tee_required(mode: &str) -> Option<bool> {
+    let normalized = mode.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "tee"
+        | "trusted_execution"
+        | "trusted-execution"
+        | "confidential"
+        | "confidential_compute"
+        | "confidential-compute" => Some(true),
+        "native" | "container" | "wasm" | "none" | "disabled" => Some(false),
+        _ => None,
+    }
+}
+
 fn default_name() -> String {
     "Blueprint".into()
 }
@@ -1456,6 +1505,140 @@ mod tests {
         assert_eq!(metadata.tag, "v1.2.3");
         assert_eq!(metadata.binaries.len(), 1);
         assert_eq!(metadata.binaries[0].name, "cli");
+    }
+
+    #[test]
+    fn metadata_tee_required_injects_structured_profiling_data() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("definition.json");
+        let manifest = serde_json::json!({
+            "metadata_uri": "ipfs://cid",
+            "manager": "0x0000000000000000000000000000000000000001",
+            "metadata": {
+                "name": "TEE Blueprint",
+                "tee_required": true
+            },
+            "jobs": [
+                { "name": "square" }
+            ],
+            "sources": [
+                {
+                    "kind": "container",
+                    "registry": "ghcr.io",
+                    "image": "org/blueprint",
+                    "tag": "v0.1.0",
+                    "binaries": [
+                        {
+                            "name": "blueprint",
+                            "arch": "x86_64",
+                            "os": "linux",
+                            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        }
+                    ]
+                }
+            ]
+        });
+        fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+        let loaded = load_blueprint_definition(&path, None).unwrap();
+        let decoded = decode_blueprint_definition(loaded.definition.encoded.as_ref()).unwrap();
+        let metadata_payload = decoded.metadata.profilingData.to_string();
+        let metadata_json: serde_json::Value = serde_json::from_str(&metadata_payload).unwrap();
+        assert_eq!(
+            metadata_json
+                .get("deployment_profile")
+                .and_then(|v| v.get("tee_required"))
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn metadata_deployment_profile_mode_derives_tee_required() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("definition.json");
+        let manifest = serde_json::json!({
+            "metadata_uri": "ipfs://cid",
+            "manager": "0x0000000000000000000000000000000000000001",
+            "metadata": {
+                "deployment_profile": { "mode": "tee" }
+            },
+            "jobs": [
+                { "name": "square" }
+            ],
+            "sources": [
+                {
+                    "kind": "container",
+                    "registry": "ghcr.io",
+                    "image": "org/blueprint",
+                    "tag": "v0.1.0",
+                    "binaries": [
+                        {
+                            "name": "blueprint",
+                            "arch": "x86_64",
+                            "os": "linux",
+                            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        }
+                    ]
+                }
+            ]
+        });
+        fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+        let loaded = load_blueprint_definition(&path, None).unwrap();
+        let decoded = decode_blueprint_definition(loaded.definition.encoded.as_ref()).unwrap();
+        let metadata_payload = decoded.metadata.profilingData.to_string();
+        let metadata_json: serde_json::Value = serde_json::from_str(&metadata_payload).unwrap();
+        assert_eq!(
+            metadata_json
+                .get("deployment_profile")
+                .and_then(|v| v.get("tee_required"))
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn metadata_tee_required_wraps_legacy_profiling_blob() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("definition.json");
+        let legacy_blob = "H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==";
+        let manifest = serde_json::json!({
+            "metadata_uri": "ipfs://cid",
+            "manager": "0x0000000000000000000000000000000000000001",
+            "metadata": {
+                "profiling_data": legacy_blob,
+                "tee_required": true
+            },
+            "jobs": [
+                { "name": "square" }
+            ],
+            "sources": [
+                {
+                    "kind": "container",
+                    "registry": "ghcr.io",
+                    "image": "org/blueprint",
+                    "tag": "v0.1.0",
+                    "binaries": [
+                        {
+                            "name": "blueprint",
+                            "arch": "x86_64",
+                            "os": "linux",
+                            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        }
+                    ]
+                }
+            ]
+        });
+        fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+        let loaded = load_blueprint_definition(&path, None).unwrap();
+        let decoded = decode_blueprint_definition(loaded.definition.encoded.as_ref()).unwrap();
+        let metadata_payload = decoded.metadata.profilingData.to_string();
+        let metadata_json: serde_json::Value = serde_json::from_str(&metadata_payload).unwrap();
+        assert_eq!(
+            metadata_json
+                .get("job_profiles_b64_gzip")
+                .and_then(serde_json::Value::as_str),
+            Some(legacy_blob)
+        );
     }
 
     #[test]

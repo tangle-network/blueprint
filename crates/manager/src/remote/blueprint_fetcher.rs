@@ -146,6 +146,7 @@ pub async fn fetch_blueprint_metadata(
 async fn fetch_from_chain(blueprint_id: u64, rpc_url: Option<&str>) -> Result<BlueprintMetadata> {
     use alloy_provider::ProviderBuilder;
     use blueprint_client_tangle::contracts::ITangle;
+    use blueprint_client_tangle::extract_job_profiles_blob;
 
     let url = rpc_url.unwrap_or("http://localhost:9944");
 
@@ -223,8 +224,10 @@ async fn fetch_from_chain(blueprint_id: u64, rpc_url: Option<&str>) -> Result<Bl
         }
     };
 
-    let job_profiles = if !definition.metadata.profilingData.is_empty() {
-        match decode_profiles_from_chain(definition.metadata.profilingData.as_str()) {
+    let job_profiles = if let Some(encoded_profiles) =
+        extract_job_profiles_blob(definition.metadata.profilingData.as_str())
+    {
+        match decode_profiles_from_chain(&encoded_profiles) {
             Ok(profiles) => {
                 tracing::info!(
                     "Loaded {} job profiles from chain metadata (profilingData field)",
