@@ -208,6 +208,17 @@ impl CloudProviderAdapter for AzureAdapter {
         }
     }
 
+    async fn deploy_blueprint(
+        &self,
+        instance: &ProvisionedInstance,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
+    ) -> Result<BlueprintDeploymentResult> {
+        self.deploy_to_existing_vm(instance, blueprint_image, resource_spec, env_vars)
+            .await
+    }
+
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
             let client = reqwest::Client::builder()
@@ -255,6 +266,17 @@ impl AzureAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         let instance = self.provision_instance("Standard_B2ms", "eastus").await?;
+        self.deploy_to_existing_vm(&instance, blueprint_image, resource_spec, env_vars)
+            .await
+    }
+
+    async fn deploy_to_existing_vm(
+        &self,
+        instance: &ProvisionedInstance,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
+    ) -> Result<BlueprintDeploymentResult> {
         let public_ip = instance
             .public_ip
             .as_ref()

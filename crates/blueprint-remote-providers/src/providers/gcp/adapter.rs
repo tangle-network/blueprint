@@ -314,6 +314,24 @@ impl CloudProviderAdapter for GcpAdapter {
         }
     }
 
+    async fn deploy_blueprint(
+        &self,
+        instance: &ProvisionedInstance,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
+    ) -> Result<BlueprintDeploymentResult> {
+        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
+        SharedSshDeployment::deploy_to_instance(
+            instance,
+            blueprint_image,
+            resource_spec,
+            env_vars,
+            SshDeploymentConfig::gcp(&self.project_id),
+        )
+        .await
+    }
+
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
             match reqwest::get(&format!("{endpoint}/health")).await {
@@ -369,19 +387,9 @@ impl GcpAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
-
         let instance = self.provision_instance("e2-medium", "us-central1").await?;
-
-        // Use shared SSH deployment with GCP configuration
-        SharedSshDeployment::deploy_to_instance(
-            &instance,
-            blueprint_image,
-            resource_spec,
-            env_vars,
-            SshDeploymentConfig::gcp(&self.project_id),
-        )
-        .await
+        self.deploy_blueprint(&instance, blueprint_image, resource_spec, env_vars)
+            .await
     }
 
     /// Deploy to GKE cluster

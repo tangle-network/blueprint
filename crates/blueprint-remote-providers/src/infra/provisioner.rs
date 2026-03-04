@@ -196,9 +196,20 @@ impl CloudProvisioner {
                     tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
                     retries += 1;
                 }
-                Err(_) => {
-                    // Instance not found - considered terminated
-                    return Ok(());
+                Err(e) => {
+                    if is_not_found_error(&e) {
+                        info!(
+                            "Instance {} no longer found after termination request",
+                            instance_id
+                        );
+                        return Ok(());
+                    }
+                    warn!(
+                        "Failed to verify termination status for {}: {}",
+                        instance_id, e
+                    );
+                    tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
+                    retries += 1;
                 }
             }
         }
@@ -249,33 +260,26 @@ impl CloudProvisioner {
         resource_spec: &ResourceSpec,
         env_vars: std::collections::HashMap<String, String>,
     ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
-        use crate::core::deployment_target::DeploymentTarget;
+        let provider = self.resolve_single_provider()?;
+        self.deploy_with_target_for_provider(
+            provider,
+            target,
+            blueprint_image,
+            resource_spec,
+            env_vars,
+        )
+        .await
+    }
 
-        // Determine provider based on target
-        let provider = match target {
-            DeploymentTarget::GenericKubernetes { .. } => {
-                // For generic K8s, we need a provider that supports kubectl
-                // Use the first available provider that has K8s support
-                self.providers.keys().next().ok_or_else(|| {
-                    Error::Other("No providers configured for Kubernetes deployment".into())
-                })?
-            }
-            DeploymentTarget::ManagedKubernetes { .. } => {
-                // For managed K8s, determine provider from cluster context
-                // Use first available provider for managed K8s
-                self.providers.keys().next().ok_or_else(|| {
-                    Error::Other("No providers configured for managed Kubernetes".into())
-                })?
-            }
-            _ => {
-                // For other targets, use first available provider
-                self.providers
-                    .keys()
-                    .next()
-                    .ok_or_else(|| Error::Other("No providers configured".into()))?
-            }
-        };
-
+    /// Deploy a Blueprint to a specific provider with a specific target.
+    pub async fn deploy_with_target_for_provider(
+        &self,
+        provider: &CloudProvider,
+        target: &crate::core::deployment_target::DeploymentTarget,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: std::collections::HashMap<String, String>,
+    ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
         let adapter = self
             .providers
             .get(provider)
@@ -284,6 +288,19 @@ impl CloudProvisioner {
         adapter
             .deploy_blueprint_with_target(target, blueprint_image, resource_spec, env_vars)
             .await
+    }
+
+    fn resolve_single_provider(&self) -> Result<&CloudProvider> {
+        let mut providers = self.providers.keys();
+        let provider = providers
+            .next()
+            .ok_or_else(|| Error::Other("No providers configured".into()))?;
+        if providers.next().is_some() {
+            return Err(Error::ConfigurationError(
+                "Multiple providers configured; select one explicitly".into(),
+            ));
+        }
+        Ok(provider)
     }
 
     /// Get the status of an instance using the appropriate adapter (alias for compatibility)
@@ -354,6 +371,23 @@ impl CloudProvisioner {
         let instance_selection = InstanceTypeMapper::map_to_instance_type(resource_spec, provider);
         Ok(instance_selection.instance_type)
     }
+}
+
+fn is_not_found_error(error: &Error) -> bool {
+    let message = match error {
+        Error::ConfigurationError(message)
+        | Error::NetworkError(message)
+        | Error::SerializationError(message)
+        | Error::HttpError(message)
+        | Error::Other(message) => message.as_str(),
+        #[cfg(feature = "kubernetes")]
+        Error::Kube(err) => return err.to_string().contains("NotFound"),
+        _ => return false,
+    };
+
+    message.contains("404")
+        || message.to_ascii_lowercase().contains("not found")
+        || message.to_ascii_lowercase().contains("does not exist")
 }
 
 #[cfg(test)]

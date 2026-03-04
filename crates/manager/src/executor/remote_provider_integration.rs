@@ -3,7 +3,7 @@
 //! Handles automatic cloud deployment when services are initiated
 
 use crate::config::BlueprintManagerContext;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use blueprint_core::{error, info};
 use blueprint_remote_providers::deployment::manager_integration::{
     RemoteDeploymentRegistry, TtlManager,
@@ -44,8 +44,11 @@ impl RemoteProviderManager {
     /// Initialize from Blueprint Manager config
     pub async fn new(ctx: &BlueprintManagerContext) -> Result<Option<Self>> {
         // Check if remote providers are configured
-        let cloud_config = ctx.cloud_config();
-        if cloud_config.is_none() || !cloud_config.as_ref().unwrap().enabled {
+        if !ctx
+            .cloud_config()
+            .as_ref()
+            .is_some_and(|config| config.enabled)
+        {
             info!("Remote cloud providers not configured");
             return Ok(None);
         }
@@ -118,30 +121,22 @@ impl RemoteProviderManager {
         };
 
         if tee_required && !supports_tee(&provider) {
-            error!(
-                "TEE is required but selected provider {} does not support confidential compute",
-                provider
-            );
-            return Ok(());
+            return Err(Error::TeePrerequisiteMissing {
+                prerequisite: format!("{provider} confidential-compute support"),
+                hint: "Select AWS, GCP, or Azure when BLUEPRINT_REMOTE_TEE_REQUIRED=true"
+                    .to_string(),
+            });
         }
 
-        match self
+        let instance = self
             .provisioner
             .provision_with_requirements(provider.clone(), &resource_spec, region, tee_required)
-            .await
-        {
-            Ok(instance) => {
-                info!("Service deployed to {}: instance={}", provider, instance.id);
+            .await?;
 
-                // Register with TTL manager for automatic cleanup
-                self.ttl_manager
-                    .register_ttl(blueprint_id, service_id, 3600)
-                    .await; // 1 hour default
-            }
-            Err(e) => {
-                error!("Failed to deploy service: {}", e);
-            }
-        }
+        info!("Service deployed to {}: instance={}", provider, instance.id);
+        self.ttl_manager
+            .register_ttl(blueprint_id, service_id, 3600)
+            .await; // 1 hour default
 
         Ok(())
     }

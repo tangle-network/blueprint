@@ -157,6 +157,24 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
         }
     }
 
+    async fn deploy_blueprint(
+        &self,
+        instance: &ProvisionedInstance,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
+    ) -> Result<BlueprintDeploymentResult> {
+        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
+        SharedSshDeployment::deploy_to_instance(
+            instance,
+            blueprint_image,
+            resource_spec,
+            env_vars,
+            SshDeploymentConfig::digitalocean(),
+        )
+        .await
+    }
+
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         use crate::security::{ApiAuthentication, SecureHttpClient};
 
@@ -192,19 +210,9 @@ impl DigitalOceanAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
-
         let instance = self.provision_instance("s-2vcpu-4gb", "nyc3").await?;
-
-        // Use shared SSH deployment with DigitalOcean configuration
-        SharedSshDeployment::deploy_to_instance(
-            &instance,
-            blueprint_image,
-            resource_spec,
-            env_vars,
-            SshDeploymentConfig::digitalocean(),
-        )
-        .await
+        self.deploy_blueprint(&instance, blueprint_image, resource_spec, env_vars)
+            .await
     }
 
     /// Deploy to DOKS cluster

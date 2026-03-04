@@ -63,6 +63,27 @@ fn parse_tee_backend(raw: &str) -> Option<String> {
     })
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TeeAttestationPolicy {
+    Structural,
+    Cryptographic,
+}
+
+impl TeeAttestationPolicy {
+    fn from_env() -> Self {
+        let raw = std::env::var("BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY")
+            .unwrap_or_else(|_| "structural".to_string());
+        parse_tee_attestation_policy(&raw)
+    }
+}
+
+fn parse_tee_attestation_policy(raw: &str) -> TeeAttestationPolicy {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "cryptographic" => TeeAttestationPolicy::Cryptographic,
+        _ => TeeAttestationPolicy::Structural,
+    }
+}
+
 /// Remote deployment service for Blueprint Manager.
 pub struct RemoteDeploymentService {
     /// Provider selection logic
@@ -306,13 +327,21 @@ impl RemoteDeploymentService {
             });
         }
 
+        if resource_spec.tee_required
+            && matches!(
+                TeeAttestationPolicy::from_env(),
+                TeeAttestationPolicy::Cryptographic
+            )
+        {
+            return Err(Error::TeeRuntimeUnavailable {
+                reason: "Cryptographic attestation policy requested, but current built-in provider verifiers are structural-only. Set BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY=structural or use an external cryptographic attestation verification pipeline.".to_string(),
+            });
+        }
+
         #[cfg(feature = "remote-providers")]
         {
             // Use real cloud provider SDK
             use blueprint_remote_providers::CloudProvisioner;
-            use blueprint_remote_providers::core::deployment_target::{
-                ContainerRuntime, DeploymentTarget,
-            };
 
             let provisioner = CloudProvisioner::new()
                 .await
@@ -329,11 +358,6 @@ impl RemoteDeploymentService {
             };
 
             info!("   Region: {}", region);
-
-            // Create deployment target for VM with Docker
-            let target = DeploymentTarget::VirtualMachine {
-                runtime: ContainerRuntime::Docker,
-            };
 
             // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
@@ -382,11 +406,11 @@ impl RemoteDeploymentService {
                 env_map.entry("TEE_BACKEND".to_string()).or_insert(backend);
             }
 
-            // Deploy blueprint using the adapter's deploy_blueprint_with_target
-            // This will handle SSH deployment, Docker setup, and QoS port exposure
+            // Deploy to the provisioned instance. This must not provision a second VM.
             let deployment_result = provisioner
-                .deploy_with_target(
-                    &target,
+                .deploy_blueprint_to_instance(
+                    &convert_provider(provider),
+                    &instance,
                     &blueprint_image,
                     &convert_resource_spec(&resource_spec),
                     env_map,
@@ -410,13 +434,13 @@ impl RemoteDeploymentService {
                         if let Some(ref qos_provider) = self.qos_provider {
                             qos_provider
                                 .register_remote_instance(
-                                    instance.id.clone(),
+                                    deployment_result.instance.id.clone(),
                                     host.to_string(),
                                     port,
                                 )
                                 .await;
                             info!("✅ QoS endpoint registered: {}:{}", host, port);
-                            info!("   Instance: {}", instance.id);
+                            info!("   Instance: {}", deployment_result.instance.id);
                             info!("   Blueprint metrics will be collected from port {}", port);
                         }
 
@@ -433,7 +457,7 @@ impl RemoteDeploymentService {
 
             // Register deployment
             let deployment_info = RemoteDeploymentInfo {
-                instance_id: instance.id.clone(),
+                instance_id: deployment_result.instance.id.clone(),
                 provider,
                 service_name: service_name.to_string(),
                 blueprint_id,
@@ -442,12 +466,15 @@ impl RemoteDeploymentService {
                     .policy
                     .auto_terminate_hours
                     .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
-                public_ip: instance.public_ip.clone(),
+                public_ip: deployment_result.instance.public_ip.clone(),
             };
 
             {
                 let mut deployments = self.deployments.write().await;
-                deployments.insert(instance.id.clone(), deployment_info.clone());
+                deployments.insert(
+                    deployment_result.instance.id.clone(),
+                    deployment_info.clone(),
+                );
             }
 
             info!("✅ Deployment registered with TTL tracking");
@@ -524,17 +551,31 @@ impl RemoteDeploymentService {
                 env_map.insert(format!("ARG_{}", i), arg.clone());
             }
 
-            // Deploy to Kubernetes using generic adapter
-            // Note: This will use kubectl to deploy to any K8s cluster
-            let deployment_result = provisioner
-                .deploy_with_target(
-                    &target,
-                    &blueprint_image,
-                    &convert_resource_spec(&resource_spec),
-                    env_map,
-                )
-                .await
-                .map_err(|e| Error::Other(format!("Failed to deploy to Kubernetes: {}", e)))?;
+            // Deploy to Kubernetes using either an inferred provider or a single configured provider.
+            let deployment_result = if let Some(provider) =
+                infer_remote_provider_from_context(context)
+            {
+                provisioner
+                    .deploy_with_target_for_provider(
+                        &provider,
+                        &target,
+                        &blueprint_image,
+                        &convert_resource_spec(&resource_spec),
+                        env_map,
+                    )
+                    .await
+                    .map_err(|e| Error::Other(format!("Failed to deploy to Kubernetes: {}", e)))?
+            } else {
+                provisioner
+                    .deploy_with_target(
+                        &target,
+                        &blueprint_image,
+                        &convert_resource_spec(&resource_spec),
+                        env_map,
+                    )
+                    .await
+                    .map_err(|e| Error::Other(format!("Failed to deploy to Kubernetes: {}", e)))?
+            };
 
             info!(
                 "✅ Blueprint deployed to Kubernetes: {}",
@@ -911,5 +952,49 @@ fn provider_default_tee_backend(provider: CloudProvider) -> Option<&'static str>
         CloudProvider::GCP => Some("gcp-confidential"),
         CloudProvider::Azure => Some("azure-skr"),
         _ => None,
+    }
+}
+
+#[cfg(feature = "remote-providers")]
+fn infer_remote_provider_from_context(
+    context: &str,
+) -> Option<blueprint_remote_providers::CloudProvider> {
+    let context = context.to_ascii_lowercase();
+    if context.contains("aws") || context.contains("eks") {
+        return Some(blueprint_remote_providers::CloudProvider::AWS);
+    }
+    if context.contains("gcp") || context.contains("gke") || context.contains("google") {
+        return Some(blueprint_remote_providers::CloudProvider::GCP);
+    }
+    if context.contains("azure") || context.contains("aks") {
+        return Some(blueprint_remote_providers::CloudProvider::Azure);
+    }
+    if context.contains("digitalocean") || context.contains("doks") {
+        return Some(blueprint_remote_providers::CloudProvider::DigitalOcean);
+    }
+    if context.contains("vultr") || context.contains("vke") {
+        return Some(blueprint_remote_providers::CloudProvider::Vultr);
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TeeAttestationPolicy, parse_tee_attestation_policy};
+
+    #[test]
+    fn parses_attestation_policy_modes() {
+        assert_eq!(
+            parse_tee_attestation_policy("cryptographic"),
+            TeeAttestationPolicy::Cryptographic
+        );
+        assert_eq!(
+            parse_tee_attestation_policy("STRUCTURAL"),
+            TeeAttestationPolicy::Structural
+        );
+        assert_eq!(
+            parse_tee_attestation_policy("unexpected"),
+            TeeAttestationPolicy::Structural
+        );
     }
 }

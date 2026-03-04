@@ -221,10 +221,14 @@ impl GcpProvisioner {
         let mut metadata = HashMap::new();
         metadata.insert("zone".to_string(), zone.clone());
         metadata.insert("project_id".to_string(), self.project_id.clone());
+        metadata.insert("instance_name".to_string(), config.name.clone());
+        if let Some(numeric_id) = instance["id"].as_str() {
+            metadata.insert("instance_numeric_id".to_string(), numeric_id.to_string());
+        }
 
         Ok(ProvisionedInfrastructure {
             provider: CloudProvider::GCP,
-            instance_id: instance["id"].as_str().unwrap_or("").to_string(),
+            instance_id: config.name.clone(),
             public_ip,
             private_ip,
             region: config.region.clone(),
