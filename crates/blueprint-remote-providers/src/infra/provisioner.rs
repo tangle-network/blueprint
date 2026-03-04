@@ -403,10 +403,10 @@ fn aws_credentials_available() -> bool {
     }
 
     if let Ok(shared_credentials_file) = std::env::var("AWS_SHARED_CREDENTIALS_FILE") {
-        if !shared_credentials_file.trim().is_empty() {
-            if std::path::Path::new(&shared_credentials_file).exists() {
-                return true;
-            }
+        if !shared_credentials_file.trim().is_empty()
+            && std::path::Path::new(&shared_credentials_file).exists()
+        {
+            return true;
         }
     }
 
