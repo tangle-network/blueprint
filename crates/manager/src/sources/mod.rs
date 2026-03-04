@@ -1,9 +1,11 @@
 use crate::blueprint::native::FilteredBlueprint;
 use crate::config::{BlueprintManagerConfig, BlueprintManagerContext};
+use crate::error::{Error, Result};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
 use alloy_primitives::Address;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use url::Url;
 
@@ -13,6 +15,50 @@ pub mod github;
 pub mod remote;
 pub mod testing;
 pub mod types;
+
+fn is_safe_archive_path(path: &Path) -> bool {
+    use std::path::Component;
+    !path.is_absolute()
+        && path.components().all(|component| {
+            !matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+}
+
+pub(crate) fn unpack_archive_safely<R: Read>(
+    archive: &mut tar::Archive<R>,
+    destination: &Path,
+) -> Result<()> {
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let entry_path = entry.path()?.into_owned();
+        if !is_safe_archive_path(&entry_path) {
+            return Err(Error::Other(format!(
+                "Unsafe archive entry path rejected: {}",
+                entry_path.display()
+            )));
+        }
+
+        let entry_type = entry.header().entry_type();
+        if entry_type.is_symlink() || entry_type.is_hard_link() {
+            return Err(Error::Other(format!(
+                "Archive entry type not allowed for security reasons: {}",
+                entry_path.display()
+            )));
+        }
+
+        if !entry.unpack_in(destination)? {
+            return Err(Error::Other(format!(
+                "Archive entry escaped destination: {}",
+                entry_path.display()
+            )));
+        }
+    }
+
+    Ok(())
+}
 
 #[auto_impl::auto_impl(Box)]
 #[dynosaur::dynosaur(pub(crate) DynBlueprintSource)]
@@ -268,5 +314,18 @@ impl BlueprintEnvVars {
         }
 
         env_vars
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_safe_archive_path;
+    use std::path::Path;
+
+    #[test]
+    fn archive_path_guard_rejects_traversal_and_absolute_paths() {
+        assert!(is_safe_archive_path(Path::new("bin/blueprint")));
+        assert!(!is_safe_archive_path(Path::new("../etc/passwd")));
+        assert!(!is_safe_archive_path(Path::new("/tmp/evil")));
     }
 }

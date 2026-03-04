@@ -1,4 +1,4 @@
-use super::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler};
+use super::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler, unpack_archive_safely};
 use crate::blueprint::native::get_blueprint_binary;
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
@@ -170,8 +170,7 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
         let tar_xz = File::open(&archive_path)?;
         let tar = XzDecoder::new(tar_xz);
         let mut archive = Archive::new(tar);
-
-        archive.unpack(cache_dir)?;
+        unpack_archive_safely(&mut archive, cache_dir)?;
 
         // sanity check that the binary actually there
         let mut binary_path = None;

@@ -213,6 +213,24 @@ impl CloudProviderAdapter for AwsAdapter {
             )),
         }
     }
+
+    async fn deploy_blueprint(
+        &self,
+        instance: &ProvisionedInstance,
+        blueprint_image: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
+    ) -> Result<BlueprintDeploymentResult> {
+        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
+        SharedSshDeployment::deploy_to_instance(
+            instance,
+            blueprint_image,
+            resource_spec,
+            env_vars,
+            SshDeploymentConfig::aws(),
+        )
+        .await
+    }
 }
 
 impl AwsAdapter {
@@ -223,20 +241,10 @@ impl AwsAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        use crate::shared::{SharedSshDeployment, SshDeploymentConfig};
-
         // Get or provision EC2 instance
         let instance = self.provision_instance("t3.medium", "us-east-1").await?;
-
-        // Use shared SSH deployment with AWS configuration
-        SharedSshDeployment::deploy_to_instance(
-            &instance,
-            blueprint_image,
-            resource_spec,
-            env_vars,
-            SshDeploymentConfig::aws(),
-        )
-        .await
+        self.deploy_blueprint(&instance, blueprint_image, resource_spec, env_vars)
+            .await
     }
 
     /// Deploy to AWS EKS cluster
