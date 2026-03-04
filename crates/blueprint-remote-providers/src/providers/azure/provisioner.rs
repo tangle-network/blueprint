@@ -133,6 +133,10 @@ impl AzureProvisioner {
             .get("vm_size")
             .cloned()
             .unwrap_or_else(|| self.select_vm_size(spec).to_string());
+        let require_tee = config
+            .custom_config
+            .get("require_tee")
+            .is_some_and(|value| value.eq_ignore_ascii_case("true"));
 
         // Create VM
         let vm_body = serde_json::json!({
@@ -178,6 +182,16 @@ impl AzureProvisioner {
                 }
             }
         });
+        let mut vm_body = vm_body;
+        if require_tee {
+            vm_body["properties"]["securityProfile"] = serde_json::json!({
+                "securityType": "ConfidentialVM",
+                "uefiSettings": {
+                    "secureBootEnabled": true,
+                    "vTpmEnabled": true
+                }
+            });
+        }
 
         let url = format!(
             "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{}?api-version=2023-09-01",
@@ -207,6 +221,7 @@ impl AzureProvisioner {
         metadata.insert("vm_size".to_string(), vm_size.clone());
         metadata.insert("location".to_string(), location.to_string());
         metadata.insert("os".to_string(), "Ubuntu 22.04 LTS".to_string());
+        metadata.insert("require_tee".to_string(), require_tee.to_string());
 
         Ok(ProvisionedInfrastructure {
             provider: crate::core::remote::CloudProvider::Azure,

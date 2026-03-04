@@ -52,11 +52,15 @@ impl RemoteServiceInstance {
             }
             Some(DeploymentStatus::Terminating) => {
                 *self.status.write().await = Status::Pending;
-                Ok(())
+                Err(Error::Other(
+                    "Remote deployment is terminating and cannot be started".into(),
+                ))
             }
             Some(DeploymentStatus::Terminated) => {
                 *self.status.write().await = Status::Finished;
-                Ok(())
+                Err(Error::Other(
+                    "Remote deployment is already terminated".into(),
+                ))
             }
             Some(DeploymentStatus::Failed) => {
                 *self.status.write().await = Status::Error;

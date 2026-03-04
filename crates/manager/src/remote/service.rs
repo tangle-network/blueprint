@@ -6,9 +6,15 @@ use super::provider_selector::{
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
 use crate::rt::ResourceLimits;
+#[cfg(feature = "remote-providers")]
+use crate::rt::remote::RemoteServiceInstance;
 use crate::rt::service::Service;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 
+#[cfg(feature = "remote-providers")]
+use blueprint_remote_providers::deployment::{
+    DeploymentRecord, DeploymentType, RemoteDeploymentConfig,
+};
 #[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker, HealthMonitor};
 
@@ -70,17 +76,22 @@ enum TeeAttestationPolicy {
 }
 
 impl TeeAttestationPolicy {
-    fn from_env() -> Self {
+    fn from_env() -> Result<Self> {
         let raw = std::env::var("BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY")
-            .unwrap_or_else(|_| "structural".to_string());
+            .unwrap_or_else(|_| "cryptographic".to_string());
         parse_tee_attestation_policy(&raw)
     }
 }
 
-fn parse_tee_attestation_policy(raw: &str) -> TeeAttestationPolicy {
+fn parse_tee_attestation_policy(raw: &str) -> Result<TeeAttestationPolicy> {
     match raw.trim().to_ascii_lowercase().as_str() {
-        "cryptographic" => TeeAttestationPolicy::Cryptographic,
-        _ => TeeAttestationPolicy::Structural,
+        "cryptographic" => Ok(TeeAttestationPolicy::Cryptographic),
+        "structural" => Ok(TeeAttestationPolicy::Structural),
+        other => Err(Error::TeeRuntimeUnavailable {
+            reason: format!(
+                "Unsupported BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY value: {other}. Use 'cryptographic' or 'structural'."
+            ),
+        }),
     }
 }
 
@@ -116,6 +127,8 @@ pub struct RemoteDeploymentInfo {
     pub tee_attestation_policy: Option<String>,
     pub tee_attestation_verified_at: Option<chrono::DateTime<chrono::Utc>>,
     pub tee_attestation_proof: Option<String>,
+    pub kubernetes_context: Option<String>,
+    pub kubernetes_namespace: Option<String>,
 }
 
 impl RemoteDeploymentService {
@@ -335,6 +348,13 @@ impl RemoteDeploymentService {
             // Use real cloud provider SDK
             use blueprint_remote_providers::CloudProvisioner;
 
+            let tracker = ensure_deployment_tracker(ctx, self.deployment_tracker.clone()).await?;
+            let tee_attestation_policy = if resource_spec.tee_required {
+                Some(TeeAttestationPolicy::from_env()?)
+            } else {
+                None
+            };
+
             let provisioner = CloudProvisioner::new()
                 .await
                 .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
@@ -433,11 +453,6 @@ impl RemoteDeploymentService {
                 }
             };
 
-            let tee_attestation_policy = if resource_spec.tee_required {
-                Some(TeeAttestationPolicy::from_env())
-            } else {
-                None
-            };
             let tee_attestation_proof = if let Some(policy) = tee_attestation_policy {
                 match verify_tee_attestation(policy, provider, &deployment_result).await {
                     Ok(proof) => proof,
@@ -530,7 +545,69 @@ impl RemoteDeploymentService {
                 tee_attestation_policy: tee_attestation_policy.map(|p| p.to_string()),
                 tee_attestation_verified_at,
                 tee_attestation_proof,
+                kubernetes_context: None,
+                kubernetes_namespace: None,
             };
+
+            let ttl_seconds = ttl_seconds_from_hours(self.policy.auto_terminate_hours);
+            let deployment_key = deployment_result.instance.id.clone();
+
+            let mut deployment_record = DeploymentRecord::new(
+                deployment_key.clone(),
+                deployment_type_for_provider(&remote_provider),
+                convert_resource_spec(&resource_spec),
+                ttl_seconds,
+            );
+            deployment_record.id = deployment_result.instance.id.clone();
+            deployment_record.provider = Some(remote_provider.clone());
+            deployment_record.region = Some(tracker_region_for_provider(provider, &region));
+            deployment_record.resource_ids.insert(
+                "instance_id".to_string(),
+                deployment_result.instance.id.clone(),
+            );
+            deployment_record.resource_ids.insert(
+                "instance_name".to_string(),
+                deployment_result.instance.id.clone(),
+            );
+            if let Some(public_ip) = &deployment_result.instance.public_ip {
+                deployment_record
+                    .resource_ids
+                    .insert("public_ip".to_string(), public_ip.clone());
+            }
+            if provider == CloudProvider::GCP {
+                if let Ok(project_id) = std::env::var("GCP_PROJECT_ID") {
+                    deployment_record
+                        .metadata
+                        .insert("project_id".to_string(), project_id);
+                }
+            }
+            if let Some(proof) = deployment_info.tee_attestation_proof.clone() {
+                deployment_record
+                    .metadata
+                    .insert("tee_attestation_proof".to_string(), proof);
+            }
+            if let Err(track_error) = tracker
+                .register_deployment(deployment_key.clone(), deployment_record)
+                .await
+            {
+                warn!(
+                    "Deployment tracking failed for provider {} (instance={}); attempting best-effort cleanup before returning error: {}",
+                    provider, deployment_result.instance.id, track_error
+                );
+                if let Err(cleanup_error) = provisioner
+                    .terminate(remote_provider.clone(), &deployment_result.instance.id)
+                    .await
+                {
+                    return Err(Error::Other(format!(
+                        "Failed to track deployment: {}. Cleanup after tracker failure also failed for instance {}: {}",
+                        track_error, deployment_result.instance.id, cleanup_error
+                    )));
+                }
+                return Err(Error::Other(format!(
+                    "Failed to track deployment: {}",
+                    track_error
+                )));
+            }
 
             {
                 let mut deployments = self.deployments.write().await;
@@ -539,22 +616,20 @@ impl RemoteDeploymentService {
                     deployment_info.clone(),
                 );
             }
-
             info!("✅ Deployment registered with TTL tracking");
 
-            // For now, still create a local service handle
-            // In future, this should return a RemoteService handle
+            let remote_config = RemoteDeploymentConfig {
+                deployment_type: deployment_type_for_provider(&remote_provider),
+                provider: Some(remote_provider),
+                region: Some(region),
+                instance_id: deployment_key,
+                resource_spec: convert_resource_spec(&resource_spec),
+                ttl_seconds,
+                deployed_at: chrono::Utc::now(),
+            };
+            let remote_instance = RemoteServiceInstance::new(remote_config, tracker);
             let runtime_dir = ctx.data_dir().join("runtime").join(service_name);
-            Service::new_native(
-                ctx,
-                ResourceLimits::default(),
-                runtime_dir,
-                service_name,
-                binary_path,
-                env_vars,
-                arguments,
-            )
-            .await
+            Service::new_remote(ctx, runtime_dir, service_name, remote_instance).await
         }
 
         #[cfg(not(feature = "remote-providers"))]
@@ -581,12 +656,15 @@ impl RemoteDeploymentService {
         info!("   Context: {}", context);
         info!("   Namespace: {}", namespace);
         info!("   Service: {}", service_name);
+        let _ = binary_path;
 
         #[cfg(feature = "remote-providers")]
         {
             use blueprint_remote_providers::{
                 CloudProvisioner, core::deployment_target::DeploymentTarget,
             };
+
+            let tracker = ensure_deployment_tracker(ctx, self.deployment_tracker.clone()).await?;
 
             // Create provisioner
             let provisioner = CloudProvisioner::new()
@@ -615,9 +693,8 @@ impl RemoteDeploymentService {
             }
 
             // Deploy to Kubernetes using either an inferred provider or a single configured provider.
-            let deployment_result = if let Some(provider) =
-                infer_remote_provider_from_context(context)
-            {
+            let inferred_provider = infer_remote_provider_from_context(context);
+            let deployment_result = if let Some(provider) = inferred_provider.clone() {
                 provisioner
                     .deploy_with_target_for_provider(
                         &provider,
@@ -639,6 +716,9 @@ impl RemoteDeploymentService {
                     .await
                     .map_err(|e| Error::Other(format!("Failed to deploy to Kubernetes: {}", e)))?
             };
+            let deployment_provider = inferred_provider
+                .clone()
+                .or_else(|| Some(deployment_result.instance.provider.clone()));
 
             info!(
                 "✅ Blueprint deployed to Kubernetes: {}",
@@ -648,7 +728,7 @@ impl RemoteDeploymentService {
             // Register deployment
             let deployment_info = RemoteDeploymentInfo {
                 instance_id: deployment_result.blueprint_id.clone(),
-                provider: CloudProvider::Generic, // Generic K8s provider
+                provider: CloudProvider::Generic,
                 service_name: service_name.to_string(),
                 blueprint_id: None,
                 deployed_at: chrono::Utc::now(),
@@ -660,7 +740,69 @@ impl RemoteDeploymentService {
                 tee_attestation_policy: None,
                 tee_attestation_verified_at: None,
                 tee_attestation_proof: None,
+                kubernetes_context: Some(context.to_string()),
+                kubernetes_namespace: Some(namespace.to_string()),
             };
+
+            info!("✅ Kubernetes deployment registered");
+            let ttl_seconds = ttl_seconds_from_hours(self.policy.auto_terminate_hours);
+            let deployment_key = deployment_result.blueprint_id.clone();
+
+            let mut deployment_record = DeploymentRecord::new(
+                deployment_key.clone(),
+                DeploymentType::LocalKubernetes,
+                convert_resource_spec(&resource_spec),
+                ttl_seconds,
+            );
+            deployment_record.id = deployment_result.blueprint_id.clone();
+            if let Some(provider) = deployment_provider.clone() {
+                deployment_record.provider = Some(provider);
+            }
+            deployment_record
+                .resource_ids
+                .insert("namespace".to_string(), namespace.to_string());
+            deployment_record.resource_ids.insert(
+                "deployment".to_string(),
+                deployment_result.blueprint_id.clone(),
+            );
+            deployment_record.resource_ids.insert(
+                "service".to_string(),
+                format!("{}-service", deployment_result.blueprint_id),
+            );
+            deployment_record
+                .resource_ids
+                .insert("context".to_string(), context.to_string());
+            deployment_record
+                .metadata
+                .insert("k8s_context".to_string(), context.to_string());
+            deployment_record
+                .metadata
+                .insert("k8s_namespace".to_string(), namespace.to_string());
+            if let Err(track_error) = tracker
+                .register_deployment(deployment_key.clone(), deployment_record)
+                .await
+            {
+                warn!(
+                    "Kubernetes deployment tracking failed (deployment={}); attempting best-effort cleanup before returning error: {}",
+                    deployment_result.blueprint_id, track_error
+                );
+                if let Err(cleanup_error) = best_effort_kubernetes_cleanup(
+                    context,
+                    namespace,
+                    &deployment_result.blueprint_id,
+                )
+                .await
+                {
+                    return Err(Error::Other(format!(
+                        "Failed to track Kubernetes deployment: {}. Cleanup after tracker failure also failed for deployment {}: {}",
+                        track_error, deployment_result.blueprint_id, cleanup_error
+                    )));
+                }
+                return Err(Error::Other(format!(
+                    "Failed to track Kubernetes deployment: {}",
+                    track_error
+                )));
+            }
 
             {
                 let mut deployments = self.deployments.write().await;
@@ -670,20 +812,18 @@ impl RemoteDeploymentService {
                 );
             }
 
-            info!("✅ Kubernetes deployment registered");
-
-            // Return a service handle
+            let remote_config = RemoteDeploymentConfig {
+                deployment_type: DeploymentType::LocalKubernetes,
+                provider: deployment_provider,
+                region: None,
+                instance_id: deployment_key,
+                resource_spec: convert_resource_spec(&resource_spec),
+                ttl_seconds,
+                deployed_at: chrono::Utc::now(),
+            };
+            let remote_instance = RemoteServiceInstance::new(remote_config, tracker);
             let runtime_dir = ctx.data_dir().join("runtime").join(service_name);
-            Service::new_native(
-                ctx,
-                ResourceLimits::default(),
-                runtime_dir,
-                service_name,
-                binary_path,
-                env_vars,
-                arguments,
-            )
-            .await
+            Service::new_remote(ctx, runtime_dir, service_name, remote_instance).await
         }
 
         #[cfg(not(feature = "remote-providers"))]
@@ -753,10 +893,35 @@ impl RemoteDeploymentService {
                         deployment_info.instance_id
                     );
                 } else {
-                    warn!(
-                        "Generic Kubernetes deployment cleanup is best-effort only (instance_id={})",
-                        deployment_info.instance_id
-                    );
+                    match (
+                        deployment_info.kubernetes_context.as_deref(),
+                        deployment_info.kubernetes_namespace.as_deref(),
+                    ) {
+                        (Some(context), Some(namespace)) => {
+                            best_effort_kubernetes_cleanup(
+                                context,
+                                namespace,
+                                &deployment_info.instance_id,
+                            )
+                            .await
+                            .map_err(|e| {
+                                Error::Other(format!(
+                                    "Failed to cleanup Kubernetes deployment {}: {}",
+                                    deployment_info.instance_id, e
+                                ))
+                            })?;
+                            info!(
+                                "✅ Kubernetes deployment {} cleaned up",
+                                deployment_info.instance_id
+                            );
+                        }
+                        _ => {
+                            warn!(
+                                "Generic deployment {} has no Kubernetes context/namespace metadata; cleanup is best-effort only",
+                                deployment_info.instance_id
+                            );
+                        }
+                    }
                 }
             }
 
@@ -1085,6 +1250,120 @@ fn resolve_provider_region(ctx: &BlueprintManagerContext, provider: CloudProvide
 }
 
 #[cfg(feature = "remote-providers")]
+fn deployment_type_for_provider(
+    provider: &blueprint_remote_providers::CloudProvider,
+) -> DeploymentType {
+    match provider {
+        blueprint_remote_providers::CloudProvider::AWS => DeploymentType::AwsEc2,
+        blueprint_remote_providers::CloudProvider::GCP => DeploymentType::GcpGce,
+        blueprint_remote_providers::CloudProvider::Azure => DeploymentType::AzureVm,
+        blueprint_remote_providers::CloudProvider::DigitalOcean => {
+            DeploymentType::DigitalOceanDroplet
+        }
+        blueprint_remote_providers::CloudProvider::Vultr => DeploymentType::VultrInstance,
+        blueprint_remote_providers::CloudProvider::Linode
+        | blueprint_remote_providers::CloudProvider::Generic
+        | blueprint_remote_providers::CloudProvider::DockerLocal
+        | blueprint_remote_providers::CloudProvider::DockerRemote(_)
+        | blueprint_remote_providers::CloudProvider::BareMetal(_) => DeploymentType::SshRemote,
+    }
+}
+
+#[cfg(feature = "remote-providers")]
+fn tracker_region_for_provider(provider: CloudProvider, region: &str) -> String {
+    match provider {
+        CloudProvider::GCP => format!("{region}-a"),
+        _ => region.to_string(),
+    }
+}
+
+#[cfg(feature = "remote-providers")]
+fn ttl_seconds_from_hours(hours: Option<u32>) -> Option<u64> {
+    hours.map(|value| u64::from(value).saturating_mul(3600))
+}
+
+#[cfg(feature = "remote-providers")]
+async fn ensure_deployment_tracker(
+    ctx: &BlueprintManagerContext,
+    tracker: Option<Arc<DeploymentTracker>>,
+) -> Result<Arc<DeploymentTracker>> {
+    if let Some(tracker) = tracker {
+        return Ok(tracker);
+    }
+
+    let tracker_path = ctx.data_dir().join("remote_deployments");
+    DeploymentTracker::new(&tracker_path)
+        .await
+        .map(Arc::new)
+        .map_err(|e| Error::Other(format!("Failed to initialize deployment tracker: {e}")))
+}
+
+#[cfg(feature = "remote-providers")]
+async fn best_effort_kubernetes_cleanup(
+    context: &str,
+    namespace: &str,
+    deployment_id: &str,
+) -> std::result::Result<(), String> {
+    run_kubectl_delete(context, namespace, "deployment", deployment_id).await?;
+
+    let mut service_errors = Vec::new();
+    let compat_service_name = format!("{deployment_id}-service");
+    if let Err(error) =
+        run_kubectl_delete(context, namespace, "service", &compat_service_name).await
+    {
+        service_errors.push(error);
+    }
+    if let Err(error) = run_kubectl_delete(context, namespace, "service", deployment_id).await {
+        service_errors.push(error);
+    }
+    if service_errors.len() == 2 {
+        return Err(format!(
+            "kubectl cleanup failed for Kubernetes services associated with deployment {}: {}; {}",
+            deployment_id, service_errors[0], service_errors[1]
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "remote-providers")]
+async fn run_kubectl_delete(
+    context: &str,
+    namespace: &str,
+    resource_kind: &str,
+    resource_name: &str,
+) -> std::result::Result<(), String> {
+    let mut command = tokio::process::Command::new("kubectl");
+    if !context.trim().is_empty() {
+        command.args(["--context", context]);
+    }
+    let output = command
+        .args([
+            "delete",
+            resource_kind,
+            resource_name,
+            "-n",
+            namespace,
+            "--ignore-not-found=true",
+        ])
+        .output()
+        .await
+        .map_err(|error| {
+            format!(
+                "failed to execute kubectl cleanup for {resource_kind}/{resource_name}: {error}"
+            )
+        })?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    Err(format!(
+        "kubectl cleanup failed for {resource_kind}/{resource_name}: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    ))
+}
+
+#[cfg(feature = "remote-providers")]
 async fn verify_tee_attestation(
     policy: TeeAttestationPolicy,
     provider: CloudProvider,
@@ -1176,16 +1455,16 @@ mod tests {
     #[test]
     fn parses_attestation_policy_modes() {
         assert_eq!(
-            parse_tee_attestation_policy("cryptographic"),
+            parse_tee_attestation_policy("cryptographic").unwrap(),
             TeeAttestationPolicy::Cryptographic
         );
         assert_eq!(
-            parse_tee_attestation_policy("STRUCTURAL"),
+            parse_tee_attestation_policy("STRUCTURAL").unwrap(),
             TeeAttestationPolicy::Structural
         );
-        assert_eq!(
-            parse_tee_attestation_policy("unexpected"),
-            TeeAttestationPolicy::Structural
+        assert!(
+            parse_tee_attestation_policy("unexpected").is_err(),
+            "unknown policy should error"
         );
     }
 

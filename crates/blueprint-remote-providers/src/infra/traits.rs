@@ -47,6 +47,7 @@ pub trait CloudProviderAdapter: Send + Sync {
         &self,
         instance_type: &str,
         region: &str,
+        require_tee: bool,
     ) -> Result<ProvisionedInstance>;
 
     /// Terminate an existing instance

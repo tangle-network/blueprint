@@ -361,6 +361,7 @@ mod tests {
             &self,
             _instance_type: &str,
             region: &str,
+            _require_tee: bool,
         ) -> Result<ProvisionedInstance> {
             self.provision_calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);

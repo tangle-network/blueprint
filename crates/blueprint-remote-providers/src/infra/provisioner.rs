@@ -148,7 +148,7 @@ impl CloudProvisioner {
         let mut attempt = 0;
         loop {
             match adapter
-                .provision_instance(&instance_selection.instance_type, region)
+                .provision_instance(&instance_selection.instance_type, region, require_tee)
                 .await
             {
                 Ok(instance) => {

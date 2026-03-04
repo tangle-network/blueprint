@@ -5,7 +5,9 @@ use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 #[cfg(feature = "aws")]
-use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
+use aws_sdk_ec2::types::{
+    EnclaveOptionsRequest, InstanceType, ResourceType, Tag, TagSpecification,
+};
 use blueprint_core::{info, warn};
 
 /// AWS EC2 provisioner
@@ -42,9 +44,13 @@ impl AwsProvisioner {
         if let Some(override_type) = config.custom_config.get("instance_type") {
             instance_selection.instance_type = override_type.clone();
         }
+        let require_tee = config
+            .custom_config
+            .get("require_tee")
+            .is_some_and(|value| value.eq_ignore_ascii_case("true"));
 
         // Run EC2 instance
-        let result = self
+        let mut request = self
             .ec2_client
             .run_instances()
             .image_id(config.ami_id.as_deref().unwrap_or("ami-0c55b159cbfafe1f0")) // Amazon Linux 2
@@ -71,9 +77,13 @@ impl AwsProvisioner {
                             .build(),
                     )
                     .build(),
-            )
-            .send()
-            .await?;
+            );
+        if require_tee {
+            request =
+                request.enclave_options(EnclaveOptionsRequest::builder().enabled(true).build());
+        }
+
+        let result = request.send().await?;
 
         let instance = result
             .instances()
@@ -117,7 +127,11 @@ impl AwsProvisioner {
             private_ip,
             region: config.region.clone(),
             instance_type: instance_selection.instance_type,
-            metadata: Default::default(),
+            metadata: {
+                let mut metadata = std::collections::HashMap::new();
+                metadata.insert("require_tee".to_string(), require_tee.to_string());
+                metadata
+            },
         })
     }
 

@@ -44,11 +44,47 @@ impl CleanupHandler for LocalKubernetesCleanup {
             .get("namespace")
             .map(|s| s.as_str())
             .unwrap_or("default");
+        let context = deployment.resource_ids.get("context").map(|s| s.as_str());
 
-        if let Some(pod_name) = deployment.resource_ids.get("pod") {
+        if let Some(deployment_name) = deployment.resource_ids.get("deployment") {
+            info!(
+                "Cleaning up Kubernetes deployment: {}/{}",
+                namespace, deployment_name
+            );
+
+            let mut command = tokio::process::Command::new("kubectl");
+            if let Some(context) = context {
+                command.args(["--context", context]);
+            }
+            let output = command
+                .args([
+                    "delete",
+                    "deployment",
+                    deployment_name,
+                    "-n",
+                    namespace,
+                    "--grace-period=30",
+                ])
+                .output()
+                .await
+                .map_err(|e| Error::ConfigurationError(format!("kubectl cleanup failed: {e}")))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !stderr.contains("NotFound") {
+                    return Err(Error::ConfigurationError(format!(
+                        "kubectl delete failed: {stderr}"
+                    )));
+                }
+            }
+        } else if let Some(pod_name) = deployment.resource_ids.get("pod") {
             info!("Cleaning up Kubernetes pod: {}/{}", namespace, pod_name);
 
-            let output = tokio::process::Command::new("kubectl")
+            let mut command = tokio::process::Command::new("kubectl");
+            if let Some(context) = context {
+                command.args(["--context", context]);
+            }
+            let output = command
                 .args([
                     "delete",
                     "pod",
@@ -73,11 +109,38 @@ impl CleanupHandler for LocalKubernetesCleanup {
 
         // Also cleanup any services, configmaps, etc.
         for (resource_type, resource_name) in &deployment.resource_ids {
-            if resource_type != "pod" && resource_type != "namespace" {
-                let _ = tokio::process::Command::new("kubectl")
+            if resource_type != "deployment"
+                && resource_type != "pod"
+                && resource_type != "namespace"
+                && resource_type != "context"
+            {
+                let mut command = tokio::process::Command::new("kubectl");
+                if let Some(context) = context {
+                    command.args(["--context", context]);
+                }
+                let output = command
                     .args(["delete", resource_type, resource_name, "-n", namespace])
                     .output()
                     .await;
+                match output {
+                    Ok(output) => {
+                        if !output.status.success() {
+                            let stderr = String::from_utf8_lossy(&output.stderr);
+                            if !stderr.contains("NotFound") {
+                                return Err(Error::ConfigurationError(format!(
+                                    "kubectl delete failed for {} {}: {}",
+                                    resource_type, resource_name, stderr
+                                )));
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        return Err(Error::ConfigurationError(format!(
+                            "kubectl cleanup failed for {} {}: {}",
+                            resource_type, resource_name, error
+                        )));
+                    }
+                }
             }
         }
 

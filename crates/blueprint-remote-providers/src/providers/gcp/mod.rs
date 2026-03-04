@@ -104,6 +104,10 @@ impl GcpProvisioner {
             "Provisioning GCP instance type {} in {}",
             instance_selection.instance_type, zone
         );
+        let require_tee = config
+            .custom_config
+            .get("require_tee")
+            .is_some_and(|value| value.eq_ignore_ascii_case("true"));
 
         // Prepare instance configuration
         let instance_config = serde_json::json!({
@@ -146,6 +150,12 @@ impl GcpProvisioner {
                 "managed_by": "blueprint_remote_providers"
             }
         });
+        let mut instance_config = instance_config;
+        if require_tee {
+            instance_config["confidentialInstanceConfig"] = serde_json::json!({
+                "enableConfidentialCompute": true
+            });
+        }
 
         // Create the instance
         let url = format!(
@@ -222,6 +232,7 @@ impl GcpProvisioner {
         metadata.insert("zone".to_string(), zone.clone());
         metadata.insert("project_id".to_string(), self.project_id.clone());
         metadata.insert("instance_name".to_string(), config.name.clone());
+        metadata.insert("require_tee".to_string(), require_tee.to_string());
         if let Some(numeric_id) = instance["id"].as_str() {
             metadata.insert("instance_numeric_id".to_string(), numeric_id.to_string());
         }

@@ -58,6 +58,7 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
         &self,
         _instance_type: &str,
         region: &str,
+        _require_tee: bool,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
             cpu: 2.0,
@@ -210,7 +211,9 @@ impl DigitalOceanAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        let instance = self.provision_instance("s-2vcpu-4gb", "nyc3").await?;
+        let instance = self
+            .provision_instance("s-2vcpu-4gb", "nyc3", false)
+            .await?;
         self.deploy_blueprint(&instance, blueprint_image, resource_spec, env_vars)
             .await
     }

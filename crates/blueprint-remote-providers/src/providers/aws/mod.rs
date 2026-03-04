@@ -39,6 +39,7 @@ pub mod adapter {
             &self,
             _instance_type: &str,
             _region: &str,
+            _require_tee: bool,
         ) -> Result<ProvisionedInstance> {
             Err(Error::ConfigurationError(
                 "AWS support not enabled. Enable the 'aws' feature".into(),

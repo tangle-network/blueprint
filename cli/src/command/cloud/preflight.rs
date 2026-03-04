@@ -25,8 +25,11 @@ pub async fn run(
     println!("Cloud preflight checks\n");
 
     let attestation_policy = std::env::var("BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY")
-        .unwrap_or_else(|_| "structural".to_string());
-    let cryptographic = attestation_policy.eq_ignore_ascii_case("cryptographic");
+        .unwrap_or_else(|_| "cryptographic".to_string())
+        .trim()
+        .to_ascii_lowercase();
+    let policy_valid = matches!(attestation_policy.as_str(), "cryptographic" | "structural");
+    let cryptographic = attestation_policy == "cryptographic";
     let cryptographic_cmd = std::env::var("BLUEPRINT_REMOTE_TEE_ATTESTATION_VERIFY_CMD").ok();
 
     let mut any_fail = false;
@@ -78,7 +81,12 @@ pub async fn run(
         println!("\nTEE policy");
         println!("- BLUEPRINT_REMOTE_TEE_REQUIRED=true");
         println!("- BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY={attestation_policy}");
-        if cryptographic {
+        if !policy_valid {
+            any_fail = true;
+            println!(
+                "- BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY: INVALID (use 'cryptographic' or 'structural')"
+            );
+        } else if cryptographic {
             let ok = cryptographic_cmd
                 .as_deref()
                 .map(command_spec_is_executable)
@@ -231,17 +239,36 @@ fn command_spec_is_executable(spec: &str) -> bool {
 
     let executable_path = Path::new(executable);
     if executable_path.is_absolute() || executable.contains(std::path::MAIN_SEPARATOR) {
-        return executable_path.is_file();
+        return is_executable_file(executable_path);
     }
 
     std::env::var_os("PATH")
         .map(|path| {
             std::env::split_paths(&path).any(|dir| {
                 let candidate = dir.join(executable);
-                candidate.is_file()
+                is_executable_file(&candidate)
             })
         })
         .unwrap_or(false)
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path)
+            .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 fn render_bootstrap_env(
@@ -426,5 +453,17 @@ mod tests {
         assert!(command_spec_is_executable("/bin/sh"));
         assert!(!command_spec_is_executable("/definitely/missing/verifier"));
         assert!(!command_spec_is_executable(""));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_spec_rejects_non_executable_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::NamedTempFile::new().expect("create temp file");
+        let path = temp.path();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o644))
+            .expect("set non-executable mode");
+        assert!(!command_spec_is_executable(path.to_string_lossy().as_ref()));
     }
 }

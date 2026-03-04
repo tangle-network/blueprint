@@ -225,6 +225,17 @@ impl GcpAdapter {
 
         Ok(cidrs)
     }
+
+    fn env_require_tee() -> bool {
+        std::env::var("BLUEPRINT_REMOTE_TEE_REQUIRED")
+            .ok()
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes"
+                )
+            })
+    }
 }
 
 #[async_trait]
@@ -233,6 +244,7 @@ impl CloudProviderAdapter for GcpAdapter {
         &self,
         instance_type: &str,
         region: &str,
+        require_tee: bool,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
             cpu: 2.0,
@@ -261,6 +273,10 @@ impl CloudProviderAdapter for GcpAdapter {
                     config.insert("ssh_public_key".to_string(), "".to_string());
                 }
                 config.insert("instance_type".to_string(), instance_type.to_string());
+                config.insert(
+                    "require_tee".to_string(),
+                    if require_tee { "true" } else { "false" }.to_string(),
+                );
                 config
             },
         };
@@ -488,7 +504,10 @@ impl GcpAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        let instance = self.provision_instance("e2-medium", "us-central1").await?;
+        let require_tee = Self::env_require_tee();
+        let instance = self
+            .provision_instance("e2-medium", "us-central1", require_tee)
+            .await?;
         self.deploy_blueprint(&instance, blueprint_image, resource_spec, env_vars)
             .await
     }
