@@ -42,11 +42,10 @@ impl TeeDeploymentProfile {
 }
 
 /// Resolve TEE deployment profile from on-chain metadata.
-#[must_use]
 pub fn resolve_tee_deployment_profile(
     metadata: &ITangleTypes::BlueprintMetadata,
-) -> Option<TeeDeploymentProfile> {
-    resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
+) -> Result<Option<TeeDeploymentProfile>, String> {
+    try_resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
 }
 
 /// Resolve TEE deployment profile from `profiling_data` payload.
@@ -98,15 +97,17 @@ pub fn try_resolve_tee_deployment_profile_from_profiling_data(
 }
 
 /// Resolve explicit `tee_required` deployment enforcement from metadata.
-#[must_use]
-pub fn resolve_tee_required(metadata: &ITangleTypes::BlueprintMetadata) -> Option<bool> {
-    resolve_tee_deployment_profile(metadata).map(|profile| profile.tee_required)
+pub fn resolve_tee_required(
+    metadata: &ITangleTypes::BlueprintMetadata,
+) -> Result<Option<bool>, String> {
+    Ok(resolve_tee_deployment_profile(metadata)?.map(|profile| profile.tee_required))
 }
 
 /// Resolve explicit `supports_tee` capability from metadata.
-#[must_use]
-pub fn resolve_tee_support(metadata: &ITangleTypes::BlueprintMetadata) -> Option<bool> {
-    resolve_tee_deployment_profile(metadata).map(|profile| profile.supports_tee)
+pub fn resolve_tee_support(
+    metadata: &ITangleTypes::BlueprintMetadata,
+) -> Result<Option<bool>, String> {
+    Ok(resolve_tee_deployment_profile(metadata)?.map(|profile| profile.supports_tee))
 }
 
 /// Inject or update structured TEE deployment profile inside `profiling_data`.
@@ -199,7 +200,7 @@ mod tests {
         metadata.profilingData =
             r#"{"deployment_profile":{"tee_required":true,"supports_tee":true}}"#.into();
         assert_eq!(
-            resolve_tee_deployment_profile(&metadata),
+            resolve_tee_deployment_profile(&metadata).unwrap(),
             Some(TeeDeploymentProfile {
                 tee_required: true,
                 supports_tee: true,
@@ -213,7 +214,7 @@ mod tests {
         metadata.profilingData =
             r#"{"deployment_profile":{"tee_required":false,"supports_tee":true}}"#.into();
         assert_eq!(
-            resolve_tee_deployment_profile(&metadata),
+            resolve_tee_deployment_profile(&metadata).unwrap(),
             Some(TeeDeploymentProfile {
                 tee_required: false,
                 supports_tee: true,
@@ -225,7 +226,7 @@ mod tests {
     fn ignores_non_structured_payloads() {
         let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
         metadata.profilingData = "tee".into();
-        assert_eq!(resolve_tee_deployment_profile(&metadata), None);
+        assert!(resolve_tee_deployment_profile(&metadata).is_err());
     }
 
     #[test]

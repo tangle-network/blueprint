@@ -10,6 +10,7 @@ pub struct BlueprintListEntry {
     pub info: BlueprintInfo,
     pub tee_required: Option<bool>,
     pub tee_supported: Option<bool>,
+    pub tee_metadata_error: Option<String>,
 }
 
 /// Fetch all registered blueprints.
@@ -21,16 +22,28 @@ pub async fn list_blueprints(client: &TangleClient) -> Result<Vec<BlueprintListE
 
     let mut entries = Vec::with_capacity(blueprints.len());
     for (blueprint_id, info) in blueprints {
-        let tee_profile = client
-            .get_blueprint_definition(blueprint_id)
-            .await
-            .ok()
-            .and_then(|definition| resolve_tee_deployment_profile(&definition.metadata));
+        let (tee_required, tee_supported, tee_metadata_error) =
+            match client.get_blueprint_definition(blueprint_id).await {
+                Ok(definition) => match resolve_tee_deployment_profile(&definition.metadata) {
+                    Ok(profile) => (
+                        profile.map(|value| value.tee_required),
+                        profile.map(|value| value.supports_tee),
+                        None,
+                    ),
+                    Err(err) => (None, None, Some(err)),
+                },
+                Err(err) => (
+                    None,
+                    None,
+                    Some(format!("failed to fetch definition: {err}")),
+                ),
+            };
         entries.push(BlueprintListEntry {
             blueprint_id,
             info,
-            tee_required: tee_profile.map(|profile| profile.tee_required),
-            tee_supported: tee_profile.map(|profile| profile.supports_tee),
+            tee_required,
+            tee_supported,
+            tee_metadata_error,
         });
     }
 
@@ -56,6 +69,7 @@ pub fn print_blueprints(blueprints: &[BlueprintListEntry]) {
             info,
             tee_required,
             tee_supported,
+            tee_metadata_error,
         } = entry;
         println!(
             "{}: {}",
@@ -92,6 +106,9 @@ pub fn print_blueprints(blueprints: &[BlueprintListEntry]) {
             None => "unspecified",
         };
         println!("{}: {}", style("TEE Policy").green(), policy_label);
+        if let Some(err) = tee_metadata_error {
+            println!("{}: {}", style("TEE Metadata Error").red(), err);
+        }
         println!("{}: {}", style("Active").green(), info.active);
         println!(
             "{}",
