@@ -12,6 +12,7 @@ pub const METADATA_SCHEMA_V1: &str = "tangle.blueprint.metadata.v1";
 
 const DEPLOYMENT_PROFILE_KEY: &str = "deployment_profile";
 const JOB_PROFILES_BLOB_KEY: &str = "job_profiles_b64_gzip";
+const LEGACY_PROFILING_PREFIX: &str = "[PROFILING_DATA_";
 
 /// Errors produced while parsing deployment profile metadata.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -35,6 +36,9 @@ pub enum TeeDeploymentProfileError {
         /// Human-readable schema validation detail.
         message: String,
     },
+    /// `profiling_data` is non-empty but not recognized as structured JSON or legacy payload.
+    #[error("profiling_data is not structured metadata and does not match legacy profile format")]
+    UnsupportedProfilingDataFormat,
     /// `tee_required=true` cannot be paired with `supports_tee=false`.
     #[error("deployment_profile is invalid: tee_required=true requires supports_tee=true")]
     ContradictoryPolicy,
@@ -92,8 +96,15 @@ pub fn resolve_tee_deployment_profile_from_profiling_data(
     profiling_data: &str,
 ) -> Result<Option<TeeDeploymentProfile>, TeeDeploymentProfileError> {
     let trimmed = profiling_data.trim();
-    if trimmed.is_empty() || !looks_like_structured_metadata(trimmed) {
+    if trimmed.is_empty() {
         return Ok(None);
+    }
+    if !looks_like_structured_metadata(trimmed) {
+        return if looks_like_legacy_profile_payload(trimmed) {
+            Ok(None)
+        } else {
+            Err(TeeDeploymentProfileError::UnsupportedProfilingDataFormat)
+        };
     }
 
     try_resolve_tee_deployment_profile_from_profiling_data(trimmed)
@@ -178,6 +189,16 @@ pub fn inject_tee_deployment_profile(
 
     if let Ok(mut value) = serde_json::from_str::<Value>(trimmed) {
         if let Some(root) = value.as_object_mut() {
+            if let Some(schema) = root.get("schema").and_then(Value::as_str) {
+                if schema != METADATA_SCHEMA_V1 {
+                    return json!({
+                        "schema": METADATA_SCHEMA_V1,
+                        DEPLOYMENT_PROFILE_KEY: profile_to_value(profile),
+                        JOB_PROFILES_BLOB_KEY: trimmed,
+                    })
+                    .to_string();
+                }
+            }
             upsert_deployment_profile(root, profile);
             return value.to_string();
         }
@@ -209,6 +230,10 @@ pub fn extract_job_profiles_blob(profiling_data: &str) -> Option<String> {
 
 fn looks_like_structured_metadata(payload: &str) -> bool {
     payload.starts_with('{')
+}
+
+fn looks_like_legacy_profile_payload(payload: &str) -> bool {
+    payload.starts_with(LEGACY_PROFILING_PREFIX) || payload.starts_with("H4sI")
 }
 
 fn default_metadata_payload(profile: TeeDeploymentProfile) -> Value {
@@ -272,7 +297,7 @@ mod tests {
     #[test]
     fn ignores_non_structured_payloads() {
         let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
-        metadata.profilingData = "tee".into();
+        metadata.profilingData = "[PROFILING_DATA_V1]tee".into();
         assert_eq!(resolve_tee_deployment_profile(&metadata).unwrap(), None);
     }
 
@@ -284,11 +309,21 @@ mod tests {
     }
 
     #[test]
-    fn tolerant_parser_ignores_non_json_payloads() {
+    fn tolerant_parser_ignores_recognized_legacy_payloads() {
         assert_eq!(
-            resolve_tee_deployment_profile_from_profiling_data("tee").unwrap(),
+            resolve_tee_deployment_profile_from_profiling_data("[PROFILING_DATA_V1]tee").unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn tolerant_parser_errors_on_unknown_non_json_payloads() {
+        let err = resolve_tee_deployment_profile_from_profiling_data("tee")
+            .expect_err("expected unsupported format error");
+        assert!(matches!(
+            err,
+            TeeDeploymentProfileError::UnsupportedProfilingDataFormat
+        ));
     }
 
     #[test]

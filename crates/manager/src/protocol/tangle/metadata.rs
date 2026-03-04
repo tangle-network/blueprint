@@ -666,11 +666,15 @@ mod tests {
     }
 
     #[test]
-    fn resolve_tee_required_ignores_non_structured_payloads() {
-        let parsed =
+    fn resolve_tee_required_errors_on_unknown_non_structured_payloads() {
+        let err =
             blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data("native")
-                .unwrap();
-        assert_eq!(parsed, None);
+                .expect_err("expected unsupported format error");
+        assert!(
+            err.to_string()
+                .contains("does not match legacy profile format"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
