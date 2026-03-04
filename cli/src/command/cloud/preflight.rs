@@ -3,6 +3,8 @@
 use super::config::{CloudConfig, CloudProvider};
 use color_eyre::{Result, eyre::eyre};
 use std::fmt::Write as _;
+use std::net::IpAddr;
+use std::path::Path;
 use std::path::PathBuf;
 
 pub async fn run(
@@ -17,7 +19,7 @@ pub async fn run(
     if providers.is_empty() {
         println!("No cloud providers configured in CLI config.");
         println!("Run `cargo tangle cloud configure <provider>` first.");
-        return Ok(());
+        return Err(eyre!("No cloud providers configured"));
     }
 
     println!("Cloud preflight checks\n");
@@ -79,7 +81,7 @@ pub async fn run(
         if cryptographic {
             let ok = cryptographic_cmd
                 .as_deref()
-                .map(|v| !v.trim().is_empty())
+                .map(command_spec_is_executable)
                 .unwrap_or(false);
             if ok {
                 println!(
@@ -89,7 +91,7 @@ pub async fn run(
             } else {
                 any_fail = true;
                 println!(
-                    "- BLUEPRINT_REMOTE_TEE_ATTESTATION_VERIFY_CMD: MISSING (required for cryptographic policy)"
+                    "- BLUEPRINT_REMOTE_TEE_ATTESTATION_VERIFY_CMD: MISSING or NOT EXECUTABLE (required for cryptographic policy)"
                 );
             }
         }
@@ -186,8 +188,60 @@ fn gcp_cidr_prerequisites_met_with_values(
     ssh_cidrs: Option<&str>,
     qos_cidrs: Option<&str>,
 ) -> bool {
-    ssh_cidrs.is_some_and(|value| !value.trim().is_empty())
-        && qos_cidrs.is_some_and(|value| !value.trim().is_empty())
+    ssh_cidrs.is_some_and(cidr_list_is_valid) && qos_cidrs.is_some_and(cidr_list_is_valid)
+}
+
+fn cidr_list_is_valid(raw: &str) -> bool {
+    let mut saw_entry = false;
+    for cidr in raw.split(',').map(str::trim) {
+        if cidr.is_empty() {
+            continue;
+        }
+        saw_entry = true;
+        if !cidr_is_valid(cidr) {
+            return false;
+        }
+    }
+    saw_entry
+}
+
+fn cidr_is_valid(raw: &str) -> bool {
+    let (ip_raw, prefix_raw) = match raw.split_once('/') {
+        Some(parts) => parts,
+        None => return false,
+    };
+    let ip: IpAddr = match ip_raw.trim().parse() {
+        Ok(ip) => ip,
+        Err(_) => return false,
+    };
+    let prefix: u8 = match prefix_raw.trim().parse() {
+        Ok(prefix) => prefix,
+        Err(_) => return false,
+    };
+    match ip {
+        IpAddr::V4(_) => prefix <= 32,
+        IpAddr::V6(_) => prefix <= 128,
+    }
+}
+
+fn command_spec_is_executable(spec: &str) -> bool {
+    let Some(executable) = spec.split_whitespace().next().filter(|v| !v.is_empty()) else {
+        return false;
+    };
+
+    let executable_path = Path::new(executable);
+    if executable_path.is_absolute() || executable.contains(std::path::MAIN_SEPARATOR) {
+        return executable_path.is_file();
+    }
+
+    std::env::var_os("PATH")
+        .map(|path| {
+            std::env::split_paths(&path).any(|dir| {
+                let candidate = dir.join(executable);
+                candidate.is_file()
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn render_bootstrap_env(
@@ -345,5 +399,32 @@ mod tests {
             Some(""),
             Some("192.168.0.0/16")
         ));
+    }
+
+    #[test]
+    fn gcp_cidr_prerequisites_require_valid_cidrs() {
+        assert!(gcp_cidr_prerequisites_met_with_values(
+            Some("10.0.0.0/8,192.168.0.0/16"),
+            Some("172.16.0.0/12")
+        ));
+        assert!(!gcp_cidr_prerequisites_met_with_values(
+            Some("not-a-cidr"),
+            Some("172.16.0.0/12")
+        ));
+        assert!(!gcp_cidr_prerequisites_met_with_values(
+            Some("10.0.0.0/33"),
+            Some("172.16.0.0/12")
+        ));
+        assert!(!gcp_cidr_prerequisites_met_with_values(
+            Some("10.0.0.0/8"),
+            Some("172.16.0.0")
+        ));
+    }
+
+    #[test]
+    fn command_spec_requires_executable() {
+        assert!(command_spec_is_executable("/bin/sh"));
+        assert!(!command_spec_is_executable("/definitely/missing/verifier"));
+        assert!(!command_spec_is_executable(""));
     }
 }

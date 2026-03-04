@@ -404,7 +404,9 @@ fn aws_credentials_available() -> bool {
 
     if let Ok(shared_credentials_file) = std::env::var("AWS_SHARED_CREDENTIALS_FILE") {
         if !shared_credentials_file.trim().is_empty() {
-            return std::path::Path::new(&shared_credentials_file).exists();
+            if std::path::Path::new(&shared_credentials_file).exists() {
+                return true;
+            }
         }
     }
 
@@ -418,6 +420,7 @@ fn aws_credentials_available() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
 
     #[tokio::test]
     async fn test_provider_initialization() {
@@ -429,5 +432,77 @@ mod tests {
         let provisioner = result.unwrap();
         // With no env vars set, no providers should be configured
         assert!(provisioner.providers.is_empty() || !provisioner.providers.is_empty());
+    }
+
+    #[cfg(feature = "aws")]
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<OsString>,
+    }
+
+    #[cfg(feature = "aws")]
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+            let original = std::env::var_os(key);
+            unsafe { std::env::set_var(key, value) };
+            Self { key, original }
+        }
+
+        fn remove(key: &'static str) -> Self {
+            let original = std::env::var_os(key);
+            unsafe { std::env::remove_var(key) };
+            Self { key, original }
+        }
+    }
+
+    #[cfg(feature = "aws")]
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(value) => unsafe { std::env::set_var(self.key, value) },
+                None => unsafe { std::env::remove_var(self.key) },
+            }
+        }
+    }
+
+    #[cfg(feature = "aws")]
+    #[test]
+    fn aws_credentials_available_requires_both_env_vars() {
+        let _key = EnvVarGuard::set("AWS_ACCESS_KEY_ID", "test-key");
+        let _secret_missing = EnvVarGuard::remove("AWS_SECRET_ACCESS_KEY");
+        let _shared = EnvVarGuard::remove("AWS_SHARED_CREDENTIALS_FILE");
+        let _home = EnvVarGuard::set("HOME", "/definitely/missing/home");
+        let _userprofile = EnvVarGuard::set("USERPROFILE", "/definitely/missing/userprofile");
+        assert!(!aws_credentials_available());
+
+        drop(_secret_missing);
+        let _secret_present = EnvVarGuard::set("AWS_SECRET_ACCESS_KEY", "test-secret");
+        let _ = &_secret_present;
+        assert!(aws_credentials_available());
+    }
+
+    #[cfg(feature = "aws")]
+    #[test]
+    fn aws_credentials_available_falls_back_when_shared_file_is_missing() {
+        let temp_home = tempfile::tempdir().expect("create temp home");
+        let aws_dir = temp_home.path().join(".aws");
+        std::fs::create_dir_all(&aws_dir).expect("create aws dir");
+        std::fs::write(
+            aws_dir.join("credentials"),
+            "[default]\naws_access_key_id = x\n",
+        )
+        .expect("write credentials");
+
+        let _key = EnvVarGuard::remove("AWS_ACCESS_KEY_ID");
+        let _secret = EnvVarGuard::remove("AWS_SECRET_ACCESS_KEY");
+        let missing_shared_file = temp_home.path().join("does-not-exist");
+        let _shared = EnvVarGuard::set(
+            "AWS_SHARED_CREDENTIALS_FILE",
+            missing_shared_file.as_os_str(),
+        );
+        let _home = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
+        let _userprofile = EnvVarGuard::remove("USERPROFILE");
+
+        assert!(aws_credentials_available());
     }
 }

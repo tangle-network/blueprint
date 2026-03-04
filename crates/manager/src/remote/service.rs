@@ -393,7 +393,7 @@ impl RemoteDeploymentService {
             }
 
             // Deploy to the provisioned instance. This must not provision a second VM.
-            let deployment_result = provisioner
+            let deployment_result = match provisioner
                 .deploy_blueprint_to_instance(
                     &remote_provider,
                     &instance,
@@ -402,7 +402,36 @@ impl RemoteDeploymentService {
                     env_map,
                 )
                 .await
-                .map_err(|e| Error::Other(format!("Failed to deploy blueprint: {}", e)))?;
+            {
+                Ok(result) => result,
+                Err(deployment_error) => {
+                    warn!(
+                        "Blueprint deployment failed for provider {} (instance={}); attempting best-effort cleanup before returning error: {}",
+                        provider, instance.id, deployment_error
+                    );
+                    if let Err(cleanup_error) = provisioner
+                        .terminate(remote_provider.clone(), &instance.id)
+                        .await
+                    {
+                        warn!(
+                            "Best-effort cleanup failed after deployment failure (instance={}): {}",
+                            instance.id, cleanup_error
+                        );
+                        return Err(Error::Other(format!(
+                            "Failed to deploy blueprint: {}. Cleanup after failed deployment also failed for instance {}: {}",
+                            deployment_error, instance.id, cleanup_error
+                        )));
+                    }
+                    info!(
+                        "✅ Instance {} terminated after deployment failure",
+                        instance.id
+                    );
+                    return Err(Error::Other(format!(
+                        "Failed to deploy blueprint: {}",
+                        deployment_error
+                    )));
+                }
+            };
 
             let tee_attestation_policy = if resource_spec.tee_required {
                 Some(TeeAttestationPolicy::from_env())
@@ -425,6 +454,10 @@ impl RemoteDeploymentService {
                                 "Best-effort cleanup failed after attestation verification failure (instance={}): {}",
                                 instance.id, cleanup_error
                             );
+                            return Err(Error::Other(format!(
+                                "TEE attestation verification failed: {}. Cleanup after attestation failure also failed for instance {}: {}",
+                                verification_error, instance.id, cleanup_error
+                            )));
                         } else {
                             info!(
                                 "✅ Instance {} terminated after attestation verification failure",
