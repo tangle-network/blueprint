@@ -15,7 +15,7 @@ use crate::sources::types::{
     GithubFetcher as ManagerGithubFetcher, ImageRegistryFetcher, RemoteFetcher, TestFetcher,
 };
 use blueprint_client_tangle::contracts::ITangleTypes;
-use blueprint_client_tangle::try_resolve_tee_deployment_profile_from_profiling_data;
+use blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data;
 use serde::Deserialize;
 use serde_json;
 type OnChainBlueprintSource = <ITangleTypes::BlueprintSource as SolType>::RustType;
@@ -106,7 +106,7 @@ impl OnChainMetadataProvider {
 
     fn resolve_tee_required(metadata: &OnChainBlueprintMetadata) -> Result<bool> {
         let profile =
-            try_resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
+            resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
                 .map_err(|err| {
                     Error::Other(format!(
                         "invalid profilingData for TEE deployment profile: {err}"
@@ -187,9 +187,9 @@ impl OnChainMetadataProvider {
     }
 
     fn convert_testing_source(source: &OnChainTestingSource) -> Option<TestFetcher> {
-        let cargo_package = source.cargoPackage.clone().to_string();
-        let cargo_bin = source.cargoBin.clone().to_string();
-        let base_path = source.basePath.clone().to_string();
+        let cargo_package = source.cargoPackage.clone().to_string().trim().to_string();
+        let cargo_bin = source.cargoBin.clone().to_string().trim().to_string();
+        let base_path = source.basePath.clone().to_string().trim().to_string();
 
         if cargo_package.is_empty() && cargo_bin.is_empty() && base_path.is_empty() {
             return None;
@@ -685,7 +685,7 @@ mod tests {
     #[test]
     fn resolve_tee_required_errors_on_malformed_json() {
         let metadata = ITangleTypes::BlueprintMetadata {
-            profilingData: "not-json".into(),
+            profilingData: "{".into(),
             ..Default::default()
         };
         let err = OnChainMetadataProvider::resolve_tee_required(&metadata).unwrap_err();
@@ -693,6 +693,32 @@ mod tests {
             err.to_string()
                 .contains("invalid profilingData for TEE deployment profile"),
             "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_tee_required_defaults_false_for_legacy_non_json_payloads() {
+        let metadata = ITangleTypes::BlueprintMetadata {
+            profilingData: "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==".into(),
+            ..Default::default()
+        };
+        let parsed = OnChainMetadataProvider::resolve_tee_required(&metadata).unwrap();
+        assert!(
+            !parsed,
+            "legacy payload should default to tee_required=false"
+        );
+    }
+
+    #[test]
+    fn skips_testing_source_with_whitespace_only_fields() {
+        let source = ITangleTypes::TestingSource {
+            cargoPackage: "   ".into(),
+            cargoBin: "\t".into(),
+            basePath: "\n".into(),
+        };
+        assert!(
+            OnChainMetadataProvider::convert_testing_source(&source).is_none(),
+            "whitespace-only testing source metadata should be ignored"
         );
     }
 }

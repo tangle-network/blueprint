@@ -35,6 +35,9 @@ pub enum TeeDeploymentProfileError {
         /// Human-readable schema validation detail.
         message: String,
     },
+    /// `tee_required=true` cannot be paired with `supports_tee=false`.
+    #[error("deployment_profile is invalid: tee_required=true requires supports_tee=true")]
+    ContradictoryPolicy,
 }
 
 /// Blueprint deployment policy related to TEE placement.
@@ -69,10 +72,8 @@ impl TeeDeploymentProfile {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawDeploymentProfile {
-    #[serde(default)]
-    tee_required: bool,
-    #[serde(default)]
-    supports_tee: bool,
+    tee_required: Option<bool>,
+    supports_tee: Option<bool>,
 }
 
 /// Resolve TEE deployment profile from on-chain metadata.
@@ -125,17 +126,22 @@ pub fn try_resolve_tee_deployment_profile_from_profiling_data(
         return Err(TeeDeploymentProfileError::DeploymentProfileNotObject);
     };
 
-    let profile: RawDeploymentProfile =
+    let raw_profile: RawDeploymentProfile =
         serde_json::from_value(Value::Object(raw_profile_object.clone())).map_err(|e| {
             TeeDeploymentProfileError::InvalidDeploymentProfile {
                 message: e.to_string(),
             }
         })?;
+    let tee_required = raw_profile.tee_required.unwrap_or(false);
+    if tee_required && matches!(raw_profile.supports_tee, Some(false)) {
+        return Err(TeeDeploymentProfileError::ContradictoryPolicy);
+    }
+    let supports_tee = raw_profile.supports_tee.unwrap_or(false);
 
     Ok(Some(
         TeeDeploymentProfile {
-            tee_required: profile.tee_required,
-            supports_tee: profile.supports_tee,
+            tee_required,
+            supports_tee,
         }
         .normalized(),
     ))
@@ -220,8 +226,10 @@ fn profile_to_value(profile: TeeDeploymentProfile) -> Value {
 }
 
 fn upsert_deployment_profile(root: &mut Map<String, Value>, profile: TeeDeploymentProfile) {
-    root.entry("schema".to_string())
-        .or_insert_with(|| Value::String(METADATA_SCHEMA_V1.to_string()));
+    root.insert(
+        "schema".to_string(),
+        Value::String(METADATA_SCHEMA_V1.to_string()),
+    );
     root.insert(
         DEPLOYMENT_PROFILE_KEY.to_string(),
         profile_to_value(profile),
@@ -303,6 +311,18 @@ mod tests {
     }
 
     #[test]
+    fn strict_parser_errors_on_contradictory_policy_flags() {
+        let err = try_resolve_tee_deployment_profile_from_profiling_data(
+            r#"{"deployment_profile":{"tee_required":true,"supports_tee":false}}"#,
+        )
+        .expect_err("expected contradiction error");
+        assert!(matches!(
+            err,
+            TeeDeploymentProfileError::ContradictoryPolicy
+        ));
+    }
+
+    #[test]
     fn strict_parser_errors_on_unknown_fields() {
         let err = try_resolve_tee_deployment_profile_from_profiling_data(
             r#"{"deployment_profile":{"tee_required":true,"tee_requred":true}}"#,
@@ -380,6 +400,22 @@ mod tests {
                 .and_then(|v| v.get("tee_required"))
                 .and_then(Value::as_bool),
             Some(true)
+        );
+    }
+
+    #[test]
+    fn inject_overwrites_stale_schema_marker() {
+        let payload = inject_tee_deployment_profile(
+            r#"{"schema":"legacy.v0"}"#,
+            TeeDeploymentProfile {
+                tee_required: false,
+                supports_tee: true,
+            },
+        );
+        let value: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(
+            value.get("schema").and_then(Value::as_str),
+            Some(METADATA_SCHEMA_V1)
         );
     }
 
