@@ -410,7 +410,30 @@ impl RemoteDeploymentService {
                 None
             };
             let tee_attestation_proof = if let Some(policy) = tee_attestation_policy {
-                verify_tee_attestation(policy, provider, &deployment_result).await?
+                match verify_tee_attestation(policy, provider, &deployment_result).await {
+                    Ok(proof) => proof,
+                    Err(verification_error) => {
+                        warn!(
+                            "TEE attestation verification failed for provider {} (instance={}); attempting best-effort cleanup before returning error: {}",
+                            provider, instance.id, verification_error
+                        );
+                        if let Err(cleanup_error) = provisioner
+                            .terminate(remote_provider.clone(), &instance.id)
+                            .await
+                        {
+                            warn!(
+                                "Best-effort cleanup failed after attestation verification failure (instance={}): {}",
+                                instance.id, cleanup_error
+                            );
+                        } else {
+                            info!(
+                                "✅ Instance {} terminated after attestation verification failure",
+                                instance.id
+                            );
+                        }
+                        return Err(verification_error);
+                    }
+                }
             } else {
                 None
             };

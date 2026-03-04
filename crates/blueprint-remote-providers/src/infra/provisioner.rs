@@ -31,7 +31,7 @@ impl CloudProvisioner {
 
         // Initialize provider adapters based on available credentials
         #[cfg(feature = "aws")]
-        if std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
+        if aws_credentials_available() {
             providers.insert(
                 CloudProvider::AWS,
                 Box::new(AwsAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
@@ -392,6 +392,27 @@ fn is_not_found_error(error: &Error) -> bool {
     message.contains("404")
         || message.to_ascii_lowercase().contains("not found")
         || message.to_ascii_lowercase().contains("does not exist")
+}
+
+#[cfg(feature = "aws")]
+fn aws_credentials_available() -> bool {
+    let env_credentials = std::env::var("AWS_ACCESS_KEY_ID").is_ok()
+        && std::env::var("AWS_SECRET_ACCESS_KEY").is_ok();
+    if env_credentials {
+        return true;
+    }
+
+    if let Ok(shared_credentials_file) = std::env::var("AWS_SHARED_CREDENTIALS_FILE") {
+        if !shared_credentials_file.trim().is_empty() {
+            return std::path::Path::new(&shared_credentials_file).exists();
+        }
+    }
+
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from)
+        .map(|home| home.join(".aws").join("credentials").exists())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

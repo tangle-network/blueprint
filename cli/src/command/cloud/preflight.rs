@@ -1,7 +1,7 @@
 //! Remote deployment preflight checks and bootstrap helpers.
 
 use super::config::{CloudConfig, CloudProvider};
-use color_eyre::Result;
+use color_eyre::{Result, eyre::eyre};
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
@@ -34,6 +34,11 @@ pub async fn run(
         let credentials_ok = credentials_present(*selected);
         let supports_tee = provider_supports_tee(*selected);
         let tee_ok = !tee_required || supports_tee;
+        let gcp_cidrs_ok = if *selected == CloudProvider::GCP {
+            gcp_cidr_prerequisites_met()
+        } else {
+            true
+        };
 
         let mut notes = Vec::new();
         if !configured {
@@ -45,17 +50,13 @@ pub async fn run(
         if tee_required && !supports_tee {
             notes.push("provider does not support confidential compute".to_string());
         }
-        if tee_required && *selected == CloudProvider::GCP {
-            if std::env::var("BLUEPRINT_ALLOWED_SSH_CIDRS").is_err()
-                || std::env::var("BLUEPRINT_ALLOWED_QOS_CIDRS").is_err()
-            {
-                notes.push(
-                    "set BLUEPRINT_ALLOWED_SSH_CIDRS and BLUEPRINT_ALLOWED_QOS_CIDRS".to_string(),
-                );
-            }
+        if *selected == CloudProvider::GCP && !gcp_cidrs_ok {
+            notes.push(
+                "set BLUEPRINT_ALLOWED_SSH_CIDRS and BLUEPRINT_ALLOWED_QOS_CIDRS".to_string(),
+            );
         }
 
-        let pass = configured && credentials_ok && tee_ok;
+        let pass = configured && credentials_ok && tee_ok && gcp_cidrs_ok;
         if !pass {
             any_fail = true;
         }
@@ -114,6 +115,7 @@ pub async fn run(
 
     if any_fail {
         println!("\nPreflight result: FAIL");
+        return Err(eyre!("Cloud preflight checks failed"));
     } else {
         println!("\nPreflight result: PASS");
     }
@@ -174,6 +176,20 @@ fn credentials_present(provider: CloudProvider) -> bool {
     }
 }
 
+fn gcp_cidr_prerequisites_met() -> bool {
+    let ssh_cidrs = std::env::var("BLUEPRINT_ALLOWED_SSH_CIDRS").ok();
+    let qos_cidrs = std::env::var("BLUEPRINT_ALLOWED_QOS_CIDRS").ok();
+    gcp_cidr_prerequisites_met_with_values(ssh_cidrs.as_deref(), qos_cidrs.as_deref())
+}
+
+fn gcp_cidr_prerequisites_met_with_values(
+    ssh_cidrs: Option<&str>,
+    qos_cidrs: Option<&str>,
+) -> bool {
+    ssh_cidrs.is_some_and(|value| !value.trim().is_empty())
+        && qos_cidrs.is_some_and(|value| !value.trim().is_empty())
+}
+
 fn render_bootstrap_env(
     config: &CloudConfig,
     provider: CloudProvider,
@@ -203,10 +219,10 @@ fn render_bootstrap_env(
         if let Some(backend) = default_tee_backend(provider) {
             let _ = writeln!(&mut out, "TEE_BACKEND={backend}");
         }
-        if provider == CloudProvider::GCP {
-            let _ = writeln!(&mut out, "BLUEPRINT_ALLOWED_SSH_CIDRS=10.0.0.0/8");
-            let _ = writeln!(&mut out, "BLUEPRINT_ALLOWED_QOS_CIDRS=10.0.0.0/8");
-        }
+    }
+    if provider == CloudProvider::GCP {
+        let _ = writeln!(&mut out, "BLUEPRINT_ALLOWED_SSH_CIDRS=10.0.0.0/8");
+        let _ = writeln!(&mut out, "BLUEPRINT_ALLOWED_QOS_CIDRS=10.0.0.0/8");
     }
     if attestation_policy.eq_ignore_ascii_case("cryptographic") {
         let value = cryptographic_cmd.unwrap_or("/usr/local/bin/verify-tee-attestation");
@@ -309,5 +325,25 @@ mod tests {
         assert!(output.contains("AWS_DEFAULT_REGION=us-west-2"));
         assert!(output.contains("BLUEPRINT_REMOTE_TEE_REQUIRED=true"));
         assert!(output.contains("TEE_BACKEND=aws-nitro"));
+    }
+
+    #[test]
+    fn gcp_cidr_prerequisites_require_both_values() {
+        assert!(gcp_cidr_prerequisites_met_with_values(
+            Some("10.0.0.0/8"),
+            Some("192.168.0.0/16")
+        ));
+        assert!(!gcp_cidr_prerequisites_met_with_values(
+            Some("10.0.0.0/8"),
+            None
+        ));
+        assert!(!gcp_cidr_prerequisites_met_with_values(
+            None,
+            Some("192.168.0.0/16")
+        ));
+        assert!(!gcp_cidr_prerequisites_met_with_values(
+            Some(""),
+            Some("192.168.0.0/16")
+        ));
     }
 }
