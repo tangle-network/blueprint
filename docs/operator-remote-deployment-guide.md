@@ -158,14 +158,35 @@ export TEE_BACKEND=aws-nitro
 # or: azure-skr
 ```
 
+Validate cloud + TEE readiness before running the manager:
+
+```bash
+cargo tangle cloud preflight --tee-required --bootstrap-env
+```
+
+For GCP secure ingress hardening, set explicit CIDRs (required unless you explicitly choose open ingress):
+
+```bash
+export BLUEPRINT_ALLOWED_SSH_CIDRS=10.0.0.0/8
+export BLUEPRINT_ALLOWED_QOS_CIDRS=10.0.0.0/8
+```
+
+If you require cryptographic attestation policy enforcement:
+
+```bash
+export BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY=cryptographic
+export BLUEPRINT_REMOTE_TEE_ATTESTATION_VERIFY_CMD=/usr/local/bin/verify-tee-attestation
+```
+
 Operator behavior in this mode:
 - Provider selection is restricted to TEE-capable providers (`AWS`, `GCP`, `Azure`).
 - Non-TEE providers are rejected instead of used as fallback.
 - Deployment injects `TEE_REQUIRED=true` and `TEE_BACKEND` into runtime env vars.
+- When `BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY=cryptographic`, deployments fail closed unless the configured verifier command succeeds.
 
 Current verification boundary:
-- This ensures TEE intent and confidential-capable provisioning selection.
-- Full cryptographic attestation proof/verification still requires additional policy tooling.
+- Structural policy enforces TEE intent and confidential-capable provisioning selection.
+- Cryptographic policy requires an external verifier command and fails closed on verification errors.
 
 ## Advanced Configuration
 

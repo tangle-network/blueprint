@@ -11,7 +11,7 @@ use crate::providers::gcp::GcpProvisioner;
 use crate::security::auth;
 use crate::shared::security::BlueprintSecurityConfig;
 use async_trait::async_trait;
-use blueprint_core::{info, warn};
+use blueprint_core::info;
 use blueprint_std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
@@ -58,14 +58,14 @@ impl GcpAdapter {
             self.project_id
         );
 
-        let firewall_rules = Self::build_firewall_rules();
+        let firewall_rules = Self::build_firewall_rules()?;
 
         info!(
             "Creating {} firewall rules for GCP Blueprint security",
             firewall_rules.len()
         );
 
-        for rule in &firewall_rules {
+        for rule in firewall_rules {
             let rule_name = rule["name"].as_str().unwrap_or("unknown");
 
             // Check if rule already exists
@@ -74,53 +74,90 @@ impl GcpAdapter {
                 .get(&check_url)
                 .bearer_auth(&access_token)
                 .send()
-                .await;
-
-            if let Ok(resp) = check_response {
-                if resp.status().is_success() {
-                    info!("Firewall rule {} already exists, skipping", rule_name);
-                    continue;
-                }
-            }
-
-            // Create the firewall rule
-            match client
-                .post(&base_url)
-                .bearer_auth(&access_token)
-                .json(rule)
-                .send()
                 .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    info!(
-                        "Created firewall rule: {} - {}",
-                        rule_name,
-                        rule["description"].as_str().unwrap_or("")
-                    );
+                .map_err(|e| {
+                    Error::ConfigurationError(format!(
+                        "Failed to check firewall rule {}: {}",
+                        rule_name, e
+                    ))
+                })?;
+
+            if check_response.status().is_success() {
+                let update_response = client
+                    .put(&check_url)
+                    .bearer_auth(&access_token)
+                    .json(&rule)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        Error::ConfigurationError(format!(
+                            "Failed to update firewall rule {}: {}",
+                            rule_name, e
+                        ))
+                    })?;
+                if !update_response.status().is_success() {
+                    let status = update_response.status();
+                    let error_text = update_response.text().await.unwrap_or_default();
+                    return Err(Error::ConfigurationError(format!(
+                        "Failed to update firewall rule {}: {} - {}",
+                        rule_name, status, error_text
+                    )));
                 }
-                Ok(response) => {
-                    let status = response.status();
-                    let error_text = response.text().await.unwrap_or_default();
-                    warn!(
+                info!(
+                    "Updated firewall rule: {} - {}",
+                    rule_name,
+                    rule["description"].as_str().unwrap_or("")
+                );
+            } else if check_response.status().as_u16() == 404 {
+                let create_response = client
+                    .post(&base_url)
+                    .bearer_auth(&access_token)
+                    .json(&rule)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        Error::ConfigurationError(format!(
+                            "Failed to create firewall rule {}: {}",
+                            rule_name, e
+                        ))
+                    })?;
+                if !create_response.status().is_success() {
+                    let status = create_response.status();
+                    let error_text = create_response.text().await.unwrap_or_default();
+                    return Err(Error::ConfigurationError(format!(
                         "Failed to create firewall rule {}: {} - {}",
                         rule_name, status, error_text
-                    );
+                    )));
                 }
-                Err(e) => {
-                    warn!("Failed to create firewall rule {}: {}", rule_name, e);
-                }
+                info!(
+                    "Created firewall rule: {} - {}",
+                    rule_name,
+                    rule["description"].as_str().unwrap_or("")
+                );
+            } else {
+                let status = check_response.status();
+                let error_text = check_response.text().await.unwrap_or_default();
+                return Err(Error::ConfigurationError(format!(
+                    "Failed to query firewall rule {}: {} - {}",
+                    rule_name, status, error_text
+                )));
             }
         }
 
         Ok(())
     }
 
-    fn build_firewall_rules() -> Vec<serde_json::Value> {
+    fn build_firewall_rules() -> Result<Vec<serde_json::Value>> {
         let security_config = BlueprintSecurityConfig::default();
         let rules = security_config.standard_rules();
-        vec![
+        let ssh_source_ranges =
+            Self::resolve_source_cidrs(&rules, "blueprint-ssh", "BLUEPRINT_ALLOWED_SSH_CIDRS")?;
+        let qos_source_ranges =
+            Self::resolve_source_cidrs(&rules, "blueprint-qos", "BLUEPRINT_ALLOWED_QOS_CIDRS")?;
+
+        Ok(vec![
             serde_json::json!({
-                "name": format!("blueprint-ssh-{}", uuid::Uuid::new_v4().simple()),
+                "name": "blueprint-ssh",
                 "description": "Allow SSH access for Blueprint management",
                 "direction": "INGRESS",
                 "priority": 1000,
@@ -129,14 +166,10 @@ impl GcpAdapter {
                     "IPProtocol": "tcp",
                     "ports": ["22"]
                 }],
-                "sourceRanges": rules
-                    .iter()
-                    .find(|rule| rule.name == "blueprint-ssh")
-                    .map(|rule| rule.source_cidrs.clone())
-                    .unwrap_or_else(|| vec!["0.0.0.0/0".to_string()]),
+                "sourceRanges": ssh_source_ranges,
             }),
             serde_json::json!({
-                "name": format!("blueprint-qos-{}", uuid::Uuid::new_v4().simple()),
+                "name": "blueprint-qos",
                 "description": "Allow Blueprint QoS ports",
                 "direction": "INGRESS",
                 "priority": 1000,
@@ -145,13 +178,52 @@ impl GcpAdapter {
                     "IPProtocol": "tcp",
                     "ports": ["8080", "9615", "9944"]
                 }],
-                "sourceRanges": rules
-                    .iter()
-                    .find(|rule| rule.name == "blueprint-qos")
-                    .map(|rule| rule.source_cidrs.clone())
-                    .unwrap_or_else(|| vec!["0.0.0.0/0".to_string()]),
+                "sourceRanges": qos_source_ranges,
             }),
-        ]
+        ])
+    }
+
+    fn resolve_source_cidrs(
+        rules: &[crate::shared::security::SecurityRule],
+        rule_name: &str,
+        env_var: &str,
+    ) -> Result<Vec<String>> {
+        let cidrs = rules
+            .iter()
+            .find(|rule| rule.name == rule_name)
+            .map(|rule| rule.source_cidrs.clone())
+            .ok_or_else(|| {
+                Error::ConfigurationError(format!(
+                    "Missing {} firewall rule in security profile",
+                    rule_name
+                ))
+            })?;
+
+        if cidrs.is_empty() {
+            return Err(Error::ConfigurationError(format!(
+                "Firewall rule {} has no source CIDRs configured",
+                rule_name
+            )));
+        }
+
+        let allows_open = cidrs.iter().any(|cidr| cidr.trim() == "0.0.0.0/0");
+        if allows_open {
+            let explicit_open = std::env::var(env_var)
+                .ok()
+                .map(|raw| {
+                    raw.split(',')
+                        .any(|cidr| cidr.trim().eq_ignore_ascii_case("0.0.0.0/0"))
+                })
+                .unwrap_or(false);
+            if !explicit_open {
+                return Err(Error::ConfigurationError(format!(
+                    "Firewall rule {} resolved to open ingress (0.0.0.0/0) without explicit {} override",
+                    rule_name, env_var
+                )));
+            }
+        }
+
+        Ok(cidrs)
     }
 }
 
@@ -366,12 +438,41 @@ mod tests {
             std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "192.168.0.0/16");
         }
 
-        let rules = GcpAdapter::build_firewall_rules();
+        let rules = GcpAdapter::build_firewall_rules().unwrap();
         let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
         let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
         assert_eq!(ssh_rule[0].as_str(), Some("10.0.0.0/8"));
         assert_eq!(qos_rule[0].as_str(), Some("192.168.0.0/16"));
 
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+    }
+
+    #[test]
+    fn firewall_rules_fail_closed_without_explicit_cidrs() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+        let err = GcpAdapter::build_firewall_rules().unwrap_err();
+        assert!(err.to_string().contains("open ingress"));
+    }
+
+    #[test]
+    fn firewall_rules_allow_explicit_open_ingress() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "0.0.0.0/0");
+            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "0.0.0.0/0");
+        }
+        let rules = GcpAdapter::build_firewall_rules().unwrap();
+        let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
+        let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
+        assert_eq!(ssh_rule[0].as_str(), Some("0.0.0.0/0"));
+        assert_eq!(qos_rule[0].as_str(), Some("0.0.0.0/0"));
         unsafe {
             std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
             std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");

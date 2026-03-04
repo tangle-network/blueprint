@@ -45,6 +45,7 @@ mod config;
 mod estimate;
 mod logs;
 mod policy;
+mod preflight;
 mod status;
 mod update;
 
@@ -217,6 +218,26 @@ pub enum CloudCommands {
     /// List configured providers
     #[command(visible_alias = "ls")]
     List,
+
+    /// Validate cloud/TEE readiness and emit bootstrap env settings
+    #[command(visible_alias = "check")]
+    Preflight {
+        /// Provider to validate (defaults to configured default provider)
+        #[arg(short, long, value_enum)]
+        provider: Option<CloudProvider>,
+
+        /// Require TEE readiness checks
+        #[arg(long)]
+        tee_required: bool,
+
+        /// Print manager bootstrap environment variables
+        #[arg(long)]
+        bootstrap_env: bool,
+
+        /// Write bootstrap env output to file
+        #[arg(long)]
+        write_env_file: Option<PathBuf>,
+    },
 }
 
 /// Execute cloud commands.
@@ -300,5 +321,12 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
         } => logs::stream_logs(service_id, follow, level, search, since, lines).await,
 
         CloudCommands::List => config::list_providers().await,
+
+        CloudCommands::Preflight {
+            provider,
+            tee_required,
+            bootstrap_env,
+            write_env_file,
+        } => preflight::run(provider, tee_required, bootstrap_env, write_env_file).await,
     }
 }

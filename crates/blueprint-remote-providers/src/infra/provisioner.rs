@@ -88,9 +88,13 @@ impl CloudProvisioner {
     }
 
     /// Get the adapter for a specific provider
-    pub fn get_adapter(&self, provider: &CloudProvider) -> Result<&Box<dyn CloudProviderAdapter>> {
+    pub fn get_adapter(
+        &self,
+        provider: &CloudProvider,
+    ) -> Result<&(dyn CloudProviderAdapter + '_)> {
         self.providers
             .get(provider)
+            .map(Box::as_ref)
             .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))
     }
 

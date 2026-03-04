@@ -113,6 +113,9 @@ pub struct RemoteDeploymentInfo {
     pub deployed_at: chrono::DateTime<chrono::Utc>,
     pub ttl_expires_at: Option<chrono::DateTime<chrono::Utc>>,
     pub public_ip: Option<String>,
+    pub tee_attestation_policy: Option<String>,
+    pub tee_attestation_verified_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub tee_attestation_proof: Option<String>,
 }
 
 impl RemoteDeploymentService {
@@ -327,17 +330,6 @@ impl RemoteDeploymentService {
             });
         }
 
-        if resource_spec.tee_required
-            && matches!(
-                TeeAttestationPolicy::from_env(),
-                TeeAttestationPolicy::Cryptographic
-            )
-        {
-            return Err(Error::TeeRuntimeUnavailable {
-                reason: "Cryptographic attestation policy requested, but current built-in provider verifiers are structural-only. Set BLUEPRINT_REMOTE_TEE_ATTESTATION_POLICY=structural or use an external cryptographic attestation verification pipeline.".to_string(),
-            });
-        }
-
         #[cfg(feature = "remote-providers")]
         {
             // Use real cloud provider SDK
@@ -347,22 +339,16 @@ impl RemoteDeploymentService {
                 .await
                 .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
 
-            // Get region from policy or use default
-            let region = match provider {
-                CloudProvider::AWS => "us-east-1".to_string(),
-                CloudProvider::GCP => "us-central1".to_string(),
-                CloudProvider::Azure => "eastus".to_string(),
-                CloudProvider::DigitalOcean => "nyc3".to_string(),
-                CloudProvider::Vultr => "ewr".to_string(),
-                _ => "default".to_string(),
-            };
+            // Resolve region from cloud config when available; otherwise use provider defaults.
+            let region = resolve_provider_region(ctx, provider);
 
             info!("   Region: {}", region);
+            let remote_provider = convert_provider(provider)?;
 
             // Provision the actual instance using the remote providers resource spec directly
             let instance = provisioner
                 .provision_with_requirements(
-                    convert_provider(provider),
+                    remote_provider.clone(),
                     &convert_resource_spec(&resource_spec),
                     &region,
                     resource_spec.tee_required,
@@ -409,7 +395,7 @@ impl RemoteDeploymentService {
             // Deploy to the provisioned instance. This must not provision a second VM.
             let deployment_result = provisioner
                 .deploy_blueprint_to_instance(
-                    &convert_provider(provider),
+                    &remote_provider,
                     &instance,
                     &blueprint_image,
                     &convert_resource_spec(&resource_spec),
@@ -417,6 +403,17 @@ impl RemoteDeploymentService {
                 )
                 .await
                 .map_err(|e| Error::Other(format!("Failed to deploy blueprint: {}", e)))?;
+
+            let tee_attestation_policy = if resource_spec.tee_required {
+                Some(TeeAttestationPolicy::from_env())
+            } else {
+                None
+            };
+            let tee_attestation_proof = if let Some(policy) = tee_attestation_policy {
+                verify_tee_attestation(policy, provider, &deployment_result).await?
+            } else {
+                None
+            };
 
             info!("✅ Blueprint deployed with QoS monitoring enabled");
 
@@ -467,6 +464,9 @@ impl RemoteDeploymentService {
                     .auto_terminate_hours
                     .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
                 public_ip: deployment_result.instance.public_ip.clone(),
+                tee_attestation_policy: tee_attestation_policy.map(|p| p.to_string()),
+                tee_attestation_verified_at: tee_attestation_policy.map(|_| chrono::Utc::now()),
+                tee_attestation_proof,
             };
 
             {
@@ -594,6 +594,9 @@ impl RemoteDeploymentService {
                     .auto_terminate_hours
                     .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
                 public_ip: deployment_result.instance.public_ip.clone(),
+                tee_attestation_policy: None,
+                tee_attestation_verified_at: None,
+                tee_attestation_proof: None,
             };
 
             {
@@ -651,10 +654,9 @@ impl RemoteDeploymentService {
     pub async fn terminate_deployment(&self, instance_id: &str) -> Result<()> {
         info!("Terminating remote deployment: {}", instance_id);
 
-        // Remove from our tracking
         let deployment = {
-            let mut deployments = self.deployments.write().await;
-            deployments.remove(instance_id)
+            let deployments = self.deployments.read().await;
+            deployments.get(instance_id).cloned()
         };
 
         if let Some(deployment_info) = deployment {
@@ -671,13 +673,11 @@ impl RemoteDeploymentService {
                 let provisioner = CloudProvisioner::new()
                     .await
                     .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
+                let remote_provider = convert_provider(deployment_info.provider)?;
 
                 // Terminate the instance with the correct provider
                 provisioner
-                    .terminate(
-                        convert_provider(deployment_info.provider),
-                        &deployment_info.instance_id,
-                    )
+                    .terminate(remote_provider, &deployment_info.instance_id)
                     .await
                     .map_err(|e| Error::Other(format!("Failed to terminate instance: {}", e)))?;
 
@@ -694,6 +694,10 @@ impl RemoteDeploymentService {
                     deployment_info.instance_id
                 );
             }
+
+            // Remove from tracking only after successful termination attempt
+            let mut deployments = self.deployments.write().await;
+            deployments.remove(instance_id);
         } else {
             warn!("Deployment {} not found in registry", instance_id);
         }
@@ -740,15 +744,17 @@ impl RemoteDeploymentService {
                     .await
                     .map_err(|e| Error::Other(format!("Health check failed: {}", e)))
             } else {
-                warn!("Health monitor not available, assuming healthy");
-                Ok(true)
+                Err(Error::Other(
+                    "Health monitor unavailable for remote deployments".to_string(),
+                ))
             }
         }
 
         #[cfg(not(feature = "remote-providers"))]
         {
-            warn!("Health monitoring requires the 'remote-providers' feature");
-            Ok(true)
+            Err(Error::Other(
+                "Health monitoring requires the 'remote-providers' feature".to_string(),
+            ))
         }
     }
 
@@ -758,10 +764,7 @@ impl RemoteDeploymentService {
 
         let deployments = self.deployments.read().await;
         for (instance_id, _) in deployments.iter() {
-            let is_healthy = self
-                .check_deployment_health(instance_id)
-                .await
-                .unwrap_or(false);
+            let is_healthy = self.check_deployment_health(instance_id).await?;
             health_status.insert(instance_id.clone(), is_healthy);
         }
 
@@ -917,32 +920,27 @@ fn convert_resource_spec(
 #[cfg(feature = "remote-providers")]
 fn convert_provider(
     provider: crate::remote::provider_selector::CloudProvider,
-) -> blueprint_remote_providers::CloudProvider {
+) -> Result<blueprint_remote_providers::CloudProvider> {
     match provider {
         crate::remote::provider_selector::CloudProvider::AWS => {
-            blueprint_remote_providers::CloudProvider::AWS
+            Ok(blueprint_remote_providers::CloudProvider::AWS)
         }
         crate::remote::provider_selector::CloudProvider::GCP => {
-            blueprint_remote_providers::CloudProvider::GCP
+            Ok(blueprint_remote_providers::CloudProvider::GCP)
         }
         crate::remote::provider_selector::CloudProvider::Azure => {
-            blueprint_remote_providers::CloudProvider::Azure
+            Ok(blueprint_remote_providers::CloudProvider::Azure)
         }
         crate::remote::provider_selector::CloudProvider::DigitalOcean => {
-            blueprint_remote_providers::CloudProvider::DigitalOcean
+            Ok(blueprint_remote_providers::CloudProvider::DigitalOcean)
         }
         crate::remote::provider_selector::CloudProvider::Vultr => {
-            blueprint_remote_providers::CloudProvider::Vultr
+            Ok(blueprint_remote_providers::CloudProvider::Vultr)
         }
-        crate::remote::provider_selector::CloudProvider::Generic => {
-            // Fallback for Generic to DigitalOcean or error?
-            // Generic usually implies K8s which might not need a specific provider for some ops,
-            // but provisioner.provision expects a provider.
-            // However, for K8s we use deploy_with_target, not provision.
-            // But if we ever need to convert Generic, let's map it to something safe or panic if invalid usage.
-            // For now mapping to DigitalOcean as placeholder or we should handle it.
-            blueprint_remote_providers::CloudProvider::DigitalOcean
-        }
+        crate::remote::provider_selector::CloudProvider::Generic => Err(Error::Other(
+            "Generic provider cannot be converted to a provider-specific cloud API operation"
+                .to_string(),
+        )),
     }
 }
 
@@ -952,6 +950,15 @@ fn provider_default_tee_backend(provider: CloudProvider) -> Option<&'static str>
         CloudProvider::GCP => Some("gcp-confidential"),
         CloudProvider::Azure => Some("azure-skr"),
         _ => None,
+    }
+}
+
+impl std::fmt::Display for TeeAttestationPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TeeAttestationPolicy::Structural => write!(f, "structural"),
+            TeeAttestationPolicy::Cryptographic => write!(f, "cryptographic"),
+        }
     }
 }
 
@@ -978,6 +985,117 @@ fn infer_remote_provider_from_context(
     None
 }
 
+#[cfg(feature = "remote-providers")]
+fn resolve_provider_region(ctx: &BlueprintManagerContext, provider: CloudProvider) -> String {
+    if let Some(config) = ctx.cloud_config() {
+        let configured = match provider {
+            CloudProvider::AWS => config.aws.as_ref().map(|c| c.region.clone()),
+            CloudProvider::GCP => config.gcp.as_ref().map(|c| c.region.clone()),
+            CloudProvider::Azure => config.azure.as_ref().map(|c| c.region.clone()),
+            CloudProvider::DigitalOcean => config.digital_ocean.as_ref().map(|c| c.region.clone()),
+            CloudProvider::Vultr => config.vultr.as_ref().map(|c| c.region.clone()),
+            CloudProvider::Generic => None,
+        };
+        if let Some(region) = configured {
+            return region;
+        }
+    }
+
+    match provider {
+        CloudProvider::AWS => "us-east-1".to_string(),
+        CloudProvider::GCP => "us-central1".to_string(),
+        CloudProvider::Azure => "eastus".to_string(),
+        CloudProvider::DigitalOcean => "nyc3".to_string(),
+        CloudProvider::Vultr => "ewr".to_string(),
+        CloudProvider::Generic => "default".to_string(),
+    }
+}
+
+#[cfg(feature = "remote-providers")]
+async fn verify_tee_attestation(
+    policy: TeeAttestationPolicy,
+    provider: CloudProvider,
+    deployment_result: &blueprint_remote_providers::infra::traits::BlueprintDeploymentResult,
+) -> Result<Option<String>> {
+    match policy {
+        TeeAttestationPolicy::Structural => {
+            info!(
+                "TEE structural attestation gate satisfied for provider {} (instance={})",
+                provider, deployment_result.instance.id
+            );
+            Ok(None)
+        }
+        TeeAttestationPolicy::Cryptographic => {
+            let command_spec = std::env::var("BLUEPRINT_REMOTE_TEE_ATTESTATION_VERIFY_CMD")
+                .map_err(|_| Error::TeeRuntimeUnavailable {
+                    reason: "Cryptographic attestation policy requires BLUEPRINT_REMOTE_TEE_ATTESTATION_VERIFY_CMD".to_string(),
+                })?;
+            let mut parts = command_spec.split_whitespace();
+            let executable = parts.next().ok_or_else(|| Error::TeeRuntimeUnavailable {
+                reason: "BLUEPRINT_REMOTE_TEE_ATTESTATION_VERIFY_CMD is empty".to_string(),
+            })?;
+
+            let metadata_json = serde_json::to_string(&deployment_result.metadata)?;
+            let mut cmd = tokio::process::Command::new(executable);
+            cmd.args(parts);
+            cmd.env("BLUEPRINT_TEE_PROVIDER", provider.to_string());
+            cmd.env(
+                "BLUEPRINT_TEE_INSTANCE_ID",
+                deployment_result.instance.id.clone(),
+            );
+            cmd.env(
+                "BLUEPRINT_TEE_PUBLIC_IP",
+                deployment_result
+                    .instance
+                    .public_ip
+                    .clone()
+                    .unwrap_or_default(),
+            );
+            cmd.env(
+                "BLUEPRINT_TEE_DEPLOYMENT_ID",
+                deployment_result.blueprint_id.clone(),
+            );
+            cmd.env("BLUEPRINT_TEE_METADATA_JSON", metadata_json);
+            if let Some(backend) = provider_default_tee_backend(provider) {
+                cmd.env("BLUEPRINT_TEE_BACKEND", backend);
+            }
+
+            let output = cmd
+                .output()
+                .await
+                .map_err(|e| Error::TeeRuntimeUnavailable {
+                    reason: format!("Failed to execute cryptographic attestation verifier: {e}"),
+                })?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                return Err(Error::TeeRuntimeUnavailable {
+                    reason: format!(
+                        "Cryptographic attestation verification failed with status {}. {}",
+                        output.status,
+                        if stderr.is_empty() {
+                            "No verifier stderr output provided".to_string()
+                        } else {
+                            stderr
+                        }
+                    ),
+                });
+            }
+
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            info!(
+                "TEE cryptographic attestation verification succeeded for provider {} (instance={})",
+                provider, deployment_result.instance.id
+            );
+            if stdout.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(stdout))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{TeeAttestationPolicy, parse_tee_attestation_policy};
@@ -996,5 +1114,12 @@ mod tests {
             parse_tee_attestation_policy("unexpected"),
             TeeAttestationPolicy::Structural
         );
+    }
+
+    #[cfg(feature = "remote-providers")]
+    #[test]
+    fn generic_provider_conversion_is_rejected() {
+        let err = super::convert_provider(super::CloudProvider::Generic).unwrap_err();
+        assert!(err.to_string().contains("Generic provider"));
     }
 }

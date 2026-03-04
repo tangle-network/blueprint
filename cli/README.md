@@ -233,6 +233,19 @@ cargo tangle cloud status --deployment-id dep-abc123
 cargo tangle cloud terminate --deployment-id dep-abc123
 ```
 
+### Preflight and TEE Readiness
+
+```bash
+# Validate credentials/provider readiness and print manager bootstrap env
+cargo tangle cloud preflight --bootstrap-env
+
+# Validate fail-closed TEE readiness (including cryptographic verifier requirements)
+cargo tangle cloud preflight --tee-required --bootstrap-env
+
+# Write bootstrap env directly to file
+cargo tangle cloud preflight --tee-required --write-env-file .env.remote
+```
+
 ### Spawning a Service Runtime
 
 Kick off the blueprint manager using a specific runtime without re-running the full deploy flow:
