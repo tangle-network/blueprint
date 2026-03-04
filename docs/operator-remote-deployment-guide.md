@@ -142,6 +142,31 @@ cargo tangle blueprint deploy \
     --package my-blueprint
 ```
 
+### 5. Enable TEE-Required Remote Deployments
+
+When you want fail-closed confidential-compute placement, run the manager with:
+
+```bash
+export BLUEPRINT_REMOTE_TEE_REQUIRED=true
+```
+
+Optional backend override (otherwise provider defaults are used):
+
+```bash
+export TEE_BACKEND=aws-nitro
+# or: gcp-confidential
+# or: azure-skr
+```
+
+Operator behavior in this mode:
+- Provider selection is restricted to TEE-capable providers (`AWS`, `GCP`, `Azure`).
+- Non-TEE providers are rejected instead of used as fallback.
+- Deployment injects `TEE_REQUIRED=true` and `TEE_BACKEND` into runtime env vars.
+
+Current verification boundary:
+- This ensures TEE intent and confidential-capable provisioning selection.
+- Full cryptographic attestation proof/verification still requires additional policy tooling.
+
 ## Advanced Configuration
 
 ### Lightweight Manager Mode

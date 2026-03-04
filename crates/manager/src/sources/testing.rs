@@ -146,6 +146,7 @@ impl BlueprintSourceHandler for TestSourceFetcher {
         id: u32,
         env: BlueprintEnvVars,
         args: BlueprintArgs,
+        _require_tee: bool,
         sub_service_str: &str,
         cache_dir: &Path,
         runtime_dir: &Path,

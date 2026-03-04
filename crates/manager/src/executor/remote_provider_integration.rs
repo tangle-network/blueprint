@@ -13,6 +13,25 @@ use blueprint_remote_providers::{
 };
 use blueprint_std::sync::Arc;
 
+fn env_bool(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn supports_tee(provider: &CloudProvider) -> bool {
+    matches!(
+        provider,
+        CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure
+    )
+}
+
 /// Remote provider manager that handles cloud deployments
 pub struct RemoteProviderManager {
     provisioner: Arc<CloudProvisioner>,
@@ -69,9 +88,12 @@ impl RemoteProviderManager {
 
         // Use provided resources or default
         let resource_spec = resource_requirements.unwrap_or_else(ResourceSpec::minimal);
+        let tee_required = env_bool("BLUEPRINT_REMOTE_TEE_REQUIRED");
 
         // Use intelligent provider selection based on resource requirements
-        let provider = if resource_spec.gpu_count.is_some() {
+        let provider = if tee_required {
+            CloudProvider::AWS
+        } else if resource_spec.gpu_count.is_some() {
             // GPU workloads prefer GCP or AWS
             CloudProvider::GCP
         } else if resource_spec.cpu > 8.0 {
@@ -95,9 +117,17 @@ impl RemoteProviderManager {
             _ => "default",
         };
 
+        if tee_required && !supports_tee(&provider) {
+            error!(
+                "TEE is required but selected provider {} does not support confidential compute",
+                provider
+            );
+            return Ok(());
+        }
+
         match self
             .provisioner
-            .provision(provider.clone(), &resource_spec, region)
+            .provision_with_requirements(provider.clone(), &resource_spec, region, tee_required)
             .await
         {
             Ok(instance) => {

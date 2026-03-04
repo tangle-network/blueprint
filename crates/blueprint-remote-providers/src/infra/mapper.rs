@@ -11,6 +11,19 @@ impl InstanceTypeMapper {
         spec: &ResourceSpec,
         provider: &CloudProvider,
     ) -> InstanceSelection {
+        Self::map_to_instance_type_with_requirements(spec, provider, false)
+    }
+
+    /// Map resource spec to instance type while honoring deployment requirements.
+    pub fn map_to_instance_type_with_requirements(
+        spec: &ResourceSpec,
+        provider: &CloudProvider,
+        require_tee: bool,
+    ) -> InstanceSelection {
+        if require_tee {
+            return Self::map_tee_instance(spec, provider);
+        }
+
         match provider {
             CloudProvider::AWS => Self::map_aws_instance(spec),
             CloudProvider::GCP => Self::map_gcp_instance(spec),
@@ -18,6 +31,58 @@ impl InstanceTypeMapper {
             CloudProvider::DigitalOcean => Self::map_do_instance(spec),
             CloudProvider::Vultr => Self::map_vultr_instance(spec),
             _ => Self::map_generic_instance(spec),
+        }
+    }
+
+    fn map_tee_instance(spec: &ResourceSpec, provider: &CloudProvider) -> InstanceSelection {
+        let instance_type = match provider {
+            CloudProvider::AWS => Self::map_aws_tee_instance_type(spec).to_string(),
+            CloudProvider::GCP => Self::map_gcp_tee_instance_type(spec).to_string(),
+            CloudProvider::Azure => Self::map_azure_tee_instance_type(spec).to_string(),
+            // Non-confidential providers must already be filtered by manager/provisioner.
+            _ => Self::map_generic_instance(spec).instance_type,
+        };
+
+        InstanceSelection {
+            instance_type: instance_type.clone(),
+            // Confidential-compute SKUs are generally not spot-capable in managed flows.
+            spot_capable: false,
+            estimated_hourly_cost: match provider {
+                CloudProvider::AWS => Self::estimate_aws_cost(&instance_type),
+                CloudProvider::GCP => Self::estimate_gcp_cost(&instance_type),
+                CloudProvider::Azure => Self::estimate_azure_cost(&instance_type),
+                _ => Self::map_generic_instance(spec).estimated_hourly_cost,
+            },
+        }
+    }
+
+    fn map_aws_tee_instance_type(spec: &ResourceSpec) -> &'static str {
+        match (spec.cpu, spec.memory_gb, spec.gpu_count) {
+            (_, _, Some(_)) => "g5.xlarge",
+            (cpu, mem, _) if cpu <= 2.0 && mem <= 8.0 => "m6i.large",
+            (cpu, mem, _) if cpu <= 4.0 && mem <= 16.0 => "m6i.xlarge",
+            (cpu, mem, _) if cpu <= 8.0 && mem <= 32.0 => "m6i.2xlarge",
+            _ => "c6i.4xlarge",
+        }
+    }
+
+    fn map_gcp_tee_instance_type(spec: &ResourceSpec) -> &'static str {
+        match (spec.cpu, spec.memory_gb, spec.gpu_count) {
+            (_, _, Some(_)) => "n2d-standard-8",
+            (cpu, mem, _) if cpu <= 2.0 && mem <= 8.0 => "n2d-standard-2",
+            (cpu, mem, _) if cpu <= 4.0 && mem <= 16.0 => "n2d-standard-4",
+            (cpu, mem, _) if cpu <= 8.0 && mem <= 32.0 => "n2d-standard-8",
+            _ => "n2d-standard-16",
+        }
+    }
+
+    fn map_azure_tee_instance_type(spec: &ResourceSpec) -> &'static str {
+        match (spec.cpu, spec.memory_gb, spec.gpu_count) {
+            (_, _, Some(_)) => "Standard_DC8as_v5",
+            (cpu, mem, _) if cpu <= 2.0 && mem <= 8.0 => "Standard_DC2as_v5",
+            (cpu, mem, _) if cpu <= 4.0 && mem <= 16.0 => "Standard_DC4as_v5",
+            (cpu, mem, _) if cpu <= 8.0 && mem <= 32.0 => "Standard_DC8as_v5",
+            _ => "Standard_DC16as_v5",
         }
     }
 
@@ -304,5 +369,40 @@ mod tests {
         assert_eq!(selection.instance_type, "t3.micro");
         assert!(selection.spot_capable);
         assert!(selection.estimated_hourly_cost < 0.02); // Should be cheap
+    }
+
+    #[test]
+    fn test_tee_mapping_prefers_confidential_families() {
+        let spec = ResourceSpec {
+            cpu: 4.0,
+            memory_gb: 16.0,
+            storage_gb: 100.0,
+            gpu_count: None,
+            allow_spot: true,
+            qos: Default::default(),
+        };
+
+        let aws = InstanceTypeMapper::map_to_instance_type_with_requirements(
+            &spec,
+            &CloudProvider::AWS,
+            true,
+        );
+        let gcp = InstanceTypeMapper::map_to_instance_type_with_requirements(
+            &spec,
+            &CloudProvider::GCP,
+            true,
+        );
+        let azure = InstanceTypeMapper::map_to_instance_type_with_requirements(
+            &spec,
+            &CloudProvider::Azure,
+            true,
+        );
+
+        assert_eq!(aws.instance_type, "m6i.xlarge");
+        assert_eq!(gcp.instance_type, "n2d-standard-4");
+        assert_eq!(azure.instance_type, "Standard_DC4as_v5");
+        assert!(!aws.spot_capable);
+        assert!(!gcp.spot_capable);
+        assert!(!azure.spot_capable);
     }
 }

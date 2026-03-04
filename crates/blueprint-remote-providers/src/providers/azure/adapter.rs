@@ -33,7 +33,7 @@ impl AzureAdapter {
 impl CloudProviderAdapter for AzureAdapter {
     async fn provision_instance(
         &self,
-        _instance_type: &str,
+        instance_type: &str,
         region: &str,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
@@ -53,7 +53,11 @@ impl CloudProviderAdapter for AzureAdapter {
             ssh_key_name: std::env::var("AZURE_SSH_KEY_NAME").ok(),
             ami_id: None,
             machine_image: None,
-            custom_config: HashMap::new(),
+            custom_config: {
+                let mut config = HashMap::new();
+                config.insert("vm_size".to_string(), instance_type.to_string());
+                config
+            },
         };
 
         let mut provisioner = self.provisioner.lock().await;

@@ -17,8 +17,10 @@ use crate::sources::types::{
 use blueprint_client_tangle::contracts::ITangleTypes;
 use serde::Deserialize;
 use serde_json;
+use serde_json::Value;
 type OnChainBlueprintSource = <ITangleTypes::BlueprintSource as SolType>::RustType;
 type OnChainBlueprintBinary = <ITangleTypes::BlueprintBinary as SolType>::RustType;
+type OnChainBlueprintMetadata = <ITangleTypes::BlueprintMetadata as SolType>::RustType;
 type OnChainImageRegistrySource = <ITangleTypes::ImageRegistrySource as SolType>::RustType;
 type OnChainTestingSource = <ITangleTypes::TestingSource as SolType>::RustType;
 type OnChainNativeSource = <ITangleTypes::NativeSource as SolType>::RustType;
@@ -54,7 +56,7 @@ impl OnChainMetadataProvider {
         service_id: u64,
         registration_mode: bool,
     ) -> Result<Option<ManagerBlueprintMetadata>> {
-        let Some((blueprint_name, sources)) =
+        let Some((blueprint_name, sources, tee_required)) =
             Self::load_blueprint_sources(client, blueprint_id).await?
         else {
             return Ok(None);
@@ -65,6 +67,7 @@ impl OnChainMetadataProvider {
             service_id,
             name: blueprint_name,
             sources,
+            tee_required,
             registration_mode,
             registration_capture_only: false,
         }))
@@ -73,7 +76,7 @@ impl OnChainMetadataProvider {
     async fn load_blueprint_sources(
         client: &TangleProtocolClient,
         blueprint_id: u64,
-    ) -> Result<Option<(String, Vec<ManagerBlueprintSource>)>> {
+    ) -> Result<Option<(String, Vec<ManagerBlueprintSource>, bool)>> {
         let inner = client.client();
         let definition = match inner.get_blueprint_definition(blueprint_id).await {
             Ok(definition) => definition,
@@ -87,6 +90,7 @@ impl OnChainMetadataProvider {
         };
 
         let blueprint_name = definition.metadata.name.clone().to_string();
+        let tee_required = Self::resolve_tee_required(&definition.metadata);
         let onchain_sources = definition.sources;
 
         let sources = Self::convert_sources(&onchain_sources);
@@ -99,7 +103,89 @@ impl OnChainMetadataProvider {
             return Ok(None);
         }
 
-        Ok(Some((blueprint_name, sources)))
+        Ok(Some((blueprint_name, sources, tee_required)))
+    }
+
+    fn resolve_tee_required(metadata: &OnChainBlueprintMetadata) -> bool {
+        for raw in [
+            metadata.profilingData.as_str(),
+            metadata.description.as_str(),
+            metadata.category.as_str(),
+        ] {
+            if let Some(tee_required) = Self::parse_tee_required_hint(raw) {
+                return tee_required;
+            }
+        }
+
+        false
+    }
+
+    fn parse_tee_required_hint(raw: &str) -> Option<bool> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        if trimmed.starts_with('{') {
+            let value: Value = serde_json::from_str(trimmed).ok()?;
+            return Self::extract_tee_required_from_value(&value);
+        }
+
+        Self::parse_runtime_profile_mode(trimmed)
+    }
+
+    fn extract_tee_required_from_value(value: &Value) -> Option<bool> {
+        if let Some(tee_required) = value.get("tee_required").and_then(Value::as_bool) {
+            return Some(tee_required);
+        }
+        if let Some(tee_required) = value.get("teeRequired").and_then(Value::as_bool) {
+            return Some(tee_required);
+        }
+
+        for key in [
+            "runtime_profile",
+            "runtimeProfile",
+            "deployment_profile",
+            "deploymentProfile",
+        ] {
+            if let Some(profile) = value.get(key) {
+                if let Some(tee_required) = Self::extract_tee_required_from_value(profile) {
+                    return Some(tee_required);
+                }
+                if let Some(mode) = profile.as_str() {
+                    if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
+                        return Some(tee_required);
+                    }
+                }
+            }
+        }
+
+        if let Some(mode) = value.get("mode").and_then(Value::as_str) {
+            if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
+                return Some(tee_required);
+            }
+        }
+        if let Some(mode) = value.get("runtime").and_then(Value::as_str) {
+            if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
+                return Some(tee_required);
+            }
+        }
+
+        None
+    }
+
+    fn parse_runtime_profile_mode(mode: &str) -> Option<bool> {
+        let normalized = mode.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "tee"
+            | "trusted_execution"
+            | "trusted-execution"
+            | "confidential"
+            | "confidential_compute"
+            | "confidential-compute" => Some(true),
+            "native" | "container" | "wasm" | "none" | "disabled" => Some(false),
+            _ => None,
+        }
     }
 
     fn convert_sources(sources: &[OnChainBlueprintSource]) -> Vec<ManagerBlueprintSource> {
@@ -623,5 +709,40 @@ mod tests {
             converted.is_empty(),
             "container source with registry scheme should be rejected"
         );
+    }
+
+    #[test]
+    fn parse_tee_required_from_top_level_bool() {
+        let payload = r#"{"tee_required":true}"#;
+        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
+        assert_eq!(parsed, Some(true));
+    }
+
+    #[test]
+    fn parse_tee_required_from_runtime_profile_object() {
+        let payload = r#"{"runtime_profile":{"tee_required":false}}"#;
+        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
+        assert_eq!(parsed, Some(false));
+    }
+
+    #[test]
+    fn parse_tee_required_from_runtime_profile_mode() {
+        let payload = r#"{"runtimeProfile":"tee"}"#;
+        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
+        assert_eq!(parsed, Some(true));
+    }
+
+    #[test]
+    fn parse_tee_required_from_plain_mode_string() {
+        let parsed = OnChainMetadataProvider::parse_tee_required_hint("native");
+        assert_eq!(parsed, Some(false));
+    }
+
+    #[test]
+    fn parse_tee_required_ignores_unrelated_or_non_json_payloads() {
+        let parsed = OnChainMetadataProvider::parse_tee_required_hint(
+            "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
+        );
+        assert_eq!(parsed, None);
     }
 }

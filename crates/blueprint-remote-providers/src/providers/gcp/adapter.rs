@@ -159,7 +159,7 @@ impl GcpAdapter {
 impl CloudProviderAdapter for GcpAdapter {
     async fn provision_instance(
         &self,
-        _instance_type: &str,
+        instance_type: &str,
         region: &str,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
@@ -188,6 +188,7 @@ impl CloudProviderAdapter for GcpAdapter {
                     // In production, read SSH public key from file
                     config.insert("ssh_public_key".to_string(), "".to_string());
                 }
+                config.insert("instance_type".to_string(), instance_type.to_string());
                 config
             },
         };

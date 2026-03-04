@@ -82,7 +82,7 @@ impl AwsAdapter {
 impl CloudProviderAdapter for AwsAdapter {
     async fn provision_instance(
         &self,
-        _instance_type: &str,
+        instance_type: &str,
         region: &str,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
@@ -99,6 +99,7 @@ impl CloudProviderAdapter for AwsAdapter {
 
         let mut custom_config = HashMap::new();
         custom_config.insert("security_group_ids".to_string(), security_group);
+        custom_config.insert("instance_type".to_string(), instance_type.to_string());
 
         let config = ProvisioningConfig {
             name: format!("blueprint-{}", uuid::Uuid::new_v4()),

@@ -101,14 +101,44 @@ impl CloudProvisioner {
         resource_spec: &ResourceSpec,
         region: &str,
     ) -> Result<ProvisionedInstance> {
+        self.provision_with_requirements(provider, resource_spec, region, false)
+            .await
+    }
+
+    /// Provision infrastructure with explicit deployment requirements.
+    pub async fn provision_with_requirements(
+        &self,
+        provider: CloudProvider,
+        resource_spec: &ResourceSpec,
+        region: &str,
+        require_tee: bool,
+    ) -> Result<ProvisionedInstance> {
         let adapter = self
             .providers
             .get(&provider)
             .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
 
+        if require_tee
+            && !matches!(
+                provider,
+                CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure
+            )
+        {
+            return Err(Error::ConfigurationError(format!(
+                "Provider {provider:?} does not support confidential-compute provisioning"
+            )));
+        }
+
         // Map resources to appropriate instance type
-        // Map resource spec to instance type
-        let instance_selection = InstanceTypeMapper::map_to_instance_type(resource_spec, &provider);
+        let instance_selection = InstanceTypeMapper::map_to_instance_type_with_requirements(
+            resource_spec,
+            &provider,
+            require_tee,
+        );
+        info!(
+            "Provisioning {} instance type {} (tee_required={})",
+            provider, instance_selection.instance_type, require_tee
+        );
 
         // Retry with exponential backoff
         let mut attempt = 0;

@@ -16,6 +16,13 @@ pub enum CloudProvider {
     Generic,
 }
 
+impl CloudProvider {
+    #[must_use]
+    pub fn supports_tee(self) -> bool {
+        matches!(self, Self::AWS | Self::GCP | Self::Azure)
+    }
+}
+
 impl std::fmt::Display for CloudProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -37,6 +44,8 @@ pub struct ResourceSpec {
     pub storage_gb: f32,
     pub gpu_count: Option<u32>,
     pub allow_spot: bool,
+    #[serde(default)]
+    pub tee_required: bool,
 }
 
 /// Deployment target options.
@@ -64,6 +73,8 @@ pub struct ProviderPreferences {
     pub memory_intensive: Vec<CloudProvider>,
     /// Providers for cost-optimized workloads
     pub cost_optimized: Vec<CloudProvider>,
+    /// Providers that can satisfy TEE requirements
+    pub tee_capable: Vec<CloudProvider>,
 }
 
 impl Default for ProviderPreferences {
@@ -77,6 +88,7 @@ impl Default for ProviderPreferences {
             ],
             memory_intensive: vec![CloudProvider::AWS, CloudProvider::GCP],
             cost_optimized: vec![CloudProvider::Vultr, CloudProvider::DigitalOcean],
+            tee_capable: vec![CloudProvider::AWS, CloudProvider::GCP, CloudProvider::Azure],
         }
     }
 }
@@ -129,7 +141,10 @@ impl ProviderSelector {
 
     /// Select cloud provider based on resource requirements.
     pub fn select_provider(&self, requirements: &ResourceSpec) -> Result<CloudProvider> {
-        let candidates = if requirements.gpu_count.is_some() {
+        let candidates = if requirements.tee_required {
+            info!("TEE required, selecting from TEE-capable providers");
+            &self.preferences.tee_capable
+        } else if requirements.gpu_count.is_some() {
             info!("GPU required, selecting from GPU providers");
             &self.preferences.gpu_providers
         } else if requirements.cpu > 8.0 {
@@ -168,6 +183,15 @@ impl ProviderSelector {
     pub fn get_fallback_providers(&self, requirements: &ResourceSpec) -> Vec<CloudProvider> {
         let mut fallbacks = Vec::new();
 
+        if requirements.tee_required {
+            fallbacks.extend(&self.preferences.tee_capable);
+            let primary = self.select_provider(requirements).ok();
+            fallbacks.retain(|p| Some(*p) != primary);
+            fallbacks.dedup();
+            info!("TEE fallback providers: {:?}", fallbacks);
+            return fallbacks;
+        }
+
         // Add all other provider categories as fallbacks
         if requirements.gpu_count.is_some() {
             // For GPU workloads, fallback to CPU-intensive providers
@@ -202,6 +226,7 @@ mod tests {
             storage_gb: 100.0,
             gpu_count: Some(1),
             allow_spot: false,
+            tee_required: false,
         };
 
         let provider = selector.select_provider(&requirements).unwrap();
@@ -218,6 +243,7 @@ mod tests {
             storage_gb: 200.0,
             gpu_count: None,
             allow_spot: false,
+            tee_required: false,
         };
 
         let provider = selector.select_provider(&requirements).unwrap();
@@ -234,6 +260,7 @@ mod tests {
             storage_gb: 20.0,
             gpu_count: None,
             allow_spot: true,
+            tee_required: false,
         };
 
         let provider = selector.select_provider(&requirements).unwrap();
@@ -250,6 +277,7 @@ mod tests {
             storage_gb: 100.0,
             gpu_count: Some(1),
             allow_spot: false,
+            tee_required: false,
         };
 
         let fallbacks = selector.get_fallback_providers(&requirements);
@@ -258,5 +286,22 @@ mod tests {
         assert!(fallbacks.contains(&CloudProvider::DigitalOcean));
         // Should not include the primary selection (GCP)
         assert!(!fallbacks.contains(&CloudProvider::GCP));
+    }
+
+    #[test]
+    fn test_tee_provider_selection() {
+        let selector = ProviderSelector::with_defaults();
+        let requirements = ResourceSpec {
+            cpu: 2.0,
+            memory_gb: 8.0,
+            storage_gb: 40.0,
+            gpu_count: None,
+            allow_spot: false,
+            tee_required: true,
+        };
+
+        let provider = selector.select_provider(&requirements).unwrap();
+        assert_eq!(provider, CloudProvider::AWS);
+        assert!(provider.supports_tee());
     }
 }
