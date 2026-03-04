@@ -414,6 +414,13 @@ impl RemoteDeploymentService {
             } else {
                 None
             };
+            let tee_attestation_verified_at =
+                tee_attestation_policy.and_then(|policy| match policy {
+                    TeeAttestationPolicy::Cryptographic if tee_attestation_proof.is_some() => {
+                        Some(chrono::Utc::now())
+                    }
+                    _ => None,
+                });
 
             info!("✅ Blueprint deployed with QoS monitoring enabled");
 
@@ -465,7 +472,7 @@ impl RemoteDeploymentService {
                     .map(|hours| chrono::Utc::now() + chrono::Duration::hours(hours as i64)),
                 public_ip: deployment_result.instance.public_ip.clone(),
                 tee_attestation_policy: tee_attestation_policy.map(|p| p.to_string()),
-                tee_attestation_verified_at: tee_attestation_policy.map(|_| chrono::Utc::now()),
+                tee_attestation_verified_at,
                 tee_attestation_proof,
             };
 
@@ -673,18 +680,28 @@ impl RemoteDeploymentService {
                 let provisioner = CloudProvisioner::new()
                     .await
                     .map_err(|e| Error::Other(format!("Failed to create provisioner: {}", e)))?;
-                let remote_provider = convert_provider(deployment_info.provider)?;
 
-                // Terminate the instance with the correct provider
-                provisioner
-                    .terminate(remote_provider, &deployment_info.instance_id)
-                    .await
-                    .map_err(|e| Error::Other(format!("Failed to terminate instance: {}", e)))?;
+                if deployment_info.provider != CloudProvider::Generic {
+                    let remote_provider = convert_provider(deployment_info.provider)?;
 
-                info!(
-                    "✅ Instance {} terminated successfully",
-                    deployment_info.instance_id
-                );
+                    // Terminate the instance with the correct provider
+                    provisioner
+                        .terminate(remote_provider, &deployment_info.instance_id)
+                        .await
+                        .map_err(|e| {
+                            Error::Other(format!("Failed to terminate instance: {}", e))
+                        })?;
+
+                    info!(
+                        "✅ Instance {} terminated successfully",
+                        deployment_info.instance_id
+                    );
+                } else {
+                    warn!(
+                        "Generic Kubernetes deployment cleanup is best-effort only (instance_id={})",
+                        deployment_info.instance_id
+                    );
+                }
             }
 
             #[cfg(not(feature = "remote-providers"))]
