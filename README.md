@@ -357,6 +357,10 @@ We welcome feedback and contributions to improve this blueprint.
 Please open an issue or submit a pull request on our GitHub repository.
 Please let us know if you fork this blueprint and extend it too!
 
+Contributor references:
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [Harness Engineering Playbook](docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md)
+
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
