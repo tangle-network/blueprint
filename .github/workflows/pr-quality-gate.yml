@@ -14,5 +14,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Export changed files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            fs.writeFileSync(
+              "/tmp/pr-changed-files.txt",
+              files.map((f) => f.filename).join("\n"),
+            );
+
       - name: Validate PR template completion
-        run: python3 .github/scripts/validate_pr_body.py
+        run: python3 .github/scripts/validate_pr_body.py --changed-files-file /tmp/pr-changed-files.txt

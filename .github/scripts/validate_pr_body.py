@@ -54,6 +54,10 @@ def parse_args() -> argparse.Namespace:
         "--body-file",
         help="Path to file containing PR body text (for local testing).",
     )
+    parser.add_argument(
+        "--changed-files-file",
+        help="Path to file containing newline-delimited changed file paths.",
+    )
     return parser.parse_args()
 
 
@@ -134,6 +138,21 @@ def extract_change_class(change_class_section: str) -> str | None:
     return match.group(1).strip().lower()
 
 
+def parse_change_class_rank(selected_class: str | None) -> int | None:
+    if not selected_class:
+        return None
+    normalized = selected_class.strip().lower()
+    if normalized.startswith("class a"):
+        return 1
+    if normalized.startswith("class b"):
+        return 2
+    if normalized.startswith("class c"):
+        return 3
+    if normalized.startswith("class d"):
+        return 4
+    return None
+
+
 def validate_change_class(change_class_section: str) -> list[str]:
     errors: list[str] = []
     selected = extract_change_class(change_class_section)
@@ -144,6 +163,78 @@ def validate_change_class(change_class_section: str) -> list[str]:
     valid_prefixes = ("class a", "class b", "class c", "class d")
     if not selected.startswith(valid_prefixes):
         errors.append("Selected class must start with one of: Class A, Class B, Class C, Class D.")
+    return errors
+
+
+def load_changed_files(args: argparse.Namespace) -> list[str]:
+    if not args.changed_files_file:
+        return []
+    raw = Path(args.changed_files_file).read_text(encoding="utf-8")
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def is_docs_or_process_only(path: str) -> bool:
+    if path.startswith("docs/"):
+        return True
+    if path.startswith(".github/"):
+        return True
+    if path in {"README.md", "CONTRIBUTING.md", "CLAUDE.md"}:
+        return True
+    if path.endswith(".md"):
+        return True
+    return False
+
+
+def infer_required_class(changed_files: list[str]) -> tuple[int, str]:
+    if not changed_files:
+        return (1, "No changed files list provided; defaulting to Class A.")
+
+    if all(is_docs_or_process_only(path) for path in changed_files):
+        return (1, "Docs/process-only changes.")
+
+    class_d_prefixes = (
+        "crates/manager/src/protocol/",
+        "crates/manager/src/rt/container/",
+        "crates/manager/src/sources/",
+        "crates/clients/tangle/src/",
+        "crates/tee/src/",
+        "cli/src/command/deploy/",
+    )
+    for path in changed_files:
+        if path.startswith(class_d_prefixes):
+            return (4, f"High-risk protocol/security/runtime path changed: {path}")
+
+    crates_touched: set[str] = set()
+    touches_cli = False
+    for path in changed_files:
+        if path.startswith("crates/"):
+            parts = path.split("/")
+            if len(parts) >= 2:
+                crates_touched.add(parts[1])
+        if path.startswith("cli/"):
+            touches_cli = True
+
+    if len(crates_touched) > 1:
+        return (3, "Multiple crates touched; cross-crate behavior likely.")
+    if touches_cli and crates_touched:
+        return (3, "CLI + crate changes touched; cross-boundary behavior likely.")
+
+    return (2, "Code changes detected with local blast radius.")
+
+
+def validate_inferred_change_class(args: argparse.Namespace, selected_class: str | None) -> list[str]:
+    errors: list[str] = []
+    selected_rank = parse_change_class_rank(selected_class)
+    if selected_rank is None:
+        return errors
+
+    changed_files = load_changed_files(args)
+    required_rank, reason = infer_required_class(changed_files)
+    if selected_rank < required_rank:
+        errors.append(
+            "Selected class is too low for changed files. "
+            f"Required minimum: Class {'ABCD'[required_rank - 1]}. Reason: {reason}"
+        )
     return errors
 
 
@@ -199,6 +290,7 @@ def main() -> int:
     change_class_section = sections.get("change class", "")
     selected_class = extract_change_class(change_class_section)
     errors.extend(validate_change_class(change_class_section))
+    errors.extend(validate_inferred_change_class(args, selected_class))
 
     verification = sections.get("verification", "")
     harness_evidence = sections.get("harness evidence", "")
