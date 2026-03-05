@@ -59,6 +59,14 @@ Use one class per PR:
 | Rollback/containment notes | Optional | Recommended | Required | Required |
 | Targeted crate tests listed | Optional | Required | Required | Required |
 
+## Automation
+
+Quality gates are enforced automatically in CI:
+
+- PR body/checklist + class validation: `.github/scripts/validate_pr_body.py`
+- Classification policy config: `.github/pr-quality-gate.toml`
+- Workflow and PR summary comment: `.github/workflows/pr-quality-gate.yml`
+
 ## PR Contract Fields
 
 Every non-draft PR should include:
