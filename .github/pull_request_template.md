@@ -3,6 +3,15 @@
 - What changed and why?
 - Which user/operator/developer flow is affected?
 
+## Change Class
+
+- `Class A` (docs/tooling only)
+- `Class B` (single-crate behavior)
+- `Class C` (cross-crate/runtime behavior)
+- `Class D` (protocol/security/metadata semantics)
+- Selected class:
+- Why this class:
+
 ## Behavior Contract
 
 - Current behavior:
@@ -35,6 +44,8 @@ List the exact commands you ran and outcomes.
 ## Checklist
 
 - [ ] I followed [`docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md`](/docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md).
+- [ ] I followed [`docs/engineering/HARNESS_ENGINEERING_SPEC.md`](/docs/engineering/HARNESS_ENGINEERING_SPEC.md).
+- [ ] I used [`docs/engineering/HARNESS_REVIEW_CHECKLIST.md`](/docs/engineering/HARNESS_REVIEW_CHECKLIST.md) while implementing/reviewing.
 - [ ] I added or updated tests that reproduce the original issue.
 - [ ] I added or updated negative-path tests for invalid/missing/conflicting input.
 - [ ] I documented behavior or interface changes in docs/examples when needed.

@@ -360,6 +360,8 @@ Please let us know if you fork this blueprint and extend it too!
 Contributor references:
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [Harness Engineering Playbook](docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md)
+- [Harness Engineering Spec](docs/engineering/HARNESS_ENGINEERING_SPEC.md)
+- [Harness Review Checklist](docs/engineering/HARNESS_REVIEW_CHECKLIST.md)
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be

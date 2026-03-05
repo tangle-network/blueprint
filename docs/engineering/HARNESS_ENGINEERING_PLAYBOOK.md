@@ -2,6 +2,11 @@
 
 This playbook defines how Blueprint teams turn unclear problems into verified, production-safe changes.
 
+Companion documents:
+
+- `docs/engineering/HARNESS_ENGINEERING_SPEC.md`
+- `docs/engineering/HARNESS_REVIEW_CHECKLIST.md`
+
 ## Why This Exists
 
 We work in high-risk surfaces:
