@@ -1,235 +1,93 @@
-# Contributing to Tangle Network's Blueprint Repository
+# Contributing to Blueprint
 
-Thank you for your interest in contributing to the Tangle Network Blueprint project! This document provides guidelines and instructions for contributing.
+This document defines how we ship high-confidence changes in this repository.
 
-## Table of Contents
+## Development Setup
 
-- [Getting Started](#getting-started)
-  - [Development Environment](#development-environment)
-  - [Project Structure](#project-structure)
-- [Making Contributions](#making-contributions)
-  - [Pull Request Process](#pull-request-process)
-  - [Commit Messages](#commit-messages)
-  - [Branch Naming](#branch-naming)
-- [Development Guidelines](#development-guidelines)
-  - [Code Style](#code-style)
-  - [Testing Requirements](#testing-requirements)
-  - [Documentation](#documentation)
-- [Review Process](#review-process)
-
-## Getting Started
-
-### Development Environment
-
-1. Install required dependencies:
+1. Install system dependencies.
    ```bash
    # Ubuntu/Debian
-   apt install build-essential cmake libssl-dev pkg-config
+   sudo apt update && sudo apt install build-essential cmake libssl-dev pkg-config
 
    # macOS
    brew install openssl cmake
    ```
-
-2. Set up Rust:
+2. Install Rust toolchain `1.88` (see `rust-toolchain.toml`).
    ```bash
-   # Install Rust
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-   # Install specific toolchain
-   rustup install nightly-2024-10-13
-   rustup default nightly-2024-10-13
-   
-   # Install required components
+   rustup toolchain install 1.88
+   rustup default 1.88
    rustup component add rustfmt clippy rust-src
    ```
-
-3. Clone the repository:
+3. Clone and enter the repository.
    ```bash
    git clone https://github.com/tangle-network/blueprint.git
    cd blueprint
    ```
 
-### Project Structure
+## Repository Layout
 
-Please familiarize yourself with the project structure before contributing:
+- `cli/`: `cargo-tangle` CLI.
+- `crates/`: SDK crates (`core`, `manager`, `networking`, `stores`, `testing-utils`, etc.).
+- `examples/`: reference blueprints that must stay buildable.
+- `docs/`: long-form specifications, RFCs, and operator guides.
+- `.github/`: CI workflows and PR automation.
 
-- `cli/`: Command-line interface implementation
-- `crates/`: Core functionality modules
-- `.github/`: GitHub-specific files (workflows, templates)
+## Branches and Commits
 
-## Making Contributions
+- Branch prefixes:
+  - `feature/` for features
+  - `fix/` for bug fixes
+  - `docs/` for docs-only changes
+  - `refactor/` for internal code movement
+  - `test/` for test-only updates
+- Commit format: Conventional Commits (`feat(scope): ...`, `fix(scope): ...`).
 
-### Pull Request Process
+## Local Verification
 
-1. Fork the repository and create your feature branch:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+Run these before opening a PR:
 
-2. Make your changes, following our [development guidelines](#development-guidelines)
-
-3. Run the test suite:
-   ```bash
-   cargo test
-   ```
-
-4. Update documentation as needed
-
-5. Submit a pull request with a clear description of the changes and any relevant issue numbers
-
-### Commit Messages
-
-Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
-
-```
-<type>(<scope>): <description>
-
-[optional body]
-
-[optional footer]
+```bash
+cargo fmt --all
+cargo clippy --workspace --all-targets --all-features -D warnings
+cargo test --workspace --all-features
+cargo build --workspace --all-features
 ```
 
-Types:
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, missing semi-colons, etc)
-- `refactor`: Code refactoring
-- `test`: Adding missing tests
-- `chore`: Maintenance tasks
+For focused iteration, use `cargo test -p <crate>`.
 
-Example:
-```
-feat(cli): add new blueprint deployment option
+## Harness Engineering Standard
 
-Added --dry-run flag to deployment command for testing deployments
-without actually submitting transactions.
+Blueprint follows a harness-first workflow for risky changes:
 
-Closes #123
-```
+1. Reproduce the problem with the smallest failing harness/test.
+2. State invariants and fail-closed behavior before implementing.
+3. Patch the code.
+4. Prove the fix with targeted tests and negative-path coverage.
+5. Document operational impact (operator/customer/developer) when behavior changes.
 
-### Branch Naming
+Use the playbook for full guidance:
 
-Use the following naming convention for branches:
-- `feature/`: New features
-- `fix/`: Bug fixes
-- `docs/`: Documentation updates
-- `refactor/`: Code refactoring
-- `test/`: Test-related changes
+- [`docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md`](docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md)
 
-Example: `feature/blueprint-deployment`
+## Pull Request Requirements
 
-## Development Guidelines
+Every PR must:
 
-### Code Style
+1. Fill out the PR template completely.
+2. Include verification commands with pass/fail outcomes.
+3. Call out risks, migration notes, and behavior changes.
+4. Add tests for new logic and regressions.
+5. Update docs/examples when interfaces or flows change.
 
-1. Follow Rust style guidelines
-2. Use `rustfmt` for code formatting:
-   ```bash
-   cargo fmt
-   ```
-3. Run clippy for linting:
-   ```bash
-   cargo clippy -- -D warnings
-   ```
+Large changes may require an RFC in `docs/rfcs/`.
 
-### Testing Requirements
+## Review Expectations
 
-1. Write unit tests for new functionality
-2. Ensure existing tests pass
-3. Add integration tests for new features
-4. Include documentation tests for public APIs
-5. Use async/tokio for asynchronous tests
+Reviewers should prioritize:
 
-Example test structure:
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
+1. Correctness and security regressions.
+2. Backward-compatibility and migration clarity.
+3. Test quality (including negative/fail-closed paths).
+4. Operational observability and rollback safety.
 
-    #[tokio::test]
-    async fn test_async_feature() {
-        // Async test implementation
-        let result = some_async_function().await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_error_handling() {
-        // Async error handling test
-        match failing_async_function().await {
-            Err(e) => assert_matches!(e, Error::Expected),
-            _ => panic!("Expected error"),
-        }
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_concurrent_operations() {
-        // Test concurrent operations
-        let (result1, result2) = tokio::join!(
-            async_operation1(),
-            async_operation2()
-        );
-        assert!(result1.is_ok() && result2.is_ok());
-    }
-}
-```
-
-For mocking time-dependent tests:
-```rust
-use tokio::time::{self, Duration};
-
-#[tokio::test]
-async fn test_with_time() {
-    let mut interval = time::interval(Duration::from_secs(1));
-    
-    // First tick completes immediately
-    interval.tick().await;
-    
-    // Use time::sleep for testing timeouts
-    tokio::time::sleep(Duration::from_secs(2)).await;
-    
-    // Test after delay
-    assert!(some_condition);
-}
-```
-
-### Documentation
-
-1. Document all public APIs
-2. Include examples in documentation
-3. Update README.md if needed
-4. Add inline comments for complex logic
-
-Example documentation:
-```rust
-/// Deploys a blueprint to the network
-///
-/// # Arguments
-///
-/// * `name` - Name of the blueprint
-/// * `config` - Blueprint configuration
-///
-/// # Returns
-///
-/// * `Result<DeploymentId>` - Deployment identifier on success
-///
-/// # Examples
-///
-/// ```
-/// let result = deploy_blueprint("my_blueprint", config)?;
-/// ```
-pub fn deploy_blueprint(name: &str, config: Config) -> Result<DeploymentId> {
-    // Implementation
-}
-```
-
-## Review Process
-
-1. All PRs require at least one review from a maintainer
-2. CI checks must pass
-3. Documentation must be updated
-4. Changes should be tested on a development network
-5. Large changes may require multiple reviews
-
-For questions or clarifications, please open an issue or join our [Discord server](https://discord.com/invite/cv8EfJu3Tn).
+For questions, open an issue or use Discord: <https://discord.com/invite/cv8EfJu3Tn>.
