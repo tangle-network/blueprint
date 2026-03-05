@@ -68,6 +68,8 @@ Blueprint follows a harness-first workflow for risky changes:
 Use the playbook for full guidance:
 
 - [`docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md`](docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md)
+- [`docs/engineering/HARNESS_ENGINEERING_SPEC.md`](docs/engineering/HARNESS_ENGINEERING_SPEC.md)
+- [`docs/engineering/HARNESS_REVIEW_CHECKLIST.md`](docs/engineering/HARNESS_REVIEW_CHECKLIST.md)
 
 ## Pull Request Requirements
 
