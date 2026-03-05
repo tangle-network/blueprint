@@ -5,6 +5,7 @@ use crate::error::{Error, Result};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
 use crate::sources::types::ImageRegistryFetcher;
+use blueprint_client_tangle::ConfidentialityPolicy;
 use blueprint_core::info;
 use blueprint_runner::config::BlueprintEnvironment;
 use std::path::{Path, PathBuf};
@@ -70,7 +71,7 @@ impl BlueprintSourceHandler for ContainerSource {
         _id: u32,
         env: BlueprintEnvVars,
         args: BlueprintArgs,
-        require_tee: bool,
+        confidentiality_policy: ConfidentialityPolicy,
         sub_service_str: &str,
         cache_dir: &Path,
         runtime_dir: &Path,
@@ -84,7 +85,7 @@ impl BlueprintSourceHandler for ContainerSource {
             image.to_string_lossy().to_string(),
             env,
             args,
-            require_tee,
+            confidentiality_policy,
             false,
         )
         .await

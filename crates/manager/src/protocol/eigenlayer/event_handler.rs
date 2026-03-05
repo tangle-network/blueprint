@@ -20,6 +20,7 @@ use crate::rt::service::Status;
 use crate::sources::testing::TestSourceFetcher;
 use crate::sources::types::{BlueprintSource, TestFetcher};
 use crate::sources::{BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler, DynBlueprintSource};
+use blueprint_client_tangle::ConfidentialityPolicy;
 use blueprint_core::{error, info, warn};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol};
 
@@ -477,7 +478,7 @@ impl EigenlayerEventHandler {
                         container_image,
                         blueprint_env.clone(),
                         args.clone(),
-                        false,
+                        ConfidentialityPolicy::StandardRequired,
                         false, // debug mode
                     )
                     .await?
@@ -517,7 +518,7 @@ impl EigenlayerEventHandler {
                             container_image,
                             blueprint_env.clone(),
                             args.clone(),
-                            true,
+                            ConfidentialityPolicy::TeeRequired,
                             false, // debug mode
                         )
                         .await?

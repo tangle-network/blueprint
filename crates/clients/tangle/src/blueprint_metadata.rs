@@ -1,4 +1,4 @@
-//! Helpers for reading and writing blueprint deployment metadata.
+//! Helpers for reading and writing blueprint execution metadata.
 
 use crate::contracts::ITangleTypes;
 use alloc::borrow::ToOwned;
@@ -10,14 +10,13 @@ use thiserror::Error;
 /// Schema marker for structured blueprint metadata payloads.
 pub const METADATA_SCHEMA_V1: &str = "tangle.blueprint.metadata.v1";
 
-const DEPLOYMENT_PROFILE_KEY: &str = "deployment_profile";
+const EXECUTION_PROFILE_KEY: &str = "execution_profile";
 const JOB_PROFILES_BLOB_KEY: &str = "job_profiles_b64_gzip";
-const LEGACY_PROFILING_PREFIX: &str = "[PROFILING_DATA_";
 
-/// Errors produced while parsing deployment profile metadata.
+/// Errors produced while parsing execution profile metadata.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum TeeDeploymentProfileError {
+pub enum ExecutionProfileError {
     /// `profiling_data` is not valid JSON.
     #[error("profiling_data must be valid JSON: {message}")]
     InvalidJson {
@@ -27,161 +26,139 @@ pub enum TeeDeploymentProfileError {
     /// `profiling_data` JSON root is not an object.
     #[error("profiling_data must be a JSON object")]
     MetadataNotObject,
-    /// `deployment_profile` exists but is not an object.
-    #[error("deployment_profile must be an object")]
-    DeploymentProfileNotObject,
-    /// `deployment_profile` exists but does not match expected schema.
-    #[error("deployment_profile is invalid: {message}")]
-    InvalidDeploymentProfile {
+    /// `execution_profile` exists but is not an object.
+    #[error("execution_profile must be an object")]
+    ExecutionProfileNotObject,
+    /// `execution_profile` exists but does not match expected schema.
+    #[error("execution_profile is invalid: {message}")]
+    InvalidExecutionProfile {
         /// Human-readable schema validation detail.
         message: String,
     },
-    /// `profiling_data` is non-empty but not recognized as structured JSON or legacy payload.
-    #[error("profiling_data is not structured metadata and does not match legacy profile format")]
-    UnsupportedProfilingDataFormat,
-    /// `tee_required=true` cannot be paired with `supports_tee=false`.
-    #[error("deployment_profile is invalid: tee_required=true requires supports_tee=true")]
-    ContradictoryPolicy,
 }
 
-/// Blueprint deployment policy related to TEE placement.
-///
-/// - `tee_required=true` means manager must fail-closed when TEE is unavailable.
-/// - `supports_tee=true` means the blueprint can run in TEE mode.
-///
-/// A dual-mode blueprint (TEE and non-TEE) should set:
-/// `tee_required=false`, `supports_tee=true`.
+/// Confidentiality policy for execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TeeDeploymentProfile {
-    /// Whether TEE placement is mandatory (fail-closed).
-    pub tee_required: bool,
-    /// Whether this blueprint can run on TEE-capable infrastructure.
-    pub supports_tee: bool,
+#[serde(rename_all = "snake_case")]
+pub enum ConfidentialityPolicy {
+    /// Standard and TEE placement are both valid.
+    Any,
+    /// TEE execution is mandatory (fail closed).
+    TeeRequired,
+    /// Non-TEE execution is mandatory.
+    StandardRequired,
+    /// Prefer TEE, but allow non-TEE fallback.
+    TeePreferred,
 }
 
-impl TeeDeploymentProfile {
-    /// Normalize profile invariants.
+impl Default for ConfidentialityPolicy {
+    fn default() -> Self {
+        Self::Any
+    }
+}
+
+/// Blueprint deployment policy for execution environments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ExecutionProfile {
+    /// Confidentiality policy for runtime placement.
+    #[serde(default)]
+    pub confidentiality: ConfidentialityPolicy,
+}
+
+impl ExecutionProfile {
+    /// Whether execution must run in TEE.
     #[must_use]
-    pub fn normalized(self) -> Self {
-        if self.tee_required && !self.supports_tee {
-            return Self {
-                tee_required: true,
-                supports_tee: true,
-            };
-        }
-        self
+    pub fn tee_required(self) -> bool {
+        matches!(self.confidentiality, ConfidentialityPolicy::TeeRequired)
+    }
+
+    /// Whether execution may run in TEE.
+    #[must_use]
+    pub fn tee_supported(self) -> bool {
+        matches!(
+            self.confidentiality,
+            ConfidentialityPolicy::Any
+                | ConfidentialityPolicy::TeeRequired
+                | ConfidentialityPolicy::TeePreferred
+        )
+    }
+
+    /// Whether non-TEE placement is required.
+    #[must_use]
+    pub fn standard_required(self) -> bool {
+        matches!(
+            self.confidentiality,
+            ConfidentialityPolicy::StandardRequired
+        )
     }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawDeploymentProfile {
-    tee_required: Option<bool>,
-    supports_tee: Option<bool>,
+struct RawExecutionProfile {
+    confidentiality: Option<ConfidentialityPolicy>,
 }
 
-/// Resolve TEE deployment profile from on-chain metadata.
-pub fn resolve_tee_deployment_profile(
+/// Resolve execution profile from on-chain metadata.
+pub fn resolve_execution_profile(
     metadata: &ITangleTypes::BlueprintMetadata,
-) -> Result<Option<TeeDeploymentProfile>, TeeDeploymentProfileError> {
-    resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
+) -> Result<Option<ExecutionProfile>, ExecutionProfileError> {
+    resolve_execution_profile_from_profiling_data(metadata.profilingData.as_str())
 }
 
-/// Resolve TEE deployment profile from `profiling_data` payload.
+/// Resolve execution profile from `profiling_data` payload.
 ///
-/// Tolerant path:
-/// - Returns `Ok(None)` for empty or legacy non-JSON/non-object payloads.
-/// - Returns `Err` when structured JSON metadata is present but malformed.
-pub fn resolve_tee_deployment_profile_from_profiling_data(
+/// This parser is strict by design:
+/// - empty payload => `Ok(None)`
+/// - non-empty payload must be structured JSON metadata
+pub fn resolve_execution_profile_from_profiling_data(
     profiling_data: &str,
-) -> Result<Option<TeeDeploymentProfile>, TeeDeploymentProfileError> {
-    let trimmed = profiling_data.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-    if !looks_like_structured_metadata(trimmed) {
-        return if looks_like_legacy_profile_payload(trimmed) {
-            Ok(None)
-        } else {
-            Err(TeeDeploymentProfileError::UnsupportedProfilingDataFormat)
-        };
-    }
-
-    try_resolve_tee_deployment_profile_from_profiling_data(trimmed)
-}
-
-/// Resolve TEE deployment profile from `profiling_data` payload with strict errors.
-///
-/// Strict path:
-/// - Returns `Err` for any non-empty payload that is not valid structured metadata.
-pub fn try_resolve_tee_deployment_profile_from_profiling_data(
-    profiling_data: &str,
-) -> Result<Option<TeeDeploymentProfile>, TeeDeploymentProfileError> {
+) -> Result<Option<ExecutionProfile>, ExecutionProfileError> {
     let trimmed = profiling_data.trim();
     if trimmed.is_empty() {
         return Ok(None);
     }
 
     let root: Value =
-        serde_json::from_str(trimmed).map_err(|e| TeeDeploymentProfileError::InvalidJson {
+        serde_json::from_str(trimmed).map_err(|e| ExecutionProfileError::InvalidJson {
             message: e.to_string(),
         })?;
     let Some(root_object) = root.as_object() else {
-        return Err(TeeDeploymentProfileError::MetadataNotObject);
+        return Err(ExecutionProfileError::MetadataNotObject);
     };
 
-    let Some(raw_profile_value) = root_object.get(DEPLOYMENT_PROFILE_KEY) else {
+    let Some(raw_profile_value) = root_object.get(EXECUTION_PROFILE_KEY) else {
         return Ok(None);
     };
     let Some(raw_profile_object) = raw_profile_value.as_object() else {
-        return Err(TeeDeploymentProfileError::DeploymentProfileNotObject);
+        return Err(ExecutionProfileError::ExecutionProfileNotObject);
     };
 
-    let raw_profile: RawDeploymentProfile =
+    let raw_profile: RawExecutionProfile =
         serde_json::from_value(Value::Object(raw_profile_object.clone())).map_err(|e| {
-            TeeDeploymentProfileError::InvalidDeploymentProfile {
+            ExecutionProfileError::InvalidExecutionProfile {
                 message: e.to_string(),
             }
         })?;
-    let tee_required = raw_profile.tee_required.unwrap_or(false);
-    if tee_required && matches!(raw_profile.supports_tee, Some(false)) {
-        return Err(TeeDeploymentProfileError::ContradictoryPolicy);
-    }
-    let supports_tee = raw_profile.supports_tee.unwrap_or(false);
 
-    Ok(Some(
-        TeeDeploymentProfile {
-            tee_required,
-            supports_tee,
-        }
-        .normalized(),
-    ))
+    Ok(Some(ExecutionProfile {
+        confidentiality: raw_profile.confidentiality.unwrap_or_default(),
+    }))
 }
 
-/// Resolve explicit `tee_required` deployment enforcement from metadata.
-pub fn resolve_tee_required(
+/// Resolve explicit confidentiality policy from metadata.
+pub fn resolve_confidentiality_policy(
     metadata: &ITangleTypes::BlueprintMetadata,
-) -> Result<Option<bool>, TeeDeploymentProfileError> {
-    Ok(resolve_tee_deployment_profile(metadata)?.map(|profile| profile.tee_required))
+) -> Result<Option<ConfidentialityPolicy>, ExecutionProfileError> {
+    Ok(resolve_execution_profile(metadata)?.map(|profile| profile.confidentiality))
 }
 
-/// Resolve explicit `supports_tee` capability from metadata.
-pub fn resolve_tee_support(
-    metadata: &ITangleTypes::BlueprintMetadata,
-) -> Result<Option<bool>, TeeDeploymentProfileError> {
-    Ok(resolve_tee_deployment_profile(metadata)?.map(|profile| profile.supports_tee))
-}
-
-/// Inject or update structured TEE deployment profile inside `profiling_data`.
+/// Inject or update structured execution profile inside `profiling_data`.
 ///
-/// If `profiling_data` currently contains a legacy plain blob, it is preserved
+/// If `profiling_data` currently contains a non-JSON blob, it is preserved
 /// under `job_profiles_b64_gzip`.
 #[must_use]
-pub fn inject_tee_deployment_profile(
-    profiling_data: &str,
-    profile: TeeDeploymentProfile,
-) -> String {
-    let profile = profile.normalized();
+pub fn inject_execution_profile(profiling_data: &str, profile: ExecutionProfile) -> String {
     let trimmed = profiling_data.trim();
     if trimmed.is_empty() {
         return default_metadata_payload(profile).to_string();
@@ -193,20 +170,20 @@ pub fn inject_tee_deployment_profile(
                 if schema != METADATA_SCHEMA_V1 {
                     return json!({
                         "schema": METADATA_SCHEMA_V1,
-                        DEPLOYMENT_PROFILE_KEY: profile_to_value(profile),
+                        EXECUTION_PROFILE_KEY: profile_to_value(profile),
                         JOB_PROFILES_BLOB_KEY: trimmed,
                     })
                     .to_string();
                 }
             }
-            upsert_deployment_profile(root, profile);
+            upsert_execution_profile(root, profile);
             return value.to_string();
         }
     }
 
     json!({
         "schema": METADATA_SCHEMA_V1,
-        DEPLOYMENT_PROFILE_KEY: profile_to_value(profile),
+        EXECUTION_PROFILE_KEY: profile_to_value(profile),
         JOB_PROFILES_BLOB_KEY: trimmed,
     })
     .to_string()
@@ -228,37 +205,25 @@ pub fn extract_job_profiles_blob(profiling_data: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn looks_like_structured_metadata(payload: &str) -> bool {
-    payload.starts_with('{')
-}
-
-fn looks_like_legacy_profile_payload(payload: &str) -> bool {
-    payload.starts_with(LEGACY_PROFILING_PREFIX) || payload.starts_with("H4sI")
-}
-
-fn default_metadata_payload(profile: TeeDeploymentProfile) -> Value {
+fn default_metadata_payload(profile: ExecutionProfile) -> Value {
     json!({
         "schema": METADATA_SCHEMA_V1,
-        DEPLOYMENT_PROFILE_KEY: profile_to_value(profile),
+        EXECUTION_PROFILE_KEY: profile_to_value(profile),
     })
 }
 
-fn profile_to_value(profile: TeeDeploymentProfile) -> Value {
+fn profile_to_value(profile: ExecutionProfile) -> Value {
     json!({
-        "tee_required": profile.tee_required,
-        "supports_tee": profile.supports_tee,
+        "confidentiality": profile.confidentiality,
     })
 }
 
-fn upsert_deployment_profile(root: &mut Map<String, Value>, profile: TeeDeploymentProfile) {
+fn upsert_execution_profile(root: &mut Map<String, Value>, profile: ExecutionProfile) {
     root.insert(
         "schema".to_string(),
         Value::String(METADATA_SCHEMA_V1.to_string()),
     );
-    root.insert(
-        DEPLOYMENT_PROFILE_KEY.to_string(),
-        profile_to_value(profile),
-    );
+    root.insert(EXECUTION_PROFILE_KEY.to_string(), profile_to_value(profile));
 }
 
 #[cfg(test)]
@@ -270,12 +235,11 @@ mod tests {
     fn resolves_required_profile() {
         let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
         metadata.profilingData =
-            r#"{"deployment_profile":{"tee_required":true,"supports_tee":true}}"#.into();
+            r#"{"execution_profile":{"confidentiality":"tee_required"}}"#.into();
         assert_eq!(
-            resolve_tee_deployment_profile(&metadata).unwrap(),
-            Some(TeeDeploymentProfile {
-                tee_required: true,
-                supports_tee: true,
+            resolve_execution_profile(&metadata).unwrap(),
+            Some(ExecutionProfile {
+                confidentiality: ConfidentialityPolicy::TeeRequired,
             })
         );
     }
@@ -284,195 +248,111 @@ mod tests {
     fn resolves_optional_profile() {
         let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
         metadata.profilingData =
-            r#"{"deployment_profile":{"tee_required":false,"supports_tee":true}}"#.into();
+            r#"{"execution_profile":{"confidentiality":"tee_preferred"}}"#.into();
         assert_eq!(
-            resolve_tee_deployment_profile(&metadata).unwrap(),
-            Some(TeeDeploymentProfile {
-                tee_required: false,
-                supports_tee: true,
+            resolve_execution_profile(&metadata).unwrap(),
+            Some(ExecutionProfile {
+                confidentiality: ConfidentialityPolicy::TeePreferred,
             })
         );
     }
 
     #[test]
-    fn ignores_non_structured_payloads() {
-        let mut metadata: ITangleTypes::BlueprintMetadata = Default::default();
-        metadata.profilingData = "[PROFILING_DATA_V1]tee".into();
-        assert_eq!(resolve_tee_deployment_profile(&metadata).unwrap(), None);
-    }
-
-    #[test]
     fn strict_parser_errors_on_non_json_payloads() {
-        let err = try_resolve_tee_deployment_profile_from_profiling_data("tee")
-            .expect_err("expected parse error");
-        assert!(matches!(err, TeeDeploymentProfileError::InvalidJson { .. }));
+        let err =
+            resolve_execution_profile_from_profiling_data("tee").expect_err("expected parse error");
+        assert!(matches!(err, ExecutionProfileError::InvalidJson { .. }));
     }
 
     #[test]
-    fn tolerant_parser_ignores_recognized_legacy_payloads() {
-        assert_eq!(
-            resolve_tee_deployment_profile_from_profiling_data("[PROFILING_DATA_V1]tee").unwrap(),
-            None
-        );
+    fn strict_parser_errors_on_non_object_json_payloads() {
+        let err =
+            resolve_execution_profile_from_profiling_data("[]").expect_err("expected type error");
+        assert!(matches!(err, ExecutionProfileError::MetadataNotObject));
     }
 
     #[test]
-    fn tolerant_parser_errors_on_unknown_non_json_payloads() {
-        let err = resolve_tee_deployment_profile_from_profiling_data("tee")
-            .expect_err("expected unsupported format error");
-        assert!(matches!(
-            err,
-            TeeDeploymentProfileError::UnsupportedProfilingDataFormat
-        ));
-    }
-
-    #[test]
-    fn tolerant_parser_errors_on_malformed_json_object_payloads() {
-        let err = resolve_tee_deployment_profile_from_profiling_data("{")
-            .expect_err("expected parse error");
-        assert!(matches!(err, TeeDeploymentProfileError::InvalidJson { .. }));
-    }
-
-    #[test]
-    fn strict_parser_errors_on_non_boolean_fields() {
-        let err = try_resolve_tee_deployment_profile_from_profiling_data(
-            r#"{"deployment_profile":{"tee_required":"true"}}"#,
+    fn strict_parser_errors_on_non_string_confidentiality() {
+        let err = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"confidentiality":true}}"#,
         )
         .expect_err("expected type error");
         assert!(matches!(
             err,
-            TeeDeploymentProfileError::InvalidDeploymentProfile { .. }
-        ));
-    }
-
-    #[test]
-    fn strict_parser_errors_on_contradictory_policy_flags() {
-        let err = try_resolve_tee_deployment_profile_from_profiling_data(
-            r#"{"deployment_profile":{"tee_required":true,"supports_tee":false}}"#,
-        )
-        .expect_err("expected contradiction error");
-        assert!(matches!(
-            err,
-            TeeDeploymentProfileError::ContradictoryPolicy
+            ExecutionProfileError::InvalidExecutionProfile { .. }
         ));
     }
 
     #[test]
     fn strict_parser_errors_on_unknown_fields() {
-        let err = try_resolve_tee_deployment_profile_from_profiling_data(
-            r#"{"deployment_profile":{"tee_required":true,"tee_requred":true}}"#,
+        let err = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"confidentiality":"tee_required","bad":true}}"#,
         )
         .expect_err("expected schema error");
         assert!(matches!(
             err,
-            TeeDeploymentProfileError::InvalidDeploymentProfile { .. }
+            ExecutionProfileError::InvalidExecutionProfile { .. }
         ));
     }
 
     #[test]
-    fn explicit_non_tee_profile_is_preserved() {
-        let parsed = try_resolve_tee_deployment_profile_from_profiling_data(
-            r#"{"deployment_profile":{"tee_required":false,"supports_tee":false}}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            parsed,
-            Some(TeeDeploymentProfile {
-                tee_required: false,
-                supports_tee: false,
-            })
-        );
-    }
-
-    #[test]
-    fn required_implies_supports() {
-        let profile = TeeDeploymentProfile {
-            tee_required: true,
-            supports_tee: false,
-        }
-        .normalized();
-        assert_eq!(
-            profile,
-            TeeDeploymentProfile {
-                tee_required: true,
-                supports_tee: true,
-            }
-        );
-    }
-
-    #[test]
     fn injects_into_empty_payload() {
-        let payload = inject_tee_deployment_profile(
+        let payload = inject_execution_profile(
             "",
-            TeeDeploymentProfile {
-                tee_required: false,
-                supports_tee: true,
+            ExecutionProfile {
+                confidentiality: ConfidentialityPolicy::Any,
             },
         );
         let value: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(
             value
-                .get(DEPLOYMENT_PROFILE_KEY)
-                .and_then(|v| v.get("supports_tee"))
-                .and_then(Value::as_bool),
-            Some(true)
+                .get(EXECUTION_PROFILE_KEY)
+                .and_then(|v| v.get("confidentiality"))
+                .and_then(Value::as_str),
+            Some("any")
         );
     }
 
     #[test]
-    fn injects_into_existing_object_payload() {
-        let payload = inject_tee_deployment_profile(
+    fn updates_existing_object_payload() {
+        let payload = inject_execution_profile(
             r#"{"job_profiles_b64_gzip":"abc"}"#,
-            TeeDeploymentProfile {
-                tee_required: true,
-                supports_tee: true,
+            ExecutionProfile {
+                confidentiality: ConfidentialityPolicy::TeeRequired,
             },
         );
         let value: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(
             value
-                .get(DEPLOYMENT_PROFILE_KEY)
-                .and_then(|v| v.get("tee_required"))
-                .and_then(Value::as_bool),
-            Some(true)
+                .get(EXECUTION_PROFILE_KEY)
+                .and_then(|v| v.get("confidentiality"))
+                .and_then(Value::as_str),
+            Some("tee_required")
         );
-    }
-
-    #[test]
-    fn inject_overwrites_stale_schema_marker() {
-        let payload = inject_tee_deployment_profile(
-            r#"{"schema":"legacy.v0"}"#,
-            TeeDeploymentProfile {
-                tee_required: false,
-                supports_tee: true,
-            },
-        );
-        let value: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(
-            value.get("schema").and_then(Value::as_str),
-            Some(METADATA_SCHEMA_V1)
+            value.get(JOB_PROFILES_BLOB_KEY).and_then(Value::as_str),
+            Some("abc")
         );
     }
 
     #[test]
-    fn wraps_legacy_blob_payload() {
-        let payload = inject_tee_deployment_profile(
-            "H4sIAAAAA...",
-            TeeDeploymentProfile {
-                tee_required: true,
-                supports_tee: true,
+    fn wraps_non_json_payload_as_job_profiles_blob() {
+        let payload = inject_execution_profile(
+            "H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
+            ExecutionProfile {
+                confidentiality: ConfidentialityPolicy::TeeRequired,
             },
         );
         let value: Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(
             value.get(JOB_PROFILES_BLOB_KEY).and_then(Value::as_str),
-            Some("H4sIAAAAA...")
+            Some("H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==")
         );
     }
 
     #[test]
     fn extracts_profiles_blob_from_structured_payload() {
-        let payload = r#"{"deployment_profile":{"tee_required":true,"supports_tee":true},"job_profiles_b64_gzip":"abc"}"#;
+        let payload = r#"{"execution_profile":{"confidentiality":"tee_required"},"job_profiles_b64_gzip":"abc"}"#;
         assert_eq!(extract_job_profiles_blob(payload), Some("abc".to_string()));
     }
 
