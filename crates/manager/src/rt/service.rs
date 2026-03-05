@@ -377,6 +377,8 @@ impl Service {
                     error!("Failed to start remote service: {e}");
                     e
                 })?;
+                // Remote services do not connect to the local bridge socket.
+                return Ok(None);
             }
             Runtime::Native(instance) => match instance {
                 NativeProcess::NotStarted(info) => {

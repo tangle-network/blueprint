@@ -142,7 +142,7 @@ pub async fn update(
 
     match update_manager
         .update_blueprint(
-            adapter.as_ref(),
+            adapter,
             &image,
             &resource_spec,
             env_vars,
@@ -289,7 +289,7 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
     let current_deployment = deployment_record_to_blueprint_result(current)?;
 
     match update_manager
-        .rollback(adapter.as_ref(), &target_version, &current_deployment)
+        .rollback(adapter, &target_version, &current_deployment)
         .await
     {
         Ok(rollback_deployment) => {

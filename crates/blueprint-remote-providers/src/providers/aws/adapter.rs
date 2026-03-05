@@ -76,6 +76,17 @@ impl AwsAdapter {
 
         Ok(security_group_id)
     }
+
+    fn env_require_tee() -> bool {
+        std::env::var("BLUEPRINT_REMOTE_TEE_REQUIRED")
+            .ok()
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes"
+                )
+            })
+    }
 }
 
 #[async_trait]
@@ -84,6 +95,7 @@ impl CloudProviderAdapter for AwsAdapter {
         &self,
         instance_type: &str,
         region: &str,
+        require_tee: bool,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
             cpu: 2.0,
@@ -100,6 +112,10 @@ impl CloudProviderAdapter for AwsAdapter {
         let mut custom_config = HashMap::new();
         custom_config.insert("security_group_ids".to_string(), security_group);
         custom_config.insert("instance_type".to_string(), instance_type.to_string());
+        custom_config.insert(
+            "require_tee".to_string(),
+            if require_tee { "true" } else { "false" }.to_string(),
+        );
 
         let config = ProvisioningConfig {
             name: format!("blueprint-{}", uuid::Uuid::new_v4()),
@@ -242,7 +258,10 @@ impl AwsAdapter {
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
         // Get or provision EC2 instance
-        let instance = self.provision_instance("t3.medium", "us-east-1").await?;
+        let require_tee = Self::env_require_tee();
+        let instance = self
+            .provision_instance("t3.medium", "us-east-1", require_tee)
+            .await?;
         self.deploy_blueprint(&instance, blueprint_image, resource_spec, env_vars)
             .await
     }

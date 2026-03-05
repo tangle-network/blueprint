@@ -4,14 +4,17 @@
 
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
-use blueprint_core::{error, info};
+use blueprint_core::info;
+use blueprint_remote_providers::deployment::DeploymentType;
 use blueprint_remote_providers::deployment::manager_integration::{
-    RemoteDeploymentRegistry, TtlManager,
+    RemoteDeploymentConfig, RemoteDeploymentRegistry, TtlManager,
 };
 use blueprint_remote_providers::{
     CloudProvider, CloudProvisioner, DeploymentTracker, ResourceSpec,
 };
+use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
+use chrono::Utc;
 
 fn env_bool(name: &str) -> bool {
     std::env::var(name)
@@ -37,6 +40,7 @@ pub struct RemoteProviderManager {
     provisioner: Arc<CloudProvisioner>,
     registry: Arc<RemoteDeploymentRegistry>,
     ttl_manager: Arc<TtlManager>,
+    provider_regions: HashMap<CloudProvider, String>,
     enabled: bool,
 }
 
@@ -60,6 +64,7 @@ impl RemoteProviderManager {
         // Create registry and provisioner
         let registry = Arc::new(RemoteDeploymentRegistry::new(tracker.clone()));
         let provisioner = Arc::new(CloudProvisioner::new().await?);
+        let provider_regions = configured_provider_regions(ctx);
 
         // Create TTL manager for automatic cleanup
         let (expiry_tx, _expiry_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -69,6 +74,7 @@ impl RemoteProviderManager {
             provisioner,
             registry,
             ttl_manager,
+            provider_regions,
             enabled: true,
         }))
     }
@@ -93,8 +99,8 @@ impl RemoteProviderManager {
         let resource_spec = resource_requirements.unwrap_or_else(ResourceSpec::minimal);
         let tee_required = env_bool("BLUEPRINT_REMOTE_TEE_REQUIRED");
 
-        // Use intelligent provider selection based on resource requirements
-        let provider = if tee_required {
+        // Start from intelligent preference based on resource requirements.
+        let preferred_provider = if tee_required {
             CloudProvider::AWS
         } else if resource_spec.gpu_count.is_some() {
             // GPU workloads prefer GCP or AWS
@@ -109,16 +115,14 @@ impl RemoteProviderManager {
             // Standard workloads use cost-optimized providers
             CloudProvider::DigitalOcean
         };
+        let provider = self.select_configured_provider(preferred_provider, tee_required)?;
 
-        // Get appropriate region for the provider
-        let region = match provider {
-            CloudProvider::AWS => "us-east-1",
-            CloudProvider::GCP => "us-central1",
-            CloudProvider::Azure => "eastus",
-            CloudProvider::DigitalOcean => "nyc3",
-            CloudProvider::Vultr => "ewr",
-            _ => "default",
-        };
+        // Use configured region when available.
+        let region = self
+            .provider_regions
+            .get(&provider)
+            .map(String::as_str)
+            .unwrap_or_else(|| provider_default_region(&provider));
 
         if tee_required && !supports_tee(&provider) {
             return Err(Error::TeePrerequisiteMissing {
@@ -132,6 +136,22 @@ impl RemoteProviderManager {
             .provisioner
             .provision_with_requirements(provider.clone(), &resource_spec, region, tee_required)
             .await?;
+
+        self.registry
+            .register(
+                blueprint_id,
+                service_id,
+                RemoteDeploymentConfig {
+                    deployment_type: deployment_type_from_provider(&provider),
+                    provider: Some(provider.clone()),
+                    region: Some(region.to_string()),
+                    instance_id: instance.id.clone(),
+                    resource_spec: resource_spec.clone(),
+                    ttl_seconds: Some(3600),
+                    deployed_at: Utc::now(),
+                },
+            )
+            .await;
 
         info!("Service deployed to {}: instance={}", provider, instance.id);
         self.ttl_manager
@@ -158,12 +178,102 @@ impl RemoteProviderManager {
             .await;
 
         // Clean up deployment from registry
-        if let Err(e) = self.registry.cleanup(blueprint_id, service_id).await {
-            error!("Failed to cleanup deployment from registry: {}", e);
-        }
+        self.registry.cleanup(blueprint_id, service_id).await?;
 
         Ok(())
     }
 }
 
 // Cloud configuration types are now imported from blueprint_remote_providers
+
+impl RemoteProviderManager {
+    fn select_configured_provider(
+        &self,
+        preferred: CloudProvider,
+        tee_required: bool,
+    ) -> Result<CloudProvider> {
+        let ordered_candidates = if tee_required {
+            vec![
+                preferred,
+                CloudProvider::AWS,
+                CloudProvider::GCP,
+                CloudProvider::Azure,
+            ]
+        } else {
+            vec![
+                preferred,
+                CloudProvider::Vultr,
+                CloudProvider::DigitalOcean,
+                CloudProvider::GCP,
+                CloudProvider::AWS,
+                CloudProvider::Azure,
+            ]
+        };
+
+        for candidate in ordered_candidates {
+            if self.provider_regions.contains_key(&candidate)
+                && (!tee_required || supports_tee(&candidate))
+            {
+                return Ok(candidate);
+            }
+        }
+
+        Err(Error::Other(
+            "No configured cloud provider can satisfy deployment requirements".to_string(),
+        ))
+    }
+}
+
+fn deployment_type_from_provider(provider: &CloudProvider) -> DeploymentType {
+    match provider {
+        CloudProvider::AWS => DeploymentType::AwsEc2,
+        CloudProvider::GCP => DeploymentType::GcpGce,
+        CloudProvider::Azure => DeploymentType::AzureVm,
+        CloudProvider::DigitalOcean => DeploymentType::DigitalOceanDroplet,
+        CloudProvider::Vultr => DeploymentType::VultrInstance,
+        _ => DeploymentType::SshRemote,
+    }
+}
+
+fn configured_provider_regions(ctx: &BlueprintManagerContext) -> HashMap<CloudProvider, String> {
+    let mut regions = HashMap::new();
+    if let Some(config) = ctx.cloud_config() {
+        if let Some(aws) = &config.aws {
+            if aws.enabled {
+                regions.insert(CloudProvider::AWS, aws.region.clone());
+            }
+        }
+        if let Some(gcp) = &config.gcp {
+            if gcp.enabled {
+                regions.insert(CloudProvider::GCP, gcp.region.clone());
+            }
+        }
+        if let Some(azure) = &config.azure {
+            if azure.enabled {
+                regions.insert(CloudProvider::Azure, azure.region.clone());
+            }
+        }
+        if let Some(do_cfg) = &config.digital_ocean {
+            if do_cfg.enabled {
+                regions.insert(CloudProvider::DigitalOcean, do_cfg.region.clone());
+            }
+        }
+        if let Some(vultr) = &config.vultr {
+            if vultr.enabled {
+                regions.insert(CloudProvider::Vultr, vultr.region.clone());
+            }
+        }
+    }
+    regions
+}
+
+fn provider_default_region(provider: &CloudProvider) -> &'static str {
+    match provider {
+        CloudProvider::AWS => "us-east-1",
+        CloudProvider::GCP => "us-central1",
+        CloudProvider::Azure => "eastus",
+        CloudProvider::DigitalOcean => "nyc3",
+        CloudProvider::Vultr => "ewr",
+        _ => "default",
+    }
+}

@@ -45,6 +45,7 @@ impl CloudProviderAdapter for VultrAdapter {
         &self,
         _instance_type: &str,
         region: &str,
+        _require_tee: bool,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
             cpu: 2.0,
@@ -211,7 +212,7 @@ impl VultrAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        let instance = self.provision_instance("vc2-2c-4gb", "ewr").await?;
+        let instance = self.provision_instance("vc2-2c-4gb", "ewr", false).await?;
         self.deploy_to_existing_instance(&instance, blueprint_image, resource_spec, env_vars)
             .await
     }

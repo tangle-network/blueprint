@@ -15,9 +15,9 @@ use crate::sources::types::{
     GithubFetcher as ManagerGithubFetcher, ImageRegistryFetcher, RemoteFetcher, TestFetcher,
 };
 use blueprint_client_tangle::contracts::ITangleTypes;
+use blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data;
 use serde::Deserialize;
 use serde_json;
-use serde_json::Value;
 type OnChainBlueprintSource = <ITangleTypes::BlueprintSource as SolType>::RustType;
 type OnChainBlueprintBinary = <ITangleTypes::BlueprintBinary as SolType>::RustType;
 type OnChainBlueprintMetadata = <ITangleTypes::BlueprintMetadata as SolType>::RustType;
@@ -81,16 +81,14 @@ impl OnChainMetadataProvider {
         let definition = match inner.get_blueprint_definition(blueprint_id).await {
             Ok(definition) => definition,
             Err(err) => {
-                warn!(
-                    blueprint_id,
-                    "Failed to fetch blueprint definition for metadata resolution: {err}"
-                );
-                return Ok(None);
+                return Err(Error::Other(format!(
+                    "failed to fetch blueprint definition {blueprint_id}: {err}"
+                )));
             }
         };
 
         let blueprint_name = definition.metadata.name.clone().to_string();
-        let tee_required = Self::resolve_tee_required(&definition.metadata);
+        let tee_required = Self::resolve_tee_required(&definition.metadata)?;
         let onchain_sources = definition.sources;
 
         let sources = Self::convert_sources(&onchain_sources);
@@ -106,86 +104,15 @@ impl OnChainMetadataProvider {
         Ok(Some((blueprint_name, sources, tee_required)))
     }
 
-    fn resolve_tee_required(metadata: &OnChainBlueprintMetadata) -> bool {
-        for raw in [
-            metadata.profilingData.as_str(),
-            metadata.description.as_str(),
-            metadata.category.as_str(),
-        ] {
-            if let Some(tee_required) = Self::parse_tee_required_hint(raw) {
-                return tee_required;
-            }
-        }
-
-        false
-    }
-
-    fn parse_tee_required_hint(raw: &str) -> Option<bool> {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-
-        if trimmed.starts_with('{') {
-            let value: Value = serde_json::from_str(trimmed).ok()?;
-            return Self::extract_tee_required_from_value(&value);
-        }
-
-        Self::parse_runtime_profile_mode(trimmed)
-    }
-
-    fn extract_tee_required_from_value(value: &Value) -> Option<bool> {
-        if let Some(tee_required) = value.get("tee_required").and_then(Value::as_bool) {
-            return Some(tee_required);
-        }
-        if let Some(tee_required) = value.get("teeRequired").and_then(Value::as_bool) {
-            return Some(tee_required);
-        }
-
-        for key in [
-            "runtime_profile",
-            "runtimeProfile",
-            "deployment_profile",
-            "deploymentProfile",
-        ] {
-            if let Some(profile) = value.get(key) {
-                if let Some(tee_required) = Self::extract_tee_required_from_value(profile) {
-                    return Some(tee_required);
-                }
-                if let Some(mode) = profile.as_str() {
-                    if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
-                        return Some(tee_required);
-                    }
-                }
-            }
-        }
-
-        if let Some(mode) = value.get("mode").and_then(Value::as_str) {
-            if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
-                return Some(tee_required);
-            }
-        }
-        if let Some(mode) = value.get("runtime").and_then(Value::as_str) {
-            if let Some(tee_required) = Self::parse_runtime_profile_mode(mode) {
-                return Some(tee_required);
-            }
-        }
-
-        None
-    }
-
-    fn parse_runtime_profile_mode(mode: &str) -> Option<bool> {
-        let normalized = mode.trim().to_ascii_lowercase();
-        match normalized.as_str() {
-            "tee"
-            | "trusted_execution"
-            | "trusted-execution"
-            | "confidential"
-            | "confidential_compute"
-            | "confidential-compute" => Some(true),
-            "native" | "container" | "wasm" | "none" | "disabled" => Some(false),
-            _ => None,
-        }
+    fn resolve_tee_required(metadata: &OnChainBlueprintMetadata) -> Result<bool> {
+        let profile =
+            resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
+                .map_err(|err| {
+                    Error::Other(format!(
+                        "invalid profilingData for TEE deployment profile: {err}"
+                    ))
+                })?;
+        Ok(profile.map(|value| value.tee_required).unwrap_or(false))
     }
 
     fn convert_sources(sources: &[OnChainBlueprintSource]) -> Vec<ManagerBlueprintSource> {
@@ -260,9 +187,9 @@ impl OnChainMetadataProvider {
     }
 
     fn convert_testing_source(source: &OnChainTestingSource) -> Option<TestFetcher> {
-        let cargo_package = source.cargoPackage.clone().to_string();
-        let cargo_bin = source.cargoBin.clone().to_string();
-        let base_path = source.basePath.clone().to_string();
+        let cargo_package = source.cargoPackage.clone().to_string().trim().to_string();
+        let cargo_bin = source.cargoBin.clone().to_string().trim().to_string();
+        let base_path = source.basePath.clone().to_string().trim().to_string();
 
         if cargo_package.is_empty() && cargo_bin.is_empty() && base_path.is_empty() {
             return None;
@@ -712,37 +639,90 @@ mod tests {
     }
 
     #[test]
-    fn parse_tee_required_from_top_level_bool() {
-        let payload = r#"{"tee_required":true}"#;
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
-        assert_eq!(parsed, Some(true));
+    fn resolve_tee_required_from_structured_required_profile() {
+        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
+            r#"{"deployment_profile":{"tee_required":true,"supports_tee":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.map(|profile| profile.tee_required), Some(true));
     }
 
     #[test]
-    fn parse_tee_required_from_runtime_profile_object() {
-        let payload = r#"{"runtime_profile":{"tee_required":false}}"#;
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
-        assert_eq!(parsed, Some(false));
+    fn resolve_tee_required_from_structured_optional_profile() {
+        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
+            r#"{"deployment_profile":{"tee_required":false,"supports_tee":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.map(|profile| profile.tee_required), Some(false));
     }
 
     #[test]
-    fn parse_tee_required_from_runtime_profile_mode() {
-        let payload = r#"{"runtimeProfile":"tee"}"#;
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint(payload);
-        assert_eq!(parsed, Some(true));
+    fn resolve_tee_required_normalizes_missing_supports_flag() {
+        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
+            r#"{"deployment_profile":{"tee_required":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.map(|profile| profile.tee_required), Some(true));
     }
 
     #[test]
-    fn parse_tee_required_from_plain_mode_string() {
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint("native");
-        assert_eq!(parsed, Some(false));
-    }
-
-    #[test]
-    fn parse_tee_required_ignores_unrelated_or_non_json_payloads() {
-        let parsed = OnChainMetadataProvider::parse_tee_required_hint(
-            "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
+    fn resolve_tee_required_errors_on_unknown_non_structured_payloads() {
+        let err =
+            blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data("native")
+                .expect_err("expected unsupported format error");
+        assert!(
+            err.to_string()
+                .contains("does not match legacy profile format"),
+            "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn resolve_tee_required_ignores_legacy_profile_markers() {
+        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
+            "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
+        )
+        .unwrap();
         assert_eq!(parsed, None);
+    }
+
+    #[test]
+    fn resolve_tee_required_errors_on_malformed_json() {
+        let metadata = ITangleTypes::BlueprintMetadata {
+            profilingData: "{".into(),
+            ..Default::default()
+        };
+        let err = OnChainMetadataProvider::resolve_tee_required(&metadata).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("invalid profilingData for TEE deployment profile"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_tee_required_defaults_false_for_legacy_non_json_payloads() {
+        let metadata = ITangleTypes::BlueprintMetadata {
+            profilingData: "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==".into(),
+            ..Default::default()
+        };
+        let parsed = OnChainMetadataProvider::resolve_tee_required(&metadata).unwrap();
+        assert!(
+            !parsed,
+            "legacy payload should default to tee_required=false"
+        );
+    }
+
+    #[test]
+    fn skips_testing_source_with_whitespace_only_fields() {
+        let source = ITangleTypes::TestingSource {
+            cargoPackage: "   ".into(),
+            cargoBin: "\t".into(),
+            basePath: "\n".into(),
+        };
+        assert!(
+            OnChainMetadataProvider::convert_testing_source(&source).is_none(),
+            "whitespace-only testing source metadata should be ignored"
+        );
     }
 }

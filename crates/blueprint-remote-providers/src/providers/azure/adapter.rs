@@ -27,6 +27,17 @@ impl AzureAdapter {
             provisioner: Arc::new(tokio::sync::Mutex::new(provisioner)),
         })
     }
+
+    fn env_require_tee() -> bool {
+        std::env::var("BLUEPRINT_REMOTE_TEE_REQUIRED")
+            .ok()
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes"
+                )
+            })
+    }
 }
 
 #[async_trait]
@@ -35,6 +46,7 @@ impl CloudProviderAdapter for AzureAdapter {
         &self,
         instance_type: &str,
         region: &str,
+        require_tee: bool,
     ) -> Result<ProvisionedInstance> {
         let spec = ResourceSpec {
             cpu: 2.0,
@@ -56,6 +68,10 @@ impl CloudProviderAdapter for AzureAdapter {
             custom_config: {
                 let mut config = HashMap::new();
                 config.insert("vm_size".to_string(), instance_type.to_string());
+                config.insert(
+                    "require_tee".to_string(),
+                    if require_tee { "true" } else { "false" }.to_string(),
+                );
                 config
             },
         };
@@ -265,7 +281,10 @@ impl AzureAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        let instance = self.provision_instance("Standard_B2ms", "eastus").await?;
+        let require_tee = Self::env_require_tee();
+        let instance = self
+            .provision_instance("Standard_B2ms", "eastus", require_tee)
+            .await?;
         self.deploy_to_existing_vm(&instance, blueprint_image, resource_spec, env_vars)
             .await
     }
