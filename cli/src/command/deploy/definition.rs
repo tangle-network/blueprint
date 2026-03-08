@@ -3,7 +3,7 @@ use alloy_json_abi::Param;
 use alloy_primitives::{Address, Bytes, FixedBytes, U256};
 use alloy_sol_types::{SolType, SolValue};
 use blueprint_client_tangle::contracts::ITangleTypes;
-use blueprint_client_tangle::{TeeDeploymentProfile, inject_tee_deployment_profile};
+use blueprint_client_tangle::{ExecutionProfile, inject_execution_profile};
 use color_eyre::eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -358,7 +358,7 @@ struct MetadataSpec {
     #[serde(default)]
     profiling_data: String,
     #[serde(default)]
-    deployment_profile: Option<DeploymentProfileSpec>,
+    execution_profile: Option<ExecutionProfileSpec>,
 }
 
 impl Default for MetadataSpec {
@@ -373,19 +373,19 @@ impl Default for MetadataSpec {
             website: default_website(),
             license: default_license(),
             profiling_data: String::new(),
-            deployment_profile: None,
+            execution_profile: None,
         }
     }
 }
 
 impl MetadataSpec {
     fn into_metadata(self) -> BlueprintMetadata {
-        let deployment_profile = self
-            .deployment_profile
+        let execution_profile = self
+            .execution_profile
             .as_ref()
-            .map(DeploymentProfileSpec::to_profile);
-        let profiling_data = deployment_profile
-            .map(|profile| inject_tee_deployment_profile(&self.profiling_data, profile))
+            .map(ExecutionProfileSpec::to_profile);
+        let profiling_data = execution_profile
+            .map(|profile| inject_execution_profile(&self.profiling_data, profile))
             .unwrap_or(self.profiling_data);
 
         BlueprintMetadata {
@@ -403,18 +403,15 @@ impl MetadataSpec {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct DeploymentProfileSpec {
+struct ExecutionProfileSpec {
     #[serde(default)]
-    tee_required: bool,
-    #[serde(default)]
-    supports_tee: bool,
+    confidentiality: blueprint_client_tangle::ConfidentialityPolicy,
 }
 
-impl DeploymentProfileSpec {
-    fn to_profile(&self) -> TeeDeploymentProfile {
-        TeeDeploymentProfile {
-            tee_required: self.tee_required,
-            supports_tee: self.supports_tee || self.tee_required,
+impl ExecutionProfileSpec {
+    fn to_profile(&self) -> ExecutionProfile {
+        ExecutionProfile {
+            confidentiality: self.confidentiality,
         }
     }
 }
@@ -1488,7 +1485,7 @@ mod tests {
     }
 
     #[test]
-    fn metadata_tee_required_injects_structured_profiling_data() {
+    fn metadata_execution_profile_injects_structured_profiling_data() {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
@@ -1496,8 +1493,8 @@ mod tests {
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
                 "name": "TEE Blueprint",
-                "deployment_profile": {
-                    "tee_required": true
+                "execution_profile": {
+                    "confidentiality": "tee_required"
                 }
             },
             "jobs": [
@@ -1527,29 +1524,22 @@ mod tests {
         let metadata_json: serde_json::Value = serde_json::from_str(&metadata_payload).unwrap();
         assert_eq!(
             metadata_json
-                .get("deployment_profile")
-                .and_then(|v| v.get("tee_required"))
-                .and_then(serde_json::Value::as_bool),
-            Some(true)
-        );
-        assert_eq!(
-            metadata_json
-                .get("deployment_profile")
-                .and_then(|v| v.get("supports_tee"))
-                .and_then(serde_json::Value::as_bool),
-            Some(true)
+                .get("execution_profile")
+                .and_then(|v| v.get("confidentiality"))
+                .and_then(serde_json::Value::as_str),
+            Some("tee_required")
         );
     }
 
     #[test]
-    fn metadata_deployment_profile_supports_tee_only_is_optional() {
+    fn metadata_execution_profile_accepts_standard_required() {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
-                "deployment_profile": { "supports_tee": true }
+                "execution_profile": { "confidentiality": "standard_required" }
             },
             "jobs": [
                 { "name": "square" }
@@ -1578,22 +1568,15 @@ mod tests {
         let metadata_json: serde_json::Value = serde_json::from_str(&metadata_payload).unwrap();
         assert_eq!(
             metadata_json
-                .get("deployment_profile")
-                .and_then(|v| v.get("tee_required"))
-                .and_then(serde_json::Value::as_bool),
-            Some(false)
-        );
-        assert_eq!(
-            metadata_json
-                .get("deployment_profile")
-                .and_then(|v| v.get("supports_tee"))
-                .and_then(serde_json::Value::as_bool),
-            Some(true)
+                .get("execution_profile")
+                .and_then(|v| v.get("confidentiality"))
+                .and_then(serde_json::Value::as_str),
+            Some("standard_required")
         );
     }
 
     #[test]
-    fn metadata_tee_required_wraps_legacy_profiling_blob() {
+    fn metadata_execution_profile_wraps_legacy_profiling_blob() {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("definition.json");
         let legacy_blob = "H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==";
@@ -1602,8 +1585,8 @@ mod tests {
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
                 "profiling_data": legacy_blob,
-                "deployment_profile": {
-                    "tee_required": true
+                "execution_profile": {
+                    "confidentiality": "tee_required"
                 }
             },
             "jobs": [

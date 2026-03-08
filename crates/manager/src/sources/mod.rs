@@ -4,6 +4,7 @@ use crate::error::{Error, Result};
 use crate::rt::ResourceLimits;
 use crate::rt::service::Service;
 use alloy_primitives::Address;
+use blueprint_client_tangle::ConfidentialityPolicy;
 use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -76,7 +77,7 @@ pub trait BlueprintSourceHandler: Send + Sync {
         id: u32,
         env: BlueprintEnvVars,
         args: BlueprintArgs,
-        require_tee: bool,
+        confidentiality_policy: ConfidentialityPolicy,
         sub_service_str: &str,
         cache_dir: &Path,
         runtime_dir: &Path,

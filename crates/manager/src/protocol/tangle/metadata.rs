@@ -15,7 +15,9 @@ use crate::sources::types::{
     GithubFetcher as ManagerGithubFetcher, ImageRegistryFetcher, RemoteFetcher, TestFetcher,
 };
 use blueprint_client_tangle::contracts::ITangleTypes;
-use blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data;
+use blueprint_client_tangle::{
+    ConfidentialityPolicy, resolve_execution_profile_from_profiling_data,
+};
 use serde::Deserialize;
 use serde_json;
 type OnChainBlueprintSource = <ITangleTypes::BlueprintSource as SolType>::RustType;
@@ -56,7 +58,7 @@ impl OnChainMetadataProvider {
         service_id: u64,
         registration_mode: bool,
     ) -> Result<Option<ManagerBlueprintMetadata>> {
-        let Some((blueprint_name, sources, tee_required)) =
+        let Some((blueprint_name, sources, confidentiality_policy)) =
             Self::load_blueprint_sources(client, blueprint_id).await?
         else {
             return Ok(None);
@@ -67,7 +69,7 @@ impl OnChainMetadataProvider {
             service_id,
             name: blueprint_name,
             sources,
-            tee_required,
+            confidentiality_policy,
             registration_mode,
             registration_capture_only: false,
         }))
@@ -76,7 +78,7 @@ impl OnChainMetadataProvider {
     async fn load_blueprint_sources(
         client: &TangleProtocolClient,
         blueprint_id: u64,
-    ) -> Result<Option<(String, Vec<ManagerBlueprintSource>, bool)>> {
+    ) -> Result<Option<(String, Vec<ManagerBlueprintSource>, ConfidentialityPolicy)>> {
         let inner = client.client();
         let definition = match inner.get_blueprint_definition(blueprint_id).await {
             Ok(definition) => definition,
@@ -88,7 +90,7 @@ impl OnChainMetadataProvider {
         };
 
         let blueprint_name = definition.metadata.name.clone().to_string();
-        let tee_required = Self::resolve_tee_required(&definition.metadata)?;
+        let confidentiality_policy = Self::resolve_confidentiality_policy(&definition.metadata)?;
         let onchain_sources = definition.sources;
 
         let sources = Self::convert_sources(&onchain_sources);
@@ -101,18 +103,22 @@ impl OnChainMetadataProvider {
             return Ok(None);
         }
 
-        Ok(Some((blueprint_name, sources, tee_required)))
+        Ok(Some((blueprint_name, sources, confidentiality_policy)))
     }
 
-    fn resolve_tee_required(metadata: &OnChainBlueprintMetadata) -> Result<bool> {
+    fn resolve_confidentiality_policy(
+        metadata: &OnChainBlueprintMetadata,
+    ) -> Result<ConfidentialityPolicy> {
         let profile =
-            resolve_tee_deployment_profile_from_profiling_data(metadata.profilingData.as_str())
+            resolve_execution_profile_from_profiling_data(metadata.profilingData.as_str())
                 .map_err(|err| {
                     Error::Other(format!(
-                        "invalid profilingData for TEE deployment profile: {err}"
+                        "invalid profilingData for execution profile: {err}"
                     ))
                 })?;
-        Ok(profile.map(|value| value.tee_required).unwrap_or(false))
+        Ok(profile
+            .map(|value| value.confidentiality)
+            .unwrap_or(ConfidentialityPolicy::Any))
     }
 
     fn convert_sources(sources: &[OnChainBlueprintSource]) -> Vec<ManagerBlueprintSource> {
@@ -639,77 +645,77 @@ mod tests {
     }
 
     #[test]
-    fn resolve_tee_required_from_structured_required_profile() {
-        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
-            r#"{"deployment_profile":{"tee_required":true,"supports_tee":true}}"#,
+    fn resolve_confidentiality_policy_from_structured_required_profile() {
+        let parsed = blueprint_client_tangle::resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"confidentiality":"tee_required"}}"#,
         )
         .unwrap();
-        assert_eq!(parsed.map(|profile| profile.tee_required), Some(true));
+        assert_eq!(
+            parsed.map(|profile| profile.confidentiality),
+            Some(ConfidentialityPolicy::TeeRequired)
+        );
     }
 
     #[test]
-    fn resolve_tee_required_from_structured_optional_profile() {
-        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
-            r#"{"deployment_profile":{"tee_required":false,"supports_tee":true}}"#,
+    fn resolve_confidentiality_policy_from_structured_optional_profile() {
+        let parsed = blueprint_client_tangle::resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"confidentiality":"tee_preferred"}}"#,
         )
         .unwrap();
-        assert_eq!(parsed.map(|profile| profile.tee_required), Some(false));
+        assert_eq!(
+            parsed.map(|profile| profile.confidentiality),
+            Some(ConfidentialityPolicy::TeePreferred)
+        );
     }
 
     #[test]
-    fn resolve_tee_required_normalizes_missing_supports_flag() {
-        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
-            r#"{"deployment_profile":{"tee_required":true}}"#,
+    fn resolve_confidentiality_policy_defaults_to_any_when_missing() {
+        let parsed = blueprint_client_tangle::resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{}}"#,
         )
         .unwrap();
-        assert_eq!(parsed.map(|profile| profile.tee_required), Some(true));
+        assert_eq!(
+            parsed.map(|profile| profile.confidentiality),
+            Some(ConfidentialityPolicy::Any)
+        );
     }
 
     #[test]
-    fn resolve_tee_required_errors_on_unknown_non_structured_payloads() {
-        let err =
-            blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data("native")
-                .expect_err("expected unsupported format error");
+    fn resolve_confidentiality_policy_errors_on_non_structured_payloads() {
+        let err = blueprint_client_tangle::resolve_execution_profile_from_profiling_data("native")
+            .expect_err("expected strict parse error");
         assert!(
             err.to_string()
-                .contains("does not match legacy profile format"),
+                .contains("profiling_data must be valid JSON"),
             "unexpected error: {err}"
         );
     }
 
     #[test]
-    fn resolve_tee_required_ignores_legacy_profile_markers() {
-        let parsed = blueprint_client_tangle::resolve_tee_deployment_profile_from_profiling_data(
-            "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
-        )
-        .unwrap();
-        assert_eq!(parsed, None);
-    }
-
-    #[test]
-    fn resolve_tee_required_errors_on_malformed_json() {
+    fn resolve_confidentiality_policy_errors_on_malformed_json() {
         let metadata = ITangleTypes::BlueprintMetadata {
             profilingData: "{".into(),
             ..Default::default()
         };
-        let err = OnChainMetadataProvider::resolve_tee_required(&metadata).unwrap_err();
+        let err = OnChainMetadataProvider::resolve_confidentiality_policy(&metadata).unwrap_err();
         assert!(
             err.to_string()
-                .contains("invalid profilingData for TEE deployment profile"),
+                .contains("invalid profilingData for execution profile"),
             "unexpected error: {err}"
         );
     }
 
     #[test]
-    fn resolve_tee_required_defaults_false_for_legacy_non_json_payloads() {
+    fn resolve_confidentiality_policy_defaults_to_any_for_empty_payload() {
         let metadata = ITangleTypes::BlueprintMetadata {
-            profilingData: "[PROFILING_DATA_V1]H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==".into(),
+            profilingData: "".into(),
             ..Default::default()
         };
-        let parsed = OnChainMetadataProvider::resolve_tee_required(&metadata).unwrap();
-        assert!(
-            !parsed,
-            "legacy payload should default to tee_required=false"
+        let parsed = OnChainMetadataProvider::resolve_confidentiality_policy(&metadata).unwrap();
+        assert_eq!(
+            parsed,
+            ConfidentialityPolicy::Any,
+            "empty payload should default to confidentiality=any"
         );
     }
 

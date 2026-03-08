@@ -9,6 +9,7 @@ use crate::rt::container::ContainerInstance;
 #[cfg(feature = "remote-providers")]
 use crate::rt::remote::RemoteServiceInstance;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
+use blueprint_client_tangle::ConfidentialityPolicy;
 use blueprint_core::error;
 use blueprint_core::{info, warn};
 use blueprint_manager_bridge::server::{Bridge, BridgeHandle};
@@ -230,7 +231,7 @@ impl Service {
         image: String,
         mut env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
-        require_tee: bool,
+        confidentiality_policy: ConfidentialityPolicy,
         debug: bool,
     ) -> Result<Service> {
         let (bridge_base_socket, bridge_handle, alive_rx) =
@@ -245,7 +246,7 @@ impl Service {
             image,
             env_vars,
             arguments,
-            require_tee,
+            confidentiality_policy,
             debug,
         )
         .await?;

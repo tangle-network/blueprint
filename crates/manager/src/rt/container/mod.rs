@@ -3,6 +3,7 @@ use crate::error::Result;
 use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
+use blueprint_client_tangle::ConfidentialityPolicy;
 use blueprint_core::{info, warn};
 use k8s_openapi::api::core::v1::{
     Container, EndpointAddress, EndpointPort, EndpointSubset, Endpoints, EnvVar,
@@ -46,7 +47,7 @@ pub struct ContainerInstance {
     image: String,
     env: BlueprintEnvVars,
     args: BlueprintArgs,
-    require_tee: bool,
+    confidentiality_policy: ConfidentialityPolicy,
 
     // TODO: Debug logging for containers
     /// Whether this instance should run in debug mode
@@ -70,7 +71,7 @@ impl ContainerInstance {
         image: String,
         env: BlueprintEnvVars,
         args: BlueprintArgs,
-        require_tee: bool,
+        confidentiality_policy: ConfidentialityPolicy,
         debug: bool,
     ) -> Result<ContainerInstance> {
         let client = ctx.containers.kube_client.clone().ok_or_else(|| {
@@ -91,7 +92,7 @@ impl ContainerInstance {
             image,
             env,
             args,
-            require_tee,
+            confidentiality_policy,
             debug,
         })
     }
@@ -120,27 +121,34 @@ impl ContainerInstance {
         self.ensure_host_service().await?;
         self.ensure_host_endpoints().await?;
 
-        let kata_available = match detect_kata(self.client.clone()).await {
-            Ok(v) => v,
-            Err(err) => {
-                if self.require_tee {
-                    return Err(err);
+        let runtime = match self.confidentiality_policy {
+            ConfidentialityPolicy::TeeRequired => {
+                let kata_available = detect_kata(self.client.clone()).await?;
+                if !kata_available {
+                    return Err(crate::error::Error::TeePrerequisiteMissing {
+                        prerequisite: "kata runtime class".to_string(),
+                        hint: "TEE runtime requires Kubernetes RuntimeClass 'kata' to enforce sandbox isolation".to_string(),
+                    });
                 }
-                warn!("Failed to detect kata runtime class, continuing without kata: {err}");
-                false
+                Some(String::from("kata"))
             }
-        };
-        if self.require_tee && !kata_available {
-            return Err(crate::error::Error::TeePrerequisiteMissing {
-                prerequisite: "kata runtime class".to_string(),
-                hint: "TEE runtime requires Kubernetes RuntimeClass 'kata' to enforce sandbox isolation".to_string(),
-            });
-        }
-
-        let runtime = if kata_available {
-            Some(String::from("kata"))
-        } else {
-            None
+            ConfidentialityPolicy::TeePreferred => {
+                let kata_available = match detect_kata(self.client.clone()).await {
+                    Ok(v) => v,
+                    Err(err) => {
+                        warn!(
+                            "Failed to detect kata runtime class, continuing without kata: {err}"
+                        );
+                        false
+                    }
+                };
+                if kata_available {
+                    Some(String::from("kata"))
+                } else {
+                    None
+                }
+            }
+            ConfidentialityPolicy::Any | ConfidentialityPolicy::StandardRequired => None,
         };
 
         let pods: Api<Pod> = Api::namespaced(self.client.clone(), BLUEPRINT_NAMESPACE);
