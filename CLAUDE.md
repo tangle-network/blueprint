@@ -122,3 +122,31 @@ Use this process for non-trivial changes:
 Reference:
 - `docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md`
 - `docs/engineering/HARNESS_ENGINEERING_SPEC.md`
+
+## PR Quality Gate
+
+PRs targeting `main` are validated by `.github/workflows/pr-quality-gate.yml`. The PR body **must** contain these markdown sections (exactly as `## Section Name`):
+
+1. `## Summary` — bullet-point description of changes
+2. `## Change Class` — must include `- Selected class: Class X` and `- Why this class: ...`
+3. `## Behavior Contract` — describe what changed behaviorally (new errors, changed defaults, etc.)
+4. `## Risk And Scope` — blast radius, mitigation, risk assessment
+5. `## Verification` — at least one fenced code block with test/build commands
+6. `## Harness Evidence` — which tests cover the changes and their status
+7. `## Checklist` — markdown checklist of quality items
+
+### Change Class Rules (from `.github/pr-quality-gate.toml`)
+- **Class D** (required) when changing files under:
+  - `crates/manager/src/protocol/`, `crates/manager/src/rt/container/`, `crates/manager/src/sources/`
+  - `crates/clients/tangle/src/`, `crates/tee/src/`, `cli/src/command/deploy/`
+- **Class C** is auto-promoted for multi-crate changes or CLI+crate changes
+- **Docs-only** PRs (only `*.md`, `docs/**`, `.github/**`) skip validation
+
+### Pre-push Hook
+The local `.git/hooks/pre-push` runs: (1) `cargo fmt -- --check`, (2) clippy on changed crates, (3) tests on changed crates, (4) optional security audit. All checks must pass before push succeeds.
+
+### PR Body Source
+The quality gate reads the PR body from `GITHUB_EVENT_PATH` (the event payload), **not** from the live API. This means:
+- Editing the PR body after push does **not** update already-running checks
+- To re-evaluate after a body edit, push a new commit (even empty) to trigger a fresh `synchronize` event
+- `gh run rerun` replays the old event payload and will see the old body
