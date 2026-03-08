@@ -325,8 +325,7 @@ macro_rules! impl_try_from_metadata_for_numbers {
 
                 fn try_from(value: MetadataValue) -> Result<Self, Self::Error> {
                     let bytes = value.as_bytes();
-                    let mut arr = [0; core::mem::size_of::<Self>()];
-                    arr.copy_from_slice(bytes);
+                    let arr: [u8; core::mem::size_of::<Self>()] = bytes.try_into()?;
                     Ok(Self::from_be_bytes(arr))
                 }
             }
@@ -337,8 +336,7 @@ macro_rules! impl_try_from_metadata_for_numbers {
 
                 fn try_from(value: &MetadataValue) -> Result<Self, Self::Error> {
                     let bytes = value.as_bytes();
-                    let mut arr = [0; core::mem::size_of::<Self>()];
-                    arr.copy_from_slice(bytes);
+                    let arr: [u8; core::mem::size_of::<Self>()] = bytes.try_into()?;
                     Ok(Self::from_be_bytes(arr))
                 }
             }
