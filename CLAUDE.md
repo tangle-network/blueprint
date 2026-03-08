@@ -130,3 +130,9 @@ PRs targeting `main` are validated by `.github/workflows/pr-quality-gate.yml`. T
 
 ### Pre-push Hook
 The local `.git/hooks/pre-push` runs: (1) `cargo fmt -- --check`, (2) clippy on changed crates, (3) tests on changed crates, (4) optional security audit. All checks must pass before push succeeds.
+
+### PR Body Source
+The quality gate reads the PR body from `GITHUB_EVENT_PATH` (the event payload), **not** from the live API. This means:
+- Editing the PR body after push does **not** update already-running checks
+- To re-evaluate after a body edit, push a new commit (even empty) to trigger a fresh `synchronize` event
+- `gh run rerun` replays the old event payload and will see the old body
