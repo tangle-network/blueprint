@@ -109,6 +109,20 @@ These require `--test-threads=1` or nextest serial execution:
 - **Eigensdk**: EigenLayer integration (v0.5)
 - **Foundry**: Smart contract compilation
 
+## Harness Process (Required)
+
+Use this process for non-trivial changes:
+
+1. Define behavior contract first: current behavior, intended behavior, invariants, fail-open/fail-closed choice.
+2. Reproduce with the smallest harness/test before implementing.
+3. Implement the change and add negative-path assertions.
+4. Verify with crate-scoped commands first, then broader workspace checks as needed.
+5. Document operator/customer/developer impact plus migration/rollback notes in the PR.
+
+Reference:
+- `docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md`
+- `docs/engineering/HARNESS_ENGINEERING_SPEC.md`
+
 ## PR Quality Gate
 
 PRs targeting `main` are validated by `.github/workflows/pr-quality-gate.yml`. The PR body **must** contain these markdown sections (exactly as `## Section Name`):

@@ -1,0 +1,25 @@
+[classification]
+# Globs treated as docs/process-only.
+docs_only_patterns = [
+  "docs/**",
+  ".github/**",
+  "README.md",
+  "CONTRIBUTING.md",
+  "CLAUDE.md",
+  "*.md",
+]
+
+# Prefixes/globs that require Class D declarations.
+class_d_prefixes = [
+  "crates/manager/src/protocol/",
+  "crates/manager/src/rt/container/",
+  "crates/manager/src/sources/",
+  "crates/clients/tangle/src/",
+  "crates/tee/src/",
+  "cli/src/command/deploy/",
+]
+class_d_patterns = []
+
+# Heuristics for Class C promotion.
+class_c_multi_crate = true
+class_c_cli_and_crate = true

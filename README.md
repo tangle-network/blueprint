@@ -2,7 +2,7 @@
 
 <h1 align="center">Blueprint SDK</h1>
 
-<p align="center"><em>A comprehensive toolkit for building, deploying, and managing blueprints on the Tangle Network.</em></p>
+<p align="center"><em>A comprehensive toolkit for building, deploying, and managing blueprints on the [Tangle Network].</em></p>
 
 <p align="center">
   <a href="https://github.com/tangle-network/blueprint/actions"><img src="https://img.shields.io/github/actions/workflow/status/tangle-network/blueprint/ci.yml?branch=main&logo=github" alt="Build Status"></a>
@@ -14,7 +14,7 @@
 
 ## Overview
 
-The Blueprint SDK is a modular Rust toolkit for building decentralized services—called Blueprints—that run across networks like Tangle, EigenLayer, and standard EVM chains.
+The Blueprint SDK is a modular Rust toolkit for building decentralized services—called Blueprints—that run across networks like [Tangle], EigenLayer, and standard EVM chains.
 
 Blueprints turn complex on-chain and off-chain infrastructure into reproducible, deployable units of logic—think Infrastructure-as-Code for crypto systems.
 With one SDK, you can design anything from oracles and MPC networks to agent-based AI services or zk-proof markets, and deploy them seamlessly.
@@ -28,21 +28,21 @@ The SDK unifies:
 
 In short, Blueprints let developers move from concept to distributed protocol with minimal friction.
 
-We also have a [documentation site](https://docs.tangle.tools/) on all things Tangle to help you get started.
+We also have a [documentation site](https://docs.tangle.tools/) on all things [Tangle] to help you get started.
 
 ### SDK Components
 
 The following components make up the SDK, providing everything from job creation and routing utilities to specialized
 tools for networking and testing.
 
-* [`blueprint-sdk`] - Main crate for the Tangle Blueprint SDK, re-exporting all of the following
+* [`blueprint-sdk`] - Main crate for the [Tangle] Blueprint SDK, re-exporting all of the following
 * [`blueprint-benchmarking`] - Utilities for benchmarking blueprints
 * [`blueprint-build-utils`] - Utilities for simplifying build-time tasks (e.g., building contracts, installing dependencies)
 * [`blueprint-chain-setup`] - (**Meta-crate**) Utilities for setting local testnets
     * [`blueprint-chain-setup-anvil`] - Utilities for setting up [Anvil] testnets
-* [`blueprint-clients`] - (**Meta-crate**) Clients for interacting with Tangle, [Eigenlayer], and other networks
+* [`blueprint-clients`] - (**Meta-crate**) Clients for interacting with [Tangle], [Eigenlayer], and other networks
     * [`blueprint-client-core`] - Core client primitives and traits
-    * [`blueprint-client-tangle`] - Client for interacting with the Tangle EVM contracts
+    * [`blueprint-client-tangle`] - Client for interacting with the [Tangle] EVM contracts
     * [`blueprint-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
     * [`blueprint-client-evm`] - Client for interacting with the EVM Network
 * [`blueprint-contexts`] - Extensions for adding functionality to custom blueprint context types
@@ -58,7 +58,7 @@ tools for networking and testing.
     * [`blueprint-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
 * [`blueprint-keystore`] - Flexible keystore implementation, supporting local and remote signers
 * [`blueprint-macros`] - Utility macros for simplifying blueprint development
-* [`blueprint-manager`] - A program executor that connects to the Tangle network and runs protocols dynamically on the fly
+* [`blueprint-manager`] - A program executor that connects to the [Tangle] network and runs protocols dynamically on the fly
     * [`blueprint-manager-bridge`] - IPC bridge for manager-blueprint communication
 * [`blueprint-metrics`] (**Meta-crate**) Utilities for collecting metrics
     * [`blueprint-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
@@ -164,7 +164,7 @@ brew install openssl cmake
 
 ### 🔧 CLI Installation
 
-You can install the Tangle CLI in two ways:
+You can install the [Tangle] CLI in two ways:
 
 #### 🚩 **Option 1: Install Script (recommended)**
 
@@ -184,7 +184,7 @@ cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --f
 
 ### ✨ Creating Your First Blueprint
 
-After installation, you can create, build, register, and run your first blueprint against the Tangle EVM:
+After installation, you can create, build, register, and run your first blueprint against the [Tangle] EVM:
 
 ```bash
 # Create a new blueprint named "my_blueprint"
@@ -194,7 +194,7 @@ cargo tangle blueprint create --name my_blueprint
 cd my_blueprint
 cargo build
 
-# Deploy your blueprint to the Tangle Network
+# Deploy your blueprint to the [Tangle Network]
 # Write the contract coordinates used by your service
 cat > settings.env <<'EOF'
 BLUEPRINT_ID=0
@@ -252,7 +252,7 @@ And your blueprint is ready to go!
 
 ### Deploying to Testnet/Mainnet
 
-When targeting real Tangle networks, provide a blueprint definition manifest that mirrors the on-chain schema. The file can be JSON, YAML, or TOML and must describe the blueprint metadata, jobs, and artifact sources (container images or native binaries). Once authored, pass it via `--definition`:
+When targeting real [Tangle] networks, provide a blueprint definition manifest that mirrors the on-chain schema. The file can be JSON, YAML, or TOML and must describe the blueprint metadata, jobs, and artifact sources (container images or native binaries). Once authored, pass it via `--definition`:
 
 ```bash
 cargo tangle blueprint deploy tangle \
@@ -303,7 +303,7 @@ For support or inquiries:
 
 ## Key Concepts
 
-**Blueprint SDK** is a Rust framework for building verifiable, decentralized services on Tangle Network with built-in x402 payment rails, multi-operator BLS aggregation, and TEE support.
+**Blueprint SDK** is a Rust framework for building verifiable, decentralized services on [Tangle Network] with built-in x402 payment rails, multi-operator BLS aggregation, and TEE support.
 
 **Blueprint** is a deployable service specification that defines computation logic, verification requirements, and payment flows in a single package. Operators stake TNT tokens to run blueprints, with slashing for incorrect results.
 
@@ -311,7 +311,7 @@ For support or inquiries:
 
 **Operator** is a node runner who stakes economic collateral (TNT tokens) to execute blueprint jobs. Multiple operators can verify the same job through BLS signature aggregation.
 
-**TangleArg / TangleResult** are extractor types that decode on-chain job inputs and encode results for submission back to the Tangle contract layer.
+**TangleArg / TangleResult** are extractor types that decode on-chain job inputs and encode results for submission back to the [Tangle] contract layer.
 
 **Router** is the job dispatch system (inspired by axum's router pattern) that maps job IDs to handler functions with middleware support via layers.
 
@@ -320,7 +320,7 @@ For support or inquiries:
 ## Frequently Asked Questions
 
 **What is Blueprint SDK?**
-Blueprint SDK is a Rust framework for building verifiable services that run on Tangle Network with built-in payment rails and multi-operator verification.
+Blueprint SDK is a Rust framework for building verifiable services that run on [Tangle Network] with built-in payment rails and multi-operator verification.
 
 **What language does Blueprint SDK use?**
 Rust, with edition 2024 and minimum Rust version 1.88. TypeScript and Python SDKs are on the roadmap.
@@ -357,11 +357,18 @@ We welcome feedback and contributions to improve this blueprint.
 Please open an issue or submit a pull request on our GitHub repository.
 Please let us know if you fork this blueprint and extend it too!
 
+Contributor references:
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [Harness Engineering Playbook](docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md)
+- [Harness Engineering Spec](docs/engineering/HARNESS_ENGINEERING_SPEC.md)
+- [Harness Review Checklist](docs/engineering/HARNESS_REVIEW_CHECKLIST.md)
+
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 [Rust]: https://www.rust-lang.org/tools/install
+[Tangle]: https://tangle.tools
 [Tangle Network]: https://tangle.tools
 [Eigenlayer]: https://eigenlayer.xyz
 [secp256k1]: https://en.bitcoin.it/wiki/Secp256k1

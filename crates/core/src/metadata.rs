@@ -350,3 +350,15 @@ impl_try_from_metadata_for_numbers! { u16, u32, u64, u128, usize, i16, i32, i64,
 const fn is_visible_ascii(b: u8) -> bool {
     b >= 32 && b < 127 || b == b'\t'
 }
+
+#[cfg(test)]
+mod tests {
+    use super::MetadataValue;
+
+    #[test]
+    fn numeric_try_from_rejects_invalid_byte_lengths() {
+        let value = MetadataValue::from([1u8]);
+        assert!(u64::try_from(value.clone()).is_err());
+        assert!(u64::try_from(&value).is_err());
+    }
+}
