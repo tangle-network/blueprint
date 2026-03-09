@@ -2676,7 +2676,7 @@ dependencies = [
  "pem 1.1.1",
  "prost 0.13.5",
  "protobuf-src",
- "rcgen 0.14.5",
+ "rcgen 0.14.7",
  "reqwest 0.12.25",
  "rocksdb",
  "rustls 0.23.35",
@@ -11658,9 +11658,9 @@ dependencies = [
 
 [[package]]
 name = "rcgen"
-version = "0.14.5"
+version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fae430c6b28f1ad601274e78b7dffa0546de0b73b4cd32f46723c0c2a16f7a5"
+checksum = "10b99e0098aa4082912d4c649628623db6aba77335e4f4569ff5083a6448b32e"
 dependencies = [
  "pem 3.0.6",
  "ring 0.17.14",
