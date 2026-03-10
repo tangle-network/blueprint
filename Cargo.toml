@@ -460,6 +460,44 @@ testcontainers = { version = "0.23.1", default-features = false }
 # Metrics
 metrics = { version = "0.24.2", default-features = false }
 
+# x402 protocol
+x402-types = { version = "1", default-features = false }
+x402-axum = { version = "1", default-features = false }
+x402-chain-eip155 = { version = "1", default-features = false }
+
+# AWS SDK (additional)
+aws-sdk-lambda = { version = "1", default-features = false }
+aws-sdk-eks = { version = "1", default-features = false }
+aws-sdk-autoscaling = { version = "1", default-features = false }
+aws-sdk-cloudwatchlogs = { version = "1", default-features = false }
+aws-smithy-types = { version = "1.4", default-features = false }
+aws-smithy-runtime = { version = "1.7", default-features = false }
+aws-smithy-mocks-experimental = { version = "0.2", default-features = false }
+aws-lc-rs = { version = "1.13", default-features = false }
+
+# Azure SDK
+azure_core = { version = "0.20", default-features = false }
+azure_identity = { version = "0.20", default-features = false }
+
+# Additional dependencies
+openssl = { version = "0.10", default-features = false }
+zip = { version = "2.2", default-features = false }
+warp = { version = "0.3", default-features = false }
+shell-escape = { version = "0.1", default-features = false }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "getrandom"] }
+mockall = { version = "0.14", default-features = false }
+tokio-test = { version = "0.4", default-features = false }
+wiremock = { version = "0.6", default-features = false }
+proptest = { version = "1.0" }
+mockito = { version = "1.0", default-features = false }
+regex = { version = "1.10", default-features = false }
+protobuf-src = "2.1"
+flate2 = { version = "1.0" }
+xz2 = { version = "0.1", default-features = false }
+hex-literal = { version = "1.1", default-features = false }
+hmac = { version = "0.12", default-features = false }
+subtle = { version = "2", default-features = false }
+
 [profile.dev.package.backtrace]
 opt-level = 3
 

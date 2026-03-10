@@ -5,14 +5,14 @@ edition = "2024"
 
 [dependencies]
 alloy-sol-types = { workspace = true }
-axum = { version = "0.8", default-features = false, features = ["http2", "json", "tokio"] }
+axum = { workspace = true, features = ["http2", "json", "tokio"] }
 blueprint-sdk = { path = "../../../crates/sdk", default-features = false, features = ["std", "tracing", "macros", "tangle"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "^1", default-features = false, features = ["rt", "macros"] }
-tower = { version = "0.5.2", default-features = false }
-uuid = { version = "1", features = ["v4", "serde"] }
-color-eyre = "0.6"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+tower = { workspace = true }
+uuid = { workspace = true, features = ["v4", "serde"] }
+color-eyre = { workspace = true }
 
 [dev-dependencies]
 alloy-primitives = { workspace = true }
@@ -20,12 +20,12 @@ alloy-network = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-signer-local = { workspace = true }
-anyhow = "1"
+anyhow = { workspace = true }
 blueprint-client-tangle = { path = "../../../crates/clients/tangle" }
 blueprint-anvil-testing-utils = { path = "../../../crates/testing-utils/anvil" }
 once_cell = { workspace = true }
 tracing-subscriber = { workspace = true }
-tokio = { version = "^1", features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

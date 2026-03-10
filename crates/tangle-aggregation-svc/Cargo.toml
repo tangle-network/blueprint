@@ -7,20 +7,20 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 
 # HTTP server
 axum = { workspace = true, features = ["json", "tokio", "http1", "http2"] }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "trace"] }
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 
 # Crypto
-blueprint-crypto-bn254 = { path = "../crypto/bn254" }
-blueprint-crypto-core = { path = "../crypto/core" }
+blueprint-crypto-bn254 = { workspace = true }
+blueprint-crypto-core = { workspace = true }
 ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-serialize = { workspace = true }
@@ -34,7 +34,7 @@ alloy-network = { workspace = true }
 alloy-contract = { workspace = true }
 
 # Tangle client
-blueprint-client-tangle = { path = "../clients/tangle" }
+blueprint-client-tangle = { workspace = true }
 
 # HTTP client (for client module)
 reqwest = { workspace = true, features = ["json"], optional = true }
@@ -42,7 +42,7 @@ reqwest = { workspace = true, features = ["json"], optional = true }
 # Utilities
 thiserror = { workspace = true }
 tracing = { workspace = true }
-parking_lot = "0.12"
+parking_lot = { workspace = true }
 hex = { workspace = true }
 
 [features]
@@ -50,9 +50,9 @@ default = []
 client = ["reqwest"]
 
 [dev-dependencies]
-tokio-test = "0.4"
+tokio-test = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
-tempfile = "3.25"
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

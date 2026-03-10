@@ -67,7 +67,7 @@ futures-util = { workspace = true }
 http = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "env-filter", "registry"] }
-openssl = { version = "0.10", features = ["vendored"] }
+openssl = { workspace = true, features = ["vendored"] }
 tokio-stream = { workspace = true }
 tonic = { workspace = true, features = ["codegen", "prost", "transport"] }
 tokio-rustls = { workspace = true }
@@ -78,7 +78,7 @@ hyper-rustls = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost", "transport"] }
-protobuf-src = "2.1"
+protobuf-src = { workspace = true }
 
 [features]
 default = ["std", "tracing"]
