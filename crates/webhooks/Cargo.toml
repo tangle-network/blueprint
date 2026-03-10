@@ -31,10 +31,10 @@ serde_json = { workspace = true, features = ["std"] }
 toml = { workspace = true }
 
 # Crypto (HMAC auth)
-hmac = "0.12"
+hmac = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
-subtle = "2"
+subtle = { workspace = true }
 
 # Error handling & logging
 thiserror = { workspace = true }

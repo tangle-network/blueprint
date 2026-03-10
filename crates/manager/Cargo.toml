@@ -69,8 +69,8 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "ansi", "trac
 auto_impl = { workspace = true }
 dynosaur = { workspace = true }
 url.workspace = true
-base64 = "0.22"
-flate2 = "1.0"
+base64 = { workspace = true }
+flate2 = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 hyper.workspace = true
 hyperlocal.workspace = true
@@ -162,6 +162,6 @@ anyhow = { workspace = true }
 blueprint-anvil-testing-utils = { workspace = true }
 blueprint-router = { workspace = true }
 blueprint-tangle-extra = { workspace = true }
-xz2 = "0.1"
+xz2 = { workspace = true }
 serial_test = { workspace = true }
 rand = { workspace = true }

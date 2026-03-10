@@ -251,7 +251,7 @@ round-based = { version = "0.4.1", default-features = false }
 async-trait = { version = "0.1", default-features = false }
 crossbeam = { version = "0.8", default-features = false }
 crossbeam-channel = { version = "0.5", default-features = false }
-futures = { version = "0.3.30", default-features = false }
+futures = { version = "0.3.32", default-features = false }
 futures-util = { version = "0.3.31", default-features = false }
 futures-core = { version = "0.3.31", default-features = false }
 tokio = { version = "^1", default-features = false }
@@ -341,14 +341,14 @@ ipnet = { version = "2.11.0", default-features = false }
 rustls = { version = "0.23.31", default-features = false, features = ["std"] }
 tokio-rustls = { version = "0.26.2", default-features = false, features = ["tls12"] }
 rustls-pemfile = { version = "2.2.0", default-features = false }
-rcgen = { version = "0.14.3", default-features = false, features = ["pem"] }
+rcgen = { version = "0.14.7", default-features = false, features = ["pem"] }
 hyper-rustls = { version = "0.27.7", default-features = false, features = ["http2", "ring"] }
 local-ip-address = "0.6.5"
 
 # System & OS
 parking_lot = { version = "0.12.4", default-features = false }
 tempfile = { version = "3.25.0", default-features = false }
-uuid = { version = "1.17.0", default-features = false }
+uuid = { version = "1.22.0", default-features = false }
 blake3 = { version = "1.8.3", default-features = false }
 tar = { version = "0.4.44", default-features = false }
 xz = { version = "0.1.0", default-features = false }
@@ -375,7 +375,7 @@ dirs = { version = "6.0.0", default-features = false }
 indicatif = { version = "0.18.4", default-features = false }
 document-features = { version = "0.2.11", default-features = false }
 rustversion = { version = "1.0.21", default-features = false }
-cargo-dist-schema = { version = "0.30.3", default-features = false }
+cargo-dist-schema = { version = "0.31.0", default-features = false }
 
 # Time & Date
 time = { version = "0.3.41", default-features = false }
@@ -459,6 +459,44 @@ testcontainers = { version = "0.23.1", default-features = false }
 
 # Metrics
 metrics = { version = "0.24.2", default-features = false }
+
+# x402 protocol
+x402-types = { version = "1", default-features = false }
+x402-axum = { version = "1", default-features = false }
+x402-chain-eip155 = { version = "1", default-features = false }
+
+# AWS SDK (additional)
+aws-sdk-lambda = { version = "1", default-features = false }
+aws-sdk-eks = { version = "1", default-features = false }
+aws-sdk-autoscaling = { version = "1", default-features = false }
+aws-sdk-cloudwatchlogs = { version = "1", default-features = false }
+aws-smithy-types = { version = "1.4", default-features = false }
+aws-smithy-runtime = { version = "1.7", default-features = false }
+aws-smithy-mocks-experimental = { version = "0.2", default-features = false }
+aws-lc-rs = { version = "1.13", default-features = false }
+
+# Azure SDK
+azure_core = { version = "0.20", default-features = false }
+azure_identity = { version = "0.20", default-features = false }
+
+# Additional dependencies
+openssl = { version = "0.10", default-features = false }
+zip = { version = "2.2", default-features = false }
+warp = { version = "0.3", default-features = false }
+shell-escape = { version = "0.1", default-features = false }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "getrandom"] }
+mockall = { version = "0.14", default-features = false }
+tokio-test = { version = "0.4", default-features = false }
+wiremock = { version = "0.6", default-features = false }
+proptest = { version = "1.0" }
+mockito = { version = "1.0", default-features = false }
+regex = { version = "1.10", default-features = false }
+protobuf-src = "2.1"
+flate2 = { version = "1.0" }
+xz2 = { version = "0.1", default-features = false }
+hex-literal = { version = "1.1", default-features = false }
+hmac = { version = "0.12", default-features = false }
+subtle = { version = "2", default-features = false }
 
 [profile.dev.package.backtrace]
 opt-level = 3

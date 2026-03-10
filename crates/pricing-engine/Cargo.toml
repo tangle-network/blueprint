@@ -65,7 +65,7 @@ rust_decimal = { workspace = true, features = ["serde"] }
 
 # HTTP client for cloud pricing APIs
 reqwest = { workspace = true, features = ["json"] }
-urlencoding = "2.1"
+urlencoding = { workspace = true }
 
 # gRPC
 tonic = { workspace = true, features = ["transport", "codegen", "prost", "router"] }
@@ -91,7 +91,7 @@ alloy-signer-local = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
-protobuf-src = "2.1"
+protobuf-src = { workspace = true }
 
 [features]
 default = ["std"]
