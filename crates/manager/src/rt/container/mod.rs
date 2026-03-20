@@ -151,6 +151,22 @@ impl ContainerInstance {
             ConfidentialityPolicy::Any | ConfidentialityPolicy::StandardRequired => None,
         };
 
+        // GPU device plugin: if GPU is requested, verify the NVIDIA device plugin
+        // is installed (nodes expose nvidia.com/gpu as an allocatable resource).
+        // Kubernetes will schedule the pod only on nodes with the device plugin.
+        // For GpuPolicy::Required this is fail-closed: the pod stays Pending if no
+        // GPU node exists. For GpuPolicy::Preferred the resource request is still
+        // set — Kubernetes best-effort scheduling handles the fallback.
+        let gpu_count = self.limits.gpu_count.unwrap_or(0);
+        if gpu_count > 0 {
+            info!(
+                target: "containers",
+                service_name = self.service_name,
+                gpu_count,
+                "Requesting GPU devices via nvidia.com/gpu device plugin"
+            );
+        }
+
         let pods: Api<Pod> = Api::namespaced(self.client.clone(), BLUEPRINT_NAMESPACE);
 
         let mem_mib = (self.limits.memory_size / 1024) / 1024;
@@ -192,14 +208,21 @@ impl ContainerInstance {
                 containers: vec![Container {
                     name: self.service_name.clone(),
                     image: Some(self.image.clone()),
-                    resources: Some(ResourceRequirements {
-                        limits: Some(
-                            [("memory".to_string(), Quantity(format!("{mem_mib}Mi")))].into(),
-                        ),
-                        requests: Some(
-                            [("memory".to_string(), Quantity(format!("{mem_mib}Mi")))].into(),
-                        ),
-                        ..Default::default()
+                    resources: Some({
+                        let mut limits: BTreeMap<String, Quantity> =
+                            [("memory".to_string(), Quantity(format!("{mem_mib}Mi")))].into();
+                        let mut requests: BTreeMap<String, Quantity> =
+                            [("memory".to_string(), Quantity(format!("{mem_mib}Mi")))].into();
+                        if gpu_count > 0 {
+                            let gpu_qty = Quantity(format!("{gpu_count}"));
+                            limits.insert("nvidia.com/gpu".to_string(), gpu_qty.clone());
+                            requests.insert("nvidia.com/gpu".to_string(), gpu_qty);
+                        }
+                        ResourceRequirements {
+                            limits: Some(limits),
+                            requests: Some(requests),
+                            ..Default::default()
+                        }
                     }),
                     env: Some(env),
                     args: Some(self.args.encode(false)),

@@ -73,9 +73,10 @@ pub mod services;
 
 // Re-exports
 pub use blueprint_metadata::{
-    ConfidentialityPolicy, ExecutionProfile, ExecutionProfileError, extract_job_profiles_blob,
-    inject_execution_profile, resolve_confidentiality_policy, resolve_execution_profile,
-    resolve_execution_profile_from_profiling_data,
+    ConfidentialityPolicy, ExecutionProfile, ExecutionProfileError, GpuPolicy, GpuRequirements,
+    extract_job_profiles_blob, inject_execution_profile, resolve_confidentiality_policy,
+    resolve_execution_profile, resolve_execution_profile_from_profiling_data,
+    resolve_gpu_requirements,
 };
 pub use client::{
     AggregationConfig, AssetInfo, AssetKind, BlueprintSelectionMode, DelegationInfo,

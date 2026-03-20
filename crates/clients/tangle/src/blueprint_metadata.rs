@@ -57,12 +57,47 @@ impl Default for ConfidentialityPolicy {
     }
 }
 
+/// GPU requirement policy for execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuPolicy {
+    /// No GPU required (default).
+    None,
+    /// GPU execution is mandatory (fail closed).
+    Required,
+    /// Prefer GPU, but allow CPU fallback.
+    Preferred,
+}
+
+impl Default for GpuPolicy {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// GPU resource requirements for a blueprint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct GpuRequirements {
+    /// GPU availability policy.
+    #[serde(default)]
+    pub policy: GpuPolicy,
+    /// Minimum number of GPU devices required.
+    #[serde(default)]
+    pub min_count: u32,
+    /// Minimum VRAM per device in GiB.
+    #[serde(default)]
+    pub min_vram_gb: u32,
+}
+
 /// Blueprint deployment policy for execution environments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ExecutionProfile {
     /// Confidentiality policy for runtime placement.
     #[serde(default)]
     pub confidentiality: ConfidentialityPolicy,
+    /// GPU resource requirements.
+    #[serde(default)]
+    pub gpu: GpuRequirements,
 }
 
 impl ExecutionProfile {
@@ -91,12 +126,32 @@ impl ExecutionProfile {
             ConfidentialityPolicy::StandardRequired
         )
     }
+
+    /// Whether GPU execution is mandatory.
+    #[must_use]
+    pub fn gpu_required(self) -> bool {
+        matches!(self.gpu.policy, GpuPolicy::Required)
+    }
+
+    /// Whether GPU execution is preferred but not mandatory.
+    #[must_use]
+    pub fn gpu_preferred(self) -> bool {
+        matches!(self.gpu.policy, GpuPolicy::Preferred)
+    }
+
+    /// Whether the blueprint has any GPU requirements.
+    #[must_use]
+    pub fn needs_gpu(self) -> bool {
+        !matches!(self.gpu.policy, GpuPolicy::None)
+    }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawExecutionProfile {
     confidentiality: Option<ConfidentialityPolicy>,
+    #[serde(default)]
+    gpu: Option<GpuRequirements>,
 }
 
 /// Resolve execution profile from on-chain metadata.
@@ -143,7 +198,15 @@ pub fn resolve_execution_profile_from_profiling_data(
 
     Ok(Some(ExecutionProfile {
         confidentiality: raw_profile.confidentiality.unwrap_or_default(),
+        gpu: raw_profile.gpu.unwrap_or_default(),
     }))
+}
+
+/// Resolve GPU requirements from metadata.
+pub fn resolve_gpu_requirements(
+    metadata: &ITangleTypes::BlueprintMetadata,
+) -> Result<Option<GpuRequirements>, ExecutionProfileError> {
+    Ok(resolve_execution_profile(metadata)?.map(|profile| profile.gpu))
 }
 
 /// Resolve explicit confidentiality policy from metadata.
@@ -213,9 +276,18 @@ fn default_metadata_payload(profile: ExecutionProfile) -> Value {
 }
 
 fn profile_to_value(profile: ExecutionProfile) -> Value {
-    json!({
-        "confidentiality": profile.confidentiality,
-    })
+    let mut obj = Map::new();
+    obj.insert(
+        "confidentiality".to_string(),
+        serde_json::to_value(profile.confidentiality).unwrap_or_default(),
+    );
+    if !matches!(profile.gpu.policy, GpuPolicy::None) {
+        obj.insert(
+            "gpu".to_string(),
+            serde_json::to_value(profile.gpu).unwrap_or_default(),
+        );
+    }
+    Value::Object(obj)
 }
 
 fn upsert_execution_profile(root: &mut Map<String, Value>, profile: ExecutionProfile) {
@@ -240,6 +312,7 @@ mod tests {
             resolve_execution_profile(&metadata).unwrap(),
             Some(ExecutionProfile {
                 confidentiality: ConfidentialityPolicy::TeeRequired,
+                ..Default::default()
             })
         );
     }
@@ -253,6 +326,7 @@ mod tests {
             resolve_execution_profile(&metadata).unwrap(),
             Some(ExecutionProfile {
                 confidentiality: ConfidentialityPolicy::TeePreferred,
+                ..Default::default()
             })
         );
     }
@@ -296,11 +370,98 @@ mod tests {
     }
 
     #[test]
+    fn resolves_gpu_required_profile() {
+        let profile = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"confidentiality":"any","gpu":{"policy":"required","min_count":2,"min_vram_gb":40}}}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(profile.gpu_required());
+        assert_eq!(profile.gpu.min_count, 2);
+        assert_eq!(profile.gpu.min_vram_gb, 40);
+    }
+
+    #[test]
+    fn resolves_gpu_preferred_profile() {
+        let profile = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"gpu":{"policy":"preferred","min_count":1,"min_vram_gb":24}}}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(profile.gpu_preferred());
+        assert!(!profile.gpu_required());
+        assert_eq!(profile.gpu.min_count, 1);
+    }
+
+    #[test]
+    fn defaults_gpu_to_none_when_absent() {
+        let profile = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"confidentiality":"tee_required"}}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(!profile.needs_gpu());
+        assert_eq!(profile.gpu.policy, GpuPolicy::None);
+    }
+
+    #[test]
+    fn resolves_combined_tee_and_gpu() {
+        let profile = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"confidentiality":"tee_required","gpu":{"policy":"required","min_count":1,"min_vram_gb":80}}}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(profile.tee_required());
+        assert!(profile.gpu_required());
+        assert_eq!(profile.gpu.min_vram_gb, 80);
+    }
+
+    #[test]
+    fn injects_gpu_profile_into_empty_payload() {
+        let payload = inject_execution_profile(
+            "",
+            ExecutionProfile {
+                confidentiality: ConfidentialityPolicy::Any,
+                gpu: GpuRequirements {
+                    policy: GpuPolicy::Required,
+                    min_count: 1,
+                    min_vram_gb: 24,
+                },
+            },
+        );
+        let value: Value = serde_json::from_str(&payload).unwrap();
+        let gpu = value
+            .get(EXECUTION_PROFILE_KEY)
+            .and_then(|v| v.get("gpu"))
+            .expect("gpu field should be present");
+        assert_eq!(gpu.get("policy").and_then(Value::as_str), Some("required"));
+        assert_eq!(gpu.get("min_count").and_then(Value::as_u64), Some(1));
+    }
+
+    #[test]
+    fn omits_gpu_from_profile_when_none() {
+        let payload = inject_execution_profile(
+            "",
+            ExecutionProfile {
+                confidentiality: ConfidentialityPolicy::Any,
+                gpu: GpuRequirements::default(),
+            },
+        );
+        let value: Value = serde_json::from_str(&payload).unwrap();
+        let profile = value.get(EXECUTION_PROFILE_KEY).unwrap();
+        assert!(
+            profile.get("gpu").is_none(),
+            "gpu field should be omitted when policy is none"
+        );
+    }
+
+    #[test]
     fn injects_into_empty_payload() {
         let payload = inject_execution_profile(
             "",
             ExecutionProfile {
                 confidentiality: ConfidentialityPolicy::Any,
+                ..Default::default()
             },
         );
         let value: Value = serde_json::from_str(&payload).unwrap();
@@ -319,6 +480,7 @@ mod tests {
             r#"{"job_profiles_b64_gzip":"abc"}"#,
             ExecutionProfile {
                 confidentiality: ConfidentialityPolicy::TeeRequired,
+                ..Default::default()
             },
         );
         let value: Value = serde_json::from_str(&payload).unwrap();
@@ -341,6 +503,7 @@ mod tests {
             "H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==",
             ExecutionProfile {
                 confidentiality: ConfidentialityPolicy::TeeRequired,
+                ..Default::default()
             },
         );
         let value: Value = serde_json::from_str(&payload).unwrap();

@@ -16,7 +16,7 @@ use crate::sources::types::{
 };
 use blueprint_client_tangle::contracts::ITangleTypes;
 use blueprint_client_tangle::{
-    ConfidentialityPolicy, resolve_execution_profile_from_profiling_data,
+    ConfidentialityPolicy, GpuRequirements, resolve_execution_profile_from_profiling_data,
 };
 use serde::Deserialize;
 use serde_json;
@@ -58,7 +58,7 @@ impl OnChainMetadataProvider {
         service_id: u64,
         registration_mode: bool,
     ) -> Result<Option<ManagerBlueprintMetadata>> {
-        let Some((blueprint_name, sources, confidentiality_policy)) =
+        let Some((blueprint_name, sources, confidentiality_policy, gpu_requirements)) =
             Self::load_blueprint_sources(client, blueprint_id).await?
         else {
             return Ok(None);
@@ -70,6 +70,7 @@ impl OnChainMetadataProvider {
             name: blueprint_name,
             sources,
             confidentiality_policy,
+            gpu_requirements,
             registration_mode,
             registration_capture_only: false,
         }))
@@ -78,7 +79,14 @@ impl OnChainMetadataProvider {
     async fn load_blueprint_sources(
         client: &TangleProtocolClient,
         blueprint_id: u64,
-    ) -> Result<Option<(String, Vec<ManagerBlueprintSource>, ConfidentialityPolicy)>> {
+    ) -> Result<
+        Option<(
+            String,
+            Vec<ManagerBlueprintSource>,
+            ConfidentialityPolicy,
+            GpuRequirements,
+        )>,
+    > {
         let inner = client.client();
         let definition = match inner.get_blueprint_definition(blueprint_id).await {
             Ok(definition) => definition,
@@ -90,7 +98,8 @@ impl OnChainMetadataProvider {
         };
 
         let blueprint_name = definition.metadata.name.clone().to_string();
-        let confidentiality_policy = Self::resolve_confidentiality_policy(&definition.metadata)?;
+        let (confidentiality_policy, gpu_requirements) =
+            Self::resolve_execution_policies(&definition.metadata)?;
         let onchain_sources = definition.sources;
 
         let sources = Self::convert_sources(&onchain_sources);
@@ -103,12 +112,17 @@ impl OnChainMetadataProvider {
             return Ok(None);
         }
 
-        Ok(Some((blueprint_name, sources, confidentiality_policy)))
+        Ok(Some((
+            blueprint_name,
+            sources,
+            confidentiality_policy,
+            gpu_requirements,
+        )))
     }
 
-    fn resolve_confidentiality_policy(
+    fn resolve_execution_policies(
         metadata: &OnChainBlueprintMetadata,
-    ) -> Result<ConfidentialityPolicy> {
+    ) -> Result<(ConfidentialityPolicy, GpuRequirements)> {
         let profile =
             resolve_execution_profile_from_profiling_data(metadata.profilingData.as_str())
                 .map_err(|err| {
@@ -116,9 +130,11 @@ impl OnChainMetadataProvider {
                         "invalid profilingData for execution profile: {err}"
                     ))
                 })?;
-        Ok(profile
-            .map(|value| value.confidentiality)
-            .unwrap_or(ConfidentialityPolicy::Any))
+        let confidentiality = profile
+            .map(|p| p.confidentiality)
+            .unwrap_or(ConfidentialityPolicy::Any);
+        let gpu = profile.map(|p| p.gpu).unwrap_or_default();
+        Ok((confidentiality, gpu))
     }
 
     fn convert_sources(sources: &[OnChainBlueprintSource]) -> Vec<ManagerBlueprintSource> {
@@ -697,7 +713,9 @@ mod tests {
             profilingData: "{".into(),
             ..Default::default()
         };
-        let err = OnChainMetadataProvider::resolve_confidentiality_policy(&metadata).unwrap_err();
+        let err = OnChainMetadataProvider::resolve_execution_policies(&metadata)
+            .map(|(c, _)| c)
+            .unwrap_err();
         assert!(
             err.to_string()
                 .contains("invalid profilingData for execution profile"),
@@ -711,7 +729,9 @@ mod tests {
             profilingData: "".into(),
             ..Default::default()
         };
-        let parsed = OnChainMetadataProvider::resolve_confidentiality_policy(&metadata).unwrap();
+        let parsed = OnChainMetadataProvider::resolve_execution_policies(&metadata)
+            .map(|(c, _)| c)
+            .unwrap();
         assert_eq!(
             parsed,
             ConfidentialityPolicy::Any,

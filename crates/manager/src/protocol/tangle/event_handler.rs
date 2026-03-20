@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use alloy_sol_types::sol;
 use async_trait::async_trait;
-use blueprint_client_tangle::ConfidentialityPolicy;
 use blueprint_client_tangle::contracts::ITangle;
+use blueprint_client_tangle::{ConfidentialityPolicy, GpuPolicy, GpuRequirements};
 use blueprint_core::{info, warn};
 use blueprint_runner::config::{BlueprintEnvironment, Protocol};
 use tokio::fs::create_dir_all;
@@ -39,6 +39,7 @@ pub struct BlueprintMetadata {
     pub name: String,
     pub sources: Vec<BlueprintSource>,
     pub confidentiality_policy: ConfidentialityPolicy,
+    pub gpu_requirements: GpuRequirements,
     pub registration_mode: bool,
     pub registration_capture_only: bool,
 }
@@ -385,6 +386,15 @@ impl TangleEventHandler {
                     .to_string(),
             });
         }
+        if matches!(metadata.gpu_requirements.policy, GpuPolicy::Required) {
+            info!(
+                blueprint_id = metadata.blueprint_id,
+                service_id = metadata.service_id,
+                min_count = metadata.gpu_requirements.min_count,
+                min_vram_gb = metadata.gpu_requirements.min_vram_gb,
+                "Blueprint requires GPU — container runtime must provide GPU device plugin"
+            );
+        }
         let ordered_source_labels: Vec<&str> = ordered_source_idxs
             .iter()
             .map(|idx| source_kind_label(&metadata.sources[*idx]))
@@ -393,6 +403,7 @@ impl TangleEventHandler {
             blueprint_id = metadata.blueprint_id,
             service_id = metadata.service_id,
             confidentiality_policy = ?metadata.confidentiality_policy,
+            gpu_policy = ?metadata.gpu_requirements.policy,
             preferred_source = %ctx.preferred_source,
             source_order = ?ordered_source_labels,
             "Resolved deterministic source fallback ordering"
@@ -426,7 +437,10 @@ impl TangleEventHandler {
                 &metadata.name,
             );
             let args = BlueprintArgs::new(ctx).with_dry_run(env.dry_run);
-            let limits = ResourceLimits::default();
+            let mut limits = ResourceLimits::default();
+            if metadata.gpu_requirements.min_count > 0 {
+                limits.gpu_count = Some(metadata.gpu_requirements.min_count.min(255) as u8);
+            }
             let service_idx = metadata.service_id.try_into().unwrap_or(u32::MAX);
 
             match handler
