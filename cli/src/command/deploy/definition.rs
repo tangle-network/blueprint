@@ -406,12 +406,15 @@ impl MetadataSpec {
 struct ExecutionProfileSpec {
     #[serde(default)]
     confidentiality: blueprint_client_tangle::ConfidentialityPolicy,
+    #[serde(default)]
+    gpu: blueprint_client_tangle::GpuRequirements,
 }
 
 impl ExecutionProfileSpec {
     fn to_profile(&self) -> ExecutionProfile {
         ExecutionProfile {
             confidentiality: self.confidentiality,
+            gpu: self.gpu,
         }
     }
 }

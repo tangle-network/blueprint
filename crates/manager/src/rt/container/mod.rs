@@ -1,14 +1,15 @@
 use crate::config::BlueprintManagerContext;
 use crate::error::Result;
-use crate::rt::ResourceLimits;
 use crate::rt::service::Status;
+use crate::rt::{GpuSchedulingPolicy, ResourceLimits};
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_client_tangle::ConfidentialityPolicy;
 use blueprint_core::{info, warn};
 use k8s_openapi::api::core::v1::{
     Container, EndpointAddress, EndpointPort, EndpointSubset, Endpoints, EnvVar,
-    HostPathVolumeSource, Namespace, Pod, PodSpec, ResourceRequirements, Service, ServicePort,
-    ServiceSpec, Volume, VolumeMount,
+    HostPathVolumeSource, Namespace, NodeAffinity, NodeSelectorRequirement, NodeSelectorTerm, Pod,
+    PodSpec, PreferredSchedulingTerm, ResourceRequirements, Service, ServicePort, ServiceSpec,
+    Volume, VolumeMount,
 };
 use k8s_openapi::api::node::v1::RuntimeClass;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
@@ -151,6 +152,32 @@ impl ContainerInstance {
             ConfidentialityPolicy::Any | ConfidentialityPolicy::StandardRequired => None,
         };
 
+        let gpu_count = self.limits.gpu_count.unwrap_or(0);
+        let gpu_policy = self.limits.gpu_policy;
+        let gpu_min_vram_gb = self.limits.gpu_min_vram_gb;
+        if gpu_count > 0 {
+            match gpu_policy {
+                GpuSchedulingPolicy::Required => {
+                    info!(
+                        target: "containers",
+                        service_name = self.service_name,
+                        gpu_count,
+                        min_vram_gb = gpu_min_vram_gb.unwrap_or(0),
+                        "GPU Required — adding nvidia.com/gpu hard resource constraint"
+                    );
+                }
+                GpuSchedulingPolicy::Preferred => {
+                    info!(
+                        target: "containers",
+                        service_name = self.service_name,
+                        gpu_count,
+                        "GPU Preferred — adding node affinity (CPU fallback allowed)"
+                    );
+                }
+                GpuSchedulingPolicy::None => {}
+            }
+        }
+
         let pods: Api<Pod> = Api::namespaced(self.client.clone(), BLUEPRINT_NAMESPACE);
 
         let mem_mib = (self.limits.memory_size / 1024) / 1024;
@@ -192,14 +219,23 @@ impl ContainerInstance {
                 containers: vec![Container {
                     name: self.service_name.clone(),
                     image: Some(self.image.clone()),
-                    resources: Some(ResourceRequirements {
-                        limits: Some(
-                            [("memory".to_string(), Quantity(format!("{mem_mib}Mi")))].into(),
-                        ),
-                        requests: Some(
-                            [("memory".to_string(), Quantity(format!("{mem_mib}Mi")))].into(),
-                        ),
-                        ..Default::default()
+                    resources: Some({
+                        let mut limits: BTreeMap<String, Quantity> =
+                            [("memory".to_string(), Quantity(format!("{mem_mib}Mi")))].into();
+                        let mut requests: BTreeMap<String, Quantity> =
+                            [("memory".to_string(), Quantity(format!("{mem_mib}Mi")))].into();
+                        // Only add nvidia.com/gpu as a hard resource constraint for Required.
+                        // Preferred uses node affinity instead (see PodSpec below).
+                        if gpu_count > 0 && matches!(gpu_policy, GpuSchedulingPolicy::Required) {
+                            let gpu_qty = Quantity(format!("{gpu_count}"));
+                            limits.insert("nvidia.com/gpu".to_string(), gpu_qty.clone());
+                            requests.insert("nvidia.com/gpu".to_string(), gpu_qty);
+                        }
+                        ResourceRequirements {
+                            limits: Some(limits),
+                            requests: Some(requests),
+                            ..Default::default()
+                        }
                     }),
                     env: Some(env),
                     args: Some(self.args.encode(false)),
@@ -219,6 +255,52 @@ impl ContainerInstance {
                     }),
                     ..Default::default()
                 }]),
+                // GPU node selection:
+                // - Required: node_selector forces scheduling onto GPU-labeled nodes
+                // - Preferred: soft affinity prefers GPU nodes but allows CPU fallback
+                node_selector: {
+                    if matches!(gpu_policy, GpuSchedulingPolicy::Required) && gpu_count > 0 {
+                        let mut selectors = BTreeMap::new();
+                        selectors
+                            .insert("gpu.tangle.tools/enabled".to_string(), "true".to_string());
+                        if let Some(vram) = gpu_min_vram_gb {
+                            selectors.insert(
+                                "gpu.tangle.tools/min-vram-gb".to_string(),
+                                vram.to_string(),
+                            );
+                        }
+                        Some(selectors)
+                    } else {
+                        None
+                    }
+                },
+                affinity: {
+                    if matches!(gpu_policy, GpuSchedulingPolicy::Preferred) && gpu_count > 0 {
+                        Some(k8s_openapi::api::core::v1::Affinity {
+                            node_affinity: Some(NodeAffinity {
+                                preferred_during_scheduling_ignored_during_execution: Some(vec![
+                                    PreferredSchedulingTerm {
+                                        weight: 80,
+                                        preference: NodeSelectorTerm {
+                                            match_expressions: Some(vec![
+                                                NodeSelectorRequirement {
+                                                    key: "gpu.tangle.tools/enabled".to_string(),
+                                                    operator: "In".to_string(),
+                                                    values: Some(vec!["true".to_string()]),
+                                                },
+                                            ]),
+                                            ..Default::default()
+                                        },
+                                    },
+                                ]),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        })
+                    } else {
+                        None
+                    }
+                },
                 ..Default::default()
             }),
             ..Default::default()
