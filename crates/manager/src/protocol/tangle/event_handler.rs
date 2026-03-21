@@ -16,7 +16,7 @@ use crate::error::{Error, Result};
 use crate::protocol::tangle::client::TangleProtocolClient;
 use crate::protocol::tangle::metadata::OnChainMetadataProvider;
 use crate::protocol::types::ProtocolEvent;
-use crate::rt::ResourceLimits;
+use crate::rt::{GpuSchedulingPolicy, ResourceLimits};
 use crate::sources::github::GithubBinaryFetcher;
 use crate::sources::remote::RemoteBinaryFetcher;
 use crate::sources::testing::TestSourceFetcher;
@@ -106,6 +106,35 @@ fn source_priority(source: &BlueprintSource, preferred_source: SourceType) -> u8
 
 fn supports_tee(source: &BlueprintSource) -> bool {
     matches!(source, BlueprintSource::Container(_))
+}
+
+/// Apply GPU requirements from blueprint metadata to resource limits.
+///
+/// - `Required`: sets hard `gpu_count` + `gpu_policy::Required` + VRAM label.
+///   The container runtime adds `nvidia.com/gpu` resource requests (hard K8s constraint).
+/// - `Preferred`: sets `gpu_count` + `gpu_policy::Preferred` + VRAM label.
+///   The container runtime uses node affinity (soft constraint, CPU fallback allowed).
+/// - `None`: no GPU resources.
+fn apply_gpu_limits(gpu: &GpuRequirements, limits: &mut ResourceLimits) {
+    match gpu.policy {
+        GpuPolicy::Required => {
+            let count = gpu.min_count.clamp(1, 255) as u8;
+            limits.gpu_count = Some(count);
+            limits.gpu_policy = GpuSchedulingPolicy::Required;
+            if gpu.min_vram_gb > 0 {
+                limits.gpu_min_vram_gb = Some(gpu.min_vram_gb);
+            }
+        }
+        GpuPolicy::Preferred => {
+            let count = gpu.min_count.clamp(1, 255) as u8;
+            limits.gpu_count = Some(count);
+            limits.gpu_policy = GpuSchedulingPolicy::Preferred;
+            if gpu.min_vram_gb > 0 {
+                limits.gpu_min_vram_gb = Some(gpu.min_vram_gb);
+            }
+        }
+        GpuPolicy::None => {}
+    }
 }
 
 fn ordered_source_indices(
@@ -438,9 +467,7 @@ impl TangleEventHandler {
             );
             let args = BlueprintArgs::new(ctx).with_dry_run(env.dry_run);
             let mut limits = ResourceLimits::default();
-            if metadata.gpu_requirements.min_count > 0 {
-                limits.gpu_count = Some(metadata.gpu_requirements.min_count.min(255) as u8);
-            }
+            apply_gpu_limits(&metadata.gpu_requirements, &mut limits);
             let service_idx = metadata.service_id.try_into().unwrap_or(u32::MAX);
 
             match handler
@@ -538,7 +565,8 @@ impl TangleEventHandler {
                     &metadata.name,
                 );
                 let args = BlueprintArgs::new(ctx).with_dry_run(env.dry_run);
-                let limits = ResourceLimits::default();
+                let mut limits = ResourceLimits::default();
+                apply_gpu_limits(&metadata.gpu_requirements, &mut limits);
                 let service_idx = metadata.service_id.try_into().unwrap_or(u32::MAX);
 
                 match handler

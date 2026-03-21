@@ -77,6 +77,7 @@ impl Default for GpuPolicy {
 
 /// GPU resource requirements for a blueprint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct GpuRequirements {
     /// GPU availability policy.
     #[serde(default)]
@@ -85,8 +86,26 @@ pub struct GpuRequirements {
     #[serde(default)]
     pub min_count: u32,
     /// Minimum VRAM per device in GiB.
+    ///
+    /// Note: Kubernetes does not natively expose per-device VRAM as a
+    /// schedulable resource. When `policy` is `Required`, the BPM adds a
+    /// node selector label (`gpu.tangle.tools/vram-gb`) so operators can
+    /// label their nodes accordingly. When `policy` is `Preferred`, this
+    /// field is advisory only.
     #[serde(default)]
     pub min_vram_gb: u32,
+}
+
+impl GpuRequirements {
+    /// Normalize requirements: when policy is `Required` or `Preferred`,
+    /// ensure `min_count` is at least 1.
+    #[must_use]
+    pub fn normalized(mut self) -> Self {
+        if !matches!(self.policy, GpuPolicy::None) && self.min_count == 0 {
+            self.min_count = 1;
+        }
+        self
+    }
 }
 
 /// Blueprint deployment policy for execution environments.
@@ -198,7 +217,7 @@ pub fn resolve_execution_profile_from_profiling_data(
 
     Ok(Some(ExecutionProfile {
         confidentiality: raw_profile.confidentiality.unwrap_or_default(),
-        gpu: raw_profile.gpu.unwrap_or_default(),
+        gpu: raw_profile.gpu.unwrap_or_default().normalized(),
     }))
 }
 
@@ -522,5 +541,62 @@ mod tests {
     #[test]
     fn extract_profiles_blob_requires_structured_payload() {
         assert_eq!(extract_job_profiles_blob("H4sIAAAAA..."), None);
+    }
+
+    #[test]
+    fn normalizes_required_with_zero_min_count() {
+        let profile = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"gpu":{"policy":"required"}}}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(profile.gpu_required());
+        assert_eq!(
+            profile.gpu.min_count, 1,
+            "Required policy must normalize min_count to at least 1"
+        );
+    }
+
+    #[test]
+    fn normalizes_preferred_with_zero_min_count() {
+        let profile = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"gpu":{"policy":"preferred"}}}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(profile.gpu_preferred());
+        assert_eq!(
+            profile.gpu.min_count, 1,
+            "Preferred policy must normalize min_count to at least 1"
+        );
+    }
+
+    #[test]
+    fn gpu_inject_then_resolve_round_trip() {
+        let original = ExecutionProfile {
+            confidentiality: ConfidentialityPolicy::Any,
+            gpu: GpuRequirements {
+                policy: GpuPolicy::Required,
+                min_count: 2,
+                min_vram_gb: 80,
+            },
+        };
+        let payload = inject_execution_profile("", original);
+        let resolved = resolve_execution_profile_from_profiling_data(&payload)
+            .unwrap()
+            .unwrap();
+        assert_eq!(resolved, original, "inject then resolve must round-trip");
+    }
+
+    #[test]
+    fn gpu_rejects_unknown_fields_in_requirements() {
+        let err = resolve_execution_profile_from_profiling_data(
+            r#"{"execution_profile":{"gpu":{"policy":"required","unknown_field":true}}}"#,
+        )
+        .expect_err("expected error for unknown GPU field");
+        assert!(matches!(
+            err,
+            ExecutionProfileError::InvalidExecutionProfile { .. }
+        ));
     }
 }
