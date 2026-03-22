@@ -1,13 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-# This script publishes Rust crates while respecting crates.io's rate limit.
+# This script publishes Rust crates in topological dependency order while
+# respecting crates.io's rate limit.
+#
 # Rate limit: burst=30 (immediate), then 1 request per minute
 # See: https://github.com/rust-lang/crates.io/blob/master/src/middleware/app.rs
 #
-# Strategy:
-# - Publish first 30 crates immediately (using the burst allowance)
-# - Wait 60 seconds between each subsequent crate (1 per minute rate)
+# Key: crates are sorted so leaf dependencies publish first. Without this,
+# a crate that depends on blueprint-std will fail if blueprint-std hasn't
+# been published yet, because cargo publish --no-verify still checks that
+# all dependencies resolve on the registry.
 
 RELEASE_JSON="${1:-}"
 BURST_SIZE=30       # Can publish 30 immediately
@@ -25,33 +28,113 @@ if [[ ! -f "$RELEASE_JSON" ]]; then
 fi
 
 # Extract package names from the release-plz JSON output
-# The GitHub Action outputs the releases array directly: [{"package_name": "...", "version": "...", ...}, ...]
-if ! packages=$(jq -r '.[].package_name' "$RELEASE_JSON" 2>&1); then
+if ! packages_json=$(jq -r '.[].package_name' "$RELEASE_JSON" 2>&1); then
     echo "Error: Failed to parse JSON file"
-    echo "$packages"
+    echo "$packages_json"
     exit 1
 fi
 
-if [[ -z "$packages" ]]; then
+if [[ -z "$packages_json" ]]; then
     echo "No packages to publish"
     exit 0
 fi
 
-# Convert to array
-mapfile -t package_array <<< "$packages"
+# Build a set of packages to publish (from release-plz output)
+declare -A publish_set
+while IFS= read -r pkg; do
+    [[ -z "$pkg" ]] && continue
+    publish_set["$pkg"]=1
+done <<< "$packages_json"
 
-# Remove any empty elements
-package_array=("${package_array[@]}")
-
-total_packages=${#package_array[@]}
-
-if ((total_packages == 0)); then
+if ((${#publish_set[@]} == 0)); then
     echo "No packages to publish"
     exit 0
 fi
 
-echo "Found $total_packages package(s) to publish"
+echo "Resolving topological publish order for ${#publish_set[@]} package(s)..."
+
+# Use cargo metadata to get dependency graph and sort topologically.
+# This ensures leaf crates (no internal deps) publish first.
+topo_order=()
+if command -v cargo &>/dev/null; then
+    # Get all workspace members and their internal dependencies
+    metadata=$(cargo metadata --format-version 1 --no-deps 2>/dev/null || true)
+    if [[ -n "$metadata" ]]; then
+        # Extract workspace member names in topological order:
+        # For each package, count how many OTHER workspace packages it depends on.
+        # Sort by count ascending (fewest deps first = leaves first).
+        topo_order_raw=$(echo "$metadata" | python3 -c "
+import json, sys
+
+meta = json.load(sys.stdin)
+workspace_members = set()
+pkg_map = {}
+
+# Collect workspace member package IDs and names
+for pkg in meta['packages']:
+    pkg_id = pkg['id']
+    if any(pkg_id.startswith(m.rsplit('#', 1)[0]) or pkg['name'] in m for m in meta.get('workspace_members', [])):
+        workspace_members.add(pkg['name'])
+        pkg_map[pkg['name']] = pkg
+
+# For simple topological sort: count internal deps per package
+dep_counts = {}
+for name in workspace_members:
+    pkg = pkg_map.get(name)
+    if not pkg:
+        dep_counts[name] = 0
+        continue
+    internal_deps = 0
+    for dep in pkg.get('dependencies', []):
+        if dep['name'] in workspace_members:
+            internal_deps += 1
+    dep_counts[name] = internal_deps
+
+# Sort: fewest internal deps first (leaves), most last (root crates like sdk)
+for name in sorted(dep_counts.keys(), key=lambda n: (dep_counts[n], n)):
+    print(name)
+" 2>/dev/null || true)
+
+        if [[ -n "$topo_order_raw" ]]; then
+            while IFS= read -r pkg; do
+                # Only include packages that release-plz wants to publish
+                if [[ -n "${publish_set[$pkg]:-}" ]]; then
+                    topo_order+=("$pkg")
+                fi
+            done <<< "$topo_order_raw"
+        fi
+    fi
+fi
+
+# Fallback: if topo sort failed, use original order
+if ((${#topo_order[@]} == 0)); then
+    echo "Warning: topological sort unavailable, using original order"
+    mapfile -t topo_order <<< "$packages_json"
+fi
+
+# Verify we didn't lose any packages
+if ((${#topo_order[@]} != ${#publish_set[@]})); then
+    echo "Warning: topo sort has ${#topo_order[@]} packages but release-plz wants ${#publish_set[@]}"
+    # Add any missing packages at the end
+    for pkg in "${!publish_set[@]}"; do
+        found=0
+        for ordered in "${topo_order[@]}"; do
+            [[ "$ordered" == "$pkg" ]] && found=1 && break
+        done
+        ((found == 0)) && topo_order+=("$pkg")
+    done
+fi
+
+total_packages=${#topo_order[@]}
+
+echo "Found $total_packages package(s) to publish (topologically ordered)"
 echo ""
+echo "Publish order:"
+for ((i=0; i<total_packages; i++)); do
+    echo "  $((i+1)). ${topo_order[$i]}"
+done
+echo ""
+
 echo "crates.io rate limit: burst=$BURST_SIZE immediate, then 1 per minute"
 if ((total_packages <= BURST_SIZE)); then
     echo "All packages fit within burst limit - will publish immediately"
@@ -63,29 +146,40 @@ else
 fi
 echo ""
 
-# Publish packages
+# Track failures for retry
+declare -a failed_packages=()
+
+# Publish packages in topological order
 for ((i=0; i<total_packages; i++)); do
-    package="${package_array[$i]}"
+    package="${topo_order[$i]}"
     echo "========================================="
     echo "[$((i+1))/$total_packages] Publishing $package"
     echo "========================================="
 
     # Run cargo publish with the same flags as release-plz
+    # Retry once on transient failures (registry index lag)
     if cargo publish --package "$package" --allow-dirty --no-verify; then
         echo "✓ Successfully published $package"
     else
-        echo "✗ Failed to publish $package"
-        exit 1
+        echo "⚠ First attempt failed for $package, waiting 30s and retrying..."
+        sleep 30
+        if cargo publish --package "$package" --allow-dirty --no-verify; then
+            echo "✓ Successfully published $package (retry)"
+        else
+            echo "✗ Failed to publish $package after retry"
+            failed_packages+=("$package")
+            # Continue publishing other crates — don't fail the entire batch
+            # because a transient error on one crate shouldn't block others
+            echo "Continuing with remaining packages..."
+        fi
     fi
 
     # Delay logic:
-    # - During burst (packages 1-29): small 2s delay to avoid hammering
-    # - After publishing package 30 onwards: 60s delay before next publish (rate limit kicks in)
+    # - During burst (packages 1-29): small 5s delay to let registry index update
+    # - After burst: 60s delay for rate limit
     if ((i < BURST_SIZE - 1)); then
-        # Still in burst (packages 1-29), small delay between publishes
-        sleep 2
+        sleep 5
     elif ((i >= BURST_SIZE - 1 && i < total_packages - 1)); then
-        # Just published package 30+, need to wait for rate limit token before next
         echo ""
         echo "Rate limit: waiting $POST_BURST_DELAY seconds before next publish..."
         sleep "$POST_BURST_DELAY"
@@ -95,5 +189,17 @@ done
 
 echo ""
 echo "========================================="
-echo "✓ Successfully published all $total_packages packages!"
+if ((${#failed_packages[@]} > 0)); then
+    echo "⚠ Published $((total_packages - ${#failed_packages[@]}))/$total_packages packages"
+    echo ""
+    echo "Failed packages:"
+    for pkg in "${failed_packages[@]}"; do
+        echo "  ✗ $pkg"
+    done
+    echo ""
+    echo "Re-run this script or publish manually: cargo publish --package <name> --allow-dirty --no-verify"
+    exit 1
+else
+    echo "✓ Successfully published all $total_packages packages!"
+fi
 echo "========================================="
