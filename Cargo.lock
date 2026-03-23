@@ -2655,7 +2655,7 @@ dependencies = [
  "once_cell",
  "openssl",
  "pasetors",
- "pem 1.1.1",
+ "pem 3.0.6",
  "prost 0.13.5",
  "protobuf-src",
  "rcgen 0.14.7",
@@ -10768,15 +10768,6 @@ dependencies = [
  "base64 0.13.1",
  "once_cell",
  "regex",
-]
-
-[[package]]
-name = "pem"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
-dependencies = [
- "base64 0.13.1",
 ]
 
 [[package]]
