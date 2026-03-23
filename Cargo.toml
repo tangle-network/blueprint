@@ -481,7 +481,7 @@ azure_identity = { version = "0.20", default-features = false }
 
 # Additional dependencies
 openssl = { version = "0.10", default-features = false }
-zip = { version = "2.2", default-features = false }
+zip = { version = "8.4", default-features = false }
 warp = { version = "0.3", default-features = false }
 shell-escape = { version = "0.1", default-features = false }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "getrandom"] }
