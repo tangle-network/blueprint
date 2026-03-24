@@ -21,12 +21,13 @@ pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/qos.rs"));
 }
 
+pub use heartbeat::{HeartbeatConfig, HeartbeatConsumer, HeartbeatService, MetricsSource};
 pub use logging::{GrafanaClient, GrafanaConfig, LokiConfig};
 pub use servers::{
     grafana::GrafanaServerConfig, loki::LokiServerConfig, prometheus::PrometheusServerConfig,
 };
 pub use service_builder::QoSServiceBuilder;
-pub use unified_service::QoSService;
+pub use unified_service::{HeartbeatContext, QoSService};
 
 /// Configuration for the `QoS` system
 #[derive(Clone, Debug, Default)]
