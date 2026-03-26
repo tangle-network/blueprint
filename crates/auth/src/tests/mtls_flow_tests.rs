@@ -546,7 +546,7 @@ fn split_ca_bundle(pem_bundle: &str) -> Result<(String, String), Box<dyn Error +
     let mut key_block: Option<Pem> = None;
 
     for block in blocks {
-        match block.tag.as_str() {
+        match block.tag() {
             "CERTIFICATE" if cert_block.is_none() => cert_block = Some(block),
             tag if tag.ends_with("PRIVATE KEY") && key_block.is_none() => key_block = Some(block),
             _ => {}
