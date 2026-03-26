@@ -32,8 +32,7 @@ url = { workspace = true }
 jsonwebtoken = { workspace = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
-# Pinned: root workspace has toml 0.9, this crate requires 0.8 API
-toml = "0.8"
+toml = { workspace = true }
 blueprint-core = { workspace = true, features = ["tracing"] }
 
 # Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)

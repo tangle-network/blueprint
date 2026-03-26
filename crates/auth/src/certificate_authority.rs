@@ -51,7 +51,7 @@ impl CertificateAuthority {
                 "Failed to parse CA certificate PEM: {e}"
             )))
         })?;
-        if cert_block.tag != "CERTIFICATE" {
+        if cert_block.tag() != "CERTIFICATE" {
             return Err(crate::Error::Io(std::io::Error::other(
                 "CA bundle is missing a CERTIFICATE block",
             )));

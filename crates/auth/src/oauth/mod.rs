@@ -172,15 +172,15 @@ impl<'a> AssertionVerifier<'a> {
             let pem_str = pem.trim();
             let key_res = pem::parse(pem_str)
                 .ok()
-                .and_then(|p| match (alg, p.tag.as_str()) {
+                .and_then(|p| match (alg, p.tag()) {
                     (jsonwebtoken::Algorithm::RS256, "PUBLIC KEY") => {
-                        Some(jsonwebtoken::DecodingKey::from_rsa_der(&p.contents))
+                        Some(jsonwebtoken::DecodingKey::from_rsa_der(p.contents()))
                     }
                     (jsonwebtoken::Algorithm::RS256, "RSA PUBLIC KEY") => {
-                        Some(jsonwebtoken::DecodingKey::from_rsa_der(&p.contents))
+                        Some(jsonwebtoken::DecodingKey::from_rsa_der(p.contents()))
                     }
                     (jsonwebtoken::Algorithm::ES256, "PUBLIC KEY") => {
-                        Some(jsonwebtoken::DecodingKey::from_ec_der(&p.contents))
+                        Some(jsonwebtoken::DecodingKey::from_ec_der(p.contents()))
                     }
                     _ => None,
                 });

@@ -350,8 +350,8 @@ impl TlsAssetManager {
             if let Ok(blocks) = pem::parse_many(pem_str) {
                 let mut ders = Vec::new();
                 for block in blocks {
-                    if block.tag == "CERTIFICATE" {
-                        ders.push(block.contents);
+                    if block.tag() == "CERTIFICATE" {
+                        ders.push(block.contents().to_vec());
                     }
                 }
                 if !ders.is_empty() {

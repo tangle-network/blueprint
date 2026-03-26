@@ -925,7 +925,7 @@ fn load_persisted_ca(
 
     for block in blocks {
         let encoded = pem::encode(&block);
-        match block.tag.as_str() {
+        match block.tag() {
             "CERTIFICATE" if ca_cert_pem.is_none() => ca_cert_pem = Some(encoded),
             tag if tag.ends_with("PRIVATE KEY") && ca_key_pem.is_none() => {
                 ca_key_pem = Some(encoded)
