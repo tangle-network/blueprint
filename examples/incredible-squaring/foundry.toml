@@ -25,6 +25,6 @@ remappings_location = "txt"
 remappings_version = false
 
 [dependencies]
-tnt-core = "0.10.4"
+tnt-core = "0.10.6"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
