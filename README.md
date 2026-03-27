@@ -2,7 +2,7 @@
 
 <h1 align="center">Blueprint SDK</h1>
 
-<p align="center"><em>A comprehensive toolkit for building, deploying, and managing blueprints on the [Tangle Network].</em></p>
+<p align="center"><em>A comprehensive toolkit for building, deploying, and managing blueprints on the <a href=https://tangle.tools/overview/>Tangle Network</a>.</em></p>
 
 <p align="center">
   <a href="https://github.com/tangle-network/blueprint/actions"><img src="https://img.shields.io/github/actions/workflow/status/tangle-network/blueprint/ci.yml?branch=main&logo=github" alt="Build Status"></a>
