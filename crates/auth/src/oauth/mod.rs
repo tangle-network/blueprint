@@ -170,20 +170,18 @@ impl<'a> AssertionVerifier<'a> {
         let mut decoded: Option<jsonwebtoken::TokenData<AssertionClaims>> = None;
         for pem in &policy.public_keys_pem {
             let pem_str = pem.trim();
-            let key_res = pem::parse(pem_str)
-                .ok()
-                .and_then(|p| match (alg, p.tag.as_str()) {
-                    (jsonwebtoken::Algorithm::RS256, "PUBLIC KEY") => {
-                        Some(jsonwebtoken::DecodingKey::from_rsa_der(&p.contents))
-                    }
-                    (jsonwebtoken::Algorithm::RS256, "RSA PUBLIC KEY") => {
-                        Some(jsonwebtoken::DecodingKey::from_rsa_der(&p.contents))
-                    }
-                    (jsonwebtoken::Algorithm::ES256, "PUBLIC KEY") => {
-                        Some(jsonwebtoken::DecodingKey::from_ec_der(&p.contents))
-                    }
-                    _ => None,
-                });
+            let key_res = pem::parse(pem_str).ok().and_then(|p| match (alg, p.tag()) {
+                (jsonwebtoken::Algorithm::RS256, "PUBLIC KEY") => {
+                    Some(jsonwebtoken::DecodingKey::from_rsa_der(p.contents()))
+                }
+                (jsonwebtoken::Algorithm::RS256, "RSA PUBLIC KEY") => {
+                    Some(jsonwebtoken::DecodingKey::from_rsa_der(p.contents()))
+                }
+                (jsonwebtoken::Algorithm::ES256, "PUBLIC KEY") => {
+                    Some(jsonwebtoken::DecodingKey::from_ec_der(p.contents()))
+                }
+                _ => None,
+            });
 
             if let Some(k) = key_res {
                 match jsonwebtoken::decode::<AssertionClaims>(jwt, &k, &validation) {

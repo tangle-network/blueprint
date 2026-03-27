@@ -24,7 +24,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
 dependencies = [
  "crypto-common",
- "generic-array",
+ "generic-array 0.14.7",
 ]
 
 [[package]]
@@ -1060,15 +1060,6 @@ dependencies = [
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
  "uuid 1.22.0",
-]
-
-[[package]]
-name = "arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
-dependencies = [
- "derive_arbitrary",
 ]
 
 [[package]]
@@ -2547,7 +2538,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
 dependencies = [
- "generic-array",
+ "generic-array 0.14.7",
 ]
 
 [[package]]
@@ -2556,7 +2547,7 @@ version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
- "generic-array",
+ "generic-array 0.14.7",
 ]
 
 [[package]]
@@ -2655,7 +2646,7 @@ dependencies = [
  "once_cell",
  "openssl",
  "pasetors",
- "pem 1.1.1",
+ "pem 3.0.6",
  "prost 0.13.5",
  "protobuf-src",
  "rcgen 0.14.7",
@@ -3284,7 +3275,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "reqwest 0.12.28",
- "rtnetlink 0.16.0",
+ "rtnetlink",
  "rustls 0.23.37",
  "serde",
  "serde_json",
@@ -3294,7 +3285,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.0.7+spec-1.1.0",
  "tower 0.5.3",
  "tracing",
  "tracing-subscriber 0.3.23",
@@ -3378,7 +3369,7 @@ dependencies = [
  "crossbeam-channel",
  "dashmap",
  "futures",
- "generic-array",
+ "generic-array 1.3.5",
  "hex",
  "libp2p",
  "rand 0.8.5",
@@ -3404,7 +3395,7 @@ dependencies = [
  "crossbeam-channel",
  "dashmap",
  "futures",
- "generic-array",
+ "generic-array 1.3.5",
  "hex",
  "libp2p",
  "rand 0.8.5",
@@ -3469,7 +3460,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-stream",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.0.7+spec-1.1.0",
  "tonic 0.13.1",
  "tonic-build",
  "tonic-web",
@@ -3609,7 +3600,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.4",
  "tokio-test",
- "toml 0.8.23",
+ "toml 1.0.7+spec-1.1.0",
  "tracing-subscriber 0.3.23",
  "url",
  "urlencoding",
@@ -3885,7 +3876,7 @@ dependencies = [
  "subtle",
  "thiserror 2.0.18",
  "tokio",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.0.7+spec-1.1.0",
  "tower 0.5.3",
  "tracing",
 ]
@@ -3911,7 +3902,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tnt-core-bindings",
  "tokio",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.0.7+spec-1.1.0",
  "tower 0.5.3",
  "tower-http 0.6.8",
  "tracing",
@@ -4231,7 +4222,7 @@ dependencies = [
  "testcontainers",
  "thiserror 2.0.18",
  "tokio",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.0.7+spec-1.1.0",
  "tracing",
  "tracing-subscriber 0.3.23",
  "url",
@@ -4549,7 +4540,7 @@ dependencies = [
  "bs58",
  "const-hex",
  "digest 0.10.7",
- "generic-array",
+ "generic-array 0.14.7",
  "ripemd",
  "serde",
  "sha2 0.10.9",
@@ -4912,7 +4903,7 @@ version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0dc92fb57ca44df6db8059111ab3af99a63d5d0f8375d9972e319a379c6bab76"
 dependencies = [
- "generic-array",
+ "generic-array 0.14.7",
  "rand_core 0.6.4",
  "subtle",
  "zeroize",
@@ -4924,7 +4915,7 @@ version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
- "generic-array",
+ "generic-array 0.14.7",
  "rand_core 0.6.4",
  "typenum",
 ]
@@ -5215,17 +5206,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derive_arbitrary"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "derive_builder"
 version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5322,7 +5302,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3dd60d1080a57a05ab032377049e0591415d2b31afd7028356dbf3cc6dcb066"
 dependencies = [
- "generic-array",
+ "generic-array 0.14.7",
 ]
 
 [[package]]
@@ -5941,7 +5921,7 @@ dependencies = [
  "crypto-bigint",
  "digest 0.10.7",
  "ff",
- "generic-array",
+ "generic-array 0.14.7",
  "group",
  "pem-rfc7468",
  "pkcs8",
@@ -6566,10 +6546,20 @@ version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
- "serde",
  "typenum",
  "version_check",
  "zeroize",
+]
+
+[[package]]
+name = "generic-array"
+version = "1.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaf57c49a95fd1fe24b90b3033bee6dc7e8f1288d51494cb44e627c295e38542"
+dependencies = [
+ "rustversion",
+ "serde_core",
+ "typenum",
 ]
 
 [[package]]
@@ -7694,9 +7684,9 @@ dependencies = [
  "log",
  "netlink-packet-core 0.8.1",
  "netlink-packet-route 0.28.0",
- "netlink-proto 0.12.0",
+ "netlink-proto",
  "netlink-sys",
- "rtnetlink 0.20.0",
+ "rtnetlink",
  "system-configuration 0.7.0",
  "tokio",
  "windows 0.62.2",
@@ -7908,7 +7898,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
- "generic-array",
+ "generic-array 0.14.7",
 ]
 
 [[package]]
@@ -9776,20 +9766,6 @@ dependencies = [
 
 [[package]]
 name = "netlink-proto"
-version = "0.11.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72452e012c2f8d612410d89eea01e2d9b56205274abb35d53f60200b2ec41d60"
-dependencies = [
- "bytes",
- "futures",
- "log",
- "netlink-packet-core 0.7.0",
- "netlink-sys",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "netlink-proto"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b65d130ee111430e47eed7896ea43ca693c387f097dd97376bffafbf25812128"
@@ -10768,15 +10744,6 @@ dependencies = [
  "base64 0.13.1",
  "once_cell",
  "regex",
-]
-
-[[package]]
-name = "pem"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
-dependencies = [
- "base64 0.13.1",
 ]
 
 [[package]]
@@ -12120,24 +12087,6 @@ dependencies = [
 
 [[package]]
 name = "rtnetlink"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cb5850b5aa2c9c0ae44f157694bbe85107a2e13d76eb3178d0e3ee96c410f57"
-dependencies = [
- "futures",
- "log",
- "netlink-packet-core 0.7.0",
- "netlink-packet-route 0.22.0",
- "netlink-packet-utils",
- "netlink-proto 0.11.5",
- "netlink-sys",
- "nix 0.29.0",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
-name = "rtnetlink"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b960d5d873a75b5be9761b1e73b146f52dddcd27bac75263f40fba686d4d7b5"
@@ -12147,7 +12096,7 @@ dependencies = [
  "log",
  "netlink-packet-core 0.8.1",
  "netlink-packet-route 0.28.0",
- "netlink-proto 0.12.0",
+ "netlink-proto",
  "netlink-sys",
  "nix 0.30.1",
  "thiserror 1.0.69",
@@ -12681,7 +12630,7 @@ checksum = "d3e97a565f76233a6003f9f5c54be1d9c5bdfa3eccfb189469f11ec4901c47dc"
 dependencies = [
  "base16ct",
  "der",
- "generic-array",
+ "generic-array 0.14.7",
  "pkcs8",
  "serdect",
  "subtle",
@@ -14474,6 +14423,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15740,7 +15695,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "toml 0.9.12+spec-1.1.0",
+ "toml 1.0.7+spec-1.1.0",
  "tower 0.5.3",
 ]
 
@@ -16024,17 +15979,14 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "2.4.2"
+version = "8.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
+checksum = "7756d0206d058333667493c4014f545f4b9603c4330ccd6d9b3f86dcab59f7d9"
 dependencies = [
- "arbitrary",
  "crc32fast",
- "crossbeam-utils",
- "displaydoc",
  "indexmap 2.13.0",
  "memchr",
- "thiserror 2.0.18",
+ "typed-path",
 ]
 
 [[package]]
