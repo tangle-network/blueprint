@@ -47,7 +47,7 @@ kube = { version = "0.90", features = ["rustls-tls"], optional = true }
 k8s-openapi = { version = "0.21", features = ["v1_29"], optional = true }
 
 # AWS SDK
-aws-config = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true, features = ["default-https-client", "rt-tokio"] }
 aws-sdk-ec2 = { workspace = true, optional = true }
 aws-sdk-eks = { workspace = true, optional = true }
 aws-sdk-autoscaling = { workspace = true, optional = true }

@@ -84,6 +84,8 @@ pub struct OAuthProtectedApiService;
 impl BackgroundService for OAuthProtectedApiService {
     async fn start(&self) -> Result<Receiver<Result<(), RunnerError>>, RunnerError> {
         let (tx, rx) = oneshot::channel();
+        let bind_addr =
+            std::env::var("OAUTH_BLUEPRINT_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".into());
 
         tokio::spawn(async move {
             let app = HttpRouter::new()
@@ -94,7 +96,7 @@ impl BackgroundService for OAuthProtectedApiService {
                 .route("/docs", get(list_docs))
                 .layer(middleware::from_fn(oauth_auth));
 
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
+            let listener = tokio::net::TcpListener::bind(&bind_addr)
                 .await
                 .expect("failed to bind listener");
 
@@ -238,6 +240,8 @@ mod tests {
 
     #[tokio::test]
     async fn background_service_starts() {
+        // Safety: this test is the only code path mutating this process env var.
+        unsafe { std::env::set_var("OAUTH_BLUEPRINT_BIND_ADDR", "127.0.0.1:0") };
         let service = OAuthProtectedApiService;
         let signal = service.start().await.unwrap();
         assert!(
@@ -247,6 +251,8 @@ mod tests {
                 .unwrap()
                 .is_ok()
         );
+        // Safety: this test is the only code path mutating this process env var.
+        unsafe { std::env::remove_var("OAUTH_BLUEPRINT_BIND_ADDR") };
     }
 
     #[tokio::test]

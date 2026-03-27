@@ -230,10 +230,15 @@ mod tests {
     use alloy_primitives::Address;
     use axum::http::HeaderValue;
     use axum::routing::get;
+    use once_cell::sync::Lazy;
+    use tokio::sync::Mutex as AsyncMutex;
     use tower::ServiceExt;
+
+    static TEST_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
 
     #[tokio::test]
     async fn purchase_and_use_api_key() {
+        let _guard = TEST_LOCK.lock().await;
         api_key_store().write().await.clear();
         let result = purchase_api_key(TangleArg(("pro".into(), Address::ZERO))).await;
         assert!(result.ok);
@@ -246,6 +251,7 @@ mod tests {
 
     #[tokio::test]
     async fn write_resource_records_data() {
+        let _guard = TEST_LOCK.lock().await;
         resource_store().write().await.clear();
         write_resource(TangleArg(("doc".into(), "payload".into(), Address::ZERO))).await;
 
@@ -262,6 +268,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_rejects_missing_key() {
+        let _guard = TEST_LOCK.lock().await;
         api_key_store().write().await.clear();
         let app = HttpRouter::new()
             .route(
@@ -283,6 +290,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_accepts_valid_key() {
+        let _guard = TEST_LOCK.lock().await;
         api_key_store().write().await.clear();
         let api_key = "sk_test_valid";
         let mut hasher = Sha256::new();
