@@ -39,7 +39,7 @@ const TANGLE_ADDRESS: &str = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
 const RESTAKING_ADDRESS: &str = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
 const STATUS_REGISTRY_ADDRESS: &str = "0x8f86403A4DE0bb5791fa46B8e795C547942fE4Cf";
 const DEFAULT_FEE_WEI: u128 = 1;
-const DEFAULT_GAS_LIMIT: u64 = 120_000_000;
+const ANVIL_BLOCK_GAS_LIMIT: u64 = 100_000_000;
 const OPERATOR1_PRIVATE_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
@@ -396,9 +396,10 @@ fn inject_fee_fields(request: &mut TransactionRequest) {
     } else if request.gas_price.is_none() {
         request.gas_price = Some(DEFAULT_FEE_WEI);
     }
-    if request.gas.is_none() {
-        request.gas = Some(DEFAULT_GAS_LIMIT);
-    }
+    request.gas = Some(match request.gas {
+        Some(gas) => gas.min(ANVIL_BLOCK_GAS_LIMIT),
+        None => ANVIL_BLOCK_GAS_LIMIT,
+    });
 }
 
 async fn fetch_account_nonce(provider: &impl Provider, address: Address) -> Result<u64> {

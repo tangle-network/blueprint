@@ -999,6 +999,7 @@ impl TangleClient {
             payment_amount,
             security_requirements,
         } = params;
+        let confidentiality = 0u8;
 
         let is_native_payment = payment_token == Address::ZERO && payment_amount > U256::ZERO;
 
@@ -1018,6 +1019,7 @@ impl TangleClient {
                 ttl,
                 payment_token,
                 payment_amount,
+                confidentiality,
             );
             call = call.from(self.account());
             if is_native_payment {
@@ -1034,6 +1036,7 @@ impl TangleClient {
                 ttl,
                 payment_token,
                 payment_amount,
+                confidentiality,
             );
             call = call.from(self.account());
             if is_native_payment {
@@ -1049,6 +1052,7 @@ impl TangleClient {
                 ttl,
                 payment_token,
                 payment_amount,
+                confidentiality,
             );
             call = call.from(self.account());
             if is_native_payment {
@@ -1068,6 +1072,7 @@ impl TangleClient {
                 ttl,
                 payment_token,
                 payment_amount,
+                confidentiality,
             );
             if is_native_payment {
                 call = call.value(payment_amount);
@@ -1083,6 +1088,7 @@ impl TangleClient {
                 ttl,
                 payment_token,
                 payment_amount,
+                confidentiality,
             );
             if is_native_payment {
                 call = call.value(payment_amount);
@@ -1097,6 +1103,7 @@ impl TangleClient {
                 ttl,
                 payment_token,
                 payment_amount,
+                confidentiality,
             );
             if is_native_payment {
                 call = call.value(payment_amount);

@@ -899,6 +899,7 @@ mod evm_listener_tests {
                     expiry: chrono::Utc::now().timestamp() as u64 + 3600,
                     securityCommitments: vec![].into(),
                     resourceCommitments: vec![].into(),
+                    confidentiality: 0u8,
                 },
                 signature: Bytes::from(vec![0u8; 65]), // Invalid signature
                 operator: Address::ZERO,
@@ -967,6 +968,7 @@ mod evm_listener_tests {
                     expiry: now - 3600,    // Expired 1 hour ago
                     securityCommitments: vec![].into(),
                     resourceCommitments: vec![].into(),
+                    confidentiality: 0u8,
                 },
                 signature: Bytes::from(vec![0u8; 65]),
                 operator: Address::ZERO,
@@ -1125,6 +1127,7 @@ mod evm_listener_tests {
                     expiry: chrono::Utc::now().timestamp() as u64 + 3600,
                     securityCommitments: vec![].into(),
                     resourceCommitments: vec![].into(),
+                    confidentiality: 0u8,
                 },
                 signature: Bytes::from(vec![0u8; 65]),
                 operator: Address::ZERO,
@@ -1470,6 +1473,7 @@ mod evm_listener_tests {
             expiry: quote_details.expiry,
             securityCommitments: security_commitments.into(),
             resourceCommitments: resource_commitments.into(),
+            confidentiality: 0u8,
         };
 
         let operator_addr = Address::from_slice(&response.operator_id);

@@ -264,6 +264,7 @@ fn build_abi_quote_details(
         totalCost: decimal_to_scaled_amount(total_cost)?,
         timestamp: details.timestamp,
         expiry: details.expiry,
+        confidentiality: 0u8,
         securityCommitments: security_commitments.into(),
         resourceCommitments: resource_commitments.into(),
     })
