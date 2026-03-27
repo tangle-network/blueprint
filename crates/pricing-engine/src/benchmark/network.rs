@@ -136,8 +136,8 @@ pub fn run_network_benchmark(_config: &BenchmarkRunConfig) -> Result<NetworkBenc
     let (final_rx_bytes, final_tx_bytes) = super::utils::get_network_stats()?;
 
     // Calculate network usage in MB
-    let rx_mb = (final_rx_bytes - initial_rx_bytes) as f32 / 1024.0 / 1024.0;
-    let tx_mb = (final_tx_bytes - initial_tx_bytes) as f32 / 1024.0 / 1024.0;
+    let rx_mb = final_rx_bytes.saturating_sub(initial_rx_bytes) as f32 / 1024.0 / 1024.0;
+    let tx_mb = final_tx_bytes.saturating_sub(initial_tx_bytes) as f32 / 1024.0 / 1024.0;
 
     // Calculate total duration
     let total_duration = start_time.elapsed();
