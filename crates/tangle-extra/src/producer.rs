@@ -148,13 +148,18 @@ impl Stream for TangleProducer {
                 }
             }
 
-            // Start a new poll for events
+            // Start a new poll for events after waiting poll_interval.
+            // Without this sleep the loop spins immediately when no jobs are
+            // found, starving the tokio runtime and preventing other tasks
+            // (HTTP servers, workflow ticks) from making progress.
             let client = producer.client.clone();
             let service_id = producer.service_id;
             let last_block = state.last_block;
             let last_log_index = state.last_log_index;
+            let poll_interval = producer.poll_interval;
 
             let fut = Box::pin(async move {
+                sleep(poll_interval).await;
                 poll_for_jobs(client, service_id, last_block, last_log_index).await
             });
             state.poll_future = Some(fut);
