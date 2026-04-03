@@ -1,6 +1,7 @@
 [package]
 name = "blueprint-remote-providers"
 version = "0.2.0-alpha.1"
+description = "Remote service providers for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
