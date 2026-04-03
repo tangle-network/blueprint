@@ -1,0 +1,69 @@
+name: Publish Crates
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (do not actually publish)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish all crates to crates.io
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-hakari
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hakari
+
+      - name: Disable Hakari
+        run: |
+          cargo hakari disable
+          cargo hakari remove-deps -y
+
+      - uses: ./.github/actions/free-disk-space
+
+      - name: Build release JSON from workspace metadata
+        run: |
+          cargo metadata --format-version 1 --no-deps | python3 -c "
+          import json, sys
+          meta = json.load(sys.stdin)
+          skip = {'workspace-hack', 'hello-tangle-blueprint', 'incredible-squaring-blueprint-eigenlayer',
+                  'incredible-squaring-blueprint-bin', 'incredible-squaring-blueprint-lib',
+                  'apikey-blueprint-bin', 'apikey-blueprint-lib',
+                  'oauth-blueprint-bin', 'oauth-blueprint-lib', 'x402-blueprint'}
+          releases = []
+          for pkg in meta['packages']:
+              if any(pkg['name'] in m for m in meta.get('workspace_members', [])):
+                  if pkg['name'] not in skip:
+                      releases.append({'package_name': pkg['name']})
+          json.dump(releases, open('release-output.json', 'w'), indent=2)
+          print(f'Generated release-output.json with {len(releases)} packages')
+          "
+          cat release-output.json
+
+      - name: Publish to crates.io
+        if: inputs.dry_run != 'true'
+        run: |
+          bash .github/scripts/batch-publish.sh release-output.json
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Dry run
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "DRY RUN — would publish these crates:"
+          python3 -c "import json; [print(f'  {r[\"package_name\"]}') for r in json.load(open('release-output.json'))]"
