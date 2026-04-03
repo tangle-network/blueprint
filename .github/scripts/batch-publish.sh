@@ -156,20 +156,27 @@ for ((i=0; i<total_packages; i++)); do
     echo "[$((i+1))/$total_packages] Publishing $package"
     echo "========================================="
 
-    # Run cargo publish with the same flags as release-plz
-    # Retry once on transient failures (registry index lag)
-    if cargo publish --package "$package" --allow-dirty --no-verify; then
+    # Run cargo publish — treat "already exists" as success
+    output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1)
+    exit_code=$?
+    if [[ $exit_code -eq 0 ]]; then
         echo "✓ Successfully published $package"
+    elif echo "$output" | grep -q "already exists"; then
+        echo "✓ $package already published (skipped)"
     else
         echo "⚠ First attempt failed for $package, waiting 30s and retrying..."
+        echo "$output" | tail -3
         sleep 30
-        if cargo publish --package "$package" --allow-dirty --no-verify; then
+        output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1)
+        exit_code=$?
+        if [[ $exit_code -eq 0 ]]; then
             echo "✓ Successfully published $package (retry)"
+        elif echo "$output" | grep -q "already exists"; then
+            echo "✓ $package already published (skipped)"
         else
             echo "✗ Failed to publish $package after retry"
+            echo "$output" | tail -5
             failed_packages+=("$package")
-            # Continue publishing other crates — don't fail the entire batch
-            # because a transient error on one crate shouldn't block others
             echo "Continuing with remaining packages..."
         fi
     fi
