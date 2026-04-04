@@ -68,6 +68,7 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 libc = { workspace = true }
 rand = { workspace = true }
 urlencoding = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 mockall = { workspace = true }

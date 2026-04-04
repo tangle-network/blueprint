@@ -467,6 +467,7 @@ mod tests {
 
     #[cfg(feature = "aws")]
     #[test]
+    #[serial_test::serial(aws_env)]
     fn aws_credentials_available_requires_both_env_vars() {
         let _key = EnvVarGuard::set("AWS_ACCESS_KEY_ID", "test-key");
         let _secret_missing = EnvVarGuard::remove("AWS_SECRET_ACCESS_KEY");
@@ -483,6 +484,7 @@ mod tests {
 
     #[cfg(feature = "aws")]
     #[test]
+    #[serial_test::serial(aws_env)]
     fn aws_credentials_available_falls_back_when_shared_file_is_missing() {
         let temp_home = tempfile::tempdir().expect("create temp home");
         let aws_dir = temp_home.path().join(".aws");

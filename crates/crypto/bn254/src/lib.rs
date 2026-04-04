@@ -69,10 +69,9 @@ fn hash_to_curve(digest: &[u8]) -> G1Affine {
         // Check if y is a quadratic residue (i.e., has a square root in the field)
         if let Some(y) = y.sqrt() {
             return G1Projective::new(x, y, Fq::one()).into_affine();
-        } else {
-            // x = x + 1
-            x += one;
         }
+        // x = x + 1
+        x += one;
     }
 }
 
@@ -205,7 +204,7 @@ impl KeyType for ArkBlsBn254 {
 
     fn generate_with_string(secret: String) -> Result<Self::Secret> {
         let secret = Fr::from_str(&secret)
-            .map_err(|_| Bn254Error::InvalidSeed("Invalid secret string".to_string()))?;
+            .map_err(|()| Bn254Error::InvalidSeed("Invalid secret string".to_string()))?;
         Ok(ArkBlsBn254Secret(secret))
     }
 

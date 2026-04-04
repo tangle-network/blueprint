@@ -381,6 +381,7 @@ pub struct TangleClient {
     block_subscription: Arc<Mutex<Option<u64>>>,
 }
 
+#[allow(clippy::missing_fields_in_debug)] // provider/signer/subscription intentionally omitted
 impl fmt::Debug for TangleClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TangleClient")
@@ -968,7 +969,7 @@ impl TangleClient {
             restaking: RestakingMetadata {
                 stake: restaking_meta.stake,
                 delegation_count: restaking_meta.delegationCount,
-                status: RestakingStatus::from(u8::from(restaking_meta.status)),
+                status: RestakingStatus::from(restaking_meta.status),
                 leaving_round: restaking_meta.leavingRound,
             },
         })
@@ -1455,7 +1456,7 @@ impl TangleClient {
         Ok(RestakingMetadata {
             stake: restaking_meta.stake,
             delegation_count: restaking_meta.delegationCount,
-            status: RestakingStatus::from(u8::from(restaking_meta.status)),
+            status: RestakingStatus::from(restaking_meta.status),
             leaving_round: restaking_meta.leavingRound,
         })
     }
@@ -1538,7 +1539,7 @@ impl TangleClient {
             .call()
             .await
             .map_err(|e| Error::Contract(e.to_string()))?;
-        Ok(DelegationMode::from(u8::from(mode)))
+        Ok(DelegationMode::from(mode))
     }
 
     /// Check if delegator is whitelisted for operator.

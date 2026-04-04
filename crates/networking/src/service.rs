@@ -382,7 +382,7 @@ impl<K: KeyType> NetworkService<K> {
         let mut shutdown_keys = self.shutdown_rx.clone();
         tokio::spawn(async move {
             tokio::select! {
-                _ = async { peer_manager.run_allowed_keys_updater(&allowed_keys_rx) } => {}
+                () = async { peer_manager.run_allowed_keys_updater(&allowed_keys_rx) } => {}
                 _ = shutdown_keys.changed() => {}
             }
         });

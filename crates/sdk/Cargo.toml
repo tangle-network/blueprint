@@ -84,6 +84,7 @@ blueprint-tee = { workspace = true, optional = true }
 blueprint-remote-providers = { workspace = true, optional = true }
 
 openssl-sys = { workspace = true, features = ["vendored"] }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = ["std", "tracing"]

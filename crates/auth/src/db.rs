@@ -48,7 +48,7 @@ impl RocksDb {
         }
         if config.enable_statistics {
             db_opts.enable_statistics();
-        };
+        }
 
         // Set the merge operator for the sequence column family
         let mut seq_cf_opts = db_opts.clone();

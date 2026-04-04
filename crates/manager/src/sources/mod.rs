@@ -86,6 +86,9 @@ pub trait BlueprintSourceHandler: Send + Sync {
     fn name(&self) -> String;
 }
 
+// SAFETY: DynBlueprintSource wraps a dynosaur-erased trait object whose trait bound
+// requires `Send + Sync`. The generated struct only holds a reference to the impl,
+// which is guaranteed Send + Sync by the trait definition.
 unsafe impl Send for DynBlueprintSource<'_> {}
 unsafe impl Sync for DynBlueprintSource<'_> {}
 
@@ -105,11 +108,6 @@ impl BlueprintArgs {
         if manager_config.test_mode {
             blueprint_core::warn!("Test mode is enabled");
         }
-
-        // TODO: Add support for keystore password
-        // if let Some(keystore_password) = &env.keystore_password {
-        //     arguments.push(format!("--keystore-password={}", keystore_password));
-        // }
 
         Self {
             test_mode: manager_config.test_mode,

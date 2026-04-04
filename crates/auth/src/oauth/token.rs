@@ -114,7 +114,7 @@ pub async fn oauth_token(
                         allowed.iter().map(|s| s.to_ascii_lowercase()).collect();
                     let mut filtered_set: std::collections::BTreeSet<String> =
                         std::collections::BTreeSet::new();
-                    for s in req.iter() {
+                    for s in req {
                         let lc = s.to_ascii_lowercase();
                         if allowed_set.contains(&lc) {
                             filtered_set.insert(lc);

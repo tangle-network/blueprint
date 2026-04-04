@@ -85,11 +85,13 @@ impl<T> MetadataMap<T> {
     }
 
     /// Returns an iterator over the map's entries.
+    #[allow(clippy::iter_without_into_iter)] // IntoIterator impl deferred to avoid API churn
     pub fn iter(&self) -> Iter<'_, Cow<'static, str>, T> {
         self.map.iter()
     }
 
     /// Returns a mutable iterator over the map's entries.
+    #[allow(clippy::iter_without_into_iter)] // IntoIterator impl deferred to avoid API churn
     pub fn iter_mut(&mut self) -> IterMut<'_, Cow<'static, str>, T> {
         self.map.iter_mut()
     }

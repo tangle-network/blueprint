@@ -1034,6 +1034,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing-subscriber 0.3.23",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -1060,6 +1061,7 @@ dependencies = [
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
  "uuid 1.22.0",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2619,6 +2621,7 @@ dependencies = [
  "tokio-stream",
  "tonic 0.13.1",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2672,6 +2675,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.23",
  "uuid 1.22.0",
+ "workspace-hack",
  "x509-parser 0.18.1",
 ]
 
@@ -2682,6 +2686,7 @@ dependencies = [
  "blueprint-std",
  "sysinfo 0.38.4",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2689,6 +2694,7 @@ name = "blueprint-build-utils"
 version = "0.2.0-alpha.1"
 dependencies = [
  "blueprint-std",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2696,6 +2702,7 @@ name = "blueprint-chain-setup"
 version = "0.2.0-alpha.1"
 dependencies = [
  "blueprint-chain-setup-anvil",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2717,6 +2724,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2726,6 +2734,7 @@ dependencies = [
  "auto_impl",
  "blueprint-std",
  "thiserror 2.0.18",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2754,6 +2763,7 @@ dependencies = [
  "tokio-util 0.7.18",
  "tracing-subscriber 0.3.23",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2785,6 +2795,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2819,6 +2830,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2831,6 +2843,7 @@ dependencies = [
  "blueprint-client-tangle",
  "blueprint-std",
  "thiserror 2.0.18",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2848,6 +2861,7 @@ dependencies = [
  "serde",
  "syn 2.0.117",
  "trybuild",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2861,6 +2875,7 @@ dependencies = [
  "blueprint-runner",
  "blueprint-std",
  "proc-macro2",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2877,6 +2892,7 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2896,6 +2912,7 @@ dependencies = [
  "tokio",
  "tracing-subscriber 0.3.23",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2910,6 +2927,7 @@ dependencies = [
  "blueprint-crypto-k256",
  "blueprint-crypto-sr25519",
  "thiserror 2.0.18",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2928,6 +2946,7 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "tnt-bls",
+ "workspace-hack",
  "zeroize",
 ]
 
@@ -2950,6 +2969,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.18",
+ "workspace-hack",
  "zeroize",
 ]
 
@@ -2961,6 +2981,7 @@ dependencies = [
  "clap",
  "serde",
  "thiserror 2.0.18",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -2975,6 +2996,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
+ "workspace-hack",
  "zeroize",
 ]
 
@@ -2988,6 +3010,7 @@ dependencies = [
  "hkdf",
  "sha2 0.10.9",
  "sha3",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3004,6 +3027,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
+ "workspace-hack",
  "zeroize",
 ]
 
@@ -3019,6 +3043,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
+ "workspace-hack",
  "zeroize",
 ]
 
@@ -3054,6 +3079,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3076,6 +3102,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3107,6 +3134,7 @@ dependencies = [
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3134,6 +3162,7 @@ dependencies = [
  "tokio",
  "tracing",
  "warp",
+ "workspace-hack",
  "zip",
 ]
 
@@ -3157,6 +3186,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3195,6 +3225,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tnt-bls",
  "tokio",
+ "workspace-hack",
  "zeroize",
 ]
 
@@ -3211,6 +3242,7 @@ dependencies = [
  "syn 2.0.117",
  "tokio",
  "trybuild",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3298,6 +3330,7 @@ dependencies = [
  "url",
  "uuid 1.22.0",
  "walkdir",
+ "workspace-hack",
  "xz",
  "xz2",
 ]
@@ -3317,6 +3350,7 @@ dependencies = [
  "tonic 0.13.1",
  "tonic-build",
  "tower 0.5.3",
+ "workspace-hack",
  "zerocopy",
 ]
 
@@ -3325,6 +3359,7 @@ name = "blueprint-metrics"
 version = "0.2.0-alpha.1"
 dependencies = [
  "blueprint-metrics-rpc-calls",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3332,6 +3367,7 @@ name = "blueprint-metrics-rpc-calls"
 version = "0.2.0-alpha.1"
 dependencies = [
  "metrics",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3358,6 +3394,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing-subscriber 0.3.23",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3387,6 +3424,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing-subscriber 0.3.23",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3415,6 +3453,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.23",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3475,6 +3514,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid 1.22.0",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3487,6 +3527,7 @@ dependencies = [
  "futures",
  "tokio",
  "tokio-cron-scheduler",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3503,6 +3544,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3553,6 +3595,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber 0.3.23",
  "uuid 1.22.0",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3612,6 +3655,7 @@ dependencies = [
  "urlencoding",
  "uuid 1.22.0",
  "wiremock",
+ "workspace-hack",
  "zeroize",
 ]
 
@@ -3629,6 +3673,7 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3674,6 +3719,7 @@ dependencies = [
  "tower 0.5.3",
  "tracing",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3717,6 +3763,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3728,6 +3775,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "thiserror 2.0.18",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3739,6 +3787,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3748,6 +3797,7 @@ dependencies = [
  "blueprint-store-local-database",
  "document-features",
  "thiserror 2.0.18",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3779,6 +3829,7 @@ dependencies = [
  "tower 0.5.3",
  "tower-http 0.6.8",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3821,6 +3872,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.23",
  "url",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3850,6 +3902,7 @@ dependencies = [
  "tower 0.5.3",
  "tracing",
  "uuid 1.22.0",
+ "workspace-hack",
  "x25519-dalek",
  "zeroize",
 ]
@@ -3861,6 +3914,7 @@ dependencies = [
  "blueprint-anvil-testing-utils",
  "blueprint-core-testing-utils",
  "blueprint-eigenlayer-testing-utils",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3885,6 +3939,7 @@ dependencies = [
  "toml 1.0.7+spec-1.1.0",
  "tower 0.5.3",
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -3913,6 +3968,7 @@ dependencies = [
  "tower-http 0.6.8",
  "tracing",
  "url",
+ "workspace-hack",
  "x402-axum",
  "x402-chain-eip155",
  "x402-types",
@@ -4234,6 +4290,7 @@ dependencies = [
  "url",
  "uuid 1.22.0",
  "walkdir",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -7109,6 +7166,7 @@ dependencies = [
  "blueprint-tangle-extra",
  "once_cell",
  "tokio",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -7755,6 +7813,7 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -7804,6 +7863,7 @@ dependencies = [
  "tokio-util 0.7.18",
  "tracing-subscriber 0.3.23",
  "uuid 1.22.0",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -7838,6 +7898,7 @@ dependencies = [
  "serial_test",
  "tokio",
  "tracing-subscriber 0.3.23",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -10275,6 +10336,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing-subscriber 0.3.23",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -10300,6 +10362,7 @@ dependencies = [
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
  "uuid 1.22.0",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -15605,6 +15668,235 @@ dependencies = [
 [[package]]
 name = "workspace-hack"
 version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "aho-corasick",
+ "alloy",
+ "alloy-consensus",
+ "alloy-contract",
+ "alloy-core",
+ "alloy-dyn-abi",
+ "alloy-eip7702",
+ "alloy-eips",
+ "alloy-json-abi",
+ "alloy-network",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-rlp",
+ "alloy-rpc-client",
+ "alloy-rpc-types",
+ "alloy-rpc-types-eth",
+ "alloy-signer",
+ "alloy-signer-local",
+ "alloy-sol-macro",
+ "alloy-sol-macro-expander",
+ "alloy-sol-macro-input",
+ "alloy-sol-type-parser",
+ "alloy-sol-types",
+ "alloy-transport-http",
+ "anyhow",
+ "argon2",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
+ "arrayvec",
+ "async-compression",
+ "aws-config",
+ "aws-runtime",
+ "aws-sigv4",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-http-client",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "axum",
+ "base64 0.22.1",
+ "base64ct",
+ "bip39",
+ "bitflags 2.11.0",
+ "bitvec",
+ "blake3",
+ "bs58",
+ "bstr",
+ "byteorder",
+ "bytes",
+ "cc",
+ "chacha20poly1305",
+ "chrono",
+ "cipher",
+ "clap",
+ "clap_builder",
+ "color-eyre",
+ "compression-codecs",
+ "concurrent-queue",
+ "const-hex",
+ "constant_time_eq",
+ "crc32fast",
+ "crossbeam-utils",
+ "crunchy",
+ "crypto-common",
+ "curve25519-dalek",
+ "data-encoding",
+ "der",
+ "deranged",
+ "derive_more",
+ "digest 0.10.7",
+ "digest 0.9.0",
+ "displaydoc",
+ "ecdsa",
+ "ed25519",
+ "ed25519-zebra",
+ "eigensdk",
+ "either",
+ "elliptic-curve",
+ "env_filter",
+ "env_logger",
+ "errno",
+ "event-listener 5.4.1",
+ "foldhash 0.2.0",
+ "form_urlencoded",
+ "futures",
+ "futures-channel",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+ "generic-array",
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "getrandom_or_panic",
+ "hashbrown 0.14.5",
+ "hashbrown 0.15.5",
+ "hashbrown 0.16.1",
+ "hex",
+ "hmac",
+ "hyper 0.14.32",
+ "hyper 1.8.1",
+ "hyper-rustls 0.27.7",
+ "hyper-util",
+ "hyperlocal",
+ "idna",
+ "indexmap 2.13.0",
+ "itertools 0.13.0",
+ "itertools 0.14.0",
+ "jiff",
+ "jsonwebtoken 9.3.1",
+ "k256",
+ "k8s-openapi 0.21.1",
+ "keccak",
+ "kube 0.90.0",
+ "kube-client 0.90.0",
+ "kube-core 0.90.0",
+ "libc",
+ "libp2p",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "libsecp256k1",
+ "libsecp256k1-core",
+ "linux-raw-sys 0.12.1",
+ "log",
+ "memchr",
+ "mime_guess",
+ "miniz_oxide",
+ "multihash",
+ "nix 0.31.2",
+ "nom",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+ "objc2-core-foundation",
+ "objc2-io-kit",
+ "once_cell",
+ "openssl",
+ "openssl-sys",
+ "parking_lot 0.12.5",
+ "password-hash",
+ "percent-encoding",
+ "pkcs8",
+ "portable-atomic",
+ "ppv-lite86",
+ "predicates",
+ "proc-macro2",
+ "prost 0.13.5",
+ "quote",
+ "rand 0.8.5",
+ "rand 0.9.2",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "regex",
+ "regex-automata",
+ "regex-syntax",
+ "reqwest 0.12.28",
+ "ring 0.16.20",
+ "ring 0.17.14",
+ "round-based",
+ "ruint",
+ "rust_decimal",
+ "rustc-hash 2.1.1",
+ "rustix 1.1.4",
+ "rustls 0.23.37",
+ "rustls-pemfile 2.2.0",
+ "rustls-webpki 0.103.10",
+ "schnorrkel",
+ "sec1",
+ "security-framework-sys",
+ "semver 1.0.27",
+ "serde",
+ "serde_bytes",
+ "serde_core",
+ "serde_json",
+ "serde_spanned 1.0.4",
+ "serde_with",
+ "serial_test",
+ "serial_test_derive",
+ "sha1",
+ "sha2 0.10.9",
+ "sha3",
+ "signature",
+ "slab",
+ "smallvec",
+ "spki",
+ "strum",
+ "subtle",
+ "syn 1.0.109",
+ "syn 2.0.117",
+ "sync_wrapper 1.0.2",
+ "sysinfo 0.38.4",
+ "tempfile",
+ "testcontainers",
+ "thiserror 2.0.18",
+ "time",
+ "time-macros",
+ "tiny-keccak",
+ "tnt-bls",
+ "tokio",
+ "tokio-rustls 0.26.4",
+ "tokio-stream",
+ "tokio-util 0.7.18",
+ "toml 1.0.7+spec-1.1.0",
+ "toml_datetime 1.0.1+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "tonic 0.13.1",
+ "tonic-build",
+ "tower 0.5.3",
+ "tower-http 0.6.8",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
+ "tracing-subscriber 0.3.23",
+ "url",
+ "uuid 1.22.0",
+ "winnow 0.7.15",
+ "x25519-dalek",
+ "zerocopy",
+ "zeroize",
+]
 
 [[package]]
 name = "writeable"
@@ -15693,6 +15985,7 @@ dependencies = [
  "tokio",
  "toml 1.0.7+spec-1.1.0",
  "tower 0.5.3",
+ "workspace-hack",
 ]
 
 [[package]]

@@ -121,7 +121,6 @@ impl IntoJobResult for Infallible {
     }
 }
 
-// TODO: Is this possible to remove? Ideally, `Void` is the only way to return `None` from a handler.
 impl<T> IntoJobResult for Option<T>
 where
     T: IntoJobResult,

@@ -1,13 +1,14 @@
 use std::time::{Duration, Instant};
 
 use alloy_primitives::Address;
+use bincode::Options;
 use blueprint_core::{debug, warn};
 use blueprint_crypto::{BytesEncoding, KeyType, hashing::keccak_256};
 use libp2p::{PeerId, request_response};
 
 use crate::blueprint_protocol::HandshakeMessage;
 use crate::discovery::peers::VerificationIdentifierKey;
-use crate::types::ProtocolMessage;
+use crate::types::{MAX_MESSAGE_SIZE, ProtocolMessage};
 
 use super::{BlueprintProtocolBehaviour, InstanceMessageRequest, InstanceMessageResponse};
 
@@ -188,7 +189,14 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                     return;
                 }
 
-                let protocol_message: ProtocolMessage = match bincode::deserialize(&payload) {
+                if !self.check_peer_rate_limit(&peer) {
+                    return;
+                }
+
+                let protocol_message: ProtocolMessage = match bincode::options()
+                    .with_limit(MAX_MESSAGE_SIZE as u64)
+                    .deserialize(&payload)
+                {
                     Ok(message) => message,
                     Err(e) => {
                         warn!(%peer, "Failed to deserialize protocol message: {:?}", e);

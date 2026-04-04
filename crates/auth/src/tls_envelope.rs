@@ -234,6 +234,18 @@ fn load_key_from_file(path: &Path) -> Result<TlsEnvelopeKey, TlsEnvelopeError> {
 
 /// Save key to file with secure permissions
 fn save_key_to_file(key: &TlsEnvelopeKey, path: &Path) -> Result<(), TlsEnvelopeError> {
+    #[cfg(unix)]
+    let mut file = {
+        use std::os::unix::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?
+    };
+    #[cfg(not(unix))]
     let mut file = fs::File::create(path).map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
 
     file.write_all(key.as_bytes())
@@ -241,15 +253,6 @@ fn save_key_to_file(key: &TlsEnvelopeKey, path: &Path) -> Result<(), TlsEnvelope
 
     file.sync_all()
         .map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
-
-    // Set restrictive permissions on the key file (Unix only)
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let permissions = std::fs::Permissions::from_mode(0o600);
-        fs::set_permissions(path, permissions)
-            .map_err(|e| TlsEnvelopeError::IoError(e.to_string()))?;
-    }
 
     Ok(())
 }

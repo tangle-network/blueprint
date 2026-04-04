@@ -223,7 +223,10 @@ impl ApiKeyModel {
             let computed_hash = CUSTOM_ENGINE.encode(output);
 
             use subtle::ConstantTimeEq;
-            self.key_hash.as_bytes().ct_eq(computed_hash.as_bytes()).into()
+            self.key_hash
+                .as_bytes()
+                .ct_eq(computed_hash.as_bytes())
+                .into()
         } else {
             false
         }

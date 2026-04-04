@@ -116,7 +116,10 @@ impl ProtocolSettingsT for ProtocolSettings {
             }
             #[cfg(feature = "symbiotic")]
             Some(Protocol::Symbiotic) => {
-                return Err(ConfigError::InvalidArgument("Symbiotic protocol is not yet supported".into()).into());
+                return Err(ConfigError::InvalidArgument(
+                    "Symbiotic protocol is not yet supported".into(),
+                )
+                .into());
             }
             None => ProtocolSettings::None,
             _ => unreachable!("should be exhaustive"),
@@ -180,20 +183,6 @@ impl ProtocolSettings {
             _ => Err(ConfigError::UnexpectedProtocol("Eigenlayer")),
         }
     }
-
-    // TODO
-    // /// Attempt to extract the [`SymbioticContractAddresses`]
-    // ///
-    // /// # Errors
-    // ///
-    // /// `self` is not [`ProtocolSettings::Symbiotic`]
-    // ///
-    // /// [`SymbioticContractAddresses`]: crate::symbiotic::config::SymbioticContractAddresses
-    // #[cfg(feature = "symbiotic")]
-    // #[allow(clippy::match_wildcard_for_single_variants)]
-    // pub fn symbiotic(&self) -> Result<(), ConfigError> {
-    //     todo!()
-    // }
 }
 
 /// Description of the environment in which the blueprint is running
@@ -303,10 +292,9 @@ impl BlueprintEnvironment {
         load_inner(config)
     }
 
-    // TODO: this shouldn't be exclusive to the std feature
     #[cfg(feature = "std")]
     #[must_use]
-    #[allow(clippy::missing_panics_doc)] // TODO: Should return errors
+    #[allow(clippy::missing_panics_doc)]
     pub fn keystore(&self) -> Keystore {
         let config = KeystoreConfig::new().fs_root(self.keystore_uri.clone());
         Keystore::new(config).expect("Failed to create keystore")

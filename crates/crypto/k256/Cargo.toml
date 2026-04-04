@@ -20,6 +20,7 @@ hex = { workspace = true, features = ["alloc"] }
 zeroize = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-primitives = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["alloc"] }

@@ -259,6 +259,7 @@ pub struct Layered<L, J, T, Ctx> {
     _marker: PhantomData<fn() -> (T, Ctx)>,
 }
 
+#[allow(clippy::missing_fields_in_debug)] // PhantomData and non-Debug job intentionally omitted
 impl<L, J, T, Ctx> fmt::Debug for Layered<L, J, T, Ctx>
 where
     L: fmt::Debug,

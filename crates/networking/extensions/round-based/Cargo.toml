@@ -28,6 +28,7 @@ crossbeam = { workspace = true }
 crossbeam-channel = { workspace = true }
 thiserror = { workspace = true }
 libp2p = { workspace = true, features = ["identify"] }
+workspace-hack = { version = "0.1", path = "../../../../workspace-hack" }
 
 [dev-dependencies]
 round-based = { workspace = true, features = ["derive", "sim", "sim-async"] }

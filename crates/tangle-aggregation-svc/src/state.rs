@@ -231,7 +231,7 @@ impl TaskState {
     /// Get list of operators who have signed
     pub fn get_signers(&self) -> Vec<u32> {
         let mut signers: Vec<_> = self.signatures.keys().copied().collect();
-        signers.sort();
+        signers.sort_unstable();
         signers
     }
 

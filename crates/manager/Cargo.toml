@@ -102,6 +102,7 @@ rtnetlink = { workspace = true, features = ["tokio_socket"], optional = true }
 ipnet = { workspace = true, optional = true }
 netdev = { workspace = true, features = ["gateway"], optional = true }
 nftables = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = ["containers"]

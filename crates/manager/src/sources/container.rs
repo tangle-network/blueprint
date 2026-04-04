@@ -30,7 +30,6 @@ impl ContainerSource {
     }
 }
 
-// TODO(serial): Stop using `Error::Other` everywhere.
 impl BlueprintSourceHandler for ContainerSource {
     async fn fetch(&mut self, _cache_dir: &Path) -> Result<PathBuf> {
         if let Some(resolved_image) = &self.resolved_image {

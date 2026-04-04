@@ -399,7 +399,7 @@ impl ProfileRunner {
             return 0;
         }
 
-        let index = ((sorted_data.len() as f64) * (percentile as f64 / 100.0)).ceil() as usize;
+        let index = ((sorted_data.len() as f64) * (f64::from(percentile) / 100.0)).ceil() as usize;
         let index = index.saturating_sub(1).min(sorted_data.len() - 1);
         sorted_data[index]
     }

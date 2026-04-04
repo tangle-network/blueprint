@@ -3,8 +3,8 @@ use crate::blueprint_protocol::HandshakeMessage;
 use crate::discovery::PeerManager;
 use crate::discovery::peers::VerificationIdentifierKey;
 use crate::discovery::utils::get_address_from_compressed_pubkey;
-use crate::types::ProtocolMessage;
-use bincode;
+use crate::types::{MAX_MESSAGE_SIZE, ProtocolMessage};
+use bincode::Options;
 use blueprint_core::{debug, error, info, warn};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::KeyType;
@@ -22,6 +22,7 @@ use libp2p::{
     },
 };
 use std::{
+    collections::HashMap,
     sync::Arc,
     task::Poll,
     time::{Duration, Instant},
@@ -79,6 +80,10 @@ pub struct BlueprintProtocolBehaviour<K: KeyType> {
     pub(crate) protocol_message_sender: Sender<ProtocolMessage>,
     /// Flag for using addresses for whitelisting and handshake verification
     pub(crate) use_address_for_handshake_verification: bool,
+    /// Per-peer rate limiting: (window_start, request_count)
+    pub(crate) peer_request_rates: HashMap<PeerId, (Instant, u32)>,
+    /// Last time stale rate-limit entries were cleaned up
+    peer_rate_cleanup: Instant,
 }
 
 impl<K: KeyType> BlueprintProtocolBehaviour<K> {
@@ -141,6 +146,8 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
             outbound_handshakes: DashMap::new(),
             protocol_message_sender,
             use_address_for_handshake_verification,
+            peer_request_rates: HashMap::new(),
+            peer_rate_cleanup: Instant::now(),
         }
     }
 
@@ -338,6 +345,35 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
         }
     }
 
+    const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(10);
+    const RATE_LIMIT_MAX_REQUESTS: u32 = 100;
+    const RATE_CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
+
+    pub(crate) fn check_peer_rate_limit(&mut self, peer: &PeerId) -> bool {
+        let now = Instant::now();
+
+        // Periodic cleanup of stale entries
+        if now.duration_since(self.peer_rate_cleanup) > Self::RATE_CLEANUP_INTERVAL {
+            self.peer_request_rates.retain(|_, (window_start, _)| {
+                now.duration_since(*window_start) < Self::RATE_LIMIT_WINDOW
+            });
+            self.peer_rate_cleanup = now;
+        }
+
+        let entry = self.peer_request_rates.entry(*peer).or_insert((now, 0));
+        if now.duration_since(entry.0) > Self::RATE_LIMIT_WINDOW {
+            // Reset window
+            *entry = (now, 1);
+            return true;
+        }
+        entry.1 += 1;
+        if entry.1 > Self::RATE_LIMIT_MAX_REQUESTS {
+            warn!(%peer, count = entry.1, "Per-peer rate limit exceeded, dropping message");
+            return false;
+        }
+        true
+    }
+
     pub fn handle_gossipsub_event(&mut self, event: gossipsub::Event) {
         match event {
             gossipsub::Event::Message {
@@ -351,10 +387,16 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                     return;
                 }
 
+                if !self.check_peer_rate_limit(&propagation_source) {
+                    return;
+                }
+
                 debug!(%propagation_source, "Received gossip message");
 
-                // Deserialize the protocol message
-                let Ok(protocol_message) = bincode::deserialize::<ProtocolMessage>(&message.data)
+                // Deserialize with bounded size to prevent memory amplification
+                let Ok(protocol_message) = bincode::options()
+                    .with_limit(MAX_MESSAGE_SIZE as u64)
+                    .deserialize::<ProtocolMessage>(&message.data)
                 else {
                     warn!(%propagation_source, "Failed to deserialize gossip message");
                     return;

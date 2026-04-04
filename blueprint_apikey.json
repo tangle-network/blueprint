@@ -1,36 +1,36 @@
 {
+  "name": "apikey-blueprint",
   "description": "API key issuance and resource blueprint",
+  "version": "0.2.0-alpha.1",
+  "master_revision": "Latest",
+  "manager": {
+    "Evm": "ApikeyBlueprintBSM"
+  },
   "jobs": [
     {
+      "name": "write_resource",
+      "job_index": 0,
       "inputs": [
         "string",
         "string",
         "address"
       ],
-      "job_index": 0,
-      "name": "write_resource",
       "outputs": [
         "tuple(bool,string,string)"
       ],
       "required_results": 1
     },
     {
+      "name": "purchase_api_key",
+      "job_index": 1,
       "inputs": [
         "string",
         "address"
       ],
-      "job_index": 1,
-      "name": "purchase_api_key",
       "outputs": [
         "tuple(bool,string)"
       ],
       "required_results": 1
     }
-  ],
-  "manager": {
-    "Evm": "ApikeyBlueprintBSM"
-  },
-  "master_revision": "Latest",
-  "name": "apikey-blueprint",
-  "version": "0.2.0-alpha.1"
+  ]
 }

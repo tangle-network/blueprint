@@ -5,6 +5,7 @@ use crate::{
     protocol_state::{AggregationState, ProtocolRound},
     signature_weight::SignatureWeight,
 };
+use bincode::Options;
 use blueprint_core::{debug, error, warn};
 use blueprint_crypto::{aggregation::AggregatableSignature, hashing::blake3_256};
 use blueprint_gossip_primitives::DeduplicationCache;
@@ -168,8 +169,8 @@ where
         );
 
         Self {
-            state,
             config,
+            state,
             weight_scheme,
             aggregator_selector,
             participant_public_keys,
@@ -286,7 +287,9 @@ where
         let sender_id = routing.sender;
 
         // Deserialize the message
-        let message = bincode::deserialize::<AggSigMessage<S>>(&protocol_msg.payload)?;
+        let message = bincode::options()
+            .with_limit(blueprint_networking::types::MAX_MESSAGE_SIZE as u64)
+            .deserialize::<AggSigMessage<S>>(&protocol_msg.payload)?;
 
         match message {
             AggSigMessage::SignatureShare {

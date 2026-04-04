@@ -336,7 +336,7 @@ async fn poll_for_jobs(
                     Some(ts) => *ts,
                     None => {
                         match client
-                            .get_block(BlockNumberOrTag::Number(log_block.into()))
+                            .get_block(BlockNumberOrTag::Number(log_block))
                             .await
                         {
                             Ok(Some(block)) => {

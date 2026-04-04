@@ -285,7 +285,44 @@ impl SecureSshClient {
         Ok(ssh_cmd)
     }
 
-    /// Validate command for basic security
+    /// Allowed command prefixes for SSH execution.
+    /// Commands must start with one of these prefixes to be accepted.
+    const ALLOWED_CMD_PREFIXES: &'static [&'static str] = &[
+        "echo ",
+        "docker ",
+        "podman ",
+        "ctr ",
+        "sudo ",
+        "mkdir ",
+        "chmod ",
+        "systemctl ",
+        "apt-get ",
+        "curl ",
+        "nginx ",
+        "cat ",
+        "tee ",
+        "install ",
+        "test ",
+        "ls ",
+        "cp ",
+        "mv ",
+        "rm ",
+        "tar ",
+        "sysctl ",
+        "journalctl ",
+        "grep ",
+        "head ",
+        "tail ",
+        "stat ",
+        "uname ",
+        "whoami",
+        "id ",
+        "ip ",
+        "#",  // shell comments (multi-line scripts)
+        "\n", // multi-line scripts starting with newline
+    ];
+
+    /// Validate command against an allowlist of permitted prefixes.
     fn validate_command(&self, command: &str) -> Result<()> {
         if command.is_empty() {
             return Err(Error::ConfigurationError(
@@ -297,16 +334,40 @@ impl SecureSshClient {
             return Err(Error::ConfigurationError("Command too long".into()));
         }
 
-        // Check for extremely dangerous patterns
+        // Reject NUL bytes — can truncate strings in C-based tooling
+        if command.contains('\0') {
+            return Err(Error::ConfigurationError(
+                "Command contains null bytes".into(),
+            ));
+        }
+
+        // Check each line of multi-line commands against the allowlist
+        let trimmed = command.trim();
+        for line in trimmed.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if !Self::ALLOWED_CMD_PREFIXES
+                .iter()
+                .any(|prefix| line.starts_with(prefix))
+            {
+                return Err(Error::ConfigurationError(format!(
+                    "Command not in allowlist: {}",
+                    line.chars().take(80).collect::<String>()
+                )));
+            }
+        }
+
+        // Reject known destructive patterns even if prefix-allowed
         let dangerous_patterns = [
             "rm -rf /",
-            ":(){ :|:& };:", // Fork bomb
+            ":(){ :|:& };:",
             "dd if=/dev/zero",
             "mkfs.",
             "fdisk",
             "parted",
         ];
-
         for pattern in &dangerous_patterns {
             if command.contains(pattern) {
                 return Err(Error::ConfigurationError(format!(

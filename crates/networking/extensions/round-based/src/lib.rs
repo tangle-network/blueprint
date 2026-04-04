@@ -240,7 +240,7 @@ where
                             );
                             Poll::Ready(Some(Ok(Incoming {
                                 msg,
-                                sender: u16::try_from(sender_index).unwrap_or(0),
+                                sender: sender_index,
                                 id,
                                 msg_type,
                             })))
