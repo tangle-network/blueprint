@@ -537,6 +537,103 @@ impl PricingEngine for PricingEngineService {
     }
 }
 
+/// Internal settlement option (pre-proto conversion).
+struct SettlementOptionInternal {
+    network: String,
+    asset: String,
+    symbol: String,
+    amount: String,
+    pay_to: String,
+    scheme: String,
+}
+
+/// Convert a wei price into settlement options for each accepted token.
+///
+/// Note: this conversion logic is intentionally kept in sync with
+/// `AcceptedToken::convert_wei_to_amount` in `crates/x402/src/config.rs`.
+/// A cyclic dependency prevents importing it directly.
+fn convert_settlement_token(
+    token: &X402AcceptedToken,
+    price_wei: alloy_primitives::U256,
+) -> std::result::Result<SettlementOptionInternal, String> {
+    let wei_decimal = rust_decimal::Decimal::from_str_exact(&price_wei.to_string())
+        .map_err(|e| format!("wei→Decimal: {e}"))?;
+    let native_unit = rust_decimal::Decimal::from(10u64.pow(18));
+    let native_amount = wei_decimal / native_unit;
+    let token_amount = native_amount * token.rate_per_native_unit;
+    let markup = rust_decimal::Decimal::ONE
+        + rust_decimal::Decimal::from(token.markup_bps) / rust_decimal::Decimal::from(10_000u32);
+    let final_amount = token_amount * markup;
+    let token_unit = rust_decimal::Decimal::from(10u64.pow(u32::from(token.decimals)));
+    let smallest_units = (final_amount * token_unit).floor().to_string();
+
+    Ok(SettlementOptionInternal {
+        network: token.network.clone(),
+        asset: token.asset.clone(),
+        symbol: token.symbol.clone(),
+        amount: smallest_units,
+        pay_to: token.pay_to.clone(),
+        scheme: "exact".into(),
+    })
+}
+
+fn compute_settlement_options(
+    accepted_tokens: &[X402AcceptedToken],
+    price_wei: alloy_primitives::U256,
+) -> Vec<SettlementOptionInternal> {
+    accepted_tokens
+        .iter()
+        .filter_map(|token| match convert_settlement_token(token, price_wei) {
+            Ok(opt) => Some(opt),
+            Err(e) => {
+                warn!("Dropping settlement option for {}: {e}", token.symbol);
+                None
+            }
+        })
+        .collect()
+}
+
+// Function to run the server (called from main.rs)
+pub async fn run_rpc_server(
+    config: Arc<OperatorConfig>,
+    benchmark_cache: Arc<BenchmarkCache>,
+    pricing_config: Arc<
+        Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
+    >,
+    job_pricing_config: Arc<Mutex<JobPricingConfig>>,
+    subscription_config: SubscriptionPricingConfig,
+    signer: Arc<Mutex<OperatorSigner>>,
+) -> anyhow::Result<()> {
+    let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
+    info!("gRPC server listening on {}", addr);
+
+    let pricing_service = PricingEngineService::new_with_configs(
+        config,
+        benchmark_cache,
+        pricing_config,
+        job_pricing_config,
+        subscription_config,
+        signer,
+    );
+    let server = PricingEngineServer::new(pricing_service);
+
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_headers(Any)
+        .allow_methods(Any)
+        .expose_headers(Any);
+
+    Server::builder()
+        .accept_http1(true)
+        .layer(cors)
+        .layer(tonic_web::GrpcWebLayer::new())
+        .add_service(server)
+        .serve(addr)
+        .await?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1138,101 +1235,4 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
         assert!(err.message().contains("Unknown pricing_model"));
     }
-}
-
-/// Internal settlement option (pre-proto conversion).
-struct SettlementOptionInternal {
-    network: String,
-    asset: String,
-    symbol: String,
-    amount: String,
-    pay_to: String,
-    scheme: String,
-}
-
-/// Convert a wei price into settlement options for each accepted token.
-///
-/// Note: this conversion logic is intentionally kept in sync with
-/// `AcceptedToken::convert_wei_to_amount` in `crates/x402/src/config.rs`.
-/// A cyclic dependency prevents importing it directly.
-fn convert_settlement_token(
-    token: &X402AcceptedToken,
-    price_wei: alloy_primitives::U256,
-) -> std::result::Result<SettlementOptionInternal, String> {
-    let wei_decimal = rust_decimal::Decimal::from_str_exact(&price_wei.to_string())
-        .map_err(|e| format!("wei→Decimal: {e}"))?;
-    let native_unit = rust_decimal::Decimal::from(10u64.pow(18));
-    let native_amount = wei_decimal / native_unit;
-    let token_amount = native_amount * token.rate_per_native_unit;
-    let markup = rust_decimal::Decimal::ONE
-        + rust_decimal::Decimal::from(token.markup_bps) / rust_decimal::Decimal::from(10_000u32);
-    let final_amount = token_amount * markup;
-    let token_unit = rust_decimal::Decimal::from(10u64.pow(u32::from(token.decimals)));
-    let smallest_units = (final_amount * token_unit).floor().to_string();
-
-    Ok(SettlementOptionInternal {
-        network: token.network.clone(),
-        asset: token.asset.clone(),
-        symbol: token.symbol.clone(),
-        amount: smallest_units,
-        pay_to: token.pay_to.clone(),
-        scheme: "exact".into(),
-    })
-}
-
-fn compute_settlement_options(
-    accepted_tokens: &[X402AcceptedToken],
-    price_wei: alloy_primitives::U256,
-) -> Vec<SettlementOptionInternal> {
-    accepted_tokens
-        .iter()
-        .filter_map(|token| match convert_settlement_token(token, price_wei) {
-            Ok(opt) => Some(opt),
-            Err(e) => {
-                warn!("Dropping settlement option for {}: {e}", token.symbol);
-                None
-            }
-        })
-        .collect()
-}
-
-// Function to run the server (called from main.rs)
-pub async fn run_rpc_server(
-    config: Arc<OperatorConfig>,
-    benchmark_cache: Arc<BenchmarkCache>,
-    pricing_config: Arc<
-        Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
-    >,
-    job_pricing_config: Arc<Mutex<JobPricingConfig>>,
-    subscription_config: SubscriptionPricingConfig,
-    signer: Arc<Mutex<OperatorSigner>>,
-) -> anyhow::Result<()> {
-    let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
-    info!("gRPC server listening on {}", addr);
-
-    let pricing_service = PricingEngineService::new_with_configs(
-        config,
-        benchmark_cache,
-        pricing_config,
-        job_pricing_config,
-        subscription_config,
-        signer,
-    );
-    let server = PricingEngineServer::new(pricing_service);
-
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_headers(Any)
-        .allow_methods(Any)
-        .expose_headers(Any);
-
-    Server::builder()
-        .accept_http1(true)
-        .layer(cors)
-        .layer(tonic_web::GrpcWebLayer::new())
-        .add_service(server)
-        .serve(addr)
-        .await?;
-
-    Ok(())
 }

@@ -55,8 +55,9 @@ async fn test_sign_and_verify_quote() -> Result<()> {
         signed_quote.quote_details.ttl_blocks, quote_details.ttl_blocks,
         "TTL blocks should match"
     );
-    assert_eq!(
-        signed_quote.quote_details.total_cost_rate, quote_details.total_cost_rate,
+    assert!(
+        (signed_quote.quote_details.total_cost_rate - quote_details.total_cost_rate).abs()
+            < f64::EPSILON,
         "Total cost rate should match"
     );
 

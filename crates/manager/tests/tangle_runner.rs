@@ -310,7 +310,7 @@ async fn run_minimal_runner_loop(
                 match router.call(job_call).await {
                     Ok(Some(results)) => {
                         let result_len = results.len();
-                        if let Some(first) = results.get(0) {
+                        if let Some(first) = results.first() {
                             match first {
                                 JobResult::Ok { head, .. } => {
                                     blueprint_core::info!(
@@ -329,7 +329,7 @@ async fn run_minimal_runner_loop(
                             }
                         }
                         if let Some(tx) = result_tx.take() {
-                            if let Some(JobResult::Ok { body, .. }) = results.get(0) {
+                            if let Some(JobResult::Ok { body, .. }) = results.first() {
                                 let _ = tx.send(body.to_vec());
                             }
                         }
@@ -499,20 +499,18 @@ async fn echo_job(TangleArg((input,)): TangleArg<(Bytes,)>) -> TangleResult<Vec<
 struct TestRunnerConfig;
 
 impl BlueprintConfig for TestRunnerConfig {
-    fn register(
+    async fn register(
         &self,
         _env: &BlueprintEnvironment,
-    ) -> impl std::future::Future<Output = Result<(), blueprint_runner::error::RunnerError>> + Send
-    {
-        async { Ok(()) }
+    ) -> Result<(), blueprint_runner::error::RunnerError> {
+        Ok(())
     }
 
-    fn requires_registration(
+    async fn requires_registration(
         &self,
         _env: &BlueprintEnvironment,
-    ) -> impl std::future::Future<Output = Result<bool, blueprint_runner::error::RunnerError>> + Send
-    {
-        async { Ok(false) }
+    ) -> Result<bool, blueprint_runner::error::RunnerError> {
+        Ok(false)
     }
 
     fn should_exit_after_registration(&self) -> bool {

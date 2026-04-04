@@ -26,6 +26,7 @@ use crate::tests::util::{
 const OPERATOR1_ADDRESS: &str = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 
 /// Account 3 (delegator) - has TNT tokens, not yet registered as operator.
+#[allow(dead_code)]
 const OPERATOR3_ADDRESS: &str = "0x90F79bf6EB2c4f870365E785982E1f101E93b906";
 const OPERATOR3_PRIVATE_KEY: &str =
     "7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6";

@@ -117,7 +117,7 @@ async fn test_multi_operator_same_service() -> Result<()> {
         }
 
         ensure!(
-            operators.len() >= 1,
+            !operators.is_empty(),
             "service should have at least one operator"
         );
 

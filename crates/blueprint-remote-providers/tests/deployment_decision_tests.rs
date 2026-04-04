@@ -1,4 +1,5 @@
 #![cfg(feature = "aws")]
+#![allow(clippy::float_cmp)]
 //! Tests for deployment decision logic - NO MOCKS
 //!
 //! Validates:

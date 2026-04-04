@@ -228,10 +228,10 @@ fn base_qos_config(service_id: u64, blueprint_id: u64, status_registry: Address)
     config.docker_network = None;
     config.service_id = Some(service_id);
     config.blueprint_id = Some(blueprint_id);
-    config.metrics.as_mut().map(|m| {
+    if let Some(m) = config.metrics.as_mut() {
         m.collection_interval_secs = 1;
         m.max_history = 10;
-    });
+    }
     config.heartbeat = Some(HeartbeatConfig {
         interval_secs: 5,
         jitter_percent: 5,
@@ -348,11 +348,10 @@ async fn verify_heartbeat_on_chain(
         .await
         .context("failed to connect to anvil provider")?;
 
-    let registry =
-        IOperatorStatusRegistry::new(deployment.status_registry_contract.into(), provider);
+    let registry = IOperatorStatusRegistry::new(deployment.status_registry_contract, provider);
 
     let last = registry
-        .getLastHeartbeat(service_id, operator.into())
+        .getLastHeartbeat(service_id, operator)
         .call()
         .await
         .context("failed to fetch last heartbeat")?;

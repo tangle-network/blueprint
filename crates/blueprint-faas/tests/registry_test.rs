@@ -49,7 +49,7 @@ impl FaasExecutor for StubExecutor {
         Ok(())
     }
 
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         "Stub FaaS"
     }
 }

@@ -230,11 +230,11 @@ mod tests {
     use alloy_primitives::Address;
     use axum::http::HeaderValue;
     use axum::routing::get;
-    use once_cell::sync::Lazy;
+    use std::sync::LazyLock;
     use tokio::sync::Mutex as AsyncMutex;
     use tower::ServiceExt;
 
-    static TEST_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
+    static TEST_LOCK: LazyLock<AsyncMutex<()>> = LazyLock::new(|| AsyncMutex::new(()));
 
     #[tokio::test]
     async fn purchase_and_use_api_key() {

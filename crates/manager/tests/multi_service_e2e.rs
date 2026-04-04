@@ -305,7 +305,7 @@ async fn run_processor(
                     .map_err(|_| anyhow!("invalid service_id metadata"))?;
 
                 if let Ok(Some(results)) = svc.call(call).await {
-                    let send_result = match results.get(0) {
+                    let send_result = match results.first() {
                         Some(blueprint_core::JobResult::Ok { body, .. }) => Ok(body.to_vec()),
                         Some(blueprint_core::JobResult::Err(err)) => {
                             Err(anyhow!("job returned error: {err:?}"))

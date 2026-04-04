@@ -95,7 +95,7 @@ async fn test_faas_and_local_execution_e2e() -> Result<()> {
                 server_handle.abort();
                 return Ok(());
             }
-            return Err(err.into());
+            return Err(err);
         }
     };
 
