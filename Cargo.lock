@@ -2657,6 +2657,7 @@ dependencies = [
  "schnorrkel",
  "serde",
  "serde_json",
+ "subtle",
  "tempfile",
  "thiserror 2.0.18",
  "time",
@@ -2927,6 +2928,7 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "tnt-bls",
+ "zeroize",
 ]
 
 [[package]]
@@ -2948,6 +2950,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.18",
+ "zeroize",
 ]
 
 [[package]]
@@ -2972,6 +2975,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
+ "zeroize",
 ]
 
 [[package]]
@@ -3000,6 +3004,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
+ "zeroize",
 ]
 
 [[package]]
@@ -3014,6 +3019,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
+ "zeroize",
 ]
 
 [[package]]

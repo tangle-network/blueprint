@@ -136,7 +136,8 @@ impl AccessTokenClaims {
                 let mut output = [0u8; 32];
                 hasher.finalize(&mut output);
                 let expected = hex::encode(output);
-                expected == *binding
+                use subtle::ConstantTimeEq;
+                bool::from(expected.as_bytes().ct_eq(binding.as_bytes()))
             }
             _ => false, // Mismatch between tenant_id and binding presence
         }

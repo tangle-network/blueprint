@@ -130,6 +130,22 @@ impl K256Signature {
     }
 }
 
+impl zeroize::Zeroize for K256SigningKey {
+    fn zeroize(&mut self) {
+        let ptr = (&raw mut self.0).cast::<u8>();
+        let len = core::mem::size_of::<k256::ecdsa::SigningKey>();
+        unsafe { core::ptr::write_bytes(ptr, 0, len) };
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl Drop for K256SigningKey {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.zeroize();
+    }
+}
+
 impl KeyType for K256Ecdsa {
     type Secret = K256SigningKey;
     type Public = K256VerifyingKey;

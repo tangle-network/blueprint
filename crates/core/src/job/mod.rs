@@ -313,7 +313,7 @@ where
             ) -> _,
         > = svc.oneshot(call).map(|result| match result {
             Ok(res) => res.into_job_result(),
-            Err(_err) => todo!("JobService needs to return a result"),
+            Err(_err) => None,
         });
 
         future::LayeredFuture::new(future)

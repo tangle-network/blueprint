@@ -189,6 +189,7 @@ struct SettlementDetails {
 struct PaymentAttribution {
     network: Option<String>,
     token: Option<String>,
+    #[allow(dead_code)]
     settled_payer: Option<Address>,
 }
 

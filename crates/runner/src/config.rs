@@ -116,7 +116,7 @@ impl ProtocolSettingsT for ProtocolSettings {
             }
             #[cfg(feature = "symbiotic")]
             Some(Protocol::Symbiotic) => {
-                todo!()
+                return Err(ConfigError::InvalidArgument("Symbiotic protocol is not yet supported".into()).into());
             }
             None => ProtocolSettings::None,
             _ => unreachable!("should be exhaustive"),

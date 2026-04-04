@@ -23,6 +23,7 @@ serde = { workspace = true, features = ["derive", "alloc"] }
 hex = { workspace = true, features = ["serde", "alloc"] }
 base64 = { workspace = true, features = ["alloc"] }
 crc32fast = { workspace = true }
+subtle = { workspace = true }
 
 k256 = { workspace = true, features = ["ecdsa", "alloc", "serde", "pem"] }
 schnorrkel = { workspace = true }

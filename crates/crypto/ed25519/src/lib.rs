@@ -137,6 +137,22 @@ impl Ed25519Signature {
     }
 }
 
+impl zeroize::Zeroize for Ed25519SigningKey {
+    fn zeroize(&mut self) {
+        let ptr = (&raw mut self.0).cast::<u8>();
+        let len = core::mem::size_of::<ed25519_zebra::SigningKey>();
+        unsafe { core::ptr::write_bytes(ptr, 0, len) };
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl Drop for Ed25519SigningKey {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.zeroize();
+    }
+}
+
 impl KeyType for Ed25519Zebra {
     type Public = Ed25519VerificationKey;
     type Secret = Ed25519SigningKey;

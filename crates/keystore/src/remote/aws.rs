@@ -19,11 +19,13 @@ pub struct AwsRemoteSignerConfig {
     pub keys: Vec<AwsKeyConfig>,
 }
 
-impl From<RemoteConfig> for AwsRemoteSignerConfig {
-    fn from(config: RemoteConfig) -> Self {
+impl TryFrom<RemoteConfig> for AwsRemoteSignerConfig {
+    type Error = crate::error::Error;
+
+    fn try_from(config: RemoteConfig) -> core::result::Result<Self, Self::Error> {
         match config {
-            RemoteConfig::Aws { keys } => Self { keys },
-            _ => panic!("Invalid config"),
+            RemoteConfig::Aws { keys } => Ok(Self { keys }),
+            _ => Err(crate::error::Error::InvalidConfig),
         }
     }
 }
@@ -79,7 +81,7 @@ impl EcdsaRemoteSigner<K256Ecdsa> for AwsRemoteSigner {
     type Config = AwsRemoteSignerConfig;
 
     async fn build(config: RemoteConfig) -> Result<Self> {
-        Self::new(config.into()).await
+        Self::new(config.try_into()?).await
     }
 
     async fn get_public_key(
