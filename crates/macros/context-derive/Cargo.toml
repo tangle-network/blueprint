@@ -22,7 +22,7 @@ proc-macro2 = { workspace = true }
 
 [dev-dependencies]
 blueprint-context-derive = { path = ".", features = ["std", "evm", "tangle", "networking"] }
-blueprint-sdk = { path = "../../sdk", features = [
+blueprint-sdk = { workspace = true, features = [
     "std",
     "macros",
     "evm",
