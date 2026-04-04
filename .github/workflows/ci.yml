@@ -30,6 +30,7 @@ jobs:
           rust-toolchain: ${{ env.RUSTFMT_NIGHTLY }}
           components: rustfmt
           cache: "false"
+          sccache: "false"
           foundry: "false"
 
       - name: Check Formatting
@@ -58,11 +59,36 @@ jobs:
           cache: "false"
           foundry: "false"
 
+      - name: Detect changed crates (PRs only)
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin ${{ github.base_ref }} --depth=1
+            CHANGED=$(./scripts/ci/changed-crates.sh origin/${{ github.base_ref }})
+            echo "crates=$CHANGED" >> $GITHUB_OUTPUT
+            echo "Changed crates: $CHANGED" >&2
+          else
+            echo 'crates=[]' >> $GITHUB_OUTPUT
+          fi
+
       - name: Generate test matrix (grouped)
         id: set-matrix
         run: |
-          # Get all workspace package names
-          ALL_PKGS=$(cargo metadata --format-version 1 --no-deps | jq -r '[.packages[] | .name] | sort | .[]')
+          CHANGED='${{ steps.changed.outputs.crates }}'
+
+          # On push to main or if changed-crates returned empty (meaning "test all"),
+          # test all workspace packages
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "$CHANGED" = "[]" ]; then
+            ALL_PKGS=$(cargo metadata --format-version 1 --no-deps | jq -r '[.packages[] | .name] | sort | .[]')
+          else
+            # On PRs, only test changed crates + dependents
+            ALL_PKGS=$(echo "$CHANGED" | jq -r '.[]' | sort)
+            if [ -z "$ALL_PKGS" ]; then
+              echo "No crates to test"
+              echo 'matrix=[]' >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
 
           # Serial crates that need test-threads=1
           SERIAL="blueprint-tangle-extra blueprint-client-tangle blueprint-client-evm blueprint-networking blueprint-qos cargo-tangle blueprint-manager"

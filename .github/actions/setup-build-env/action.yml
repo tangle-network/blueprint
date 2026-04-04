@@ -1,5 +1,5 @@
 name: Setup Build Environment
-description: Install Rust, LLVM, protobuf, GMP, Foundry, and configure caching
+description: Install Rust, LLVM, protobuf, GMP, Foundry, sccache, and configure caching
 
 inputs:
   rust-toolchain:
@@ -7,6 +7,9 @@ inputs:
     default: stable
   cache:
     description: Enable Rust build cache
+    default: "true"
+  sccache:
+    description: Enable sccache (shared compilation cache via GH Actions cache)
     default: "true"
   foundry:
     description: Install Foundry
@@ -41,6 +44,17 @@ runs:
       with:
         toolchain: ${{ inputs.rust-toolchain }}
         components: ${{ inputs.components }}
+
+    - name: Setup sccache
+      if: inputs.sccache == 'true'
+      uses: mozilla-actions/sccache-action@v0.0.7
+
+    - name: Configure sccache
+      if: inputs.sccache == 'true'
+      shell: bash
+      run: |
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
 
     - name: Rust cache
       if: inputs.cache == 'true'
@@ -81,3 +95,8 @@ runs:
       uses: taiki-e/install-action@v2
       with:
         tool: nextest
+
+    - name: Show sccache stats
+      if: inputs.sccache == 'true' && always()
+      shell: bash
+      run: sccache --show-stats 2>/dev/null || true
