@@ -169,10 +169,17 @@ impl KeyType for K256Ecdsa {
             k256::ecdsa::SigningKey::from_bytes(&padded_seed.into())
                 .map_err(|e| K256Error::InvalidSeed(e.to_string()))
         } else {
-            let mut rng = Self::get_rng();
-            let rand_bytes: [u8; 32] = <[u8; 32]>::rand(&mut rng);
-            k256::ecdsa::SigningKey::from_slice(&rand_bytes)
-                .map_err(|e| K256Error::InvalidSeed(e.to_string()))
+            #[cfg(feature = "std")]
+            {
+                let mut rng = Self::get_rng();
+                let rand_bytes: [u8; 32] = <[u8; 32]>::rand(&mut rng);
+                k256::ecdsa::SigningKey::from_slice(&rand_bytes)
+                    .map_err(|e| K256Error::InvalidSeed(e.to_string()))
+            }
+            #[cfg(not(feature = "std"))]
+            return Err(K256Error::InvalidSeed(
+                "Random key generation requires the std feature".into(),
+            ));
         };
 
         signing_key.map(K256SigningKey)

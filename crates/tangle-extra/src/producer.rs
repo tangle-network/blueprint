@@ -334,78 +334,73 @@ async fn poll_for_jobs(
             } else {
                 match block_timestamps.get(&log_block) {
                     Some(ts) => *ts,
-                    None => {
-                        match client
-                            .get_block(BlockNumberOrTag::Number(log_block))
-                            .await
-                        {
-                            Ok(Some(block)) => {
-                                if block_fetch_failures > 0 {
-                                    blueprint_core::info!(
-                                        target: "tangle-producer",
-                                        rpc = "eth_getBlockByNumber",
-                                        attempts = block_fetch_failures,
-                                        block = log_block,
-                                        "RPC recovered after retries"
-                                    );
-                                }
-                                block_fetch_failures = 0;
-                                let ts = block.header.timestamp;
-                                block_timestamps.insert(log_block, ts);
-                                ts
+                    None => match client.get_block(BlockNumberOrTag::Number(log_block)).await {
+                        Ok(Some(block)) => {
+                            if block_fetch_failures > 0 {
+                                blueprint_core::info!(
+                                    target: "tangle-producer",
+                                    rpc = "eth_getBlockByNumber",
+                                    attempts = block_fetch_failures,
+                                    block = log_block,
+                                    "RPC recovered after retries"
+                                );
                             }
-                            Ok(None) => {
-                                block_fetch_failures += 1;
-                                let delay = rpc_retry_delay(block_fetch_failures);
-                                if block_fetch_failures >= RPC_ERROR_ESCALATION_ATTEMPTS {
-                                    blueprint_core::error!(
-                                        target: "tangle-producer",
-                                        rpc = "eth_getBlockByNumber",
-                                        attempts = block_fetch_failures,
-                                        block = log_block,
-                                        delay_ms = delay.as_millis() as u64,
-                                        "Missing block data while deriving timestamp"
-                                    );
-                                } else {
-                                    blueprint_core::warn!(
-                                        target: "tangle-producer",
-                                        rpc = "eth_getBlockByNumber",
-                                        attempts = block_fetch_failures,
-                                        block = log_block,
-                                        delay_ms = delay.as_millis() as u64,
-                                        "Missing block data while deriving timestamp; retrying"
-                                    );
-                                }
-                                sleep(delay).await;
-                                continue 'poll_loop;
-                            }
-                            Err(err) => {
-                                block_fetch_failures += 1;
-                                let delay = rpc_retry_delay(block_fetch_failures);
-                                if block_fetch_failures >= RPC_ERROR_ESCALATION_ATTEMPTS {
-                                    blueprint_core::error!(
-                                        target: "tangle-producer",
-                                        rpc = "eth_getBlockByNumber",
-                                        attempts = block_fetch_failures,
-                                        block = log_block,
-                                        delay_ms = delay.as_millis() as u64,
-                                        "Failed to read block data: {err}"
-                                    );
-                                } else {
-                                    blueprint_core::warn!(
-                                        target: "tangle-producer",
-                                        rpc = "eth_getBlockByNumber",
-                                        attempts = block_fetch_failures,
-                                        block = log_block,
-                                        delay_ms = delay.as_millis() as u64,
-                                        "Failed to read block data: {err}; retrying"
-                                    );
-                                }
-                                sleep(delay).await;
-                                continue 'poll_loop;
-                            }
+                            block_fetch_failures = 0;
+                            let ts = block.header.timestamp;
+                            block_timestamps.insert(log_block, ts);
+                            ts
                         }
-                    }
+                        Ok(None) => {
+                            block_fetch_failures += 1;
+                            let delay = rpc_retry_delay(block_fetch_failures);
+                            if block_fetch_failures >= RPC_ERROR_ESCALATION_ATTEMPTS {
+                                blueprint_core::error!(
+                                    target: "tangle-producer",
+                                    rpc = "eth_getBlockByNumber",
+                                    attempts = block_fetch_failures,
+                                    block = log_block,
+                                    delay_ms = delay.as_millis() as u64,
+                                    "Missing block data while deriving timestamp"
+                                );
+                            } else {
+                                blueprint_core::warn!(
+                                    target: "tangle-producer",
+                                    rpc = "eth_getBlockByNumber",
+                                    attempts = block_fetch_failures,
+                                    block = log_block,
+                                    delay_ms = delay.as_millis() as u64,
+                                    "Missing block data while deriving timestamp; retrying"
+                                );
+                            }
+                            sleep(delay).await;
+                            continue 'poll_loop;
+                        }
+                        Err(err) => {
+                            block_fetch_failures += 1;
+                            let delay = rpc_retry_delay(block_fetch_failures);
+                            if block_fetch_failures >= RPC_ERROR_ESCALATION_ATTEMPTS {
+                                blueprint_core::error!(
+                                    target: "tangle-producer",
+                                    rpc = "eth_getBlockByNumber",
+                                    attempts = block_fetch_failures,
+                                    block = log_block,
+                                    delay_ms = delay.as_millis() as u64,
+                                    "Failed to read block data: {err}"
+                                );
+                            } else {
+                                blueprint_core::warn!(
+                                    target: "tangle-producer",
+                                    rpc = "eth_getBlockByNumber",
+                                    attempts = block_fetch_failures,
+                                    block = log_block,
+                                    delay_ms = delay.as_millis() as u64,
+                                    "Failed to read block data: {err}; retrying"
+                                );
+                            }
+                            sleep(delay).await;
+                            continue 'poll_loop;
+                        }
+                    },
                 }
             };
 

@@ -196,8 +196,15 @@ impl KeyType for ArkBlsBn254 {
             Fr::from_random_bytes(seed)
                 .ok_or_else(|| Bn254Error::InvalidSeed("None value".to_string()))?
         } else {
-            let mut rng = Self::get_rng();
-            Fr::rand(&mut rng)
+            #[cfg(feature = "std")]
+            {
+                let mut rng = Self::get_rng();
+                Fr::rand(&mut rng)
+            }
+            #[cfg(not(feature = "std"))]
+            return Err(Bn254Error::InvalidSeed(
+                "Random key generation requires the std feature".into(),
+            ));
         };
         Ok(ArkBlsBn254Secret(secret))
     }
