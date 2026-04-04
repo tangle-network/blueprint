@@ -1,0 +1,83 @@
+name: Setup Build Environment
+description: Install Rust, LLVM, protobuf, GMP, Foundry, and configure caching
+
+inputs:
+  rust-toolchain:
+    description: Rust toolchain to install
+    default: stable
+  cache:
+    description: Enable Rust build cache
+    default: "true"
+  foundry:
+    description: Install Foundry
+    default: "true"
+  nextest:
+    description: Install cargo-nextest
+    default: "false"
+  tnt-core:
+    description: Checkout and verify tnt-core
+    default: "true"
+  components:
+    description: Additional Rust components (comma-separated)
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout tnt-core
+      if: inputs.tnt-core == 'true'
+      uses: actions/checkout@v4
+      with:
+        repository: tangle-network/tnt-core
+        path: tnt-core
+
+    - name: Verify tnt-core bindings
+      if: inputs.tnt-core == 'true'
+      shell: bash
+      run: ./scripts/ci/verify-tnt-core.sh
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ inputs.rust-toolchain }}
+        components: ${{ inputs.components }}
+
+    - name: Rust cache
+      if: inputs.cache == 'true'
+      uses: swatinem/rust-cache@v2
+      with:
+        cache-on-failure: "true"
+
+    - name: Install system dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
+
+    - name: Install LLVM 19
+      uses: KyleMayes/install-llvm-action@v2
+      with:
+        version: "19.1.7"
+
+    - name: Install Foundry
+      if: inputs.foundry == 'true'
+      uses: foundry-rs/foundry-toolchain@v1
+      with:
+        version: stable
+      continue-on-error: true
+
+    - name: Retry Foundry if needed
+      if: inputs.foundry == 'true'
+      shell: bash
+      run: |
+        if ! command -v forge &> /dev/null; then
+          curl -L https://foundry.paradigm.xyz | bash
+          ~/.foundry/bin/foundryup --version stable
+        fi
+        forge --version
+
+    - name: Install nextest
+      if: inputs.nextest == 'true'
+      uses: taiki-e/install-action@v2
+      with:
+        tool: nextest
