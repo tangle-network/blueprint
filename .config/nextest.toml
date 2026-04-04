@@ -2,9 +2,11 @@
 failure-output = "immediate-final"
 fail-fast = false
 slow-timeout = { period = "300s", terminate-after = 4 }
+retries = { backoff = "exponential", count = 2, delay = "5s" }
 
 [profile.serial]
 test-threads = 1
 failure-output = "immediate-final"
 fail-fast = false
 slow-timeout = { period = "300s", terminate-after = 4 }
+retries = { backoff = "exponential", count = 2, delay = "5s" }

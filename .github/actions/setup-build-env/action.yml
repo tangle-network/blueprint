@@ -48,11 +48,11 @@ runs:
       with:
         cache-on-failure: "true"
 
-    - name: Install system dependencies
+    - name: Install system dependencies (protobuf, gmp, mold linker)
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
+        sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev mold
 
     - name: Install LLVM 19
       uses: KyleMayes/install-llvm-action@v2

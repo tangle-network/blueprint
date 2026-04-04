@@ -475,6 +475,18 @@ hex-literal = { version = "1.1", default-features = false }
 hmac = { version = "0.12", default-features = false }
 subtle = { version = "2", default-features = false }
 
+# CI: minimize codegen for faster compiles (debug checks still on)
+[profile.ci]
+inherits = "dev"
+opt-level = 0
+debug = 0
+codegen-units = 256
+incremental = false
+
+[profile.ci.build-override]
+opt-level = 0
+debug = 0
+
 [profile.dev.package.backtrace]
 opt-level = 3
 
