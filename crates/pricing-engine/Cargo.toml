@@ -82,9 +82,9 @@ sha2 = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true, features = ["net"] }
-blueprint-networking = { path = "../networking", features = ["testing"] }
-blueprint-testing-utils = { path = "../testing-utils" }
-blueprint-anvil-testing-utils = { path = "../testing-utils/anvil" }
+blueprint-networking = { workspace = true, features = ["testing"] }
+blueprint-testing-utils = { workspace = true }
+blueprint-anvil-testing-utils = { workspace = true }
 tempfile = { workspace = true }
 alloy-network = { workspace = true }
 alloy-signer-local = { workspace = true }

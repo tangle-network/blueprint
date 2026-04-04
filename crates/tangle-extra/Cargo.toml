@@ -48,10 +48,10 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 alloy-provider = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-network = { workspace = true }
-blueprint-anvil-testing-utils = { path = "../testing-utils/anvil" }
+blueprint-anvil-testing-utils = { workspace = true }
 blueprint-keystore = { workspace = true, features = ["evm"] }
 blueprint-crypto = { workspace = true, features = ["k256"] }
-blueprint-chain-setup-anvil = { path = "../chain-setup/anvil" }
+blueprint-chain-setup-anvil = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }

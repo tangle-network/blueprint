@@ -57,7 +57,7 @@ dirs.workspace = true
 chrono = { workspace = true, features = ["serde", "clock"] }
 
 [dev-dependencies]
-blueprint-eigenlayer-testing-utils = { path = "../testing-utils/eigenlayer" }
+blueprint-eigenlayer-testing-utils = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
