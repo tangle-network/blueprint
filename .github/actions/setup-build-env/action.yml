@@ -54,7 +54,14 @@ runs:
       shell: bash
       run: |
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        # Verify sccache can start before setting as wrapper
+        if sccache --start-server 2>/dev/null && sccache --show-stats 2>/dev/null; then
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "sccache configured successfully"
+        else
+          echo "::warning::sccache failed to start, falling back to direct rustc"
+          sccache --stop-server 2>/dev/null || true
+        fi
 
     - name: Rust cache
       if: inputs.cache == 'true'
