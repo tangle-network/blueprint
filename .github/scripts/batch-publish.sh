@@ -193,14 +193,61 @@ done
 echo ""
 echo "========================================="
 if ((${#failed_packages[@]} > 0)); then
-    echo "⚠ Published $((total_packages - ${#failed_packages[@]}))/$total_packages packages"
+    echo "⚠ Pass 1: Published $((total_packages - ${#failed_packages[@]}))/$total_packages packages"
+    echo "${#failed_packages[@]} failed — running pass 2 (deps may now be available)..."
+    echo ""
+
+    # Pass 2: retry all failures (deps from pass 1 should now be indexed)
+    sleep 30
+    declare -a pass2_failed=()
+    for ((i=0; i<${#failed_packages[@]}; i++)); do
+        package="${failed_packages[$i]}"
+        echo "[Pass 2: $((i+1))/${#failed_packages[@]}] Publishing $package"
+        output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1 || true)
+        if echo "$output" | grep -q "Uploading\|Published"; then
+            echo "✓ Successfully published $package"
+        elif echo "$output" | grep -q "already exists"; then
+            echo "✓ $package already published (skipped)"
+        else
+            echo "✗ Failed: $(echo "$output" | grep "required by\|version for\|prerelease\|error" | head -2)"
+            pass2_failed+=("$package")
+        fi
+        sleep 10
+    done
+
+    if ((${#pass2_failed[@]} > 0 && ${#pass2_failed[@]} < ${#failed_packages[@]})); then
+        echo ""
+        echo "Pass 2 made progress — running pass 3..."
+        sleep 30
+        declare -a pass3_failed=()
+        for package in "${pass2_failed[@]}"; do
+            echo "[Pass 3] Publishing $package"
+            output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1 || true)
+            if echo "$output" | grep -q "Uploading\|Published\|already exists"; then
+                echo "✓ $package"
+            else
+                echo "✗ $package"
+                pass3_failed+=("$package")
+            fi
+            sleep 10
+        done
+        failed_packages=("${pass3_failed[@]}")
+    else
+        failed_packages=("${pass2_failed[@]}")
+    fi
+fi
+
+echo ""
+echo "========================================="
+if ((${#failed_packages[@]} > 0)); then
+    echo "⚠ Final: ${#failed_packages[@]} packages still failed"
     echo ""
     echo "Failed packages:"
     for pkg in "${failed_packages[@]}"; do
         echo "  ✗ $pkg"
     done
     echo ""
-    echo "Re-run this script or publish manually: cargo publish --package <name> --allow-dirty --no-verify"
+    echo "Re-run: gh workflow run publish-crates.yml --ref main"
     exit 1
 else
     echo "✓ Successfully published all $total_packages packages!"
