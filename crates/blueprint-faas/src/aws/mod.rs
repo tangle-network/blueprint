@@ -332,7 +332,7 @@ impl FaasExecutor for LambdaExecutor {
         Ok(())
     }
 
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         "AWS Lambda"
     }
 }

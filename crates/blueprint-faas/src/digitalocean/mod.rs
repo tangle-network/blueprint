@@ -420,7 +420,7 @@ impl FaasExecutor for DigitalOceanExecutor {
         Ok(())
     }
 
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         "DigitalOcean Functions"
     }
 }

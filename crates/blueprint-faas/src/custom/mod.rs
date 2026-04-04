@@ -169,7 +169,7 @@ impl FaasExecutor for HttpFaasExecutor {
         Ok(())
     }
 
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         "Custom HTTP FaaS"
     }
 }
