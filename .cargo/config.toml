@@ -1,7 +1,7 @@
 # Use mold linker on Linux (CI) for ~40% faster linking
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
-rustflags = ["-Clink-arg=-fuse-ld=mold"]
+rustflags = ["-Clink-arg=-fuse-ld=/usr/bin/mold"]
 
 [target.aarch64-apple-darwin]
 rustflags = [
