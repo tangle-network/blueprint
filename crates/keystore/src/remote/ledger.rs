@@ -73,11 +73,13 @@ pub struct LedgerRemoteSignerConfig {
     pub keys: Vec<LedgerKeyConfig>,
 }
 
-impl From<RemoteConfig> for LedgerRemoteSignerConfig {
-    fn from(config: RemoteConfig) -> Self {
+impl TryFrom<RemoteConfig> for LedgerRemoteSignerConfig {
+    type Error = crate::error::Error;
+
+    fn try_from(config: RemoteConfig) -> core::result::Result<Self, Self::Error> {
         match config {
-            RemoteConfig::Ledger { keys } => Self { keys },
-            _ => panic!("Invalid config type"),
+            RemoteConfig::Ledger { keys } => Ok(Self { keys }),
+            _ => Err(crate::error::Error::InvalidConfig),
         }
     }
 }
@@ -149,7 +151,7 @@ impl EcdsaRemoteSigner<K256Ecdsa> for LedgerRemoteSigner {
     type Config = LedgerRemoteSignerConfig;
 
     async fn build(config: RemoteConfig) -> Result<Self> {
-        Self::new(config.into()).await
+        Self::new(config.try_into()?).await
     }
 
     async fn get_public_key(

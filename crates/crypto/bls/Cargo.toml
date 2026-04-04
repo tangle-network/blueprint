@@ -19,6 +19,7 @@ ark-serialize = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
 paste = { workspace = true }
 thiserror = { workspace = true }
+zeroize = { workspace = true }
 
 sha2 = { workspace = true, optional = true }
 

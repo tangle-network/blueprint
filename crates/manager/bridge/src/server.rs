@@ -173,6 +173,7 @@ struct BridgeService {
 }
 
 impl BridgeService {
+    #[allow(dead_code)]
     fn new(tx: oneshot::Sender<()>, db: RocksDb) -> Self {
         Self {
             ready_tx: Arc::new(Mutex::new(Some(tx))),

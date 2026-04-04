@@ -123,15 +123,11 @@ pub trait KeyType:
 
     fn key_type_id() -> KeyTypeId;
 
-    /// Get a cryptographically secure random number generator
+    /// Get a cryptographically secure random number generator.
+    /// Only available with the `std` feature — no_std callers must provide their own RNG.
     #[cfg(feature = "std")]
     fn get_rng() -> impl blueprint_std::CryptoRng + blueprint_std::Rng {
         blueprint_std::rand::thread_rng()
-    }
-
-    #[cfg(not(feature = "std"))]
-    fn get_rng() -> impl blueprint_std::CryptoRng + blueprint_std::Rng {
-        blueprint_std::test_rng()
     }
 
     /// Get a deterministic random number generator for testing

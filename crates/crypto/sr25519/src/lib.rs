@@ -82,6 +82,22 @@ impl_schnorrkel_serde!(SchnorrkelPublic, schnorrkel::PublicKey);
 impl_schnorrkel_serde!(SchnorrkelSecret, schnorrkel::SecretKey);
 impl_schnorrkel_serde!(SchnorrkelSignature, schnorrkel::Signature);
 
+impl zeroize::Zeroize for SchnorrkelSecret {
+    fn zeroize(&mut self) {
+        let ptr = (&raw mut self.0).cast::<u8>();
+        let len = core::mem::size_of::<schnorrkel::SecretKey>();
+        unsafe { core::ptr::write_bytes(ptr, 0, len) };
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl Drop for SchnorrkelSecret {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.zeroize();
+    }
+}
+
 impl KeyType for SchnorrkelSr25519 {
     type Secret = SchnorrkelSecret;
     type Public = SchnorrkelPublic;

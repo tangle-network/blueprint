@@ -1123,7 +1123,7 @@ fn compact_length_size(len: usize) -> usize {
     }
 }
 
-/// Count total nodes in a schema field (including nested children).
+#[allow(dead_code)]
 fn count_nodes(param: &Param) -> usize {
     // For array types (type[] or type[n]), we need to count the element type as a child
     if param.ty.ends_with(']') && param.components.is_empty() {
@@ -1250,7 +1250,7 @@ fn parse_solidity_type(ty: &str) -> Result<(u8, u16)> {
     // Handle arrays: type[] or type[n]
     if ty.ends_with(']') {
         if let Some(bracket_pos) = ty.rfind('[') {
-            let base_type = &ty[..bracket_pos];
+            let _base_type = &ty[..bracket_pos];
             let size_str = &ty[bracket_pos + 1..ty.len() - 1];
 
             if size_str.is_empty() {

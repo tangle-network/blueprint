@@ -222,7 +222,8 @@ impl ApiKeyModel {
             hasher.finalize(&mut output);
             let computed_hash = CUSTOM_ENGINE.encode(output);
 
-            self.key_hash == computed_hash
+            use subtle::ConstantTimeEq;
+            self.key_hash.as_bytes().ct_eq(computed_hash.as_bytes()).into()
         } else {
             false
         }

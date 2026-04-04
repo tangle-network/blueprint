@@ -120,6 +120,22 @@ macro_rules! define_bls_key {
                 impl_w3f_serde!([<W3f $ty Secret>], SecretKey<[<Tiny $ty:upper>]>);
                 impl_w3f_serde!([<W3f $ty Signature>], Signature<[<Tiny $ty:upper>]>);
 
+                impl zeroize::Zeroize for [<W3f $ty Secret>] {
+                    fn zeroize(&mut self) {
+                        let ptr = (&raw mut self.0).cast::<u8>();
+                        let len = core::mem::size_of::<SecretKey<[<Tiny $ty:upper>]>>();
+                        unsafe { core::ptr::write_bytes(ptr, 0, len) };
+                        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+                    }
+                }
+
+                impl Drop for [<W3f $ty Secret>] {
+                    fn drop(&mut self) {
+                        use zeroize::Zeroize;
+                        self.zeroize();
+                    }
+                }
+
                 impl KeyType for [<W3f $ty>] {
                     type Public = [<W3f $ty Public>];
                     type Secret = [<W3f $ty Secret>];
@@ -134,8 +150,7 @@ macro_rules! define_bls_key {
                         if let Some(seed) = seed {
                             Ok([<W3f $ty Secret>](SecretKey::from_seed(seed)))
                         } else {
-                            // Should only be used for testing. Pass a seed in production.
-                            let mut rng = blueprint_std::test_rng();
+                            let mut rng = Self::get_rng();
                             let rand_bytes = <[u8; 32]>::rand(&mut rng);
                             Ok([<W3f $ty Secret>](SecretKey::from_seed(&rand_bytes)))
                         }

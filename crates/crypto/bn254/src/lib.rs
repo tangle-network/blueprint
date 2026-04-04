@@ -166,6 +166,22 @@ impl_ark_serde!(ArkBlsBn254Public, G2Affine);
 impl_ark_serde!(ArkBlsBn254Secret, Fr);
 impl_ark_serde!(ArkBlsBn254Signature, G1Affine);
 
+impl zeroize::Zeroize for ArkBlsBn254Secret {
+    fn zeroize(&mut self) {
+        let ptr = (&raw mut self.0).cast::<u8>();
+        let len = core::mem::size_of::<Fr>();
+        unsafe { core::ptr::write_bytes(ptr, 0, len) };
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl Drop for ArkBlsBn254Secret {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.zeroize();
+    }
+}
+
 impl KeyType for ArkBlsBn254 {
     type Public = ArkBlsBn254Public;
     type Secret = ArkBlsBn254Secret;

@@ -117,7 +117,9 @@ async fn register_bls_impl(
     info!("Eigenlayer BLS Registration: Creating AVS Registry Writer");
 
     info!("Eigenlayer BLS Registration: Fetching BLS BN254 Keys");
-    let bn254_public = env.keystore().iter_bls_bn254().next().unwrap();
+    let bn254_public = env.keystore().iter_bls_bn254().next().ok_or_else(|| {
+        EigenlayerError::Other("No BLS BN254 key found in keystore".into())
+    })?;
     let bn254_secret = env
         .keystore()
         .expose_bls_bn254_secret(&bn254_public)
