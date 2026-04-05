@@ -1,6 +1,6 @@
 [package]
 name = "oauth-blueprint-lib"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 edition = "2024"
 
 [dependencies]

@@ -1,7 +1,7 @@
 {
   "name": "apikey-blueprint",
   "description": "API key issuance and resource blueprint",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "master_revision": "Latest",
   "manager": {
     "Evm": "ApikeyBlueprintBSM"

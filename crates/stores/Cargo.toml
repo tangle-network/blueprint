@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-stores"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 description = "Storage providers for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
