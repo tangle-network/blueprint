@@ -453,7 +453,7 @@ aws-smithy-mocks-experimental = { version = "0.2", default-features = false }
 aws-lc-rs = { version = "1.13", default-features = false }
 
 # Azure SDK
-azure_core = { version = "0.20", default-features = false }
+azure_core = { version = "0.33", default-features = false }
 azure_identity = { version = "0.20", default-features = false }
 
 # Additional dependencies
