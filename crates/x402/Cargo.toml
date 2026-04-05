@@ -53,6 +53,7 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 bytes = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

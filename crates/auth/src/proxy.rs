@@ -270,19 +270,23 @@ impl AuthenticatedProxy {
         let manager = PasetoTokenManager::new(std::time::Duration::from_secs(15 * 60));
         let key = manager.get_key();
 
-        // Save key to file
+        // Save key to file with restrictive permissions from creation
+        #[cfg(unix)]
+        let mut file = {
+            use std::os::unix::fs::OpenOptionsExt;
+            fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&key_path)
+                .map_err(crate::Error::Io)?
+        };
+        #[cfg(not(unix))]
         let mut file = fs::File::create(&key_path).map_err(crate::Error::Io)?;
         let key_bytes = key.as_bytes();
         file.write_all(&key_bytes).map_err(crate::Error::Io)?;
         file.sync_all().map_err(crate::Error::Io)?;
-
-        // Set restrictive permissions on the key file (Unix only)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::Permissions::from_mode(0o600);
-            fs::set_permissions(&key_path, permissions).map_err(crate::Error::Io)?;
-        }
 
         info!("Generated and saved new Paseto signing key");
         Ok(manager)
@@ -928,7 +932,7 @@ fn load_persisted_ca(
         match block.tag() {
             "CERTIFICATE" if ca_cert_pem.is_none() => ca_cert_pem = Some(encoded),
             tag if tag.ends_with("PRIVATE KEY") && ca_key_pem.is_none() => {
-                ca_key_pem = Some(encoded)
+                ca_key_pem = Some(encoded);
             }
             _ => {}
         }
@@ -998,7 +1002,7 @@ async fn handle_legacy_token(
 
     let api_token = match ApiTokenModel::find_token_id(token_id, db) {
         Ok(Some(token)) if token.is(token_str) && !token.is_expired() && token.is_enabled => token,
-        Ok(Some(_)) | Ok(None) => {
+        Ok(Some(_) | None) => {
             warn!("Invalid or expired legacy token");
             return Err(StatusCode::UNAUTHORIZED);
         }
@@ -1312,7 +1316,7 @@ fn apply_additional_headers(
 /// Sanitize request headers by removing auth-specific and forbidden headers
 fn sanitize_request_headers(req: &mut Request, is_grpc: bool) {
     let mut to_remove: Vec<header::HeaderName> = Vec::new();
-    for (name, _value) in req.headers().iter() {
+    for (name, _value) in req.headers() {
         let name_str = name.as_str();
         if is_auth_header(name_str) || is_forbidden_header(name_str) {
             // For gRPC, don't remove gRPC-required headers

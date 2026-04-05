@@ -13,6 +13,7 @@ tokio = { workspace = true, features = ["rt", "macros"] }
 tower = { workspace = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 color-eyre = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 alloy-primitives = { workspace = true }

@@ -5,8 +5,6 @@
 //! ## Features
 #![doc = document_features::document_features!()]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-// TODO: #![warn(missing_docs)]
-
 extern crate alloc;
 
 pub mod config;
@@ -86,6 +84,9 @@ pub trait BlueprintConfig: Send + Sync {
     }
 }
 
+// SAFETY: DynBlueprintConfig wraps a dynosaur-erased trait object whose trait bound
+// requires `Send + Sync`. The generated struct only holds a reference to the impl,
+// which is guaranteed Send + Sync by the trait definition.
 unsafe impl Send for DynBlueprintConfig<'_> {}
 unsafe impl Sync for DynBlueprintConfig<'_> {}
 
@@ -135,6 +136,9 @@ pub trait BackgroundService: Send + Sync {
     ) -> impl Future<Output = Result<oneshot::Receiver<Result<(), Error>>, Error>> + Send;
 }
 
+// SAFETY: DynBackgroundService wraps a dynosaur-erased trait object whose trait bound
+// requires `Send + Sync`. The generated struct only holds a reference to the impl,
+// which is guaranteed Send + Sync by the trait definition.
 unsafe impl Send for DynBackgroundService<'_> {}
 unsafe impl Sync for DynBackgroundService<'_> {}
 
@@ -421,6 +425,7 @@ where
     ) -> Self {
         struct QoSServiceAdapter<C: HeartbeatConsumer + Send + Sync + 'static> {
             qos_service: Arc<Mutex<Option<blueprint_qos::QoSService<C>>>>,
+            ready: Arc<tokio::sync::Notify>,
         }
 
         impl<C: HeartbeatConsumer + Send + Sync + 'static> BackgroundService for QoSServiceAdapter<C> {
@@ -433,31 +438,33 @@ where
                 let (tx, rx) = tokio::sync::oneshot::channel();
                 let qos_arc_for_adapter_task = self.qos_service.clone();
 
+                let ready = self.ready.clone();
                 tokio::spawn(async move {
                     blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): Waiting for QoS Service build...");
 
-                    let mut attempt_count = 0;
-                    let max_attempts = 300; // Approx 30 seconds with 100ms polling
+                    let timeout = std::time::Duration::from_secs(30);
+                    if tokio::time::timeout(timeout, ready.notified())
+                        .await
+                        .is_err()
+                    {
+                        let err_msg = "QoS Adapter Task (Task 2): QoS service did not initialize (build task may have failed or timed out).";
+                        blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
+                        let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
+                            std::io::Error::other(err_msg),
+                        ))));
+                        return;
+                    }
 
-                    let mut service_guard = loop {
-                        let guard = qos_arc_for_adapter_task.lock().await;
-                        if guard.is_some() {
-                            blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): QoS Service is built. Proceeding to start components.");
-                            break guard;
-                        }
-                        drop(guard);
-
-                        attempt_count += 1;
-                        if attempt_count >= max_attempts {
-                            let err_msg = "QoS Adapter Task (Task 2): QoS service did not initialize (build task may have failed or timed out).";
-                            blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
-                            let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
-                                std::io::Error::other(err_msg),
-                            ))));
-                            return;
-                        }
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                    };
+                    let mut service_guard = qos_arc_for_adapter_task.lock().await;
+                    if service_guard.is_none() {
+                        let err_msg = "QoS Adapter Task (Task 2): Notified but QoS service is None (build failed).";
+                        blueprint_core::error!(target: "blueprint-runner", "{}", err_msg);
+                        let _ = tx.send(Err(crate::error::RunnerError::Other(Box::new(
+                            std::io::Error::other(err_msg),
+                        ))));
+                        return;
+                    }
+                    blueprint_core::debug!(target: "blueprint-runner", "QoS Adapter Task (Task 2): QoS Service is built. Proceeding to start components.");
 
                     let qos_service_mut = service_guard
                         .as_mut()
@@ -490,8 +497,10 @@ where
         }
 
         let qos_service_arc = Arc::new(Mutex::new(None::<blueprint_qos::QoSService<C>>));
+        let qos_ready = Arc::new(tokio::sync::Notify::new());
 
         let builder_task_qos_arc = qos_service_arc.clone();
+        let builder_task_ready = qos_ready.clone();
         let http_rpc_endpoint = self.env.http_rpc_endpoint.to_string();
         let keystore_uri = self.env.keystore_uri.clone();
         #[cfg(feature = "tangle")]
@@ -525,16 +534,20 @@ where
                 Ok(service) => {
                     let mut guard = builder_task_qos_arc.lock().await;
                     *guard = Some(service);
+                    drop(guard);
+                    builder_task_ready.notify_one();
                     blueprint_core::info!(target: "blueprint-runner", "QoS Builder Task (Task 1): QoS Service built and stored.");
                 }
                 Err(e) => {
                     blueprint_core::error!(target: "blueprint-runner", "QoS Builder Task (Task 1): Failed to build QoS service: {:?}", e);
+                    builder_task_ready.notify_one();
                 }
             }
         });
 
         let adapter = QoSServiceAdapter::<C> {
             qos_service: qos_service_arc,
+            ready: qos_ready,
         };
         self.background_services
             .push(DynBackgroundService::boxed(adapter));
@@ -1066,10 +1079,14 @@ where
             }
         }
 
+        // Backpressure: cap concurrent in-flight jobs. When the limit is
+        // reached we stop polling producers until some jobs complete.
+        const MAX_CONCURRENT_JOBS: usize = 1024;
+
         loop {
             tokio::select! {
-                // Receive job calls from producer
-                producer_result = producer_stream.next() => {
+                // Receive job calls from producer (only when below concurrency limit)
+                producer_result = producer_stream.next(), if pending_jobs.len() < MAX_CONCURRENT_JOBS => {
                     match producer_result {
                         Some(Ok(job_call)) => {
                             let block_number =

@@ -47,6 +47,7 @@ pub fn create_test_quote_details() -> pricing_engine::QuoteDetails {
     }
 }
 
+#[allow(dead_code)]
 pub fn sample_benchmark_profile(blueprint_id: u64) -> BenchmarkProfile {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -80,6 +81,7 @@ pub fn sample_benchmark_profile(blueprint_id: u64) -> BenchmarkProfile {
     }
 }
 
+#[allow(dead_code)]
 pub fn sample_pricing_map(blueprint_id: Option<u64>) -> HashMap<Option<u64>, Vec<ResourcePricing>> {
     let pricing = ResourcePricing {
         kind: ResourceUnit::CPU,

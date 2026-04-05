@@ -512,6 +512,8 @@ impl RemoteDeploymentService {
                                     deployment_result.instance.id.clone(),
                                     host.to_string(),
                                     port,
+                                    blueprint_id.unwrap_or(0),
+                                    blueprint_id.unwrap_or(0),
                                 )
                                 .await;
                             info!("✅ QoS endpoint registered: {}:{}", host, port);

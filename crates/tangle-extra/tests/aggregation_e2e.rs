@@ -63,7 +63,7 @@ impl MultiOperatorHarness {
     async fn new(deployment: SeededTangleTestnet, operator_count: usize) -> Result<Self> {
         let temp = TempDir::new().context("failed to create tempdir")?;
 
-        let operator_keys = vec![
+        let operator_keys = [
             OPERATOR1_PRIVATE_KEY,
             OPERATOR2_PRIVATE_KEY,
             OPERATOR3_PRIVATE_KEY,
@@ -76,10 +76,10 @@ impl MultiOperatorHarness {
         );
 
         let mut operators = Vec::new();
-        for i in 0..operator_count {
+        for (i, key) in operator_keys.iter().enumerate().take(operator_count) {
             let keystore_path = temp.path().join(format!("operator_{}_keystore", i));
             std::fs::create_dir_all(&keystore_path)?;
-            seed_operator_key(&keystore_path, operator_keys[i])?;
+            seed_operator_key(&keystore_path, key)?;
 
             let client = create_client(&deployment, &keystore_path).await?;
             let address = client.account();

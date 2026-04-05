@@ -332,7 +332,7 @@ mod tests {
         db.set("c", 3).unwrap();
 
         let mut values = db.values().unwrap();
-        values.sort();
+        values.sort_unstable();
         assert_eq!(values, vec![1, 2, 3]);
     }
 

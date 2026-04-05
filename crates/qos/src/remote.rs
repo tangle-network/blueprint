@@ -13,12 +13,26 @@ use tokio::sync::RwLock;
 #[cfg(feature = "remote")]
 use blueprint_remote_providers::observability::MetricsCollector as RemoteMetricsCollector;
 
+/// Connection info for a remote Blueprint instance
+#[derive(Clone, Debug)]
+struct RemoteEndpoint {
+    /// gRPC endpoint URL
+    #[cfg_attr(not(feature = "remote"), allow(dead_code))]
+    grpc_url: String,
+    /// Service ID for this deployment
+    #[cfg_attr(not(feature = "remote"), allow(dead_code))]
+    service_id: u64,
+    /// Blueprint ID for this deployment
+    #[cfg_attr(not(feature = "remote"), allow(dead_code))]
+    blueprint_id: u64,
+}
+
 /// Remote instance metrics collector
 pub struct RemoteMetricsProvider {
     #[cfg(feature = "remote")]
     remote_collector: Arc<RemoteMetricsCollector>,
     /// Remote endpoints for connecting to `QoS` gRPC services
-    remote_endpoints: Arc<RwLock<HashMap<String, String>>>, // instance_id -> grpc_endpoint
+    remote_endpoints: Arc<RwLock<HashMap<String, RemoteEndpoint>>>,
     metrics_cache: Arc<RwLock<HashMap<u64, SystemMetrics>>>,
     blueprint_metrics: Arc<RwLock<BlueprintMetrics>>,
     status: Arc<RwLock<BlueprintStatus>>,
@@ -43,8 +57,19 @@ impl RemoteMetricsProvider {
     }
 
     /// Register a remote Blueprint instance for metrics collection
-    pub async fn register_remote_instance(&self, instance_id: String, host: String, port: u16) {
-        let endpoint = format!("http://{}:{}", host, port);
+    pub async fn register_remote_instance(
+        &self,
+        instance_id: String,
+        host: String,
+        port: u16,
+        service_id: u64,
+        blueprint_id: u64,
+    ) {
+        let endpoint = RemoteEndpoint {
+            grpc_url: format!("http://{}:{}", host, port),
+            service_id,
+            blueprint_id,
+        };
         self.remote_endpoints
             .write()
             .await
@@ -56,12 +81,19 @@ impl RemoteMetricsProvider {
     pub async fn register_blueprint_deployment(
         &self,
         result: &blueprint_remote_providers::infra::traits::BlueprintDeploymentResult,
+        service_id: u64,
+        blueprint_id: u64,
     ) {
         if let Some(qos_endpoint) = result.qos_grpc_endpoint() {
+            let endpoint = RemoteEndpoint {
+                grpc_url: qos_endpoint.clone(),
+                service_id,
+                blueprint_id,
+            };
             self.remote_endpoints
                 .write()
                 .await
-                .insert(result.blueprint_id.clone(), qos_endpoint.clone());
+                .insert(result.blueprint_id.clone(), endpoint);
             tracing::info!(
                 "Registered QoS endpoint for Blueprint deployment {}: {}",
                 result.blueprint_id,
@@ -89,14 +121,11 @@ impl RemoteMetricsProvider {
         let mut cache = self.metrics_cache.write().await;
 
         for (instance_id, endpoint) in endpoints {
-            // Connect to remote QoS gRPC service
-            match QosMetricsClient::connect(endpoint.clone()).await {
-                Ok(mut client) => {
-                    // Extract service/blueprint IDs from instance_id or use defaults
-                    let service_id = 1u64; // TODO: Extract from deployment config
-                    let blueprint_id = 1u64; // TODO: Extract from deployment config
+            let service_id = endpoint.service_id;
+            let blueprint_id = endpoint.blueprint_id;
 
-                    // Get resource usage metrics
+            match QosMetricsClient::connect(endpoint.grpc_url.clone()).await {
+                Ok(mut client) => {
                     if let Ok(response) = client
                         .get_resource_usage(GetResourceUsageRequest {
                             blueprint_id,
@@ -119,7 +148,6 @@ impl RemoteMetricsProvider {
                         cache.insert(service_id, system_metrics);
                     }
 
-                    // Get blueprint-specific metrics
                     if let Ok(response) = client
                         .get_blueprint_metrics(GetBlueprintMetricsRequest {
                             blueprint_id,
@@ -141,10 +169,9 @@ impl RemoteMetricsProvider {
                 Err(e) => {
                     tracing::warn!(
                         "Failed to connect to remote QoS service at {}: {}",
-                        endpoint,
+                        endpoint.grpc_url,
                         e
                     );
-                    // TODO: Consider removing dead endpoints after multiple failures
                 }
             }
         }

@@ -187,7 +187,7 @@ pub trait FaasExecutor: Send + Sync + fmt::Debug {
     async fn undeploy_job(&self, job_id: u32) -> Result<(), FaasError>;
 
     /// Get the display name of this FaaS provider
-    fn provider_name(&self) -> &str;
+    fn provider_name(&self) -> &'static str;
 }
 
 /// Configuration for FaaS deployment
@@ -270,7 +270,7 @@ impl<T: FaasExecutor + ?Sized> FaasExecutor for Arc<T> {
         (**self).undeploy_job(job_id).await
     }
 
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         (**self).provider_name()
     }
 }

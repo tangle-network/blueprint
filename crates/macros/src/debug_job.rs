@@ -160,57 +160,6 @@ fn check_extractor_count(item_fn: &ItemFn, kind: FunctionKind) -> Option<TokenSt
     }
 }
 
-#[allow(dead_code)]
-fn extractor_idents(
-    item_fn: &ItemFn,
-    kind: FunctionKind,
-) -> impl Iterator<Item = (usize, &syn::FnArg, &syn::Ident)> {
-    item_fn
-        .sig
-        .inputs
-        .iter()
-        .filter(move |arg| skip_next_arg(arg, kind))
-        .enumerate()
-        .filter_map(|(idx, fn_arg)| match fn_arg {
-            FnArg::Receiver(_) => None,
-            FnArg::Typed(pat_type) => {
-                if let Type::Path(type_path) = &*pat_type.ty {
-                    type_path
-                        .path
-                        .segments
-                        .last()
-                        .map(|segment| (idx, fn_arg, &segment.ident))
-                } else {
-                    None
-                }
-            }
-        })
-}
-
-#[allow(dead_code)]
-fn check_path_extractor(item_fn: &ItemFn, kind: FunctionKind) -> TokenStream {
-    let path_extractors = extractor_idents(item_fn, kind)
-        .filter(|(_, _, ident)| *ident == "Path")
-        .collect::<Vec<_>>();
-
-    if path_extractors.len() > 1 {
-        path_extractors
-            .into_iter()
-            .map(|(_, arg, _)| {
-                syn::Error::new_spanned(
-                    arg,
-                    "Multiple parameters must be extracted with a tuple \
-                    `Path<(_, _)>` or a struct `Path<YourParams>`, not by applying \
-                    multiple `Path<_>` extractors",
-                )
-                .to_compile_error()
-            })
-            .collect()
-    } else {
-        quote! {}
-    }
-}
-
 fn is_self_pat_type(typed: &syn::PatType) -> bool {
     let ident = if let syn::Pat::Ident(ident) = &*typed.pat {
         &ident.ident

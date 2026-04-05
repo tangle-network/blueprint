@@ -1,41 +1,50 @@
 # Pursuit: SDK Quality — Principal Eng Standard
 
-Generation: 1
+## Generation 1 — SHIPPED (PR #1361)
+- Security criticals: deterministic RNG, constant-time auth, key zeroing, job dispatch panic
+- Lint discipline: removed 5 dangerous workspace-wide allows
+- Panic elimination: keystore, eigenlayer registration, runner config
+- Result: 5.5 → 6.5/10
+
+---
+
+## Generation 2 — ALL REMAINING HIGH/MEDIUM/STRATEGIC
 Date: 2026-04-04
 Status: building
 
-## Diagnosis
+### Thesis
+**Seal every crack, harden every surface.** Gen 1 stopped the bleeding. Gen 2 closes every remaining HIGH and MEDIUM finding, fixes the structural bloat, and adds the missing production hardening. Target: 9/10 across all categories.
 
-The SDK has excellent core abstractions (job/router/extractor pattern) buried under alpha-quality hygiene. The problems are not architectural — the Tower-inspired design is sound. The problems are execution discipline: panics in hot paths, suppressed lints masking bugs, missing security fundamentals, dead code tolerance.
+### Track A — Soundness & Unsafe
+1. Add `// SAFETY:` comments to `unsafe impl Send/Sync` in runner + manager, or eliminate them
+2. Fix `unsafe` env var mutation in remote-providers (use Mutex or scoped approach)
+3. Fix TOCTOU on key file permissions (create with restricted permissions from the start)
+4. Fix `transmute` endianness in JobId (use `from_le_bytes`/`to_le_bytes`)
 
-## Generation 1 Thesis
+### Track B — Network Hardening
+5. Add per-peer rate limiting to P2P protocol (request + gossip)
+6. Add size-bounded deserialization for bincode on network messages
+7. Replace SSH command denylist with allowlist pattern
 
-**Strip the slop, harden the core.** No new features. Remove dead weight, fix security criticals, restore lint discipline, eliminate panics from library code. Less code, fewer crates, tighter contracts.
+### Track C — Async & Concurrency
+8. Replace QoS busy-wait polling with `tokio::sync::watch` channel
+9. Add backpressure to producer/consumer pipeline (bounded channels)
 
-## Changes (ordered by impact)
+### Track D — Clippy Deep Clean
+10. Audit remaining ~100 suppressed clippy lints — remove unjustified, fix warnings
+11. Target: only genuinely stylistic lints remain suppressed
 
-### P0 — Security Criticals
-1. Fix deterministic RNG in `no_std` crypto — compile_error!, not silent fallback
-2. Replace `todo!()` in job dispatch with proper error propagation
-3. Fix timing-vulnerable auth comparison with constant-time eq
-4. Add `Zeroize` on drop for secret key types
+### Track E — TODO/Dead Code Purge
+12. Audit all TODO/FIXME in production code — resolve meaningful ones, delete stale ones
+13. Remove dead code surfaced by lint changes
+14. Clean up hardcoded values (service_id=1, blueprint_id=1 in QoS)
 
-### P1 — Lint Discipline
-5. Remove workspace-wide `dead_code = "allow"` and `unused_variables = "allow"`
-6. Audit and tighten the 108 suppressed clippy lints — keep only justified ones
-7. Fix resulting warnings (dead code removal = bloat reduction for free)
+### Track F — Build & Structure
+15. Populate workspace-hack with hakari output for compile-time dedup
+16. Audit and document the meta-crate strategy (keep/merge decision with rationale)
 
-### P2 — Panic Elimination
-8. Replace `unwrap()` chains in eigenlayer registration with `?` propagation
-9. Replace `panic!()` in keystore remote config with `TryFrom` returning Result
-10. Replace `todo!()` in runner config (Symbiotic) with proper error
-
-### P3 — Bloat Reduction
-11. Audit and remove dead code surfaced by lint changes
-12. Clean up 55 TODO/FIXME — resolve or delete
-
-## Success Criteria
-- `cargo clippy -- -D warnings` passes with real lint coverage
-- Zero `todo!()`/`panic!()` in non-test library code paths
-- Zero `unwrap()` in error-handling paths of runner/registration
-- Compile succeeds with no dead_code/unused_variable suppression
+### Strategic (deferred to Gen 3 — require protocol design decisions)
+- Key rotation for operators
+- Pre-submission slashing protection
+- MEV-protected result submission
+- `cargo tangle dev` zero-config mode

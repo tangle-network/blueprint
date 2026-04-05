@@ -43,8 +43,7 @@ impl EigenlayerProtocolClient {
 
         info!("EigenLayer client initialized at block {}", current_block);
 
-        // TODO(PERFORMANCE - HIGH PRIORITY): Filter logs by AVS contract addresses
-        // GitHub Issue: https://github.com/tangle-network/blueprint/issues/XXX (create this issue)
+        // TODO(PERFORMANCE): Filter logs by AVS contract addresses
         // BLOCKER FOR MAINNET: Currently polls ALL logs from every block - this will cause major
         // performance degradation on mainnet with high transaction throughput.
         // Required implementation before mainnet deployment:

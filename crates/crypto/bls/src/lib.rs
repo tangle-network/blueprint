@@ -150,9 +150,16 @@ macro_rules! define_bls_key {
                         if let Some(seed) = seed {
                             Ok([<W3f $ty Secret>](SecretKey::from_seed(seed)))
                         } else {
-                            let mut rng = Self::get_rng();
-                            let rand_bytes = <[u8; 32]>::rand(&mut rng);
-                            Ok([<W3f $ty Secret>](SecretKey::from_seed(&rand_bytes)))
+                            #[cfg(feature = "std")]
+                            {
+                                let mut rng = Self::get_rng();
+                                let rand_bytes = <[u8; 32]>::rand(&mut rng);
+                                Ok([<W3f $ty Secret>](SecretKey::from_seed(&rand_bytes)))
+                            }
+                            #[cfg(not(feature = "std"))]
+                            Err(BlsError::InvalidSeed(
+                                "Random key generation requires the std feature".into(),
+                            ))
                         }
                     }
 
@@ -167,12 +174,19 @@ macro_rules! define_bls_key {
                         [<W3f $ty Public>](secret.0.into_public())
                     }
 
+                    #[cfg(feature = "std")]
                     fn sign_with_secret(secret: &mut Self::Secret, msg: &[u8]) -> Result<Self::Signature> {
                         let mut rng = Self::get_rng();
                         let message: Message = Message::new(super::CONTEXT, msg);
                         Ok([<W3f $ty Signature>](secret.0.sign(&message, &mut rng)))
                     }
 
+                    #[cfg(not(feature = "std"))]
+                    fn sign_with_secret(_secret: &mut Self::Secret, _msg: &[u8]) -> Result<Self::Signature> {
+                        Err(BlsError::InvalidSeed("BLS signing requires the std feature".into()))
+                    }
+
+                    #[cfg(feature = "std")]
                     fn sign_with_secret_pre_hashed(
                         secret: &mut Self::Secret,
                         msg: &[u8; 32],
@@ -180,6 +194,14 @@ macro_rules! define_bls_key {
                         let mut rng = Self::get_rng();
                         let message: Message = Message::new(super::CONTEXT, msg);
                         Ok([<W3f $ty Signature>](secret.0.sign(&message, &mut rng)))
+                    }
+
+                    #[cfg(not(feature = "std"))]
+                    fn sign_with_secret_pre_hashed(
+                        _secret: &mut Self::Secret,
+                        _msg: &[u8; 32],
+                    ) -> Result<Self::Signature> {
+                        Err(BlsError::InvalidSeed("BLS signing requires the std feature".into()))
                     }
 
                     fn verify(public: &Self::Public, msg: &[u8], signature: &Self::Signature) -> bool {

@@ -74,6 +74,7 @@ uuid = { workspace = true, features = ["v4"] }
 rand = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 blueprint-keystore = { workspace = true, features = ["bn254"] }

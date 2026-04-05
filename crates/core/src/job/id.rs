@@ -29,7 +29,7 @@ impl core::fmt::Debug for JobId {
 
 impl core::fmt::Display for JobId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        for limb in self.0.iter() {
+        for limb in &self.0 {
             write!(f, "{limb:016x}")?;
         }
         Ok(())
@@ -124,16 +124,38 @@ impl_from_numbers!(wide u128, wide i128);
 impl From<[u8; 32]> for JobId {
     #[inline]
     fn from(value: [u8; 32]) -> Self {
-        // Safe because they are same size and layout
-        Self(unsafe { core::mem::transmute::<[u8; 32], [u64; 4]>(value) })
+        Self([
+            u64::from_le_bytes([
+                value[0], value[1], value[2], value[3], value[4], value[5], value[6], value[7],
+            ]),
+            u64::from_le_bytes([
+                value[8], value[9], value[10], value[11], value[12], value[13], value[14],
+                value[15],
+            ]),
+            u64::from_le_bytes([
+                value[16], value[17], value[18], value[19], value[20], value[21], value[22],
+                value[23],
+            ]),
+            u64::from_le_bytes([
+                value[24], value[25], value[26], value[27], value[28], value[29], value[30],
+                value[31],
+            ]),
+        ])
     }
 }
 
 impl From<JobId> for [u8; 32] {
     #[inline]
     fn from(value: JobId) -> Self {
-        // Safe because they are same size and layout
-        unsafe { core::mem::transmute::<[u64; 4], [u8; 32]>(value.0) }
+        let a = value.0[0].to_le_bytes();
+        let b = value.0[1].to_le_bytes();
+        let c = value.0[2].to_le_bytes();
+        let d = value.0[3].to_le_bytes();
+        [
+            a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], b[0], b[1], b[2], b[3], b[4], b[5],
+            b[6], b[7], c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], d[0], d[1], d[2], d[3],
+            d[4], d[5], d[6], d[7],
+        ]
     }
 }
 
@@ -168,7 +190,7 @@ impl From<JobId> for alloc::string::String {
     fn from(value: JobId) -> Self {
         let hash: [u8; 32] = value.into();
         let mut result = alloc::string::String::with_capacity(64);
-        for byte in hash.iter() {
+        for byte in &hash {
             let _ = write!(result, "{byte:02x}");
         }
         result
@@ -206,7 +228,7 @@ impl From<&alloc::vec::Vec<u8>> for JobId {
 
 impl From<()> for JobId {
     #[inline]
-    fn from(_: ()) -> Self {
+    fn from((): ()) -> Self {
         Self::ZERO
     }
 }

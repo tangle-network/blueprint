@@ -12,6 +12,7 @@ blueprint-router = { workspace = true }
 blueprint-tangle-extra = { workspace = true }
 once_cell = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 anyhow = { workspace = true }

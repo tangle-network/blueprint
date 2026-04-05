@@ -11,8 +11,7 @@ use oauth_blueprint_lib::{
     ADMIN_PURGE_JOB_ID, AdminPurgeResult, WRITE_DOC_JOB_ID, WriteDocResult, reset_state_for_tests,
     router,
 };
-use once_cell::sync::Lazy;
-use std::sync::Once;
+use std::sync::{LazyLock, Once};
 use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::timeout;
@@ -23,7 +22,7 @@ const SERVICE_OWNER_PRIVATE_KEY: &str =
     "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const UNAUTHORIZED_CALLER_PRIVATE_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-static HARNESS_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
+static HARNESS_LOCK: LazyLock<AsyncMutex<()>> = LazyLock::new(|| AsyncMutex::new(()));
 static LOG_INIT: Once = Once::new();
 
 fn setup_log() {

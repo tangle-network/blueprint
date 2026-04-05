@@ -51,9 +51,8 @@ impl BlueprintRng {
     pub fn from_seed(seed: [u8; 32]) -> Self {
         #[cfg(feature = "std")]
         {
-            // TODO: ??
+            // In std mode, always use OsRng regardless of seed for security
             let _ = seed;
-            // Always use OsRng in std for security
             Self(rand::rngs::OsRng)
         }
         #[cfg(not(feature = "std"))]

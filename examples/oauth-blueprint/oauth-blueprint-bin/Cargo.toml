@@ -8,6 +8,7 @@ oauth-blueprint-lib = { path = "../oauth-blueprint-lib" }
 blueprint-sdk = { path = "../../../crates/sdk", features = ["std", "tangle"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [build-dependencies]
 serde_json = { workspace = true }

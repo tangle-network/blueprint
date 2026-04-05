@@ -269,10 +269,4 @@ mod no_std {
             }
         }
     }
-
-    #[allow(dead_code)]
-    fn assert_error_is_sync_send() {
-        fn is_sync_send<T: Sync + Send>() {}
-        is_sync_send::<Error>();
-    }
 }

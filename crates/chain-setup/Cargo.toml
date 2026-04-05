@@ -11,6 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 blueprint-chain-setup-anvil = { workspace = true, optional = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = ["std"]

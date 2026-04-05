@@ -46,7 +46,7 @@ use core::{
 /// ```
 ///
 /// Note that [`Context`] is an extractor, so be sure to put it before any body
-/// extractors, see ["the order of extractors"][order-of-extractors].
+/// extractors, see [`the order of extractors`][order-of-extractors].
 ///
 /// [order-of-extractors]: crate::extract#the-order-of-extractors
 ///

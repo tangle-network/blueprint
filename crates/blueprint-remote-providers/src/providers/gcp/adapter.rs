@@ -436,66 +436,6 @@ impl CloudProviderAdapter for GcpAdapter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::GcpAdapter;
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
-    }
-
-    #[test]
-    fn firewall_rules_use_configured_cidrs() {
-        let _guard = env_lock();
-        unsafe {
-            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8");
-            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "192.168.0.0/16");
-        }
-
-        let rules = GcpAdapter::build_firewall_rules().unwrap();
-        let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
-        let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
-        assert_eq!(ssh_rule[0].as_str(), Some("10.0.0.0/8"));
-        assert_eq!(qos_rule[0].as_str(), Some("192.168.0.0/16"));
-
-        unsafe {
-            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
-            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
-        }
-    }
-
-    #[test]
-    fn firewall_rules_fail_closed_without_explicit_cidrs() {
-        let _guard = env_lock();
-        unsafe {
-            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
-            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
-        }
-        let err = GcpAdapter::build_firewall_rules().unwrap_err();
-        assert!(err.to_string().contains("open ingress"));
-    }
-
-    #[test]
-    fn firewall_rules_allow_explicit_open_ingress() {
-        let _guard = env_lock();
-        unsafe {
-            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "0.0.0.0/0");
-            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "0.0.0.0/0");
-        }
-        let rules = GcpAdapter::build_firewall_rules().unwrap();
-        let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
-        let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
-        assert_eq!(ssh_rule[0].as_str(), Some("0.0.0.0/0"));
-        assert_eq!(qos_rule[0].as_str(), Some("0.0.0.0/0"));
-        unsafe {
-            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
-            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
-        }
-    }
-}
-
 impl GcpAdapter {
     /// Deploy to Compute Engine VM via SSH
     async fn deploy_to_vm(
@@ -579,6 +519,66 @@ impl GcpAdapter {
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GcpAdapter;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn firewall_rules_use_configured_cidrs() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8");
+            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "192.168.0.0/16");
+        }
+
+        let rules = GcpAdapter::build_firewall_rules().unwrap();
+        let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
+        let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
+        assert_eq!(ssh_rule[0].as_str(), Some("10.0.0.0/8"));
+        assert_eq!(qos_rule[0].as_str(), Some("192.168.0.0/16"));
+
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+    }
+
+    #[test]
+    fn firewall_rules_fail_closed_without_explicit_cidrs() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
+        }
+        let err = GcpAdapter::build_firewall_rules().unwrap_err();
+        assert!(err.to_string().contains("open ingress"));
+    }
+
+    #[test]
+    fn firewall_rules_allow_explicit_open_ingress() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "0.0.0.0/0");
+            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "0.0.0.0/0");
+        }
+        let rules = GcpAdapter::build_firewall_rules().unwrap();
+        let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
+        let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
+        assert_eq!(ssh_rule[0].as_str(), Some("0.0.0.0/0"));
+        assert_eq!(qos_rule[0].as_str(), Some("0.0.0.0/0"));
+        unsafe {
+            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
+            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
         }
     }
 }

@@ -121,9 +121,16 @@ impl KeyType for SchnorrkelSr25519 {
             schnorrkel::SecretKey::from_bytes(&padded_seed)
                 .map_err(|e| Sr25519Error::InvalidSeed(e.to_string()))
         } else {
-            let mut rng = Self::get_rng();
-            let mini_secret_key = MiniSecretKey::generate_with(&mut rng);
-            Ok(mini_secret_key.expand(MiniSecretKey::UNIFORM_MODE))
+            #[cfg(feature = "std")]
+            {
+                let mut rng = Self::get_rng();
+                let mini_secret_key = MiniSecretKey::generate_with(&mut rng);
+                Ok(mini_secret_key.expand(MiniSecretKey::UNIFORM_MODE))
+            }
+            #[cfg(not(feature = "std"))]
+            return Err(Sr25519Error::InvalidSeed(
+                "Random key generation requires the std feature".into(),
+            ));
         };
 
         secret_key.map(SchnorrkelSecret)

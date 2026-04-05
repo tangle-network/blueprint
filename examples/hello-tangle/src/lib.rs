@@ -49,7 +49,6 @@ pub async fn create_document(
 }
 
 /// Router used by the example blueprint runner.
-#[must_use]
 pub fn router() -> Router {
     Router::new().route(CREATE_DOCUMENT_JOB, create_document)
 }

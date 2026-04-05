@@ -106,7 +106,7 @@ async fn multi_tenant_service_isolation() {
     ];
 
     let mut signing_keys = Vec::new();
-    for (email, _, _) in &tenant_keys {
+    for &(email, _, _) in &tenant_keys {
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
         let public_key = signing_key.verifying_key().to_sec1_bytes();
         service.add_owner(KeyType::Ecdsa, public_key.into());
@@ -121,7 +121,7 @@ async fn multi_tenant_service_isolation() {
     // Each tenant gets their own API token with their specific headers
     let mut tenant_tokens = Vec::new();
 
-    for ((email, company, tier), (_, signing_key)) in tenant_keys.iter().zip(signing_keys.iter()) {
+    for (&(email, company, tier), (_, signing_key)) in tenant_keys.iter().zip(signing_keys.iter()) {
         let public_key = signing_key.verifying_key().to_sec1_bytes();
 
         // Step 1: Request challenge

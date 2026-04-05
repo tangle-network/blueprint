@@ -16,7 +16,6 @@ use ark_bn254::{Fr, G1Affine, G2Affine};
 use ark_ec::AffineRepr;
 use ark_ff::UniformRand;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use blueprint_crypto_bn254;
 use blueprint_sdk::testing::utils::setup_log;
 use blueprint_tangle_aggregation_svc::{
     AggregationService, ServiceConfig, ServiceError, SubmitSignatureRequest, create_signing_message,

@@ -38,6 +38,7 @@ libsecp256k1 = { workspace = true, features = ["static-context"] }
 # Crypto dependencies
 blueprint-crypto = { workspace = true, features = ["k256", "hashing"] }
 k256 = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies.libp2p]
 workspace = true

@@ -30,3 +30,4 @@ eigensdk = { workspace = true }
 eigenlayer-contract-deployer = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }

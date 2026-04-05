@@ -527,7 +527,7 @@ mod tests {
         let mut native: OnChainBlueprintSource = Default::default();
         native.kind = SOURCE_KIND_NATIVE;
         native.native.fetcher = FETCHER_KIND_HTTP;
-        native.native.artifactUri = metadata.into();
+        native.native.artifactUri = metadata;
         native.native.entrypoint = "./demo".into();
         native.testing = ITangleTypes::TestingSource {
             cargoPackage: "pkg-native".into(),
@@ -570,8 +570,7 @@ mod tests {
             "archive_url": "https://example.com/archive.tar.xz",
             "binaries": []
         })
-        .to_string()
-        .into();
+        .to_string();
         native.binaries = vec![ITangleTypes::BlueprintBinary {
             arch: ITangleTypes::BlueprintArchitecture::from_underlying(5).into_underlying(),
             os: ITangleTypes::BlueprintOperatingSystem::from_underlying(1).into_underlying(),
@@ -611,8 +610,7 @@ mod tests {
                 "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             }]
         })
-        .to_string()
-        .into();
+        .to_string();
 
         let converted = OnChainMetadataProvider::convert_sources(&[native]);
         assert_eq!(converted.len(), 1);

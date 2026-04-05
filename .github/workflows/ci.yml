@@ -23,23 +23,15 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Checkout tnt-core
-        uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-build-env
         with:
-          repository: tangle-network/tnt-core
-          path: tnt-core
-
-      - name: Verify tnt-core bindings
-        run: ./scripts/ci/verify-tnt-core.sh
-
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.RUSTFMT_NIGHTLY }}
+          rust-toolchain: ${{ env.RUSTFMT_NIGHTLY }}
           components: rustfmt
+          cache: "false"
+          sccache: "false"
+          foundry: "false"
 
       - name: Check Formatting
         run: cargo +${RUSTFMT_NIGHTLY} fmt -- --check
@@ -49,217 +41,146 @@ jobs:
     name: cargo clippy
     runs-on: ubuntu-latest
     steps:
-      - name: checkout code
-        uses: actions/checkout@v4
-
-      - name: Checkout tnt-core
-        uses: actions/checkout@v4
-        with:
-          repository: tangle-network/tnt-core
-          path: tnt-core
-
-      - name: Verify tnt-core bindings
-        run: ./scripts/ci/verify-tnt-core.sh
-
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/free-disk-space
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-        continue-on-error: true
-
-      - name: Retry Foundry installation if needed
-        run: |
-          if ! command -v forge &> /dev/null; then
-            echo "Foundry not found, retrying installation..."
-            curl -L https://foundry.paradigm.xyz | bash
-            ~/.foundry/bin/foundryup --version stable
-          fi
-          forge --version
-
-      - name: install rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-
-      - name: install protobuf and gmp
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.7"
+      - uses: ./.github/actions/setup-build-env
 
       - name: Run Clippy
-        run: cargo clippy --tests --examples -- -D warnings
+        run: cargo clippy --workspace --tests --examples -- -D warnings
 
   generate-matrix:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Checkout tnt-core
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-build-env
         with:
-          repository: tangle-network/tnt-core
-          path: tnt-core
+          cache: "false"
+          foundry: "false"
 
-      - name: Verify tnt-core bindings
-        run: ./scripts/ci/verify-tnt-core.sh
+      - name: Detect changed crates (PRs only)
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin ${{ github.base_ref }} --depth=1
+            CHANGED=$(./scripts/ci/changed-crates.sh origin/${{ github.base_ref }})
+            echo "crates=$CHANGED" >> $GITHUB_OUTPUT
+            echo "Changed crates: $CHANGED" >&2
+          else
+            echo 'crates=[]' >> $GITHUB_OUTPUT
+          fi
 
-      - name: Generate matrix for workspace crates
+      - name: Generate test matrix (grouped)
         id: set-matrix
         run: |
-          matrix=$(cargo metadata --format-version 1 --no-deps | jq -c '[.packages[] | .name]')
-          echo "Generated matrix: $matrix"
-          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          CHANGED='${{ steps.changed.outputs.crates }}'
 
-  # TODO: Figure out why this doesn't work in CI. Tangle node seems to be silently dying at some point before job submission.
-  #       Runner setup failed: RPC error: The background task closed connection closed; restart required
-  #
-  #  test-incredible-squaring-tangle:
-  #    timeout-minutes: 30
-  #    name: Tangle incredible squaring
-  #    runs-on: ubuntu-latest
-  #    env:
-  #      CARGO_TERM_COLOR: always
-  #      RUST_LOG: info
-  #    steps:
-  #      - name: checkout code
-  #        uses: actions/checkout@v2
-  #
-  #      - name: Install Foundry
-  #        uses: foundry-rs/foundry-toolchain@v1
-  #
-  #      - name: Verify Forge installation
-  #        run: forge --version
-  #
-  #      - name: install rust
-  #        uses: dtolnay/rust-toolchain@nightly
-  #        with:
-  #          toolchain: stable
-  #
-  #      - uses: swatinem/rust-cache@v2
-  #        with:
-  #          cache-on-failure: "true"
-  #
-  #      - uses: taiki-e/install-action@v2
-  #        with:
-  #          tool: nextest
-  #
-  #      - name: tests
-  #        working-directory: examples/incredible-squaring/incredible-squaring-lib
-  #        run: cargo nextest run --profile ci
-
-  testing:
-    needs:
-      - generate-matrix
-    timeout-minutes: 45
-    name: cargo test
-    runs-on: ubuntu-latest
-    env:
-      CARGO_TERM_COLOR: always
-    strategy:
-      fail-fast: false
-      matrix:
-        package: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
-    steps:
-      - name: checkout code
-        uses: actions/checkout@v4
-
-      - name: Checkout tnt-core
-        uses: actions/checkout@v4
-        with:
-          repository: tangle-network/tnt-core
-          path: tnt-core
-
-      - name: Verify tnt-core bindings
-        run: ./scripts/ci/verify-tnt-core.sh
-
-      - uses: ./.github/actions/free-disk-space
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-        continue-on-error: true
-
-      - name: Retry Foundry installation if needed
-        run: |
-          if ! command -v forge &> /dev/null; then
-            echo "Foundry not found, retrying installation..."
-            curl -L https://foundry.paradigm.xyz | bash
-            ~/.foundry/bin/foundryup --version stable
+          # On push to main or if changed-crates returned empty (meaning "test all"),
+          # test all workspace packages
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "$CHANGED" = "[]" ]; then
+            ALL_PKGS=$(cargo metadata --format-version 1 --no-deps | jq -r '[.packages[] | .name] | sort | .[]')
+          else
+            # On PRs, only test changed crates + dependents
+            ALL_PKGS=$(echo "$CHANGED" | jq -r '.[]' | sort)
+            if [ -z "$ALL_PKGS" ]; then
+              echo "No crates to test"
+              echo 'matrix=[]' >> $GITHUB_OUTPUT
+              exit 0
+            fi
           fi
-          forge --version
 
-      - name: install rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: stable
+          # Serial crates that need test-threads=1
+          SERIAL="blueprint-tangle-extra blueprint-client-tangle blueprint-client-evm blueprint-networking blueprint-qos cargo-tangle blueprint-manager"
 
-      - uses: swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
+          # Group crates into bundles of ~8 for parallel execution
+          BUNDLE_SIZE=8
+          BUNDLES="[]"
+          CURRENT_BUNDLE="[]"
+          COUNT=0
 
-      - name: install protobuf and gmp
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
+          for pkg in $ALL_PKGS; do
+            # Serial crates get their own job
+            if echo "$SERIAL" | grep -qw "$pkg"; then
+              BUNDLES=$(echo "$BUNDLES" | jq --arg p "$pkg" --arg s "true" '. + [{"packages": [$p], "serial": $s}]')
+              continue
+            fi
 
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.7"
+            CURRENT_BUNDLE=$(echo "$CURRENT_BUNDLE" | jq --arg p "$pkg" '. + [$p]')
+            COUNT=$((COUNT + 1))
 
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest
-
-      - name: Determine nextest profile and features
-        run: |
-          SERIAL_CRATES=("blueprint-tangle-extra" "blueprint-client-tangle" "blueprint-client-evm" "blueprint-networking" "blueprint-qos" "cargo-tangle" "blueprint-manager")
-          PROFILE=ci
-
-          for crate in "${SERIAL_CRATES[@]}"; do
-            if [[ "${{ matrix.package }}" == "$crate" ]]; then
-              PROFILE=serial
-              break
+            if [ "$COUNT" -ge "$BUNDLE_SIZE" ]; then
+              BUNDLES=$(echo "$BUNDLES" | jq --argjson b "$CURRENT_BUNDLE" '. + [{"packages": $b, "serial": "false"}]')
+              CURRENT_BUNDLE="[]"
+              COUNT=0
             fi
           done
 
-          echo "cargo_nextest_args=--profile $PROFILE" >> $GITHUB_ENV
+          # Flush remaining
+          if [ "$(echo "$CURRENT_BUNDLE" | jq length)" -gt 0 ]; then
+            BUNDLES=$(echo "$BUNDLES" | jq --argjson b "$CURRENT_BUNDLE" '. + [{"packages": $b, "serial": "false"}]')
+          fi
 
-      # TODO: nextest doesn't support doc tests yet (https://github.com/nextest-rs/nextest/issues/16)
-      # Because blueprint-manage spawns many workers, we should run tests with test-threads=1 to avoid conflicts
-      - name: tests
+          echo "Generated $(echo "$BUNDLES" | jq length) test bundles"
+          echo "matrix=$(echo "$BUNDLES" | jq -c .)" >> $GITHUB_OUTPUT
+
+  testing:
+    needs: [generate-matrix]
+    timeout-minutes: 45
+    name: cargo test (${{ join(fromJSON(matrix.bundle.packages), ', ') }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        bundle: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-disk-space
+      - uses: ./.github/actions/setup-build-env
+        with:
+          nextest: "true"
+
+      - name: Run tests
         run: |
-          export PKG="${{ matrix.package }}"
-          cargo metadata --no-deps --format-version 1 > /tmp/cargo-metadata.json
-          HAS_LIB=$(python3 ./scripts/ci/check-lib-target.py /tmp/cargo-metadata.json "$PKG")
-          if [[ "$PKG" == "blueprint-manager" ]]; then
-            cargo nextest run --test-threads=1 --no-tests pass --package "$PKG" ${{ env.cargo_nextest_args }}
-          else
-            cargo nextest run --no-tests pass --package "$PKG" ${{ env.cargo_nextest_args }}
-          fi
-          if [[ "$HAS_LIB" == "true" ]]; then
-            cargo test --package "$PKG" --doc
-          else
-            echo "Skipping doc tests for $PKG (no lib target)"
+          PACKAGES='${{ toJSON(matrix.bundle.packages) }}'
+          IS_SERIAL='${{ matrix.bundle.serial }}'
+
+          PROFILE="ci"
+          EXTRA_ARGS=""
+          if [ "$IS_SERIAL" = "true" ]; then
+            PROFILE="serial"
           fi
 
-  tangle-integration:
-    name: Tangle Integration
+          for PKG in $(echo "$PACKAGES" | jq -r '.[]'); do
+            echo "========================================="
+            echo "Testing: $PKG"
+            echo "========================================="
+
+            # Check if crate has a lib target (for doc tests)
+            HAS_LIB=$(cargo metadata --no-deps --format-version 1 | python3 -c "
+          import json, sys
+          meta = json.load(sys.stdin)
+          pkg = next((p for p in meta['packages'] if p['name'] == '$PKG'), None)
+          if pkg:
+            has_lib = any(t['kind'] == ['lib'] for t in pkg.get('targets', []))
+            print('true' if has_lib else 'false')
+          else:
+            print('false')
+          ")
+
+            if [ "$PKG" = "blueprint-manager" ]; then
+              cargo nextest run --test-threads=1 --no-tests pass --package "$PKG" --profile "$PROFILE"
+            else
+              cargo nextest run --no-tests pass --package "$PKG" --profile "$PROFILE"
+            fi
+
+            if [ "$HAS_LIB" = "true" ]; then
+              cargo test --package "$PKG" --doc
+            fi
+          done
+
+  integration:
+    name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -267,199 +188,37 @@ jobs:
       RUN_TNT_E2E: "1"
       BLUEPRINT_ANVIL_LOGS: "1"
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Checkout tnt-core
-        uses: actions/checkout@v4
-        with:
-          repository: tangle-network/tnt-core
-          path: tnt-core
-
-      - name: Verify tnt-core bindings
-        run: ./scripts/ci/verify-tnt-core.sh
-
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/free-disk-space
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-        continue-on-error: true
-
-      - name: Retry Foundry installation if needed
-        run: |
-          if ! command -v forge &> /dev/null; then
-            echo "Foundry not found, retrying installation..."
-            curl -L https://foundry.paradigm.xyz | bash
-            ~/.foundry/bin/foundryup --version stable
-          fi
-          forge --version
+      - uses: ./.github/actions/setup-build-env
 
       - name: Warm up Foundry image
         run: docker pull ghcr.io/foundry-rs/foundry:latest
 
-      - name: install rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: stable
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - uses: swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-
-      - name: install protobuf and gmp
+      - name: Tangle integration tests
         run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.7"
-
-      - name: Run Tangle integration tests
-        env:
-          PRICING_ENGINE_E2E_FEATURES: "pricing-engine-e2e-tests"
-        run: |
-          # Core Tangle tests
-          cargo test -p blueprint-pricing-engine --features ${PRICING_ENGINE_E2E_FEATURES} --test evm_listener -- --nocapture
+          cargo test -p blueprint-pricing-engine --features pricing-engine-e2e-tests --test evm_listener -- --nocapture
           cargo test -p blueprint-manager --test tangle_runner -- --nocapture
           cargo test -p hello-tangle-blueprint --test anvil -- --nocapture
-          # QoS and heartbeat integration
-          cargo test -p blueprint-qos --test blueprint_integration_test -- --nocapture --test-threads=1
-          # Client integration tests
           cargo test -p blueprint-client-tangle --test anvil -- --nocapture --test-threads=1
-          # Producer/consumer flow tests
           cargo test -p blueprint-tangle-extra --test anvil_integration -- --nocapture --test-threads=1
 
-  qos-integration:
-    name: QoS & Heartbeat Integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      RUST_LOG: info
-      RUN_TNT_E2E: "1"
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Checkout tnt-core
-        uses: actions/checkout@v4
-        with:
-          repository: tangle-network/tnt-core
-          path: tnt-core
-
-      - name: Verify tnt-core bindings
-        run: ./scripts/ci/verify-tnt-core.sh
-
-      - uses: ./.github/actions/free-disk-space
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-        continue-on-error: true
-
-      - name: Retry Foundry installation if needed
-        run: |
-          if ! command -v forge &> /dev/null; then
-            echo "Foundry not found, retrying installation..."
-            curl -L https://foundry.paradigm.xyz | bash
-            ~/.foundry/bin/foundryup --version stable
-          fi
-          forge --version
-
-      - name: Warm up Foundry image
-        run: docker pull ghcr.io/foundry-rs/foundry:latest
-
-      - name: install rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: stable
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-
-      - name: install protobuf and gmp
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.7"
-
-      - name: Run QoS integration tests
+      - name: QoS integration tests
         run: |
           cargo test -p blueprint-qos --test qos_metrics_demo_test -- --nocapture --test-threads=1
           cargo test -p blueprint-qos --test blueprint_integration_test -- --nocapture --test-threads=1
 
-  cli-integration:
-    name: CLI Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      RUST_LOG: info
-      RUN_TNT_E2E: "1"
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Checkout tnt-core
-        uses: actions/checkout@v4
-        with:
-          repository: tangle-network/tnt-core
-          path: tnt-core
-
-      - name: Verify tnt-core bindings
-        run: ./scripts/ci/verify-tnt-core.sh
-
-      - uses: ./.github/actions/free-disk-space
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-        continue-on-error: true
-
-      - name: Retry Foundry installation if needed
+      - name: CLI integration tests
         run: |
-          if ! command -v forge &> /dev/null; then
-            echo "Foundry not found, retrying installation..."
-            curl -L https://foundry.paradigm.xyz | bash
-            ~/.foundry/bin/foundryup --version stable
-          fi
-          forge --version
-
-      - name: Warm up Foundry image
-        run: docker pull ghcr.io/foundry-rs/foundry:latest
-
-      - name: install rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: stable
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-
-      - name: install protobuf and gmp
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.7"
-
-      - name: Run CLI integration tests
-        run: |
-          # CLI service lifecycle tests
           cargo test -p cargo-tangle --test '*' -- --nocapture --test-threads=1
+
+      - name: Container spawn tests
+        run: |
+          cargo test -p blueprint-manager container --lib -- --nocapture --test-threads=1
+          cargo test -p blueprint-manager sources --lib -- --nocapture --test-threads=1
 
   eigenlayer-integration:
     name: EigenLayer Integration
@@ -468,119 +227,16 @@ jobs:
     env:
       RUST_LOG: info
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/free-disk-space
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+      - uses: ./.github/actions/setup-build-env
         with:
-          version: stable
-        continue-on-error: true
-
-      - name: Retry Foundry installation if needed
-        run: |
-          if ! command -v forge &> /dev/null; then
-            echo "Foundry not found, retrying installation..."
-            curl -L https://foundry.paradigm.xyz | bash
-            ~/.foundry/bin/foundryup --version stable
-          fi
-          forge --version
-
-      - name: install rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: stable
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-
-      - name: install protobuf and gmp
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.7"
+          tnt-core: "false"
 
       - name: Run EigenLayer tests
         run: |
-          # EigenLayer protocol tests
           cargo test -p blueprint-client-eigenlayer --lib -- --nocapture
           cargo test -p blueprint-runner --features eigenlayer --lib -- --nocapture
-
-  container-spawn-tests:
-    name: Container Spawn Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      RUST_LOG: info
-      RUN_TNT_E2E: "1"
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Checkout tnt-core
-        uses: actions/checkout@v4
-        with:
-          repository: tangle-network/tnt-core
-          path: tnt-core
-
-      - name: Verify tnt-core bindings
-        run: ./scripts/ci/verify-tnt-core.sh
-
-      - uses: ./.github/actions/free-disk-space
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-        continue-on-error: true
-
-      - name: Retry Foundry installation if needed
-        run: |
-          if ! command -v forge &> /dev/null; then
-            echo "Foundry not found, retrying installation..."
-            curl -L https://foundry.paradigm.xyz | bash
-            ~/.foundry/bin/foundryup --version stable
-          fi
-          forge --version
-
-      - name: Warm up Foundry image
-        run: docker pull ghcr.io/foundry-rs/foundry:latest
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: install rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: stable
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-
-      - name: install protobuf and gmp
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.7"
-
-      - name: Run container spawn tests
-        run: |
-          # Manager container source tests
-          cargo test -p blueprint-manager container --lib -- --nocapture --test-threads=1
-          # Manager source handling tests
-          cargo test -p blueprint-manager sources --lib -- --nocapture --test-threads=1
 
   testnet-smoke-test:
     name: Testnet Smoke Test
@@ -590,32 +246,15 @@ jobs:
     env:
       RUST_LOG: info
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: install rust
-        uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-build-env
         with:
-          toolchain: stable
-
-      - uses: swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-
-      - name: install protobuf and gmp
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.7"
+          foundry: "false"
 
       - name: Build CLI
         run: cargo build -p cargo-tangle --release
 
-      - name: Smoke test - list blueprints on testnet
+      - name: Smoke test
         env:
           TANGLE_RPC_URL: ${{ secrets.TANGLE_TESTNET_RPC_URL }}
         if: env.TANGLE_RPC_URL != ''

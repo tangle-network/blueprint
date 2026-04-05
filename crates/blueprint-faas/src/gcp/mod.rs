@@ -458,7 +458,7 @@ impl FaasExecutor for CloudFunctionExecutor {
         Ok(())
     }
 
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         "GCP Cloud Functions"
     }
 }

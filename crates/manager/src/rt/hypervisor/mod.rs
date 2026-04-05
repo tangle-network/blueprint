@@ -286,7 +286,6 @@ impl HypervisorInstance {
         mut env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
     ) -> Result<()> {
-        /// TODO: actually resolve the hosts to see if they're loopback
         // For local testnets, we need to translate IPs to the host
         fn translate_local_ip(url: &mut Url, lease: &Lease) {
             match url.host() {

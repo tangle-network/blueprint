@@ -6,8 +6,7 @@ use apikey_blueprint_lib::{
     reset_state_for_tests, router,
 };
 use blueprint_anvil_testing_utils::{BlueprintHarness, missing_tnt_core_artifacts};
-use once_cell::sync::Lazy;
-use std::sync::Once;
+use std::sync::{LazyLock, Once};
 use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::timeout;
@@ -18,7 +17,7 @@ const JOB_RESULT_TIMEOUT: Duration = Duration::from_secs(300);
 const UNAUTHORIZED_CALLER_PRIVATE_KEY: &str =
     "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
-static HARNESS_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
+static HARNESS_LOCK: LazyLock<AsyncMutex<()>> = LazyLock::new(|| AsyncMutex::new(()));
 static LOG_INIT: Once = Once::new();
 
 fn setup_log() {

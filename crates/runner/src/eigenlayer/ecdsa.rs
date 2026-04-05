@@ -194,7 +194,9 @@ async fn register_ecdsa_impl(
         .map_err(|e| EigenlayerError::Registration(format!("Failed to send registration tx: {e}")))?
         .get_receipt()
         .await
-        .map_err(|e| EigenlayerError::Registration(format!("Failed to get registration receipt: {e}")))?;
+        .map_err(|e| {
+            EigenlayerError::Registration(format!("Failed to get registration receipt: {e}"))
+        })?;
 
     let is_registered = ecdsa_stake_registry
         .operatorRegistered(operator_address)

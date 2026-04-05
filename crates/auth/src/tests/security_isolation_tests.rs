@@ -356,7 +356,7 @@ async fn test_paseto_token_cross_user_isolation() {
     let mut modified_token = admin_token.clone();
     // Change one character in the token
     if let Some(pos) = modified_token.rfind('A') {
-        modified_token.replace_range(pos..pos + 1, "B");
+        modified_token.replace_range(pos..=pos, "B");
     }
 
     let res = client

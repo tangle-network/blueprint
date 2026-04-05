@@ -26,6 +26,7 @@ alloy-transport = { workspace = true, optional = true }
 # Oracle: Coinbase REST API
 reqwest = { workspace = true, features = ["rustls-tls", "json"], optional = true }
 serde_json = { workspace = true, features = ["std"], optional = true }
+workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-runner = { workspace = true }

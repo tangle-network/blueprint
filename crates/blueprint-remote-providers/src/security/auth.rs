@@ -153,6 +153,7 @@ fn validate_azure_metadata_url(url: &str) -> Result<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::{
         azure_access_token, gcp_access_token, validate_azure_metadata_url,

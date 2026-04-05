@@ -381,7 +381,7 @@ async fn run_minimal_runner_loop(
                 match router.call(job_call).await {
                     Ok(Some(results)) => {
                         if let Some(tx) = result_tx.take() {
-                            if let Some(blueprint_core::JobResult::Ok { body, .. }) = results.get(0) {
+                            if let Some(blueprint_core::JobResult::Ok { body, .. }) = results.first() {
                                 let _ = tx.send(body.to_vec());
                             }
                         }

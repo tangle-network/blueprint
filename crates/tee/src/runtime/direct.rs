@@ -268,7 +268,7 @@ impl TeeRuntimeBackend for DirectBackend {
         // Derive from HMAC-SHA256(backend_secret, deployment_id) to prevent
         // prediction from deployment ID alone.
         let key = Sha256::new()
-            .chain_update(&self.key_derivation_secret)
+            .chain_update(self.key_derivation_secret)
             .chain_update(handle.id.as_bytes())
             .finalize()
             .to_vec();

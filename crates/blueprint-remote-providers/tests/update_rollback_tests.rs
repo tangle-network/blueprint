@@ -1,3 +1,4 @@
+#![allow(clippy::float_cmp)]
 //! Tests for the update and rollback functionality
 //!
 //! These tests verify the new update manager works correctly with different strategies.

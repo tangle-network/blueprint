@@ -289,7 +289,7 @@ mod tests {
             .iter()
             .any(|proto| matches!(proto, Protocol::P2p(_)))
         {
-            bootstrap_addr.push(Protocol::P2p(handle1.local_peer_id.into()));
+            bootstrap_addr.push(Protocol::P2p(handle1.local_peer_id));
         }
 
         let mut node2 = TestNode::new_with_keys(

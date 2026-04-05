@@ -171,8 +171,15 @@ impl KeyType for Ed25519Zebra {
             let seed = seed_bytes;
             Ok(Ed25519SigningKey(ed25519_zebra::SigningKey::from(seed)))
         } else {
-            let mut rng = Self::get_rng();
-            Ok(Ed25519SigningKey(ed25519_zebra::SigningKey::new(&mut rng)))
+            #[cfg(feature = "std")]
+            {
+                let mut rng = Self::get_rng();
+                Ok(Ed25519SigningKey(ed25519_zebra::SigningKey::new(&mut rng)))
+            }
+            #[cfg(not(feature = "std"))]
+            Err(Ed25519Error::InvalidSeed(
+                "Random key generation requires the std feature".into(),
+            ))
         }
     }
 

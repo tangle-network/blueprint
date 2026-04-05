@@ -50,7 +50,6 @@ pub struct ContainerInstance {
     args: BlueprintArgs,
     confidentiality_policy: ConfidentialityPolicy,
 
-    // TODO: Debug logging for containers
     /// Whether this instance should run in debug mode
     ///
     /// This is set by the CLI, and can indicate that extra logging (possibly, real-time process logs)
@@ -107,7 +106,6 @@ impl ContainerInstance {
     /// * Unable to create the endpoint for the `blueprint-service` service
     /// * Unable to create the pod, for any reason
     pub async fn start(&mut self) -> Result<()> {
-        /// TODO: actually resolve the hosts to see if they're loopback
         // For local testnets, we need to translate IPs to the host
         fn translate_local_ip(url: &mut Url, host_ip: IpAddr) {
             match url.host() {

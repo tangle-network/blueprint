@@ -27,6 +27,7 @@ zerocopy.workspace = true
 hyper-util = { workspace = true, features = ["tokio"], optional = true }
 tokio-vsock = { workspace = true, optional = true }
 tower = { workspace = true, features = ["util"], optional = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [build-dependencies]
 tonic-build = { workspace = true, features = ["prost"] }
