@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-gossip-primitives"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 description = "Reusable gossip protocol primitives for Blueprint SDK networking"
 authors.workspace = true
 edition.workspace = true
