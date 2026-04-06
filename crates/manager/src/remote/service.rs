@@ -1261,6 +1261,22 @@ fn deployment_type_for_provider(
             DeploymentType::DigitalOceanDroplet
         }
         blueprint_remote_providers::CloudProvider::Vultr => DeploymentType::VultrInstance,
+        blueprint_remote_providers::CloudProvider::LambdaLabs => DeploymentType::LambdaLabsInstance,
+        blueprint_remote_providers::CloudProvider::RunPod => DeploymentType::RunPodInstance,
+        blueprint_remote_providers::CloudProvider::VastAi => DeploymentType::VastAiInstance,
+        blueprint_remote_providers::CloudProvider::CoreWeave => DeploymentType::CoreWeaveWorkload,
+        blueprint_remote_providers::CloudProvider::Paperspace => DeploymentType::PaperspaceMachine,
+        blueprint_remote_providers::CloudProvider::Fluidstack => DeploymentType::FluidstackServer,
+        blueprint_remote_providers::CloudProvider::TensorDock => DeploymentType::TensorDockServer,
+        blueprint_remote_providers::CloudProvider::Akash => DeploymentType::AkashLease,
+        blueprint_remote_providers::CloudProvider::IoNet => DeploymentType::IoNetCluster,
+        blueprint_remote_providers::CloudProvider::PrimeIntellect => {
+            DeploymentType::PrimeIntellectPod
+        }
+        blueprint_remote_providers::CloudProvider::Render => DeploymentType::RenderDispersedNode,
+        blueprint_remote_providers::CloudProvider::BittensorLium => {
+            DeploymentType::BittensorLiumMiner
+        }
         blueprint_remote_providers::CloudProvider::Linode
         | blueprint_remote_providers::CloudProvider::Generic
         | blueprint_remote_providers::CloudProvider::DockerLocal

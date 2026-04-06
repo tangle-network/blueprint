@@ -99,6 +99,20 @@ pub enum DeploymentType {
     DigitalOceanDoks,
     VultrVke,
 
+    // GPU cloud providers
+    LambdaLabsInstance,
+    RunPodInstance,
+    VastAiInstance,
+    CoreWeaveWorkload,
+    PaperspaceMachine,
+    FluidstackServer,
+    TensorDockServer,
+    AkashLease,
+    IoNetCluster,
+    PrimeIntellectPod,
+    RenderDispersedNode,
+    BittensorLiumMiner,
+
     // Other
     SshRemote,
     BareMetal,

@@ -86,6 +86,30 @@ pub enum CloudProvider {
     Vultr,
     /// Linode
     Linode,
+    /// Lambda Labs — GPU cloud, on-demand A100/H100
+    LambdaLabs,
+    /// RunPod — pod-based GPU cloud
+    RunPod,
+    /// Vast.ai — bid-based spot GPU marketplace
+    VastAi,
+    /// CoreWeave — K8s-native GPU cloud
+    CoreWeave,
+    /// Paperspace — GPU cloud
+    Paperspace,
+    /// Fluidstack — GPU-focused cloud
+    Fluidstack,
+    /// TensorDock — GPU marketplace
+    TensorDock,
+    /// Akash Network — Cosmos-based decentralized compute
+    Akash,
+    /// io.net — decentralized GPU cloud aggregator
+    IoNet,
+    /// Prime Intellect — compute aggregator
+    PrimeIntellect,
+    /// Render (Dispersed) — decentralized AI compute
+    Render,
+    /// Bittensor Lium (subnet 51) — decentralized GPU rental
+    BittensorLium,
     /// Generic cloud provider
     Generic,
     /// Local Docker
@@ -105,6 +129,18 @@ impl core::fmt::Display for CloudProvider {
             CloudProvider::DigitalOcean => write!(f, "DigitalOcean"),
             CloudProvider::Vultr => write!(f, "Vultr"),
             CloudProvider::Linode => write!(f, "Linode"),
+            CloudProvider::LambdaLabs => write!(f, "Lambda Labs"),
+            CloudProvider::RunPod => write!(f, "RunPod"),
+            CloudProvider::VastAi => write!(f, "Vast.ai"),
+            CloudProvider::CoreWeave => write!(f, "CoreWeave"),
+            CloudProvider::Paperspace => write!(f, "Paperspace"),
+            CloudProvider::Fluidstack => write!(f, "Fluidstack"),
+            CloudProvider::TensorDock => write!(f, "TensorDock"),
+            CloudProvider::Akash => write!(f, "Akash"),
+            CloudProvider::IoNet => write!(f, "io.net"),
+            CloudProvider::PrimeIntellect => write!(f, "Prime Intellect"),
+            CloudProvider::Render => write!(f, "Render"),
+            CloudProvider::BittensorLium => write!(f, "Bittensor Lium"),
             CloudProvider::Generic => write!(f, "Generic"),
             CloudProvider::DockerLocal => write!(f, "Docker (Local)"),
             CloudProvider::DockerRemote(host) => write!(f, "Docker (Remote: {host})"),

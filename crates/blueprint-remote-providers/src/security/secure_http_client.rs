@@ -5,15 +5,13 @@
 
 use crate::core::error::{Error, Result};
 use blueprint_core::{debug, warn};
-use blueprint_std::{collections::HashMap, time::Duration};
+use blueprint_std::time::Duration;
 use reqwest::{Client, ClientBuilder, Request, Response, header};
 use url::Url;
 
 /// Secure HTTP client with comprehensive security controls
 pub struct SecureHttpClient {
     client: Client,
-    /// Certificate fingerprints for certificate pinning
-    certificate_pins: HashMap<String, Vec<String>>,
     /// Maximum response size to prevent memory exhaustion
     max_response_size: usize,
     /// Request timeout
@@ -33,44 +31,11 @@ impl SecureHttpClient {
             .build()
             .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {e}")))?;
 
-        let mut certificate_pins = HashMap::new();
-
-        // Add certificate pins for known cloud provider APIs
-        Self::add_cloud_provider_pins(&mut certificate_pins);
-
         Ok(Self {
             client,
-            certificate_pins,
             max_response_size: 10 * 1024 * 1024, // 10MB max response
             timeout: Duration::from_secs(30),
         })
-    }
-
-    /// Add certificate pins for major cloud providers
-    fn add_cloud_provider_pins(pins: &mut HashMap<String, Vec<String>>) {
-        // AWS API certificate pins (SHA256 fingerprints)
-        pins.insert(
-            "ec2.amazonaws.com".to_string(),
-            vec!["8f48f6b8c7b9aca7b2e1a5f4e3d8c1b5a2e7d4f1a5b8e2c9f6a3b1e4d7c0a9f6".to_string()],
-        );
-
-        // DigitalOcean API certificate pins
-        pins.insert(
-            "api.digitalocean.com".to_string(),
-            vec!["9a4b2c8e7d5f1a3b6e9c2d8f5a1b4e7c0d9f6a2b5e8c1d4f7a0b3e6c9d2f5a8".to_string()],
-        );
-
-        // Google Cloud API certificate pins
-        pins.insert(
-            "compute.googleapis.com".to_string(),
-            vec!["7c3e1b9f6a2d5e8b1c4f7a0d3e6b9c2f5a8b1e4d7c0a9f6b3e1d4c7a0f3e6b9".to_string()],
-        );
-
-        // Azure API certificate pins
-        pins.insert(
-            "management.azure.com".to_string(),
-            vec!["5a8f2c6b9e1d4a7c0f3b6e9d2a5f8c1b4e7d0a9f6c2b5e8d1a4f7c0b3e6a9f2".to_string()],
-        );
     }
 
     /// Make authenticated request with security validation
@@ -175,6 +140,32 @@ impl SecureHttpClient {
             "storage.azure.com",
             // DigitalOcean domains
             "api.digitalocean.com",
+            // Vultr domains
+            "api.vultr.com",
+            // Lambda Labs domains
+            "cloud.lambdalabs.com",
+            // RunPod domains
+            "api.runpod.io",
+            // Vast.ai domains
+            "console.vast.ai",
+            // CoreWeave domains
+            "api.coreweave.com",
+            // Paperspace domains
+            "api.paperspace.io",
+            // Fluidstack domains
+            "api.fluidstack.io",
+            // TensorDock domains
+            "marketplace.tensordock.com",
+            // Akash domains
+            "api.akash.network",
+            // io.net domains
+            "api.io.net",
+            // Prime Intellect domains
+            "api.primeintellect.ai",
+            // Render domains
+            "api.render.com",
+            // Bittensor/Lium domains
+            "api.lium.ai",
             // Kubernetes domains (for EKS/GKE/AKS)
             "kubernetes.default.svc",
             "kubernetes.default.svc.cluster.local",
@@ -310,31 +301,9 @@ impl SecureHttpClient {
         Ok(())
     }
 
-    /// Validate certificate pinning for enhanced security
-    fn validate_certificate_pinning(&self, url: &str, _response: &Response) -> Result<()> {
-        let parsed = Url::parse(url).map_err(|e| {
-            Error::ConfigurationError(format!("Invalid URL for certificate pinning: {e}"))
-        })?;
-        if let Some(host) = parsed.host_str() {
-            if let Some(expected_pins) = self.certificate_pins.get(host) {
-                // Certificate pinning configured - would validate fingerprint in production
-                debug!(
-                    "Certificate pinning configured for {}: {} pins",
-                    host,
-                    expected_pins.len()
-                );
-
-                // In production, this would:
-                // 1. Extract the certificate chain from the TLS connection
-                // 2. Compute SHA256 fingerprints
-                // 3. Verify at least one matches expected_pins
-                // 4. Fail the request if no match found
-
-                warn!(
-                    "Certificate pinning validation not fully implemented - using trust-on-first-use"
-                );
-            }
-        }
+    /// Certificate pinning placeholder. Actual TLS verification is handled by
+    /// reqwest's native-tls/rustls backend and the OS trust store.
+    fn validate_certificate_pinning(&self, _url: &str, _response: &Response) -> Result<()> {
         Ok(())
     }
 
@@ -374,7 +343,7 @@ impl SecureHttpClient {
 }
 
 /// API authentication methods
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ApiAuthentication {
     /// Bearer token authentication
     Bearer { token: String },
@@ -389,6 +358,32 @@ pub enum ApiAuthentication {
     },
     /// No authentication
     None,
+}
+
+impl std::fmt::Debug for ApiAuthentication {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bearer { .. } => f
+                .debug_struct("Bearer")
+                .field("token", &"[REDACTED]")
+                .finish(),
+            Self::ApiKey { header_name, .. } => f
+                .debug_struct("ApiKey")
+                .field("key", &"[REDACTED]")
+                .field("header_name", header_name)
+                .finish(),
+            Self::AwsSignatureV4 {
+                region, service, ..
+            } => f
+                .debug_struct("AwsSignatureV4")
+                .field("access_key", &"[REDACTED]")
+                .field("secret_key", &"[REDACTED]")
+                .field("region", region)
+                .field("service", service)
+                .finish(),
+            Self::None => write!(f, "None"),
+        }
+    }
 }
 
 impl ApiAuthentication {
@@ -415,6 +410,83 @@ impl ApiAuthentication {
     /// Create Azure authentication
     pub fn azure(token: String) -> Self {
         Self::Bearer { token }
+    }
+
+    /// Create Vultr API authentication
+    pub fn vultr(api_key: String) -> Self {
+        Self::Bearer { token: api_key }
+    }
+
+    /// Create Lambda Labs API authentication
+    pub fn lambda_labs(api_key: String) -> Self {
+        Self::Bearer { token: api_key }
+    }
+
+    /// Create RunPod API authentication
+    pub fn runpod(api_key: String) -> Self {
+        Self::Bearer { token: api_key }
+    }
+
+    /// Create Vast.ai API authentication
+    pub fn vast_ai(api_key: String) -> Self {
+        Self::ApiKey {
+            key: api_key,
+            header_name: "Authorization".to_string(),
+        }
+    }
+
+    /// Create CoreWeave API authentication
+    pub fn coreweave(token: String) -> Self {
+        Self::Bearer { token }
+    }
+
+    /// Create Paperspace API authentication
+    pub fn paperspace(api_key: String) -> Self {
+        Self::ApiKey {
+            key: api_key,
+            header_name: "x-api-key".to_string(),
+        }
+    }
+
+    /// Create Fluidstack API authentication
+    pub fn fluidstack(api_key: String) -> Self {
+        Self::ApiKey {
+            key: api_key,
+            header_name: "api-key".to_string(),
+        }
+    }
+
+    /// Create TensorDock API authentication
+    pub fn tensordock(api_key: String, api_token: String) -> Self {
+        Self::ApiKey {
+            key: format!("{api_key}:{api_token}"),
+            header_name: "Authorization".to_string(),
+        }
+    }
+
+    /// Create Akash API authentication
+    pub fn akash(token: String) -> Self {
+        Self::Bearer { token }
+    }
+
+    /// Create io.net API authentication
+    pub fn io_net(api_key: String) -> Self {
+        Self::Bearer { token: api_key }
+    }
+
+    /// Create Prime Intellect API authentication
+    pub fn prime_intellect(api_key: String) -> Self {
+        Self::Bearer { token: api_key }
+    }
+
+    /// Create Render API authentication
+    pub fn render(api_key: String) -> Self {
+        Self::Bearer { token: api_key }
+    }
+
+    /// Create Bittensor/Lium API authentication
+    pub fn bittensor_lium(api_key: String) -> Self {
+        Self::Bearer { token: api_key }
     }
 }
 

@@ -1,5 +1,17 @@
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
+use crate::providers::akash::AkashInstanceMapper;
+use crate::providers::bittensor_lium::BittensorLiumInstanceMapper;
+use crate::providers::coreweave::CoreWeaveInstanceMapper;
+use crate::providers::fluidstack::FluidstackInstanceMapper;
+use crate::providers::io_net::IoNetInstanceMapper;
+use crate::providers::lambda_labs::LambdaLabsInstanceMapper;
+use crate::providers::paperspace::PaperspaceInstanceMapper;
+use crate::providers::prime_intellect::PrimeIntellectInstanceMapper;
+use crate::providers::render::RenderInstanceMapper;
+use crate::providers::runpod::RunPodInstanceMapper;
+use crate::providers::tensordock::TensorDockInstanceMapper;
+use crate::providers::vast_ai::VastAiInstanceMapper;
 use serde::{Deserialize, Serialize};
 
 /// Maps resource requirements to cloud instance types
@@ -30,6 +42,22 @@ impl InstanceTypeMapper {
             CloudProvider::Azure => Self::map_azure_instance(spec),
             CloudProvider::DigitalOcean => Self::map_do_instance(spec),
             CloudProvider::Vultr => Self::map_vultr_instance(spec),
+            CloudProvider::LambdaLabs => Self::from_common(LambdaLabsInstanceMapper::map(spec)),
+            CloudProvider::RunPod => Self::from_common(RunPodInstanceMapper::map(spec)),
+            CloudProvider::VastAi => Self::from_common(VastAiInstanceMapper::map(spec)),
+            CloudProvider::CoreWeave => Self::from_common(CoreWeaveInstanceMapper::map(spec)),
+            CloudProvider::Paperspace => Self::from_common(PaperspaceInstanceMapper::map(spec)),
+            CloudProvider::Fluidstack => Self::from_common(FluidstackInstanceMapper::map(spec)),
+            CloudProvider::TensorDock => Self::from_common(TensorDockInstanceMapper::map(spec)),
+            CloudProvider::Akash => Self::from_common(AkashInstanceMapper::map(spec)),
+            CloudProvider::IoNet => Self::from_common(IoNetInstanceMapper::map(spec)),
+            CloudProvider::PrimeIntellect => {
+                Self::from_common(PrimeIntellectInstanceMapper::map(spec))
+            }
+            CloudProvider::Render => Self::from_common(RenderInstanceMapper::map(spec)),
+            CloudProvider::BittensorLium => {
+                Self::from_common(BittensorLiumInstanceMapper::map(spec))
+            }
             _ => Self::map_generic_instance(spec),
         }
     }
@@ -193,6 +221,14 @@ impl InstanceTypeMapper {
             instance_type: instance_type.to_string(),
             spot_capable: false,
             estimated_hourly_cost: Self::estimate_vultr_cost(instance_type),
+        }
+    }
+
+    fn from_common(common: crate::providers::common::InstanceSelection) -> InstanceSelection {
+        InstanceSelection {
+            instance_type: common.instance_type,
+            spot_capable: common.spot_capable,
+            estimated_hourly_cost: common.estimated_hourly_cost.unwrap_or(0.10),
         }
     }
 

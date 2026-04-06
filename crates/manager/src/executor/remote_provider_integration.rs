@@ -99,23 +99,22 @@ impl RemoteProviderManager {
         let resource_spec = resource_requirements.unwrap_or_else(ResourceSpec::minimal);
         let tee_required = env_bool("BLUEPRINT_REMOTE_TEE_REQUIRED");
 
-        // Start from intelligent preference based on resource requirements.
+        // Select provider based on workload type. GPU workloads use a
+        // GPU-first candidate list so operators who configured RunPod/Vast/Lambda
+        // get those before falling back to GCP/AWS.
+        let is_gpu = resource_spec.gpu_count.is_some();
         let preferred_provider = if tee_required {
             CloudProvider::AWS
-        } else if resource_spec.gpu_count.is_some() {
-            // GPU workloads prefer GCP or AWS
-            CloudProvider::GCP
+        } else if is_gpu {
+            CloudProvider::RunPod
         } else if resource_spec.cpu > 8.0 {
-            // High CPU workloads prefer cost-optimized providers
             CloudProvider::Vultr
         } else if resource_spec.memory_gb > 32.0 {
-            // High memory workloads prefer AWS or GCP
             CloudProvider::AWS
         } else {
-            // Standard workloads use cost-optimized providers
             CloudProvider::DigitalOcean
         };
-        let provider = self.select_configured_provider(preferred_provider, tee_required)?;
+        let provider = self.select_configured_provider(preferred_provider, tee_required, is_gpu)?;
 
         // Use configured region when available.
         let region = self
@@ -191,15 +190,40 @@ impl RemoteProviderManager {
         &self,
         preferred: CloudProvider,
         tee_required: bool,
+        is_gpu: bool,
     ) -> Result<CloudProvider> {
         let ordered_candidates = if tee_required {
+            // TEE only on hyperscalers with confidential compute
             vec![
                 preferred,
                 CloudProvider::AWS,
                 CloudProvider::GCP,
                 CloudProvider::Azure,
             ]
+        } else if is_gpu {
+            // GPU workloads: GPU marketplaces first (cheapest), then
+            // decentralized, then hyperscalers as fallback
+            vec![
+                preferred,
+                CloudProvider::VastAi,
+                CloudProvider::RunPod,
+                CloudProvider::Fluidstack,
+                CloudProvider::TensorDock,
+                CloudProvider::LambdaLabs,
+                CloudProvider::Paperspace,
+                CloudProvider::CoreWeave,
+                CloudProvider::Akash,
+                CloudProvider::IoNet,
+                CloudProvider::PrimeIntellect,
+                CloudProvider::Render,
+                CloudProvider::BittensorLium,
+                // Hyperscaler fallback (have GPUs but more expensive)
+                CloudProvider::GCP,
+                CloudProvider::AWS,
+                CloudProvider::Azure,
+            ]
         } else {
+            // CPU workloads: cost-optimized first
             vec![
                 preferred,
                 CloudProvider::Vultr,
@@ -231,6 +255,18 @@ fn deployment_type_from_provider(provider: &CloudProvider) -> DeploymentType {
         CloudProvider::Azure => DeploymentType::AzureVm,
         CloudProvider::DigitalOcean => DeploymentType::DigitalOceanDroplet,
         CloudProvider::Vultr => DeploymentType::VultrInstance,
+        CloudProvider::LambdaLabs => DeploymentType::LambdaLabsInstance,
+        CloudProvider::RunPod => DeploymentType::RunPodInstance,
+        CloudProvider::VastAi => DeploymentType::VastAiInstance,
+        CloudProvider::CoreWeave => DeploymentType::CoreWeaveWorkload,
+        CloudProvider::Paperspace => DeploymentType::PaperspaceMachine,
+        CloudProvider::Fluidstack => DeploymentType::FluidstackServer,
+        CloudProvider::TensorDock => DeploymentType::TensorDockServer,
+        CloudProvider::Akash => DeploymentType::AkashLease,
+        CloudProvider::IoNet => DeploymentType::IoNetCluster,
+        CloudProvider::PrimeIntellect => DeploymentType::PrimeIntellectPod,
+        CloudProvider::Render => DeploymentType::RenderDispersedNode,
+        CloudProvider::BittensorLium => DeploymentType::BittensorLiumMiner,
         _ => DeploymentType::SshRemote,
     }
 }
@@ -263,6 +299,66 @@ fn configured_provider_regions(ctx: &BlueprintManagerContext) -> HashMap<CloudPr
                 regions.insert(CloudProvider::Vultr, vultr.region.clone());
             }
         }
+        if let Some(cfg) = &config.lambda_labs {
+            if cfg.enabled {
+                regions.insert(CloudProvider::LambdaLabs, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.runpod {
+            if cfg.enabled {
+                regions.insert(CloudProvider::RunPod, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.vast_ai {
+            if cfg.enabled {
+                regions.insert(CloudProvider::VastAi, "global".to_string());
+            }
+        }
+        if let Some(cfg) = &config.coreweave {
+            if cfg.enabled {
+                regions.insert(CloudProvider::CoreWeave, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.paperspace {
+            if cfg.enabled {
+                regions.insert(CloudProvider::Paperspace, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.fluidstack {
+            if cfg.enabled {
+                regions.insert(CloudProvider::Fluidstack, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.tensordock {
+            if cfg.enabled {
+                regions.insert(CloudProvider::TensorDock, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.akash {
+            if cfg.enabled {
+                regions.insert(CloudProvider::Akash, "global".to_string());
+            }
+        }
+        if let Some(cfg) = &config.io_net {
+            if cfg.enabled {
+                regions.insert(CloudProvider::IoNet, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.prime_intellect {
+            if cfg.enabled {
+                regions.insert(CloudProvider::PrimeIntellect, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.render {
+            if cfg.enabled {
+                regions.insert(CloudProvider::Render, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.bittensor_lium {
+            if cfg.enabled {
+                regions.insert(CloudProvider::BittensorLium, "global".to_string());
+            }
+        }
     }
     regions
 }
@@ -274,6 +370,18 @@ fn provider_default_region(provider: &CloudProvider) -> &'static str {
         CloudProvider::Azure => "eastus",
         CloudProvider::DigitalOcean => "nyc3",
         CloudProvider::Vultr => "ewr",
+        CloudProvider::LambdaLabs => "us-west-1",
+        CloudProvider::RunPod => "US",
+        CloudProvider::VastAi => "global",
+        CloudProvider::CoreWeave => "ORD1",
+        CloudProvider::Paperspace => "NY2",
+        CloudProvider::Fluidstack => "us-east",
+        CloudProvider::TensorDock => "us-central",
+        CloudProvider::Akash => "global",
+        CloudProvider::IoNet => "us-east",
+        CloudProvider::PrimeIntellect => "us-east",
+        CloudProvider::Render => "oregon",
+        CloudProvider::BittensorLium => "global",
         _ => "default",
     }
 }
