@@ -6,7 +6,7 @@
 //! [`MppConfig`](crate::config::MppConfig) is `Some`.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use alloy_primitives::Address;
 use dashmap::DashMap;
@@ -28,7 +28,38 @@ use crate::mpp::method::BlueprintEvmChargeMethod;
 /// per-credential map keyed by the challenge id (which is HMAC-bound and
 /// unique per challenge issuance), then drain the entry on the route side
 /// immediately after `verify_credential_with_expected_request` returns.
-pub type VerifiedPayerCache = Arc<DashMap<String, Address>>;
+///
+/// **Insertion ordering invariant:** [`BlueprintEvmChargeMethod::verify`]
+/// MUST only insert into this cache *after* the facilitator's `/settle`
+/// returns Success. The route handler then drains on `Ok` from
+/// `verify_credential_with_expected_request`. If the route panics or
+/// crashes between insert and drain, the [`run_payer_cache_gc`] task
+/// evicts entries older than [`PAYER_CACHE_TTL`] so the cache cannot grow
+/// without bound.
+pub type VerifiedPayerCache = Arc<DashMap<String, PayerCacheEntry>>;
+
+/// TTL after which a payer cache entry is considered orphaned (e.g.
+/// because the route handler crashed before draining it). 60 seconds is
+/// orders of magnitude larger than a normal request lifetime but small
+/// enough that a stuck cache cannot bloat memory.
+pub(crate) const PAYER_CACHE_TTL: Duration = Duration::from_secs(60);
+
+/// Cached payer entry. Stores the address plus a wall-clock-independent
+/// `Instant` for the GC sweep.
+#[derive(Debug, Clone, Copy)]
+pub struct PayerCacheEntry {
+    pub payer: Address,
+    pub inserted_at: Instant,
+}
+
+impl PayerCacheEntry {
+    pub fn new(payer: Address) -> Self {
+        Self {
+            payer,
+            inserted_at: Instant::now(),
+        }
+    }
+}
 
 /// All MPP-specific state shared by the gateway and the MPP request handlers.
 ///
@@ -110,6 +141,25 @@ impl MppGatewayState {
             config.realm.clone(),
             config.secret_key.clone(),
         );
+
+        // Background TTL sweep for orphaned cache entries. The sweep runs
+        // every 30 seconds and evicts anything older than `PAYER_CACHE_TTL`.
+        // Without this, a route-handler panic between `BlueprintEvmChargeMethod::verify`
+        // (which inserts on settle success) and the route's drain would
+        // leak the entry forever. The interval / TTL together bound worst-
+        // case memory at ~`(rps * 90s)` cached entries.
+        let gc_handle = verified_payers.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                interval.tick().await;
+                let now = Instant::now();
+                gc_handle.retain(|_, entry: &mut PayerCacheEntry| {
+                    now.duration_since(entry.inserted_at) < PAYER_CACHE_TTL
+                });
+            }
+        });
 
         Ok(Self {
             mpp: Arc::new(mpp),

@@ -1,12 +1,19 @@
-# x402 Blueprint Example
+# x402 + MPP Blueprint Example
 
-Reference implementation showing the full x402 payment pipeline: TOML pricing
-config, exchange rate oracles, HTTP gateway, and job dispatch via the Blueprint
-router.
+Reference implementation showing the full x402 / MPP payment pipeline: TOML
+pricing config, exchange rate oracles, HTTP gateway with **two parallel wire
+protocols**, and job dispatch via the Blueprint router.
 
 ## What This Demonstrates
 
-- Two jobs (echo, keccak256) priced in wei and served via x402.
+- Two jobs (echo, keccak256) priced in wei and served via two payment ingresses:
+  - `/x402/jobs/{sid}/{idx}` — the legacy x402 wire format (`X-PAYMENT` headers)
+  - `/mpp/jobs/{sid}/{idx}` — the IETF Payment HTTP Authentication Scheme
+    (`WWW-Authenticate: Payment` / `Authorization: Payment` / `Payment-Receipt`),
+    documented at <https://paymentauth.org> and <https://mpp.dev>
+- Both ingresses share the **same** job pricing, accepted-token table,
+  restricted-caller policy, and producer/runner injection path. Only the
+  wire format on the request side differs.
 - Static TOML-based pricing and dynamic oracle-based pricing via `PriceOracle`.
 - `ScaledPriceOracle` for surge pricing multipliers.
 - Exchange rate oracles: Chainlink, Uniswap V3 TWAP, Coinbase API.
@@ -14,6 +21,20 @@ router.
 - `refresh_rates()` helper to update `X402Config` from live oracle data.
 - Gateway startup, health checks, price discovery, and job submission.
 - Real integration tests with HTTP requests against a running gateway.
+
+## When to use which protocol
+
+| Use x402 (`/x402/jobs/...`) when... | Use MPP (`/mpp/jobs/...`) when... |
+|---|---|
+| You're integrating with an existing x402 wallet | You want the IETF standards-track wire format |
+| You want the smallest possible client surface | You need RFC 9457 Problem Details errors for client branching |
+| You're calling from a script with `X-PAYMENT` headers | You want the standard `WWW-Authenticate` / `Authorization` headers that browsers, proxies, and CDNs already understand |
+| You don't want to manage an HMAC secret | You're OK with rotating an `mpp.secret_key` for stateless challenge verification |
+
+The two ingresses are **functionally equivalent** for charge intent today —
+the MPP method (`blueprintevm`) wraps the same EIP-3009 / Permit2 payload an
+x402 wallet already produces. A single client could speak both; an operator
+could enable just one.
 
 ## Architecture
 
@@ -25,26 +46,47 @@ router.
                             refresh_rates()
                                     |
                                     v
-Client                        X402Config
-  |                      (rate_per_native_unit)
-  | HTTP POST /x402/jobs/{service_id}/{job_index}
-  v
-X402Gateway (axum)
-  |   GET  /health         -> "ok"
-  |   GET  /jobs/.../price -> settlement options (USDC amount)
-  |   POST /jobs/...       -> accept payment, inject job
-  |
-  | VerifiedPayment -> mpsc channel
-  v
-X402Producer (Stream<Item = JobCall>)
-  |
-  v
-Router
-  |-- job 0 -> echo(body)  -> body
-  |-- job 1 -> hash(body)  -> keccak256(body)
-  v
-JobResult
+                              X402Config
+                          (rate_per_native_unit)
+                                    |
+                                    |
+   ┌────────── x402 client ──────┐  │   ┌────────── mpp client ─────────┐
+   │ POST /x402/jobs/{sid}/{idx} │  │   │ POST /mpp/jobs/{sid}/{idx}    │
+   │ X-PAYMENT: <base64 payload> │  │   │ Authorization: Payment <b64u> │
+   └──────────────┬──────────────┘  │   └────────────────┬──────────────┘
+                  │                 v                    │
+                  │       X402Gateway (axum)              │
+                  │                                       │
+                  │  x402-axum middleware     Mpp::verify_credential_with_
+                  │  + facilitator /verify    expected_request
+                  │  + facilitator /settle    + BlueprintEvmChargeMethod
+                  │                            (-> facilitator /verify + /settle)
+                  │           │    │                    │
+                  │           ▼    ▼                    │
+                  │     handle_paid_job_inner ◄─────────┘
+                  │      (shared policy + quote
+                  │       registry + producer)
+                  │           │
+                  │           ▼
+                  │   VerifiedPayment -> mpsc channel
+                  │           │
+                  │           ▼
+                  │     X402Producer (Stream<Item = JobCall>)
+                  │           │
+                  │           ▼
+                  │       Router
+                  │       |-- job 0 -> echo(body)  -> body
+                  │       |-- job 1 -> hash(body)  -> keccak256(body)
+                  │           │
+                  │           ▼
+                  │       JobResult
+                  v
+              (response)
 ```
+
+The two ingresses converge at `handle_paid_job_inner`. Everything below
+that point — policy, replay guard, quote registry, producer — is wire-
+protocol-agnostic.
 
 ## Configuration
 
@@ -74,10 +116,71 @@ decimals = 6
 pay_to = "0x0000000000000000000000000000000000000001"
 rate_per_native_unit = "3200.00"
 markup_bps = 200
+
+# Optional: enable the parallel MPP ingress.
+[mpp]
+realm = "x402-blueprint.example.com"
+secret_key = "<openssl rand -hex 32>"
+challenge_ttl_secs = 300
 ```
 
 `rate_per_native_unit` is how many token units equal 1 native unit (1 ETH =
 3200 USDC). `markup_bps` is a percentage markup in basis points (200 = 2%).
+
+The `[mpp]` section is **optional**. When present, the gateway also exposes
+`/mpp/jobs/{sid}/{idx}` and `/mpp/jobs/{sid}/{idx}/price`. The `secret_key`
+MUST be 64 lowercase hex characters (32 bytes) generated with
+`openssl rand -hex 32` — the validator rejects the example value, ASCII
+patterns, and low-entropy keys at startup. Rotation invalidates outstanding
+challenges; in-flight clients transparently retry on a fresh 402.
+
+## Hitting the gateway with curl
+
+### x402 path (legacy)
+
+```bash
+# 1. Discovery: how much does this job cost, on which chains?
+curl -s http://127.0.0.1:8402/x402/jobs/1/0/price | jq
+
+# 2. Pay (the X-PAYMENT header is built by an x402 wallet — see
+#    https://github.com/coinbase/x402 for client libraries):
+curl -X POST \
+  -H "X-PAYMENT: $(x402_wallet sign --amount 3264000 --token USDC)" \
+  -d 'hello' \
+  http://127.0.0.1:8402/x402/jobs/1/0
+```
+
+### MPP path (IETF Payment Auth)
+
+```bash
+# 1. Discovery (note: protocol="mpp", scheme="charge"):
+curl -s http://127.0.0.1:8402/mpp/jobs/1/0/price | jq
+
+# 2. Issue a challenge by POSTing without an Authorization header. The 402
+#    response carries one `WWW-Authenticate: Payment ...` header per
+#    accepted token. Save the challenge ID for the next step.
+curl -i -X POST -d 'hello' http://127.0.0.1:8402/mpp/jobs/1/0
+# HTTP/1.1 402 Payment Required
+# www-authenticate: Payment id="...", realm="...", method="blueprintevm", ...
+# content-type: application/problem+json
+# {"type":"https://paymentauth.org/problems/payment-required", ...}
+
+# 3. Build a credential echoing the challenge and POST it. See
+#    `scripts/mpp-challenge.sh` for a smoke-test helper that does
+#    steps 1-2 automatically.
+curl -X POST \
+  -H 'Authorization: Payment <base64url-credential>' \
+  -d 'hello' \
+  http://127.0.0.1:8402/mpp/jobs/1/0
+# HTTP/1.1 202 Accepted
+# payment-receipt: <base64url-receipt>
+# {"status":"accepted","receipt":"...","call_id":1}
+```
+
+The `examples/x402-blueprint/tests/x402_gateway.rs` file contains a real
+end-to-end credential builder (`build_payment_authorization`) and a
+wiremock-stubbed facilitator harness (`stub_facilitator_success`) that
+operators can crib for their own client implementations.
 
 ## Running
 
@@ -124,6 +227,35 @@ Headers sent by delegated mode:
 - `X-TANGLE-CALLER-SIG`
 - `X-TANGLE-CALLER-NONCE`
 - `X-TANGLE-CALLER-EXPIRY`
+
+The delegated-signature mode is wire-protocol agnostic — it works on both
+the x402 and the MPP ingress unchanged.
+
+## MPP smoke-test
+
+To verify your MPP-enabled gateway is wired correctly, use:
+
+```bash
+scripts/mpp-challenge.sh \
+  --gateway-url http://127.0.0.1:8402 \
+  --service-id 1 \
+  --job-index 0
+```
+
+The script issues an unpaid `POST /mpp/jobs/...`, captures the
+`WWW-Authenticate: Payment` headers, and asserts:
+
+- HTTP status is 402 Payment Required
+- `Content-Type` is `application/problem+json` (RFC 9457)
+- At least one `WWW-Authenticate: Payment` header is present
+- Each challenge advertises `method="blueprintevm"` and `intent="charge"`
+- The `type` URI in the body points at `https://paymentauth.org/problems/...`
+
+It does NOT build a real `Authorization: Payment` credential or settle a
+payment — that requires an MPP wallet implementation. See
+`tests/x402_gateway.rs::build_payment_authorization` for a reference
+client-side credential builder, and `stub_facilitator_success` for a
+wiremock harness operators can crib for their own implementation.
 
 ## How It Works
 

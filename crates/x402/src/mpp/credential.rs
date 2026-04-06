@@ -1,6 +1,6 @@
-//! Credential payload schema for the Blueprint MPP `x402-evm` method.
+//! Credential payload schema for the Blueprint MPP `blueprintevm` method.
 //!
-//! The Blueprint MPP method ([`METHOD_NAME`](super::METHOD_NAME) = `"x402-evm"`)
+//! The Blueprint MPP method ([`METHOD_NAME`](super::METHOD_NAME) = `"blueprintevm"`)
 //! intentionally wraps the same EIP-3009 / Permit2 `PaymentPayload` that x402
 //! clients already produce. This means:
 //!
@@ -80,7 +80,7 @@ pub struct Eip3009Extra {
     pub version: String,
 }
 
-/// MPP credential payload for the Blueprint `x402-evm` method.
+/// MPP credential payload for the Blueprint `blueprintevm` method.
 ///
 /// The single `x402_payload` field carries a base64url-encoded x402 v1
 /// `PaymentPayload` JSON, which the verifier hands directly to the

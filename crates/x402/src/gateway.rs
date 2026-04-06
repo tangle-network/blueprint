@@ -690,7 +690,47 @@ async fn handle_job_request(
             })),
         )
             .into_response(),
-        Err(rej) => rej.into_response(),
+        // Wire-shape compatibility shim: the pre-MPP-refactor x402 path
+        // returned `{"error": ..., "service_id": ..., "job_index": ...}`
+        // for `job_not_found` (404), `quote_conflict` (409), and
+        // `shutting_down` (503). The shared `PolicyRejection::into_response`
+        // emits `{"error": ..., "code": ...}` instead. To preserve back-
+        // compat for x402 clients parsing the legacy structured fields,
+        // re-emit those three cases here in the legacy shape.
+        Err(rej) => map_legacy_x402_rejection(rej, service_id, job_index),
+    }
+}
+
+/// Restore the pre-refactor x402 wire shape for the three error cases
+/// that legacy clients structurally parse.
+fn map_legacy_x402_rejection(
+    rej: PolicyRejection,
+    service_id: u64,
+    job_index: u32,
+) -> axum::response::Response {
+    match rej.code {
+        "job_not_found" => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "job not found",
+                "service_id": service_id,
+                "job_index": job_index,
+            })),
+        )
+            .into_response(),
+        "quote_conflict" => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "error": "quote already consumed or expired",
+            })),
+        )
+            .into_response(),
+        "shutting_down" => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "service shutting down" })),
+        )
+            .into_response(),
+        _ => rej.into_response(),
     }
 }
 
@@ -935,13 +975,22 @@ pub(crate) async fn authorize_restricted_job_with_payer(
         X402CallerAuthMode::PayerIsCaller => {
             if let Some(payer) = payer_override {
                 payer
-            } else if protocol == PaymentProtocol::Mpp {
-                // MPP route is responsible for draining the verified-payer
-                // cache; if it didn't, never trust the request headers.
+            } else if protocol != PaymentProtocol::X402 {
+                // Deny-by-default: only the legacy x402 wire format is
+                // permitted to read `X-Payment-Response` from request
+                // headers. Any future protocol variant (e.g. a Stripe
+                // ingress) MUST pass an explicit `payer_override` from
+                // its own verified payment context. An attacker can
+                // forge `X-Payment-Response` on any non-x402 request,
+                // so reading it here would let them impersonate any
+                // address that passes `isPermittedCaller`.
                 return Err(PolicyRejection::service_unavailable(
                     "missing_settled_payer",
-                    "MPP payer_is_caller requires the facilitator-verified payer; \
-                     refusing to read X-Payment-Response from a non-x402 request",
+                    format!(
+                        "{} payer_is_caller requires a verified payer override; \
+                         refusing to read X-Payment-Response from a non-x402 request",
+                        protocol.as_str()
+                    ),
                 ));
             } else {
                 let settlement = parse_settlement_details(headers).ok_or_else(|| {

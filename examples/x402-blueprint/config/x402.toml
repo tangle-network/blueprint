@@ -30,17 +30,53 @@ pay_to = "0x0000000000000000000000000000000000000001"
 rate_per_native_unit = "3200.00"
 markup_bps = 200
 
-# Optional: enable the parallel MPP (Machine Payments Protocol) ingress.
+# ────────────────────────────────────────────────────────────────────────────
+# Optional: parallel MPP (Machine Payments Protocol) ingress.
+# ────────────────────────────────────────────────────────────────────────────
 #
-# When this section is present the gateway also exposes
+# Why enable this?
+#
+#   1. **IETF standards-track wire format.** MPP uses the standard
+#      `WWW-Authenticate: Payment` / `Authorization: Payment` /
+#      `Payment-Receipt` headers. Browsers, proxies, and CDNs already
+#      understand the Payment authentication scheme — no custom header
+#      negotiation. Spec: https://paymentauth.org
+#
+#   2. **RFC 9457 Problem Details errors.** Every error response carries
+#      a typed `application/problem+json` body. MPP clients can branch on
+#      the `type` URI without parsing prose error strings.
+#
+#   3. **Forward path to multi-method payments.** MPP defines the
+#      contract for cards, Lightning, and other rails as additional
+#      methods on the same endpoint. This blueprint only ships the
+#      `blueprintevm` method today (which wraps an x402 EIP-3009 payload),
+#      but the surface is ready for extensions.
+#
+# Trade-offs:
+#
+#   * One additional axum route surface (`/mpp/jobs/...`).
+#   * One additional secret to rotate (`secret_key` below).
+#   * Operators today must support BOTH ingresses, OR pick MPP only and
+#     accept that x402 wallets cannot reach this gateway. The two are
+#     functionally equivalent for charge intent.
+#
+# When this section is present the gateway exposes:
 #   POST /mpp/jobs/{service_id}/{job_index}
+#   GET  /mpp/jobs/{service_id}/{job_index}/price
 # alongside the existing /x402/jobs/... routes. The two ingresses share the
 # same job pricing, accepted-token table, restricted-auth modes, and producer
-# stream — clients can pick whichever wire format their wallet speaks.
+# stream — clients pick whichever wire format their wallet speaks.
 #
-# `secret_key` MUST be at least 32 bytes of entropy and SHOULD be rotated on
-# a schedule (rotation invalidates outstanding challenges; in-flight clients
-# transparently retry on a fresh 402).
+# `secret_key` MUST be:
+#   * At least 64 hex characters (32 bytes)
+#   * Lowercase hex (the validator rejects uppercase, non-hex, and padded values)
+#   * High-entropy (≥16 distinct bytes; the validator rejects low-entropy patterns)
+#   * NOT one of the well-known demo values that ship in this repo
+#
+# Generate one with: `openssl rand -hex 32`
+#
+# Rotate on a schedule. Rotation invalidates outstanding challenges;
+# in-flight clients transparently retry on a fresh 402.
 [mpp]
 realm = "x402-blueprint.example.com"
 # DEMO ONLY — generate a fresh value for production with `openssl rand -hex 32`.

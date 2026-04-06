@@ -45,7 +45,32 @@ use crate::mpp::state::MppGatewayState;
 use crate::settlement::{PaymentProtocol, SettlementOption};
 
 const CONTENT_TYPE_PROBLEM_JSON: &str = "application/problem+json";
+
+/// IETF spec-defined Problem Details type prefix. Only the codes enumerated
+/// by `mpp::ErrorCode::spec_code` may be used here.
 const PROBLEM_TYPE_BASE: &str = "https://paymentauth.org/problems/";
+
+/// Blueprint-specific Problem Details type prefix for codes that the IETF
+/// spec doesn't enumerate. Anything emitted under this namespace is a
+/// Blueprint extension; conformant clients are expected to fall through to
+/// generic handling. Documented at <crates/x402/README.md>.
+const BLUEPRINT_PROBLEM_TYPE_BASE: &str = "https://blueprint.tangle.tools/problems/";
+
+/// The complete set of IETF-defined Problem Details `type` suffixes for the
+/// MPP spec. Used to validate `problem_response` callers don't accidentally
+/// invent new type URIs under the IETF namespace.
+const IETF_PROBLEM_CODES: &[&str] = &[
+    "payment-required",
+    "payment-insufficient",
+    "payment-expired",
+    "verification-failed",
+    "method-unsupported",
+    "malformed-credential",
+];
+
+fn is_ietf_problem_code(code: &str) -> bool {
+    IETF_PROBLEM_CODES.contains(&code)
+}
 
 /// `POST /mpp/jobs/{service_id}/{job_index}` — the MPP-equivalent of
 /// `POST /x402/jobs/{service_id}/{job_index}`.
@@ -293,12 +318,12 @@ pub(crate) async fn handle_mpp_job_request(
     };
 
     // Drain the facilitator-verified payer that BlueprintEvmChargeMethod
-    // stashed under the credential's challenge id during the verify call
-    // above. Removing the entry on read prevents accidental reuse.
+    // stashed under the credential's challenge id during the settle-success
+    // branch above. Removing the entry on read prevents accidental reuse.
     let settled_payer = mpp_state
         .verified_payers
         .remove(&credential.challenge.id)
-        .map(|(_, payer)| payer);
+        .map(|(_, entry)| entry.payer);
 
     // For `payer_is_caller` policies the gateway requires a verified
     // on-chain payer. The MPP route never trusts the legacy x402
@@ -663,50 +688,280 @@ fn success_response(
     resp
 }
 
+/// Mapping table from gateway-internal `PolicyRejection.code` strings to
+/// the Problem Details `type` suffix the MPP route should emit, plus the
+/// namespace flag.
+///
+/// IETF-namespaced codes (`is_ietf = true`) come from the spec at
+/// <https://paymentauth.org>. Blueprint-namespaced codes (`is_ietf = false`)
+/// are emitted under [`BLUEPRINT_PROBLEM_TYPE_BASE`] and are documented in
+/// `crates/x402/README.md`. Conformant MPP clients are expected to branch
+/// on the IETF set and fall through to generic handling for the Blueprint
+/// extensions.
+struct ProblemMapping {
+    suffix: &'static str,
+    is_ietf: bool,
+}
+
+const POLICY_PROBLEM_MAP: &[(&str, ProblemMapping)] = &[
+    // ─── IETF spec-defined codes ──────────────────────────────────────────
+    (
+        "x402_disabled",
+        ProblemMapping {
+            suffix: "method-unsupported",
+            is_ietf: true,
+        },
+    ),
+    (
+        "invalid_policy",
+        ProblemMapping {
+            suffix: "verification-failed",
+            is_ietf: true,
+        },
+    ),
+    (
+        "permission_check_failed",
+        ProblemMapping {
+            suffix: "verification-failed",
+            is_ietf: true,
+        },
+    ),
+    (
+        "clock_error",
+        ProblemMapping {
+            suffix: "verification-failed",
+            is_ietf: true,
+        },
+    ),
+    (
+        "shutting_down",
+        ProblemMapping {
+            suffix: "verification-failed",
+            is_ietf: true,
+        },
+    ),
+    // Header-parsing failures look like credential malformations to the
+    // client even though they originated in the legacy x402 path.
+    (
+        "missing_settlement_context",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "missing_settled_payer",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "missing_caller",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "invalid_caller",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "missing_signature",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "missing_signature_nonce",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "invalid_signature_nonce",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "missing_signature_expiry",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "invalid_signature_expiry",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "invalid_signature",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "invalid_signature_recovery",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "signature_mismatch",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    (
+        "signature_expired",
+        ProblemMapping {
+            suffix: "malformed-credential",
+            is_ietf: true,
+        },
+    ),
+    // ─── Blueprint-namespaced extensions ─────────────────────────────────
+    // These are conditions the IETF spec doesn't enumerate. Documented in
+    // crates/x402/README.md so MPP wallets can opt into branching on them.
+    (
+        "job_not_found",
+        ProblemMapping {
+            suffix: "job-not-found",
+            is_ietf: false,
+        },
+    ),
+    (
+        "quote_conflict",
+        ProblemMapping {
+            suffix: "quote-conflict",
+            is_ietf: false,
+        },
+    ),
+    (
+        "signature_replay",
+        ProblemMapping {
+            suffix: "signature-replay",
+            is_ietf: false,
+        },
+    ),
+    (
+        "caller_not_permitted",
+        ProblemMapping {
+            suffix: "caller-not-permitted",
+            is_ietf: false,
+        },
+    ),
+];
+
 /// Convert a [`PolicyRejection`] from the shared ingress helper into an
 /// RFC 9457 Problem Details response.
-///
-/// Each gateway-side rejection code is mapped to a distinct IETF Problem
-/// Details type suffix so that MPP clients can branch on the failure mode
-/// instead of treating every error as `verification-failed`.
 fn policy_rejection_to_problem(rej: PolicyRejection, service_id: u64, job_index: u32) -> Response {
-    let code = match rej.code {
-        // Job is not exposed via x402/MPP at all.
-        "x402_disabled" => "method-unsupported",
-        // Job key not in the operator's pricing table.
-        "job_not_found" => "verification-failed",
-        // Server already accepted a payment for this dynamic quote (race).
-        "quote_conflict" => "payment-replayed",
-        // Producer channel closed (gateway shutting down).
-        "shutting_down" => "verification-failed",
-        // Delegated-signature nonce was already consumed for this scope.
-        "signature_replay" => "payment-replayed",
-        // On-chain `isPermittedCaller` returned false.
-        "caller_not_permitted" => "caller-denied",
-        // Restricted policy with `payment_only` auth (config bug).
-        "invalid_policy" => "verification-failed",
-        // PayerIsCaller checks (header parsing errors etc).
-        "missing_settlement_context"
-        | "missing_settled_payer"
-        | "missing_caller"
-        | "invalid_caller"
-        | "missing_signature"
-        | "missing_signature_nonce"
-        | "invalid_signature_nonce"
-        | "missing_signature_expiry"
-        | "invalid_signature_expiry"
-        | "invalid_signature"
-        | "invalid_signature_recovery"
-        | "signature_mismatch"
-        | "signature_expired" => "malformed-credential",
-        // Upstream RPC / clock failures.
-        "permission_check_failed" | "clock_error" => "verification-failed",
-        _ => "verification-failed",
+    let mapping = POLICY_PROBLEM_MAP
+        .iter()
+        .find(|(code, _)| *code == rej.code)
+        .map(|(_, m)| m);
+
+    let (status, body) = match mapping {
+        Some(m) => {
+            let base = if m.is_ietf {
+                PROBLEM_TYPE_BASE
+            } else {
+                BLUEPRINT_PROBLEM_TYPE_BASE
+            };
+            (
+                rej.status,
+                build_problem_body(
+                    base,
+                    m.suffix,
+                    rej.status,
+                    &rej.detail,
+                    None,
+                    service_id,
+                    job_index,
+                ),
+            )
+        }
+        None => {
+            // Unknown code: treat as a generic verification failure under
+            // the IETF namespace. Logged so future PolicyRejection codes
+            // are caught by an operator before they ship.
+            tracing::warn!(
+                code = rej.code,
+                "unmapped PolicyRejection code surfaced on MPP path; falling back to verification-failed"
+            );
+            (
+                rej.status,
+                build_problem_body(
+                    PROBLEM_TYPE_BASE,
+                    "verification-failed",
+                    rej.status,
+                    &rej.detail,
+                    None,
+                    service_id,
+                    job_index,
+                ),
+            )
+        }
     };
-    problem_response(rej.status, code, rej.detail, None, service_id, job_index)
+
+    let mut resp = (status, Json(body)).into_response();
+    resp.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static(CONTENT_TYPE_PROBLEM_JSON),
+    );
+    resp
+}
+
+/// Build a Problem Details body. Centralised so the IETF/Blueprint
+/// namespace split is consistent across all callers.
+fn build_problem_body(
+    base: &str,
+    suffix: &str,
+    status: StatusCode,
+    detail: &str,
+    challenge_id: Option<&str>,
+    service_id: u64,
+    job_index: u32,
+) -> serde_json::Value {
+    let mut body = json!({
+        "type": format!("{base}{suffix}"),
+        "title": status.canonical_reason().unwrap_or("Error"),
+        "status": status.as_u16(),
+        "detail": detail,
+        "instance": format!("/mpp/jobs/{service_id}/{job_index}"),
+        "service_id": service_id,
+        "job_index": job_index,
+    });
+    if let Some(challenge_id) = challenge_id {
+        body.as_object_mut()
+            .expect("json object")
+            .insert("challenge_id".into(), json!(challenge_id));
+    }
+    body
 }
 
 /// Build an RFC 9457 Problem Details response.
+///
+/// `code` MUST be an IETF spec-defined Problem Details suffix from
+/// [`IETF_PROBLEM_CODES`]. Routes that need a Blueprint-namespaced code
+/// should go through [`policy_rejection_to_problem`] instead, which
+/// looks up the namespace via [`POLICY_PROBLEM_MAP`]. Passing an unknown
+/// code is a programmer error and is logged at warn level (the response
+/// still ships under the IETF namespace to avoid double-failing on a
+/// bug, but the operator's logs surface the typo).
 fn problem_response(
     status: StatusCode,
     code: &str,
@@ -715,21 +970,25 @@ fn problem_response(
     service_id: u64,
     job_index: u32,
 ) -> Response {
-    let detail = detail.into();
-    let mut body = json!({
-        "type": format!("{PROBLEM_TYPE_BASE}{code}"),
-        "title": status.canonical_reason().unwrap_or("Error"),
-        "status": status.as_u16(),
-        "detail": detail,
-        "instance": format!("/mpp/jobs/{service_id}/{job_index}"),
-        "service_id": service_id,
-        "job_index": job_index,
-    });
-    if let Some(challenge_id) = instance_challenge_id {
-        body.as_object_mut()
-            .expect("json object")
-            .insert("challenge_id".into(), json!(challenge_id));
+    if !is_ietf_problem_code(code) {
+        tracing::warn!(
+            code,
+            "problem_response called with non-IETF code; route the call through policy_rejection_to_problem instead"
+        );
+        debug_assert!(
+            false,
+            "problem_response: code {code:?} is not in IETF_PROBLEM_CODES; use policy_rejection_to_problem for Blueprint-namespaced codes"
+        );
     }
+    let body = build_problem_body(
+        PROBLEM_TYPE_BASE,
+        code,
+        status,
+        &detail.into(),
+        instance_challenge_id,
+        service_id,
+        job_index,
+    );
     let mut resp = (status, Json(body)).into_response();
     resp.headers_mut().insert(
         axum::http::header::CONTENT_TYPE,

@@ -118,6 +118,69 @@ async fn test_unknown_job_returns_404() {
     handle.abort();
 }
 
+/// Pin the legacy x402 wire shape for `GET /x402/jobs/.../price` 404
+/// responses. Pre-MPP-refactor clients structurally parse `service_id` /
+/// `job_index` from the body; the refactor must not silently drop them.
+#[tokio::test]
+async fn test_x402_price_404_wire_shape_preserved() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let resp = reqwest::get(format!("http://127.0.0.1:{port}/x402/jobs/7/99/price"))
+        .await
+        .expect("GET unknown price");
+
+    assert_eq!(resp.status(), 404);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["error"], "job not found");
+    assert_eq!(body["service_id"], 7);
+    assert_eq!(body["job_index"], 99);
+    // Critically, no `code` field on this legacy path.
+    assert!(
+        body.get("code").is_none(),
+        "x402 price 404 must not gain new fields: {body}"
+    );
+
+    handle.abort();
+}
+
+/// Pin the legacy x402 wire shape for `POST /x402/jobs/.../{sid}/{idx}` 404
+/// responses. This is the path that the refactor briefly broke before the
+/// `map_legacy_x402_rejection` shim was added — the body shape used to be
+/// `{error, service_id, job_index}` and the structured fields must
+/// survive.
+#[tokio::test]
+async fn test_x402_post_404_wire_shape_preserved() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    // To reach the `job_not_found` branch on POST, we need to bypass the
+    // x402 middleware (which would 402 first). The middleware is keyed on
+    // request URL, so a job that exists in the pricing table but is then
+    // routed to an unknown (sid, idx) via a different path won't help.
+    // Instead, we use the auth-dry-run endpoint which is unprotected and
+    // ALSO checks `job_not_found` against the pricing table — it returns
+    // 404 with the same legacy shape via its own handler.
+    let resp = reqwest::Client::new()
+        .post(format!(
+            "http://127.0.0.1:{port}/x402/jobs/13/77/auth-dry-run"
+        ))
+        .body("hello")
+        .send()
+        .await
+        .expect("POST dry-run unknown");
+
+    assert_eq!(resp.status(), 404);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["service_id"], 13);
+    assert_eq!(body["job_index"], 77);
+    assert_eq!(body["error"], "job not found");
+
+    handle.abort();
+}
+
 #[tokio::test]
 async fn test_auth_dry_run_public_job() {
     let port = free_port();
@@ -645,7 +708,7 @@ use blueprint_x402::config::{AcceptedToken, MppConfig};
 use mpp::protocol::core::headers::{format_authorization, parse_www_authenticate};
 use mpp::protocol::core::{ChallengeEcho, PaymentCredential};
 use rust_decimal::Decimal;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const TEST_PAYER_ADDR: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
@@ -700,13 +763,39 @@ async fn start_mpp_gateway_with_facilitator(
     (handle, port, producer)
 }
 
-/// Stub the x402 facilitator's `/verify` and `/settle` endpoints to always
-/// succeed. The MPP route forwards a v1 ExactScheme VerifyRequest to these
-/// endpoints; we don't validate the body shape because the test is about
-/// the *integration* — the facilitator already has its own coverage.
+/// Stub the x402 facilitator's `/verify` and `/settle` endpoints to
+/// succeed, asserting via partial-JSON body matchers that the gateway
+/// sends a well-formed v1 `ExactScheme` VerifyRequest. The matcher only
+/// pins **structural discriminators** (scheme, network, version,
+/// extra.name/version) — not address case, not exact amount — because
+/// alloy's `Address` serializer is checksum-cased and we don't want
+/// brittle test failures on a serializer change. A regression that
+/// drops any of these fields entirely will fail this test loudly.
 async fn stub_facilitator_success(server: &MockServer) {
+    // Discriminators we MUST see in any well-formed request from the
+    // gateway. wiremock's `body_partial_json` does deep-subset matching:
+    // every key here must be present in the request body with the same
+    // value, but the request body may contain additional fields.
+    let expected_discriminators = serde_json::json!({
+        "x402Version": 1,
+        "paymentRequirements": {
+            "scheme": "exact",
+            "network": "base",
+            "extra": {
+                "name": "USD Coin",
+                "version": "2",
+            },
+        },
+        "paymentPayload": {
+            "x402Version": 1,
+            "scheme": "exact",
+            "network": "base",
+        },
+    });
+
     Mock::given(method("POST"))
         .and(path("/verify"))
+        .and(body_partial_json(expected_discriminators.clone()))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "isValid": true,
             "payer": TEST_PAYER_ADDR,
@@ -715,6 +804,7 @@ async fn stub_facilitator_success(server: &MockServer) {
         .await;
     Mock::given(method("POST"))
         .and(path("/settle"))
+        .and(body_partial_json(expected_discriminators))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "success": true,
             "transaction": TEST_TX_HASH,

@@ -17,10 +17,21 @@ use crate::error::X402Error;
 /// values at validation time catches the most common HMAC-key footgun
 /// (deploying a server whose challenge IDs are forgeable by anyone with
 /// a copy of the SDK source).
+///
+/// All entries MUST be lowercase since `MppConfig::validate` lowercases
+/// and trims the operator-supplied value before comparison.
 const MPP_FORBIDDEN_SECRETS: &[&str] = &[
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "0123456789abcdef0123456789abcdef",
+    // Other commonly-pasted "looks random" values
+    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe",
 ];
+
+/// Minimum number of distinct bytes required in an `mpp.secret_key`.
+/// 16 is half the byte width of a 32-byte key — anything below this is
+/// pattern-rich enough to be guessable.
+const MPP_MIN_UNIQUE_BYTES: usize = 16;
 
 /// How a job is exposed to the x402 HTTP ingress.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -389,21 +400,56 @@ impl X402Config {
         }
 
         if let Some(mpp) = &self.mpp {
+            // Realm must be non-empty AND must not contain control characters
+            // (including CR/LF) which would let an attacker inject extra HTTP
+            // headers via `format_www_authenticate` AND would make every 402
+            // fail to encode at runtime, surfacing as 500s.
             if mpp.realm.trim().is_empty() {
                 return Err(X402Error::Config("mpp.realm must not be empty".into()));
             }
-            if mpp.secret_key.len() < 32 {
+            if mpp.realm.chars().any(|c| c.is_control()) {
+                return Err(X402Error::Config(
+                    "mpp.realm must not contain control characters (CR, LF, NUL, etc.)".into(),
+                ));
+            }
+
+            // Normalise the secret before comparing against the forbidden
+            // list so case variants and whitespace padding can't bypass.
+            let normalized_secret = mpp.secret_key.trim().to_ascii_lowercase();
+
+            // Length check is on the normalized form. The spec is "≥ 32
+            // bytes of entropy"; we accept any encoding ≥32 bytes long.
+            if normalized_secret.len() < 32 {
                 return Err(X402Error::Config(format!(
-                    "mpp.secret_key must be at least 32 bytes (got {})",
-                    mpp.secret_key.len()
+                    "mpp.secret_key must be at least 32 bytes after trim (got {})",
+                    normalized_secret.len()
                 )));
             }
+
+            // Strict format check: we require canonical hex (`openssl rand
+            // -hex 32` output). This rules out emoji-rune-padded keys that
+            // pass the byte-length check with near-zero entropy, and gives
+            // operators a single canonical format the docs can point at.
+            if !normalized_secret.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Err(X402Error::Config(
+                    "mpp.secret_key must be lowercase hex (generate with `openssl rand -hex 32`)"
+                        .into(),
+                ));
+            }
+            if normalized_secret.len() < 64 {
+                return Err(X402Error::Config(format!(
+                    "mpp.secret_key must be at least 64 hex characters (32 bytes); got {}",
+                    normalized_secret.len()
+                )));
+            }
+
             // Reject the well-known example/demo secrets that ship in the
-            // repo. Operators copy-paste from `examples/`; we'd rather fail
-            // at startup than let a deployment go live with a publicly
-            // known HMAC key.
+            // repo. Comparison is on the normalized form so uppercase /
+            // padded variants are caught. Operators copy-paste from
+            // `examples/`; we'd rather fail at startup than let a
+            // deployment go live with a publicly known HMAC key.
             for forbidden in MPP_FORBIDDEN_SECRETS {
-                if mpp.secret_key == *forbidden {
+                if normalized_secret == *forbidden {
                     return Err(X402Error::Config(
                         "mpp.secret_key matches a known example/demo value; \
                          generate a fresh key with `openssl rand -hex 32` \
@@ -412,13 +458,30 @@ impl X402Config {
                     ));
                 }
             }
-            // Reject single-byte-repeat patterns like "0000...000" or
-            // "aaaa...aaa" which pass the length check but have ~0 entropy.
-            if mpp.secret_key.as_bytes().windows(2).all(|w| w[0] == w[1]) {
-                return Err(X402Error::Config(
-                    "mpp.secret_key has insufficient entropy (all bytes identical)".into(),
-                ));
+
+            // Entropy floor: at least N distinct bytes must appear in the
+            // raw key. This catches `aaaa...`, `01010101...`, `deadbeef...`
+            // (4 distinct bytes), and other low-entropy patterns that the
+            // length + hex checks would otherwise let through.
+            let unique_byte_count = {
+                let mut seen = [false; 256];
+                let mut count = 0usize;
+                for b in normalized_secret.as_bytes() {
+                    if !seen[*b as usize] {
+                        seen[*b as usize] = true;
+                        count += 1;
+                    }
+                }
+                count
+            };
+            if unique_byte_count < MPP_MIN_UNIQUE_BYTES {
+                return Err(X402Error::Config(format!(
+                    "mpp.secret_key has insufficient entropy: only {unique_byte_count} \
+                     distinct bytes (need ≥ {MPP_MIN_UNIQUE_BYTES}). Generate with \
+                     `openssl rand -hex 32`."
+                )));
             }
+
             if mpp.challenge_ttl_secs == 0 {
                 return Err(X402Error::Config(
                     "mpp.challenge_ttl_secs must be > 0".into(),
@@ -682,6 +745,83 @@ mod tests {
         };
         let err = config.validate().unwrap_err();
         assert!(err.to_string().contains("insufficient entropy"), "{err}");
+    }
+
+    fn cfg_with_secret(secret: &str) -> X402Config {
+        let mut mpp = good_mpp();
+        mpp.secret_key = secret.into();
+        X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        }
+    }
+
+    #[test]
+    fn test_mpp_uppercase_demo_secret_still_rejected() {
+        // Audit finding: case-sensitive equality let "0123…EF" bypass.
+        let err =
+            cfg_with_secret("0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF")
+                .validate()
+                .unwrap_err();
+        assert!(err.to_string().contains("example/demo value"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_padded_demo_secret_still_rejected() {
+        // Audit finding: leading/trailing whitespace let demo bypass.
+        let err =
+            cfg_with_secret("  0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  ")
+                .validate()
+                .unwrap_err();
+        assert!(err.to_string().contains("example/demo value"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_period_2_pattern_rejected() {
+        // Audit finding: `windows(2).all(...)` only catches single-byte
+        // repeats. `abababab...` (period-2) used to pass — must not now.
+        let err = cfg_with_secret(&"ab".repeat(32)).validate().unwrap_err();
+        assert!(err.to_string().contains("insufficient entropy"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_non_hex_secret_rejected() {
+        // 64 chars but not hex.
+        let err = cfg_with_secret(&"z".repeat(64)).validate().unwrap_err();
+        assert!(err.to_string().contains("hex"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_short_hex_secret_rejected() {
+        // Valid hex but only 32 hex characters (16 bytes).
+        let err = cfg_with_secret("9e7c2f4b6d1a0832514768af9c3e2b14")
+            .validate()
+            .unwrap_err();
+        assert!(err.to_string().contains("64 hex"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_realm_rejects_crlf() {
+        let mut mpp = good_mpp();
+        mpp.realm = "evil\r\nInjected: header".into();
+        let cfg = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("control characters"), "{err}");
     }
 
     #[test]

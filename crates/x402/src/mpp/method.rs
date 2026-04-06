@@ -35,7 +35,7 @@ use x402_types::proto::v1 as proto_v1;
 
 use crate::config::AcceptedToken;
 use crate::mpp::credential::{MppCredentialPayload, MppMethodDetails};
-use crate::mpp::state::VerifiedPayerCache;
+use crate::mpp::state::{PayerCacheEntry, VerifiedPayerCache};
 
 /// MPP method name for the Blueprint EVM/EIP-3009 bridge.
 ///
@@ -320,19 +320,19 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
                     )
                 })?;
 
-            // Capture the facilitator-reported payer before settle so that
-            // the MPP route handler can enforce `payer_is_caller` policies.
-            // The cache is keyed by the HMAC-bound challenge id and drained
-            // by the route handler in the same request lifecycle.
-            match verify_resp {
+            // Hold the verified payer in a local — we only stash it in the
+            // shared `verified_payers` cache once `/settle` confirms the
+            // payment is on-chain. This is the only ordering that prevents
+            // a leak when any intermediate operation (settle encode, settle
+            // network, settle decode) fails between `/verify` and `/settle`.
+            let verified_payer: Address = match verify_resp {
                 proto_v1::VerifyResponse::Valid { payer } => {
-                    let payer_addr = payer.parse::<Address>().map_err(|_| {
+                    payer.parse::<Address>().map_err(|_| {
                         VerificationError::with_code(
                             format!("facilitator returned non-address payer {payer}"),
                             ErrorCode::InvalidPayload,
                         )
-                    })?;
-                    verified_payers.insert(challenge_id.clone(), payer_addr);
+                    })?
                 }
                 proto_v1::VerifyResponse::Invalid { reason, .. } => {
                     return Err(VerificationError::with_code(
@@ -340,7 +340,7 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
                         ErrorCode::InvalidSignature,
                     ));
                 }
-            }
+            };
 
             // Settle uses the same shape as VerifyRequest.
             let typed_settle = ExactVerifyRequest {
@@ -370,14 +370,16 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
 
             match settle_resp {
                 proto_v1::SettleResponse::Success { transaction, .. } => {
+                    // Only NOW do we stash the payer for the route handler.
+                    // Insert-on-success means there is exactly one path that
+                    // ever populates the cache, and the route handler always
+                    // drains in the same request lifecycle (or the request
+                    // panics, in which case the next sweep collects it — see
+                    // `MppGatewayState`'s GC task).
+                    verified_payers.insert(challenge_id, PayerCacheEntry::new(verified_payer));
                     Ok(Receipt::success(METHOD_NAME, transaction))
                 }
                 proto_v1::SettleResponse::Error { reason, .. } => {
-                    // Drop the cached payer entry on settle failure so we
-                    // don't leak it to a subsequent request reusing the same
-                    // challenge id (which the HMAC binding makes vanishingly
-                    // unlikely, but defence in depth is cheap).
-                    verified_payers.remove(&challenge_id);
                     Err(VerificationError::transaction_failed(reason))
                 }
             }

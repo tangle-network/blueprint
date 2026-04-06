@@ -32,7 +32,7 @@
 //! # Method
 //!
 //! The Blueprint MPP ingress uses a custom MPP method named [`METHOD_NAME`]
-//! (`"x402-evm"`). This method's credential payload wraps the **same**
+//! (`"blueprintevm"`). This method's credential payload wraps the **same**
 //! EIP-3009 / Permit2 `PaymentPayload` that x402 clients already produce,
 //! base64url-encoded into the MPP credential's `payload.signature` field.
 //! Verification delegates to the same x402 facilitator the legacy ingress
