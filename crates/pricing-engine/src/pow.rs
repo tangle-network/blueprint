@@ -33,7 +33,7 @@ pub async fn generate_proof(challenge: &[u8], difficulty: u32) -> Result<Vec<u8>
         nonce += 1;
 
         // Yield to the executor occasionally to prevent blocking
-        if nonce % 1000 == 0 {
+        if nonce.is_multiple_of(1000) {
             tokio::task::yield_now().await;
         }
     }

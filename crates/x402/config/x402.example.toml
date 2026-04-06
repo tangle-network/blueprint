@@ -68,3 +68,39 @@ decimals = 6
 pay_to  = "0xYourOperatorAddressOnEthereum"
 rate_per_native_unit = "3200.00"
 markup_bps = 300
+
+# ─── Optional: MPP (Machine Payments Protocol) ingress ────────────────────
+#
+# When this section is present, the gateway also exposes
+#   POST /mpp/jobs/{service_id}/{job_index}
+# alongside the existing /x402/jobs/... routes. The two ingresses share the
+# same job pricing, accepted-token table, restricted-auth modes, and producer
+# stream — clients can pick whichever wire format their wallet speaks.
+#
+# MPP is the IETF standards-track Payment HTTP Authentication Scheme
+# (https://paymentauth.org). It uses standard `WWW-Authenticate: Payment` /
+# `Authorization: Payment` / `Payment-Receipt` headers and RFC 9457 Problem
+# Details errors. The Blueprint MPP method (`blueprintevm`) wraps the same
+# EIP-3009 / Permit2 payloads x402 clients already produce, so existing
+# x402 wallets work over the MPP wire format unchanged.
+#
+# Fields:
+#   realm              – Realm string for the WWW-Authenticate challenge
+#                        (typically your public hostname).
+#   secret_key         – HMAC secret used to bind challenge IDs to their
+#                        parameters. MUST be at least 32 bytes of entropy.
+#                        Rotate on a schedule; rotation invalidates
+#                        outstanding challenges (in-flight clients
+#                        transparently retry on a fresh 402).
+#   challenge_ttl_secs – How long a 402 challenge remains valid. Must be
+#                        ≤ quote_ttl_secs above. Default 300.
+#
+# Comment out the entire section to disable the MPP ingress.
+[mpp]
+realm = "blueprint.example.com"
+# REPLACE THIS VALUE before deploying. Generate with `openssl rand -hex 32`.
+# The validator REJECTS the well-known example/demo secret_key values at
+# startup; this constant is intentionally a placeholder that will fail
+# X402Config::validate() so a copy-paste deployment cannot ship by accident.
+secret_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+challenge_ttl_secs = 300

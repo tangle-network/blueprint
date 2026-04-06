@@ -1,5 +1,5 @@
 In the Blueprint SDK a "job" is an async function that accepts zero or more
-["extractors"](crate::extract) as arguments and returns something that
+[extractors](crate::extract) as arguments and returns something that
 can be converted [into a job result](crate::job::result).
 
 Jobs are where your application logic lives, and Blueprints are built by routing between one or many of them.

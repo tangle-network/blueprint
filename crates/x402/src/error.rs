@@ -38,6 +38,10 @@ pub enum X402Error {
     /// TOML parsing error.
     #[error(transparent)]
     TomlParse(#[from] toml::de::Error),
+
+    /// MPP (Machine Payments Protocol) ingress error.
+    #[error("mpp error: {0}")]
+    Mpp(String),
 }
 
 impl From<X402Error> for blueprint_runner::error::RunnerError {

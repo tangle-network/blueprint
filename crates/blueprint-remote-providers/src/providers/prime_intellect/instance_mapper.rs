@@ -138,9 +138,10 @@ mod tests {
 
     #[test]
     fn unknown_gpu_type_falls_back() {
-        assert_eq!(
-            PrimeIntellectInstanceMapper::estimate_hourly_cost("MI300X"),
-            1.50
+        let cost = PrimeIntellectInstanceMapper::estimate_hourly_cost("MI300X");
+        assert!(
+            (cost - 1.50).abs() < f64::EPSILON,
+            "expected 1.50, got {cost}"
         );
     }
 }

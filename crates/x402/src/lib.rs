@@ -50,13 +50,22 @@
 pub mod config;
 pub mod error;
 pub mod gateway;
+pub mod mpp;
 pub mod producer;
 pub mod quote_registry;
 pub mod settlement;
 
-pub use config::{JobPolicyConfig, X402CallerAuthMode, X402Config, X402InvocationMode};
+pub use config::{JobPolicyConfig, MppConfig, X402CallerAuthMode, X402Config, X402InvocationMode};
 pub use error::X402Error;
 pub use gateway::X402Gateway;
 pub use producer::X402Producer;
 pub use quote_registry::QuoteRegistry;
-pub use settlement::SettlementOption;
+pub use settlement::{PaymentProtocol, SettlementOption};
+
+// MPP wire types are intentionally NOT re-exported at the crate root.
+// `BlueprintEvmChargeMethod::verify` is only safe to call inside the route's
+// `verify_credential_with_expected_request` wrapper that pins the
+// `(amount, currency, recipient)` tuple to a server-side expected value;
+// `MppCredentialPayload` and `MppMethodDetails` are wire types nobody outside
+// the gateway constructs. Access them via `blueprint_x402::mpp::*` if you
+// genuinely need them (e.g. for tests).

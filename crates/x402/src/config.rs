@@ -12,6 +12,27 @@ use url::Url;
 
 use crate::error::X402Error;
 
+/// Demo `mpp.secret_key` values that ship in `examples/` and `config/`.
+/// Operators frequently copy-paste from those files; rejecting the demo
+/// values at validation time catches the most common HMAC-key footgun
+/// (deploying a server whose challenge IDs are forgeable by anyone with
+/// a copy of the SDK source).
+///
+/// All entries MUST be lowercase since `MppConfig::validate` lowercases
+/// and trims the operator-supplied value before comparison.
+const MPP_FORBIDDEN_SECRETS: &[&str] = &[
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "0123456789abcdef0123456789abcdef",
+    // Other commonly-pasted "looks random" values
+    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe",
+];
+
+/// Minimum number of distinct bytes required in an `mpp.secret_key`.
+/// 16 is half the byte width of a 32-byte key — anything below this is
+/// pattern-rich enough to be guessable.
+const MPP_MIN_UNIQUE_BYTES: usize = 16;
+
 /// How a job is exposed to the x402 HTTP ingress.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -92,6 +113,15 @@ pub struct JobPolicyConfig {
 /// pay_to = "0xYourOperatorAddressOnBase"
 /// rate_per_native_unit = "3200.00"
 /// markup_bps = 200
+///
+/// # Optional: enable the parallel MPP (Machine Payments Protocol) ingress.
+/// # When present, the gateway also accepts WWW-Authenticate: Payment /
+/// # Authorization: Payment / Payment-Receipt headers under /mpp/jobs/...
+/// # using the same job pricing, accepted tokens, and restricted-auth modes.
+/// [mpp]
+/// realm = "blueprint.example.com"
+/// secret_key = "0123456789abcdef0123456789abcdef"
+/// challenge_ttl_secs = 300
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct X402Config {
@@ -121,6 +151,64 @@ pub struct X402Config {
     /// The service ID this gateway serves (set at runtime, not from TOML).
     #[serde(default)]
     pub service_id: u64,
+
+    /// Optional MPP (Machine Payments Protocol) ingress configuration.
+    ///
+    /// When `Some`, the gateway exposes parallel `/mpp/jobs/{service_id}/{job_index}`
+    /// routes that speak the IETF Payment authentication scheme defined at
+    /// <https://paymentauth.org>. The MPP ingress shares all downstream
+    /// plumbing (job pricing, restricted-auth, producer, quote registry) with
+    /// the existing x402 ingress; only the wire format differs.
+    ///
+    /// When `None`, the MPP routes are not registered (existing x402 surface
+    /// is unchanged).
+    #[serde(default)]
+    pub mpp: Option<MppConfig>,
+}
+
+/// Configuration for the optional MPP (Machine Payments Protocol) ingress.
+///
+/// MPP is an IETF standards-track HTTP 402 protocol that uses standard
+/// `WWW-Authenticate: Payment` / `Authorization: Payment` / `Payment-Receipt`
+/// headers and RFC 9457 Problem Details for errors. See
+/// <https://paymentauth.org> and <https://mpp.dev>.
+///
+/// The blueprint-x402 MPP ingress is **additive** to the existing x402
+/// ingress. Both ingresses share:
+/// - Job pricing (`job_pricing` in [`X402Gateway::new`](crate::X402Gateway::new))
+/// - Accepted tokens / cross-chain markup
+/// - Restricted-caller policy and on-chain `isPermittedCaller` checks
+/// - Replay protection on delegated caller signatures
+/// - The producer/runner injection path
+///
+/// Only the wire protocol on the request side differs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MppConfig {
+    /// MPP realm string. Identifies this server in the `WWW-Authenticate`
+    /// challenge. Typically the public hostname (e.g. `blueprint.example.com`).
+    pub realm: String,
+
+    /// HMAC secret used to bind challenge IDs to their parameters.
+    ///
+    /// Must be at least 32 bytes of entropy. The MPP server uses this to
+    /// implement stateless challenge verification per the IETF spec — the
+    /// challenge ID is an HMAC-SHA256 over the challenge fields, so the
+    /// server can verify that a returned credential was issued by *this*
+    /// instance without any per-challenge storage.
+    ///
+    /// **Operators**: rotate this on a schedule. Rotation invalidates all
+    /// outstanding challenges; in-flight clients will retry on a fresh `402`.
+    pub secret_key: String,
+
+    /// How long (seconds) a generated MPP challenge remains valid.
+    /// Must be ≤ [`X402Config::quote_ttl_secs`] to keep the two ingresses
+    /// in sync. Default: 300 seconds.
+    #[serde(default = "default_mpp_challenge_ttl")]
+    pub challenge_ttl_secs: u64,
+}
+
+fn default_mpp_challenge_ttl() -> u64 {
+    300
 }
 
 /// A token the operator accepts for x402 payment.
@@ -311,6 +399,102 @@ impl X402Config {
             }
         }
 
+        if let Some(mpp) = &self.mpp {
+            // Realm must be non-empty AND must not contain control characters
+            // (including CR/LF) which would let an attacker inject extra HTTP
+            // headers via `format_www_authenticate` AND would make every 402
+            // fail to encode at runtime, surfacing as 500s.
+            if mpp.realm.trim().is_empty() {
+                return Err(X402Error::Config("mpp.realm must not be empty".into()));
+            }
+            if mpp.realm.chars().any(|c| c.is_control()) {
+                return Err(X402Error::Config(
+                    "mpp.realm must not contain control characters (CR, LF, NUL, etc.)".into(),
+                ));
+            }
+
+            // Normalise the secret before comparing against the forbidden
+            // list so case variants and whitespace padding can't bypass.
+            let normalized_secret = mpp.secret_key.trim().to_ascii_lowercase();
+
+            // Length check is on the normalized form. The spec is "≥ 32
+            // bytes of entropy"; we accept any encoding ≥32 bytes long.
+            if normalized_secret.len() < 32 {
+                return Err(X402Error::Config(format!(
+                    "mpp.secret_key must be at least 32 bytes after trim (got {})",
+                    normalized_secret.len()
+                )));
+            }
+
+            // Strict format check: we require canonical hex (`openssl rand
+            // -hex 32` output). This rules out emoji-rune-padded keys that
+            // pass the byte-length check with near-zero entropy, and gives
+            // operators a single canonical format the docs can point at.
+            if !normalized_secret.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Err(X402Error::Config(
+                    "mpp.secret_key must be lowercase hex (generate with `openssl rand -hex 32`)"
+                        .into(),
+                ));
+            }
+            if normalized_secret.len() < 64 {
+                return Err(X402Error::Config(format!(
+                    "mpp.secret_key must be at least 64 hex characters (32 bytes); got {}",
+                    normalized_secret.len()
+                )));
+            }
+
+            // Reject the well-known example/demo secrets that ship in the
+            // repo. Comparison is on the normalized form so uppercase /
+            // padded variants are caught. Operators copy-paste from
+            // `examples/`; we'd rather fail at startup than let a
+            // deployment go live with a publicly known HMAC key.
+            for forbidden in MPP_FORBIDDEN_SECRETS {
+                if normalized_secret == *forbidden {
+                    return Err(X402Error::Config(
+                        "mpp.secret_key matches a known example/demo value; \
+                         generate a fresh key with `openssl rand -hex 32` \
+                         before going to production"
+                            .into(),
+                    ));
+                }
+            }
+
+            // Entropy floor: at least N distinct bytes must appear in the
+            // raw key. This catches `aaaa...`, `01010101...`, `deadbeef...`
+            // (4 distinct bytes), and other low-entropy patterns that the
+            // length + hex checks would otherwise let through.
+            let unique_byte_count = {
+                let mut seen = [false; 256];
+                let mut count = 0usize;
+                for b in normalized_secret.as_bytes() {
+                    if !seen[*b as usize] {
+                        seen[*b as usize] = true;
+                        count += 1;
+                    }
+                }
+                count
+            };
+            if unique_byte_count < MPP_MIN_UNIQUE_BYTES {
+                return Err(X402Error::Config(format!(
+                    "mpp.secret_key has insufficient entropy: only {unique_byte_count} \
+                     distinct bytes (need ≥ {MPP_MIN_UNIQUE_BYTES}). Generate with \
+                     `openssl rand -hex 32`."
+                )));
+            }
+
+            if mpp.challenge_ttl_secs == 0 {
+                return Err(X402Error::Config(
+                    "mpp.challenge_ttl_secs must be > 0".into(),
+                ));
+            }
+            if mpp.challenge_ttl_secs > self.quote_ttl_secs {
+                return Err(X402Error::Config(format!(
+                    "mpp.challenge_ttl_secs ({}) must be <= quote_ttl_secs ({}) so MPP challenges expire before their backing quotes",
+                    mpp.challenge_ttl_secs, self.quote_ttl_secs
+                )));
+            }
+        }
+
         Ok(())
     }
 
@@ -417,6 +601,7 @@ mod tests {
                 tangle_contract: None,
             }],
             service_id: 0,
+            mpp: None,
         };
 
         let err = config.validate().unwrap_err();
@@ -440,10 +625,203 @@ mod tests {
                 tangle_contract: Some("0x0000000000000000000000000000000000000001".into()),
             }],
             service_id: 0,
+            mpp: None,
         };
 
         let err = config.validate().unwrap_err();
         assert!(err.to_string().contains("payment_only"), "{err}");
+    }
+
+    fn good_mpp() -> MppConfig {
+        MppConfig {
+            realm: "blueprint.example.com".into(),
+            // 64 hex chars (32 bytes), not on the forbidden list and not a
+            // single-byte repeat. Generated with `openssl rand -hex 32`.
+            secret_key: "9e7c2f4b6d1a0832514768af9c3e2b14f827d6e09a3b1c7d4e6f8a02b9c5d70e".into(),
+            challenge_ttl_secs: 300,
+        }
+    }
+
+    #[test]
+    fn test_mpp_short_secret_key_rejected() {
+        let mut mpp = good_mpp();
+        mpp.secret_key = "tooshort".into();
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("at least 32 bytes"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_empty_realm_rejected() {
+        let mut mpp = good_mpp();
+        mpp.realm = "  ".into();
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("realm"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_challenge_ttl_must_not_exceed_quote_ttl() {
+        let mut mpp = good_mpp();
+        mpp.challenge_ttl_secs = 600;
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("challenge_ttl_secs"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_good_config_accepted() {
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(good_mpp()),
+        };
+        config.validate().expect("good mpp config should validate");
+    }
+
+    #[test]
+    fn test_mpp_demo_secret_rejected() {
+        let mut mpp = good_mpp();
+        mpp.secret_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into();
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("example/demo value"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_low_entropy_secret_rejected() {
+        let mut mpp = good_mpp();
+        mpp.secret_key = "a".repeat(64);
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("insufficient entropy"), "{err}");
+    }
+
+    fn cfg_with_secret(secret: &str) -> X402Config {
+        let mut mpp = good_mpp();
+        mpp.secret_key = secret.into();
+        X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        }
+    }
+
+    #[test]
+    fn test_mpp_uppercase_demo_secret_still_rejected() {
+        // Audit finding: case-sensitive equality let "0123…EF" bypass.
+        let err =
+            cfg_with_secret("0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF")
+                .validate()
+                .unwrap_err();
+        assert!(err.to_string().contains("example/demo value"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_padded_demo_secret_still_rejected() {
+        // Audit finding: leading/trailing whitespace let demo bypass.
+        let err =
+            cfg_with_secret("  0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  ")
+                .validate()
+                .unwrap_err();
+        assert!(err.to_string().contains("example/demo value"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_period_2_pattern_rejected() {
+        // Audit finding: `windows(2).all(...)` only catches single-byte
+        // repeats. `abababab...` (period-2) used to pass — must not now.
+        let err = cfg_with_secret(&"ab".repeat(32)).validate().unwrap_err();
+        assert!(err.to_string().contains("insufficient entropy"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_non_hex_secret_rejected() {
+        // 64 chars but not hex.
+        let err = cfg_with_secret(&"z".repeat(64)).validate().unwrap_err();
+        assert!(err.to_string().contains("hex"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_short_hex_secret_rejected() {
+        // Valid hex but only 32 hex characters (16 bytes).
+        let err = cfg_with_secret("9e7c2f4b6d1a0832514768af9c3e2b14")
+            .validate()
+            .unwrap_err();
+        assert!(err.to_string().contains("64 hex"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_realm_rejects_crlf() {
+        let mut mpp = good_mpp();
+        mpp.realm = "evil\r\nInjected: header".into();
+        let cfg = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("control characters"), "{err}");
     }
 
     #[test]
@@ -465,6 +843,7 @@ mod tests {
             default_invocation_mode: X402InvocationMode::Disabled,
             job_policies: vec![policy.clone(), policy],
             service_id: 0,
+            mpp: None,
         };
 
         let err = config.validate().unwrap_err();

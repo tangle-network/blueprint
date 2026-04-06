@@ -302,13 +302,13 @@ impl<K: KeyType> PeerManager<K> {
     pub fn is_banned(&self, peer_id: &PeerId) -> bool {
         match self.banned_peers.get(peer_id) {
             Some(entry) => {
-                if let Some(expiry) = *entry {
-                    if Instant::now() >= expiry {
-                        // Ban expired — remove it and treat as not banned
-                        drop(entry);
-                        self.banned_peers.remove(peer_id);
-                        return false;
-                    }
+                if let Some(expiry) = *entry
+                    && Instant::now() >= expiry
+                {
+                    // Ban expired — remove it and treat as not banned
+                    drop(entry);
+                    self.banned_peers.remove(peer_id);
+                    return false;
                 }
                 true
             }
@@ -361,10 +361,10 @@ impl<K: KeyType> PeerManager<K> {
             // Find expired bans
             let banned_peers = self.banned_peers.clone().into_read_only();
             for (peer_id, expires_at) in banned_peers.iter() {
-                if let Some(expiry) = expires_at {
-                    if now >= *expiry {
-                        to_unban.push(*peer_id);
-                    }
+                if let Some(expiry) = expires_at
+                    && now >= *expiry
+                {
+                    to_unban.push(*peer_id);
                 }
             }
 

@@ -7,9 +7,10 @@
 
 use crate::config::{JobPolicyConfig, X402CallerAuthMode, X402Config, X402InvocationMode};
 use crate::error::X402Error;
+use crate::mpp::MppGatewayState;
 use crate::producer::VerifiedPayment;
 use crate::quote_registry::QuoteRegistry;
-use crate::settlement::SettlementOption;
+use crate::settlement::{PaymentProtocol, SettlementOption};
 
 use alloy_primitives::{Address, Signature, U256, hex};
 use alloy_provider::ProviderBuilder;
@@ -42,43 +43,55 @@ const HEADER_PAYMENT_V1: &str = "X-PAYMENT";
 const HEADER_PAYMENT_V2: &str = "Payment-Signature";
 
 /// Shared state for the axum handlers.
+///
+/// Both the legacy `/x402/jobs/...` route and the parallel `/mpp/jobs/...`
+/// route share this state. The MPP-specific bits are isolated in the
+/// optional [`mpp`](Self::mpp) field, which is `Some` only when MPP is
+/// enabled in the config.
 #[derive(Clone)]
-struct GatewayState {
-    config: Arc<X402Config>,
+pub(crate) struct GatewayState {
+    pub(crate) config: Arc<X402Config>,
     /// Per-job prices in wei: (service_id, job_index) → U256
-    job_pricing: Arc<HashMap<(u64, u32), U256>>,
+    pub(crate) job_pricing: Arc<HashMap<(u64, u32), U256>>,
     /// Per-job x402 invocation policies.
-    job_policies: Arc<HashMap<(u64, u32), JobPolicyConfig>>,
+    pub(crate) job_policies: Arc<HashMap<(u64, u32), JobPolicyConfig>>,
     /// Quote tracking
-    quote_registry: QuoteRegistry,
+    pub(crate) quote_registry: QuoteRegistry,
     /// Channel to send verified payments to the runner's producer
-    payment_tx: mpsc::UnboundedSender<VerifiedPayment>,
+    pub(crate) payment_tx: mpsc::UnboundedSender<VerifiedPayment>,
     /// Monotonic call ID counter
-    call_id_counter: Arc<AtomicU64>,
+    pub(crate) call_id_counter: Arc<AtomicU64>,
     /// Replay protection for delegated caller assertions.
-    replay_guard: Arc<DelegatedReplayGuard>,
+    pub(crate) replay_guard: Arc<DelegatedReplayGuard>,
     /// Request counters for lightweight observability.
-    counters: Arc<GatewayCounters>,
+    pub(crate) counters: Arc<GatewayCounters>,
+    /// MPP ingress state. `Some` only when [`MppConfig`](crate::config::MppConfig)
+    /// is configured.
+    pub(crate) mpp: Option<Arc<MppGatewayState>>,
 }
 
 #[derive(Default)]
-struct GatewayCounters {
-    accepted: AtomicU64,
-    policy_denied: AtomicU64,
-    policy_error: AtomicU64,
-    replay_denied: AtomicU64,
-    enqueue_failed: AtomicU64,
-    job_not_found: AtomicU64,
-    quote_conflict: AtomicU64,
-    auth_dry_run_allowed: AtomicU64,
-    auth_dry_run_denied: AtomicU64,
-    auth_dry_run_error: AtomicU64,
+pub(crate) struct GatewayCounters {
+    pub(crate) accepted: AtomicU64,
+    pub(crate) mpp_accepted: AtomicU64,
+    pub(crate) policy_denied: AtomicU64,
+    pub(crate) policy_error: AtomicU64,
+    pub(crate) replay_denied: AtomicU64,
+    pub(crate) enqueue_failed: AtomicU64,
+    pub(crate) job_not_found: AtomicU64,
+    pub(crate) quote_conflict: AtomicU64,
+    pub(crate) auth_dry_run_allowed: AtomicU64,
+    pub(crate) auth_dry_run_denied: AtomicU64,
+    pub(crate) auth_dry_run_error: AtomicU64,
+    pub(crate) mpp_challenge_issued: AtomicU64,
+    pub(crate) mpp_verification_failed: AtomicU64,
 }
 
 impl GatewayCounters {
     fn snapshot(&self) -> serde_json::Value {
         serde_json::json!({
             "accepted": self.accepted.load(Ordering::Relaxed),
+            "mpp_accepted": self.mpp_accepted.load(Ordering::Relaxed),
             "policy_denied": self.policy_denied.load(Ordering::Relaxed),
             "policy_error": self.policy_error.load(Ordering::Relaxed),
             "replay_denied": self.replay_denied.load(Ordering::Relaxed),
@@ -88,18 +101,20 @@ impl GatewayCounters {
             "auth_dry_run_allowed": self.auth_dry_run_allowed.load(Ordering::Relaxed),
             "auth_dry_run_denied": self.auth_dry_run_denied.load(Ordering::Relaxed),
             "auth_dry_run_error": self.auth_dry_run_error.load(Ordering::Relaxed),
+            "mpp_challenge_issued": self.mpp_challenge_issued.load(Ordering::Relaxed),
+            "mpp_verification_failed": self.mpp_verification_failed.load(Ordering::Relaxed),
         })
     }
 }
 
 #[derive(Default)]
-struct DelegatedReplayGuard {
+pub(crate) struct DelegatedReplayGuard {
     // key: "{caller}:{service_id}:{job_index}:{nonce}" => expiry_unix_secs
     seen_nonces: Mutex<HashMap<String, u64>>,
 }
 
 impl DelegatedReplayGuard {
-    async fn reserve(
+    pub(crate) async fn reserve(
         &self,
         caller: Address,
         service_id: u64,
@@ -128,14 +143,14 @@ impl DelegatedReplayGuard {
 }
 
 #[derive(Debug)]
-struct PolicyRejection {
-    status: StatusCode,
-    code: &'static str,
-    detail: String,
+pub(crate) struct PolicyRejection {
+    pub(crate) status: StatusCode,
+    pub(crate) code: &'static str,
+    pub(crate) detail: String,
 }
 
 impl PolicyRejection {
-    fn denied(code: &'static str, detail: impl Into<String>) -> Self {
+    pub(crate) fn denied(code: &'static str, detail: impl Into<String>) -> Self {
         Self {
             status: StatusCode::FORBIDDEN,
             code,
@@ -143,7 +158,7 @@ impl PolicyRejection {
         }
     }
 
-    fn bad_request(code: &'static str, detail: impl Into<String>) -> Self {
+    pub(crate) fn bad_request(code: &'static str, detail: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
             code,
@@ -151,7 +166,7 @@ impl PolicyRejection {
         }
     }
 
-    fn service_unavailable(code: &'static str, detail: impl Into<String>) -> Self {
+    pub(crate) fn service_unavailable(code: &'static str, detail: impl Into<String>) -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
             code,
@@ -159,7 +174,7 @@ impl PolicyRejection {
         }
     }
 
-    fn conflict(code: &'static str, detail: impl Into<String>) -> Self {
+    pub(crate) fn conflict(code: &'static str, detail: impl Into<String>) -> Self {
         Self {
             status: StatusCode::CONFLICT,
             code,
@@ -167,7 +182,7 @@ impl PolicyRejection {
         }
     }
 
-    fn into_response(self) -> axum::response::Response {
+    pub(crate) fn into_response(self) -> axum::response::Response {
         (
             self.status,
             Json(serde_json::json!({
@@ -185,12 +200,15 @@ struct SettlementDetails {
     network: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-struct PaymentAttribution {
-    network: Option<String>,
-    token: Option<String>,
-    #[allow(dead_code)]
-    settled_payer: Option<Address>,
+/// Wire-protocol-agnostic description of who paid for a job and on which
+/// rail. Built by the per-protocol header parsing code (x402 reads
+/// `X-Payment-Response`; MPP reads the verified `Receipt`) and consumed
+/// by [`handle_paid_job_inner`].
+#[derive(Debug, Clone, Default)]
+pub(crate) struct PaymentAttribution {
+    pub(crate) network: Option<String>,
+    pub(crate) token: Option<String>,
+    pub(crate) settled_payer: Option<Address>,
 }
 
 /// The x402 payment gateway.
@@ -218,6 +236,7 @@ pub struct X402Gateway {
     quote_registry: QuoteRegistry,
     replay_guard: Arc<DelegatedReplayGuard>,
     counters: Arc<GatewayCounters>,
+    mpp: Option<Arc<MppGatewayState>>,
 }
 
 impl X402Gateway {
@@ -225,6 +244,12 @@ impl X402Gateway {
     ///
     /// `job_pricing` maps `(service_id, job_index)` to the price in wei.
     /// This is the same `JobPricingConfig` used by the pricing engine.
+    ///
+    /// If `config.mpp` is `Some`, the gateway will also expose the parallel
+    /// `/mpp/jobs/{service_id}/{job_index}` routes that speak the MPP /
+    /// IETF Payment authentication scheme. The MPP ingress shares the same
+    /// `job_pricing`, `accepted_tokens`, restricted-auth modes, and producer
+    /// stream as the existing x402 ingress; only the wire format differs.
     pub fn new(
         config: X402Config,
         job_pricing: HashMap<(u64, u32), U256>,
@@ -249,6 +274,16 @@ impl X402Gateway {
         let (producer, payment_tx) = crate::X402Producer::channel();
         let quote_registry = QuoteRegistry::new(Duration::from_secs(config.quote_ttl_secs));
 
+        let mpp = if let Some(mpp_config) = config.mpp.clone() {
+            Some(Arc::new(MppGatewayState::new(
+                &mpp_config,
+                config.facilitator_url.clone(),
+                config.accepted_tokens.clone(),
+            )?))
+        } else {
+            None
+        };
+
         let gateway = Self {
             config: Arc::new(config),
             job_pricing: Arc::new(job_pricing),
@@ -257,6 +292,7 @@ impl X402Gateway {
             quote_registry,
             replay_guard: Arc::new(DelegatedReplayGuard::default()),
             counters: Arc::new(GatewayCounters::default()),
+            mpp,
         };
 
         Ok((gateway, producer))
@@ -281,6 +317,7 @@ impl X402Gateway {
             .map(|token| {
                 let amount = token.convert_wei_to_amount(price_wei)?;
                 Ok(SettlementOption {
+                    protocol: PaymentProtocol::X402,
                     network: token.network.clone(),
                     asset: token.asset.clone(),
                     symbol: token.symbol.clone(),
@@ -304,6 +341,7 @@ impl X402Gateway {
             call_id_counter: Arc::new(AtomicU64::new(1)),
             replay_guard: self.replay_guard.clone(),
             counters: self.counters.clone(),
+            mpp: self.mpp.clone(),
         };
 
         // Base job execution route handler, protected by the x402 middleware.
@@ -330,7 +368,7 @@ impl X402Gateway {
 
         let job_route = post(handle_job_request).layer(layer);
 
-        Router::new()
+        let mut router = Router::new()
             .route("/x402/jobs/{service_id}/{job_index}", job_route)
             // Health/discovery endpoints are unprotected
             .route("/x402/health", axum::routing::get(health_check))
@@ -342,8 +380,54 @@ impl X402Gateway {
             .route(
                 "/x402/jobs/{service_id}/{job_index}/price",
                 axum::routing::get(get_job_price),
-            )
-            .with_state(state)
+            );
+
+        if state.mpp.is_some() {
+            router = router
+                .route(
+                    "/mpp/jobs/{service_id}/{job_index}",
+                    post(crate::mpp::routes::handle_mpp_job_request),
+                )
+                .route(
+                    "/mpp/jobs/{service_id}/{job_index}/price",
+                    axum::routing::get(crate::mpp::routes::get_mpp_job_price),
+                );
+        }
+
+        router.with_state(state)
+    }
+
+    /// Compute MPP settlement options for a given job, mirroring x402's
+    /// [`settlement_options`](Self::settlement_options) but with the MPP
+    /// endpoint URL and `intent="charge"` instead of `scheme="exact"`.
+    pub fn mpp_settlement_options(
+        config: &X402Config,
+        service_id: u64,
+        job_index: u32,
+        price_wei: &U256,
+    ) -> Result<Vec<SettlementOption>, X402Error> {
+        let base_url = format!(
+            "http://{}/mpp/jobs/{}/{}",
+            config.bind_address, service_id, job_index
+        );
+
+        config
+            .accepted_tokens
+            .iter()
+            .map(|token| {
+                let amount = token.convert_wei_to_amount(price_wei)?;
+                Ok(SettlementOption {
+                    protocol: PaymentProtocol::Mpp,
+                    network: token.network.clone(),
+                    asset: token.asset.clone(),
+                    symbol: token.symbol.clone(),
+                    amount,
+                    pay_to: token.pay_to.clone(),
+                    scheme: "charge".into(),
+                    x402_endpoint: base_url.clone(),
+                })
+            })
+            .collect()
     }
 }
 
@@ -572,7 +656,7 @@ async fn post_auth_dry_run(
     }
 }
 
-/// Handle a paid job request.
+/// Handle a paid job request via the x402 wire protocol.
 ///
 /// Called after the x402 middleware has verified and settled payment.
 /// The operator has already been paid on-chain at this point.
@@ -582,45 +666,143 @@ async fn handle_job_request(
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
+    let attribution = extract_payment_attribution(&headers, &state.config);
+
+    match handle_paid_job_inner(
+        &state,
+        service_id,
+        job_index,
+        body,
+        &headers,
+        attribution,
+        PaymentProtocol::X402,
+    )
+    .await
+    {
+        Ok(receipt) => (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "status": "accepted",
+                "receipt": receipt.quote_digest_hex,
+                "service_id": service_id,
+                "job_index": job_index,
+                "call_id": receipt.call_id,
+            })),
+        )
+            .into_response(),
+        // Wire-shape compatibility shim: the pre-MPP-refactor x402 path
+        // returned `{"error": ..., "service_id": ..., "job_index": ...}`
+        // for `job_not_found` (404), `quote_conflict` (409), and
+        // `shutting_down` (503). The shared `PolicyRejection::into_response`
+        // emits `{"error": ..., "code": ...}` instead. To preserve back-
+        // compat for x402 clients parsing the legacy structured fields,
+        // re-emit those three cases here in the legacy shape.
+        Err(rej) => map_legacy_x402_rejection(rej, service_id, job_index),
+    }
+}
+
+/// Restore the pre-refactor x402 wire shape for the three error cases
+/// that legacy clients structurally parse.
+fn map_legacy_x402_rejection(
+    rej: PolicyRejection,
+    service_id: u64,
+    job_index: u32,
+) -> axum::response::Response {
+    match rej.code {
+        "job_not_found" => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "job not found",
+                "service_id": service_id,
+                "job_index": job_index,
+            })),
+        )
+            .into_response(),
+        "quote_conflict" => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "error": "quote already consumed or expired",
+            })),
+        )
+            .into_response(),
+        "shutting_down" => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "service shutting down" })),
+        )
+            .into_response(),
+        _ => rej.into_response(),
+    }
+}
+
+/// Outcome of a successful enqueue, returned by [`handle_paid_job_inner`]
+/// to both the x402 and MPP request handlers.
+#[derive(Debug, Clone)]
+pub(crate) struct EnqueuedReceipt {
+    pub(crate) call_id: u64,
+    pub(crate) quote_digest_hex: String,
+}
+
+/// Shared "I have a verified payment, please enqueue it" path used by both
+/// the x402 ingress (via [`handle_job_request`]) and the MPP ingress (via
+/// [`crate::mpp::routes::handle_mpp_job_request`]).
+///
+/// Performs job lookup, policy enforcement (including restricted-caller
+/// auth + replay guard), quote registry insert/consume, and producer
+/// channel send. The wire-protocol-specific bits — header parsing, payment
+/// verification, and response formatting — are the caller's responsibility.
+pub(crate) async fn handle_paid_job_inner(
+    state: &GatewayState,
+    service_id: u64,
+    job_index: u32,
+    body: Bytes,
+    headers: &HeaderMap,
+    attribution: PaymentAttribution,
+    protocol: PaymentProtocol,
+) -> Result<EnqueuedReceipt, PolicyRejection> {
     let key = (service_id, job_index);
 
     // Verify the job exists in our pricing config
     let price_wei = match state.job_pricing.get(&key) {
-        Some(p) => p,
+        Some(p) => *p,
         None => {
             state.counters.job_not_found.fetch_add(1, Ordering::Relaxed);
-            return (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({
-                    "error": "job not found",
-                    "service_id": service_id,
-                    "job_index": job_index,
-                })),
-            )
-                .into_response();
+            return Err(PolicyRejection {
+                status: StatusCode::NOT_FOUND,
+                code: "job_not_found",
+                detail: format!("job not found: service_id={service_id} job_index={job_index}"),
+            });
         }
     };
 
-    let policy = resolve_job_policy(&state, service_id, job_index);
+    let policy = resolve_job_policy(state, service_id, job_index);
+    let mpp_caller_override = attribution.settled_payer;
     let caller = match policy.invocation_mode {
         X402InvocationMode::Disabled => {
             state.counters.policy_denied.fetch_add(1, Ordering::Relaxed);
             tracing::warn!(
                 service_id,
                 job_index,
+                protocol = protocol.as_str(),
                 reason = "x402_disabled",
                 "x402 policy denied"
             );
-            return PolicyRejection::denied(
+            return Err(PolicyRejection::denied(
                 "x402_disabled",
                 "job is not enabled for x402 invocation",
-            )
-            .into_response();
+            ));
         }
         X402InvocationMode::PublicPaid => None,
         X402InvocationMode::RestrictedPaid => {
-            match authorize_restricted_job(
-                &state, &policy, service_id, job_index, &body, &headers, true,
+            match authorize_restricted_job_with_payer(
+                state,
+                &policy,
+                service_id,
+                job_index,
+                &body,
+                headers,
+                mpp_caller_override,
+                protocol,
+                true,
             )
             .await
             {
@@ -639,12 +821,13 @@ async fn handle_job_request(
                     tracing::warn!(
                         service_id,
                         job_index,
+                        protocol = protocol.as_str(),
                         status = %rejection.status,
                         code = rejection.code,
                         reason = "policy_rejected",
                         "x402 restricted policy failed"
                     );
-                    return rejection.into_response();
+                    return Err(rejection);
                 }
             }
         }
@@ -653,7 +836,7 @@ async fn handle_job_request(
     // Register a dynamic quote for tracking
     let quote_digest = state
         .quote_registry
-        .insert_dynamic(service_id, job_index, *price_wei);
+        .insert_dynamic(service_id, job_index, price_wei);
 
     // Consume the quote (marks it as paid)
     if state.quote_registry.consume(&quote_digest).is_none() {
@@ -661,16 +844,14 @@ async fn handle_job_request(
             .counters
             .quote_conflict
             .fetch_add(1, Ordering::Relaxed);
-        return (
-            StatusCode::CONFLICT,
-            Json(serde_json::json!({ "error": "quote already consumed or expired" })),
-        )
-            .into_response();
+        return Err(PolicyRejection::conflict(
+            "quote_conflict",
+            "quote already consumed or expired",
+        ));
     }
 
     let call_id = state.call_id_counter.fetch_add(1, Ordering::Relaxed);
 
-    let attribution = extract_payment_attribution(&headers, &state.config);
     let (payment_network, payment_token) = resolved_payment_metadata(&state.config, &attribution);
 
     let payment = VerifiedPayment {
@@ -693,38 +874,36 @@ async fn handle_job_request(
         tracing::error!(
             service_id,
             job_index,
+            protocol = protocol.as_str(),
             reason = "enqueue_failed",
             "x402 enqueue failed"
         );
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({ "error": "service shutting down" })),
-        )
-            .into_response();
+        return Err(PolicyRejection::service_unavailable(
+            "shutting_down",
+            "service shutting down",
+        ));
     }
 
-    state.counters.accepted.fetch_add(1, Ordering::Relaxed);
+    match protocol {
+        PaymentProtocol::X402 => state.counters.accepted.fetch_add(1, Ordering::Relaxed),
+        PaymentProtocol::Mpp => state.counters.mpp_accepted.fetch_add(1, Ordering::Relaxed),
+    };
 
-    let digest_hex = hex::encode(quote_digest);
-
-    (
-        StatusCode::ACCEPTED,
-        Json(serde_json::json!({
-            "status": "accepted",
-            "receipt": digest_hex,
-            "service_id": service_id,
-            "job_index": job_index,
-            "call_id": call_id,
-        })),
-    )
-        .into_response()
+    Ok(EnqueuedReceipt {
+        call_id,
+        quote_digest_hex: hex::encode(quote_digest),
+    })
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Policy + Attribution Helpers
 // ═══════════════════════════════════════════════════════════════════════════
 
-fn resolve_job_policy(state: &GatewayState, service_id: u64, job_index: u32) -> JobPolicyConfig {
+pub(crate) fn resolve_job_policy(
+    state: &GatewayState,
+    service_id: u64,
+    job_index: u32,
+) -> JobPolicyConfig {
     state
         .job_policies
         .get(&(service_id, job_index))
@@ -748,20 +927,85 @@ async fn authorize_restricted_job(
     headers: &HeaderMap,
     enforce_replay_guard: bool,
 ) -> Result<Address, PolicyRejection> {
+    authorize_restricted_job_with_payer(
+        state,
+        policy,
+        service_id,
+        job_index,
+        body,
+        headers,
+        None,
+        PaymentProtocol::X402,
+        enforce_replay_guard,
+    )
+    .await
+}
+
+/// Variant of [`authorize_restricted_job`] that accepts an out-of-band
+/// `payer` override and a wire `protocol` discriminator.
+///
+/// The MPP ingress doesn't expose the `X-Payment-Response` header that
+/// the legacy x402 path reads via [`parse_settlement_details`]; instead,
+/// the verified payer comes from the facilitator's `VerifyResponse.payer`
+/// stashed in the MPP route's `verified_payers` cache. This entry point
+/// lets the MPP route inject that payer for `auth_mode = payer_is_caller`
+/// while keeping all other restricted-auth checks (delegated signature
+/// verification, replay guard, on-chain `isPermittedCaller`) shared.
+///
+/// **Security:** The `protocol` parameter is load-bearing. When called
+/// with `PaymentProtocol::Mpp` and no `payer_override`, this function
+/// will NOT fall back to `parse_settlement_details(headers)` — an attacker
+/// can trivially forge an `X-Payment-Response` header on an MPP request,
+/// so reading it here would let them impersonate any address. The MPP
+/// route handler is expected to drain its `verified_payers` cache and
+/// pass the result here; if the cache was empty for some reason the
+/// route is responsible for failing closed *before* calling this helper.
+pub(crate) async fn authorize_restricted_job_with_payer(
+    state: &GatewayState,
+    policy: &JobPolicyConfig,
+    service_id: u64,
+    job_index: u32,
+    body: &Bytes,
+    headers: &HeaderMap,
+    payer_override: Option<Address>,
+    protocol: PaymentProtocol,
+    enforce_replay_guard: bool,
+) -> Result<Address, PolicyRejection> {
     let caller = match policy.auth_mode {
         X402CallerAuthMode::PayerIsCaller => {
-            let settlement = parse_settlement_details(headers).ok_or_else(|| {
-                PolicyRejection::bad_request(
-                    "missing_settlement_context",
-                    "X-Payment-Response settlement context is required",
-                )
-            })?;
-            settlement.payer.ok_or_else(|| {
-                PolicyRejection::bad_request(
+            if let Some(payer) = payer_override {
+                payer
+            } else if protocol != PaymentProtocol::X402 {
+                // Deny-by-default: only the legacy x402 wire format is
+                // permitted to read `X-Payment-Response` from request
+                // headers. Any future protocol variant (e.g. a Stripe
+                // ingress) MUST pass an explicit `payer_override` from
+                // its own verified payment context. An attacker can
+                // forge `X-Payment-Response` on any non-x402 request,
+                // so reading it here would let them impersonate any
+                // address that passes `isPermittedCaller`.
+                return Err(PolicyRejection::service_unavailable(
                     "missing_settled_payer",
-                    "settled payer is required for auth_mode=payer_is_caller",
-                )
-            })?
+                    format!(
+                        "{} payer_is_caller requires a verified payer override; \
+                         refusing to read X-Payment-Response from a non-x402 request",
+                        protocol.as_str()
+                    ),
+                ));
+            } else {
+                let settlement = parse_settlement_details(headers).ok_or_else(|| {
+                    PolicyRejection::bad_request(
+                        "missing_settlement_context",
+                        "X-Payment-Response settlement context is required",
+                    )
+                })?;
+                settlement.payer.ok_or_else(|| {
+                    PolicyRejection::bad_request(
+                        "missing_settled_payer",
+                        "settled payer is required for auth_mode=payer_is_caller",
+                    )
+                })?
+            }
         }
         X402CallerAuthMode::DelegatedCallerSignature => {
             let assertion = verify_delegated_signature(service_id, job_index, body, headers)?;
@@ -1379,6 +1623,7 @@ mod tests {
                 default_invocation_mode: X402InvocationMode::Disabled,
                 job_policies: vec![],
                 service_id: 1,
+                mpp: None,
             }),
             job_pricing: Arc::new(HashMap::new()),
             job_policies: Arc::new(HashMap::new()),
@@ -1387,6 +1632,7 @@ mod tests {
             call_id_counter: Arc::new(AtomicU64::new(1)),
             replay_guard: Arc::new(DelegatedReplayGuard::default()),
             counters: Arc::new(GatewayCounters::default()),
+            mpp: None,
         };
 
         let first = authorize_restricted_job(&state, &policy, 1, 7, &body, &headers, true).await;
@@ -1424,6 +1670,7 @@ mod tests {
                 default_invocation_mode: X402InvocationMode::Disabled,
                 job_policies: vec![],
                 service_id: 1,
+                mpp: None,
             }),
             job_pricing: Arc::new(HashMap::new()),
             job_policies: Arc::new(HashMap::new()),
@@ -1432,6 +1679,7 @@ mod tests {
             call_id_counter: Arc::new(AtomicU64::new(1)),
             replay_guard: Arc::new(DelegatedReplayGuard::default()),
             counters: Arc::new(GatewayCounters::default()),
+            mpp: None,
         };
 
         // Dry-run path should not reserve nonce.

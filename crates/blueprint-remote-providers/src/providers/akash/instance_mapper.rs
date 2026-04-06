@@ -145,9 +145,10 @@ mod tests {
 
     #[test]
     fn unknown_profile_falls_back_to_default_cost() {
-        assert_eq!(
-            AkashInstanceMapper::estimate_hourly_cost("gpu-unknown"),
-            1.00
+        let cost = AkashInstanceMapper::estimate_hourly_cost("gpu-unknown");
+        assert!(
+            (cost - 1.00).abs() < f64::EPSILON,
+            "expected 1.00, got {cost}"
         );
     }
 }

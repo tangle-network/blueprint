@@ -146,7 +146,7 @@ mod bls377_tests {
         let different_message = b"completely different message".to_vec();
 
         // Generate 3 valid keys
-        let secrets = vec![
+        let secrets = [
             W3fBls377::generate_with_seed(Some(&[1u8; 32])).unwrap(),
             W3fBls377::generate_with_seed(Some(&[2u8; 32])).unwrap(),
             W3fBls377::generate_with_seed(Some(&[3u8; 32])).unwrap(),
@@ -355,7 +355,7 @@ mod bls381_tests {
         let different_message = b"completely different message".to_vec();
 
         // Generate 3 valid keys
-        let secrets = vec![
+        let secrets = [
             W3fBls381::generate_with_seed(Some(&[1u8; 32])).unwrap(),
             W3fBls381::generate_with_seed(Some(&[2u8; 32])).unwrap(),
             W3fBls381::generate_with_seed(Some(&[3u8; 32])).unwrap(),

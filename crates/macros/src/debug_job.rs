@@ -744,19 +744,16 @@ fn self_receiver(item_fn: &ItemFn) -> Option<TokenStream> {
         return Some(quote! { Self:: });
     }
 
-    if let syn::ReturnType::Type(_, ty) = &item_fn.sig.output {
-        if let syn::Type::Path(path) = &**ty {
-            let segments = &path.path.segments;
-            if segments.len() == 1 {
-                if let Some(last) = segments.last() {
-                    match &last.arguments {
-                        syn::PathArguments::None if last.ident == "Self" => {
-                            return Some(quote! { Self:: });
-                        }
-                        _ => {}
-                    }
-                }
-            }
+    if let syn::ReturnType::Type(_, ty) = &item_fn.sig.output
+        && let syn::Type::Path(path) = &**ty
+    {
+        let segments = &path.path.segments;
+        if segments.len() == 1
+            && let Some(last) = segments.last()
+            && let syn::PathArguments::None = &last.arguments
+            && last.ident == "Self"
+        {
+            return Some(quote! { Self:: });
         }
     }
 

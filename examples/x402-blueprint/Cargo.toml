@@ -35,6 +35,11 @@ tokio = { workspace = true, features = ["full"] }
 futures = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 serde_json = { workspace = true, features = ["std"] }
+# MPP integration tests stub the x402 facilitator HTTP endpoints to prove
+# the verify→settle flow without standing up a real on-chain settler.
+wiremock = { workspace = true }
+mpp = { workspace = true, features = ["server", "axum"] }
+base64 = { workspace = true }
 
 [features]
 default = []

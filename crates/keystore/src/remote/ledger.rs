@@ -177,10 +177,10 @@ impl EcdsaRemoteSigner<K256Ecdsa> for LedgerRemoteSigner {
         let mut public_keys = Vec::new();
         for ((_, _), signer) in &self.signers {
             // Skip if chain_id is Some and doesn't match
-            if let Some(chain_id) = chain_id {
-                if signer.chain_id != Some(chain_id) {
-                    continue;
-                }
+            if let Some(chain_id) = chain_id
+                && signer.chain_id != Some(chain_id)
+            {
+                continue;
             }
 
             let address_check = signer
@@ -200,10 +200,10 @@ impl EcdsaRemoteSigner<K256Ecdsa> for LedgerRemoteSigner {
     ) -> Result<Self::KeyId> {
         for ((signer_address, _), signer) in &self.signers {
             // Skip if chain_id is Some and doesn't match
-            if let Some(chain_id) = chain_id {
-                if signer.chain_id != Some(chain_id) {
-                    continue;
-                }
+            if let Some(chain_id) = chain_id
+                && signer.chain_id != Some(chain_id)
+            {
+                continue;
             }
 
             let signer_address_check = signer

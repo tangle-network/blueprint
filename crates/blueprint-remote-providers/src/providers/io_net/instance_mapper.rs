@@ -148,9 +148,10 @@ mod tests {
 
     #[test]
     fn cost_lookup_falls_back_to_default() {
-        assert_eq!(
-            IoNetInstanceMapper::estimate_hourly_cost("UNKNOWN_GPU"),
-            1.00
+        let cost = IoNetInstanceMapper::estimate_hourly_cost("UNKNOWN_GPU");
+        assert!(
+            (cost - 1.00).abs() < f64::EPSILON,
+            "expected 1.00, got {cost}"
         );
     }
 }

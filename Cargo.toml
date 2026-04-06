@@ -23,7 +23,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://tangle.tools"
 repository = "https://github.com/tangle-network/blueprint"
-rust-version = "1.88"
+rust-version = "1.91"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
@@ -116,6 +116,7 @@ option_as_ref_cloned = "allow"
 manual_div_ceil = "allow"
 derivable_impls = "allow"
 collapsible_else_if = "allow"
+collapsible_if = "allow"
 no_effect_underscore_binding = "allow"
 manual_range_contains = "allow"
 
@@ -334,7 +335,7 @@ fatfs = { version = "0.3.6", default-features = false }
 tokio-vsock = { version = "0.7.1", default-features = false }
 nix = { version = "0.31.1", default-features = false }
 capctl = { version = "0.2.4", default-features = false }
-netdev = { version = "0.35.3", default-features = false }
+netdev = { version = "0.41", default-features = false }
 nftables = { version = "0.6.3", default-features = false }
 
 # Development & Testing
@@ -377,7 +378,7 @@ opentelemetry_sdk = { version = "0.29", default-features = false }
 opentelemetry-semantic-conventions = { version = "0.29", default-features = false }
 opentelemetry_api = { version = "0.20", default-features = false }
 tracing-loki = { version = "0.2", default-features = false }
-tracing-opentelemetry = { version = "0.30", default-features = false }
+tracing-opentelemetry = { version = "0.32", default-features = false }
 urlencoding = { version = "2.1.3", default-features = false }
 
 # Testing
@@ -385,37 +386,37 @@ test-log = { version = "0.2", default-features = false }
 serial_test = { version = "3.4.0", default-features = false }
 
 # Alloy (EVM)
-alloy = { version = "1.0.35", default-features = false }
-alloy-primitives = { version = "1.2.1", default-features = false }
-alloy-json-abi = { version = "1.2.1", default-features = false }
-alloy-json-rpc = { version = "1.0.35", default-features = false }
-alloy-dyn-abi = { version = "1.5.7", default-features = false, features = ["eip712"] }
-alloy-sol-types = { version = "1.2.1", default-features = false }
+alloy = { version = "1.8", default-features = false }
+alloy-primitives = { version = "1.5", default-features = false }
+alloy-json-abi = { version = "1.5", default-features = false }
+alloy-json-rpc = { version = "1.8", default-features = false }
+alloy-dyn-abi = { version = "1.5", default-features = false, features = ["eip712"] }
+alloy-sol-types = { version = "1.5", default-features = false }
 alloy-rlp = { version = "0.3.12", default-features = false }
-alloy-rpc-client = { version = "1.0.35", default-features = false }
-alloy-rpc-types = { version = "1.0.35", default-features = false }
-alloy-rpc-types-eth = { version = "1.0.35", default-features = false }
-alloy-provider = { version = "1.0.35", default-features = false, features = ["reqwest", "ws"] }
-alloy-pubsub = { version = "1.6.3", default-features = false }
-alloy-signer = { version = "1.3.0", default-features = false }
-alloy-signer-local = { version = "1.3.0", default-features = false }
-alloy-network = { version = "1.0.35", default-features = false }
-alloy-contract = { version = "1.0.35", default-features = false }
-alloy-consensus = { version = "1.0.35", default-features = false }
-alloy-eips = { version = "1.0.35", default-features = false }
-alloy-transport = { version = "1.0.35", default-features = false }
-alloy-transport-http = { version = "1.0.35", default-features = false }
+alloy-rpc-client = { version = "1.8", default-features = false }
+alloy-rpc-types = { version = "1.8", default-features = false }
+alloy-rpc-types-eth = { version = "1.8", default-features = false }
+alloy-provider = { version = "1.8", default-features = false, features = ["reqwest", "ws"] }
+alloy-pubsub = { version = "1.8", default-features = false }
+alloy-signer = { version = "1.8", default-features = false }
+alloy-signer-local = { version = "1.8", default-features = false }
+alloy-network = { version = "1.8", default-features = false }
+alloy-contract = { version = "1.8", default-features = false }
+alloy-consensus = { version = "1.8", default-features = false }
+alloy-eips = { version = "1.8", default-features = false }
+alloy-transport = { version = "1.8", default-features = false }
+alloy-transport-http = { version = "1.8", default-features = false }
 ripemd = { version = "0.1.3", default-features = false }
 libsecp256k1 = { version = "0.7.2", default-features = false }
 
 # Remote signing
-alloy-signer-aws = { version = "1.0.35", default-features = false }
-alloy-signer-gcp = { version = "1.0.35", default-features = false }
-alloy-signer-ledger = { version = "1.0.35", default-features = false, features = ["eip712"] }
+alloy-signer-aws = { version = "1.8", default-features = false }
+alloy-signer-gcp = { version = "1.8", default-features = false }
+alloy-signer-ledger = { version = "1.8", default-features = false, features = ["eip712"] }
 aws-config = { version = "1", default-features = false }
 aws-sdk-ec2 = { version = "1", default-features = false }
 aws-sdk-kms = { version = "1", default-features = false }
-gcloud-sdk = { version = "0.27.4", default-features = false }
+gcloud-sdk = { version = "0.29", default-features = false }
 gcp_auth = { version = "0.12" }
 
 # Arkworks
@@ -441,6 +442,7 @@ metrics = { version = "0.24.2", default-features = false }
 x402-types = { version = "1", default-features = false }
 x402-axum = { version = "1", default-features = false }
 x402-chain-eip155 = { version = "1", default-features = false }
+mpp = { version = "0.8", default-features = false }
 
 # AWS SDK (additional)
 aws-sdk-lambda = { version = "1", default-features = false }
@@ -453,8 +455,8 @@ aws-smithy-mocks-experimental = { version = "0.2", default-features = false }
 aws-lc-rs = { version = "1.13", default-features = false }
 
 # Azure SDK
-azure_core = { version = "0.20", default-features = false }
-azure_identity = { version = "0.20", default-features = false }
+azure_core = { version = "0.33", default-features = false }
+azure_identity = { version = "0.33", default-features = false }
 
 # Additional dependencies
 openssl = { version = "0.10", default-features = false }

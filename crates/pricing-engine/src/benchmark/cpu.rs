@@ -205,7 +205,7 @@ fn calculate_primes_range(start: u64, end: u64) -> u64 {
         // 2 is prime
         count += 1;
         3
-    } else if start % 2 == 0 {
+    } else if start.is_multiple_of(2) {
         start + 1
     } else {
         start

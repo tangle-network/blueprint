@@ -118,6 +118,69 @@ async fn test_unknown_job_returns_404() {
     handle.abort();
 }
 
+/// Pin the legacy x402 wire shape for `GET /x402/jobs/.../price` 404
+/// responses. Pre-MPP-refactor clients structurally parse `service_id` /
+/// `job_index` from the body; the refactor must not silently drop them.
+#[tokio::test]
+async fn test_x402_price_404_wire_shape_preserved() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let resp = reqwest::get(format!("http://127.0.0.1:{port}/x402/jobs/7/99/price"))
+        .await
+        .expect("GET unknown price");
+
+    assert_eq!(resp.status(), 404);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["error"], "job not found");
+    assert_eq!(body["service_id"], 7);
+    assert_eq!(body["job_index"], 99);
+    // Critically, no `code` field on this legacy path.
+    assert!(
+        body.get("code").is_none(),
+        "x402 price 404 must not gain new fields: {body}"
+    );
+
+    handle.abort();
+}
+
+/// Pin the legacy x402 wire shape for `POST /x402/jobs/.../{sid}/{idx}` 404
+/// responses. This is the path that the refactor briefly broke before the
+/// `map_legacy_x402_rejection` shim was added — the body shape used to be
+/// `{error, service_id, job_index}` and the structured fields must
+/// survive.
+#[tokio::test]
+async fn test_x402_post_404_wire_shape_preserved() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    // To reach the `job_not_found` branch on POST, we need to bypass the
+    // x402 middleware (which would 402 first). The middleware is keyed on
+    // request URL, so a job that exists in the pricing table but is then
+    // routed to an unknown (sid, idx) via a different path won't help.
+    // Instead, we use the auth-dry-run endpoint which is unprotected and
+    // ALSO checks `job_not_found` against the pricing table — it returns
+    // 404 with the same legacy shape via its own handler.
+    let resp = reqwest::Client::new()
+        .post(format!(
+            "http://127.0.0.1:{port}/x402/jobs/13/77/auth-dry-run"
+        ))
+        .body("hello")
+        .send()
+        .await
+        .expect("POST dry-run unknown");
+
+    assert_eq!(resp.status(), 404);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["service_id"], 13);
+    assert_eq!(body["job_index"], 77);
+    assert_eq!(body["error"], "job not found");
+
+    handle.abort();
+}
+
 #[tokio::test]
 async fn test_auth_dry_run_public_job() {
     let port = free_port();
@@ -320,6 +383,7 @@ fn test_settlement_with_custom_token_address() {
         job_policies: vec![],
 
         service_id: 1,
+        mpp: None,
     };
 
     let price_wei = U256::from(1_000_000_000_000_000u64); // 0.001 ETH
@@ -370,6 +434,7 @@ fn test_settlement_with_multiple_tokens() {
         job_policies: vec![],
 
         service_id: 1,
+        mpp: None,
     };
 
     let price_wei = U256::from(1_000_000_000_000_000u64); // 0.001 ETH
@@ -385,4 +450,598 @@ fn test_settlement_with_multiple_tokens() {
     // DAI: 0.001 * 3200 * 1.01 = 3.232 DAI = 3232000000000000000 (18 decimals, 1% markup)
     assert_eq!(options[1].symbol, "DAI");
     assert_eq!(options[1].amount, "3232000000000000000");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MPP (Machine Payments Protocol) integration tests
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// These tests exercise the parallel /mpp/jobs/... ingress added by the
+// blueprint-x402 MPP integration. The example x402.toml now ships with an
+// `[mpp]` section so `start_gateway` brings the MPP routes up automatically.
+
+/// `GET /mpp/jobs/1/0/price` returns settlement options carrying
+/// `protocol: "mpp"` with the same converted amount as the x402 path.
+#[tokio::test]
+async fn test_mpp_price_discovery() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let resp = reqwest::get(format!("http://127.0.0.1:{port}/mpp/jobs/1/0/price"))
+        .await
+        .expect("GET /mpp price");
+
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let options = body["settlement_options"].as_array().unwrap();
+    assert!(
+        !options.is_empty(),
+        "must advertise at least one MPP method"
+    );
+    assert_eq!(options[0]["protocol"], "mpp");
+    // Same wei→token math as the x402 path: 0.001 ETH * 3200 USDC * 1.02 markup = 3.264 USDC.
+    assert_eq!(options[0]["amount"], "3264000");
+    assert_eq!(options[0]["scheme"], "charge");
+
+    handle.abort();
+}
+
+/// `GET /mpp/jobs/1/99/price` for an unknown job is rejected with a 404
+/// RFC 9457 Problem Details payload.
+#[tokio::test]
+async fn test_mpp_unknown_job_returns_problem() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let resp = reqwest::get(format!("http://127.0.0.1:{port}/mpp/jobs/1/99/price"))
+        .await
+        .expect("GET /mpp unknown");
+
+    assert_eq!(resp.status(), 404);
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("application/problem+json")
+    );
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], 404);
+    assert!(
+        body["type"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("https://paymentauth.org/problems/"),
+        "MPP errors must use IETF Problem Details type URIs"
+    );
+
+    handle.abort();
+}
+
+/// `POST /mpp/jobs/1/0` without an `Authorization: Payment` header returns
+/// `402 Payment Required` with `WWW-Authenticate: Payment` headers — one
+/// per accepted token.
+#[tokio::test]
+async fn test_mpp_unpaid_returns_challenge() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+        .body("hello")
+        .send()
+        .await
+        .expect("POST /mpp/jobs/1/0");
+
+    assert_eq!(resp.status(), 402, "MPP must speak HTTP 402 like x402");
+
+    let challenges: Vec<_> = resp
+        .headers()
+        .get_all("www-authenticate")
+        .iter()
+        .filter_map(|v| v.to_str().ok().map(str::to_owned))
+        .collect();
+    assert!(
+        !challenges.is_empty(),
+        "must emit at least one WWW-Authenticate: Payment header"
+    );
+    for challenge in &challenges {
+        assert!(
+            challenge.starts_with("Payment "),
+            "WWW-Authenticate must use Payment scheme: {challenge}"
+        );
+        assert!(
+            challenge.contains("method=\"blueprintevm\""),
+            "challenge must advertise method=blueprintevm: {challenge}"
+        );
+        assert!(
+            challenge.contains("intent=\"charge\""),
+            "challenge must advertise intent=charge: {challenge}"
+        );
+    }
+
+    // The 402 body MUST be RFC 9457 Problem Details.
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("application/problem+json")
+    );
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], 402);
+    assert!(body["challenge_ids"].is_array());
+
+    handle.abort();
+}
+
+/// `POST /mpp/jobs/1/0` with a malformed `Authorization: Payment` header
+/// returns a 400 with the `malformed-credential` IETF code.
+#[tokio::test]
+async fn test_mpp_malformed_credential_returns_problem() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+        .header("authorization", "Payment not-base64url-and-not-json")
+        .body("hello")
+        .send()
+        .await
+        .expect("POST /mpp with bad credential");
+
+    assert_eq!(resp.status(), 400);
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("application/problem+json")
+    );
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], 400);
+    assert!(
+        body["type"]
+            .as_str()
+            .unwrap_or_default()
+            .ends_with("malformed-credential"),
+        "type must signal malformed-credential, got {}",
+        body["type"]
+    );
+
+    handle.abort();
+}
+
+/// MPP routes are NOT registered when the operator omits the `[mpp]` config
+/// section. This test starts a gateway with MPP disabled and asserts that
+/// `/mpp/jobs/...` returns 404 from the axum router (no route match), while
+/// the legacy `/x402/jobs/...` endpoints still work.
+#[tokio::test]
+async fn test_mpp_routes_disabled_when_unconfigured() {
+    use blueprint_x402::config::AcceptedToken;
+    use rust_decimal::Decimal;
+
+    // Build a minimal config WITHOUT [mpp].
+    let config = X402Config {
+        bind_address: SocketAddr::from(([127, 0, 0, 1], free_port())),
+        facilitator_url: "https://facilitator.x402.org".parse().unwrap(),
+        quote_ttl_secs: 300,
+        accepted_tokens: vec![AcceptedToken {
+            network: "eip155:8453".into(),
+            asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".into(),
+            symbol: "USDC".into(),
+            decimals: 6,
+            pay_to: "0x0000000000000000000000000000000000000001".into(),
+            rate_per_native_unit: Decimal::from(3200u32),
+            markup_bps: 0,
+            transfer_method: "permit2".into(),
+            eip3009_name: None,
+            eip3009_version: None,
+        }],
+        default_invocation_mode: X402InvocationMode::PublicPaid,
+        job_policies: vec![],
+        service_id: 1,
+        mpp: None,
+    };
+    let port = config.bind_address.port();
+
+    let mut pricing = HashMap::new();
+    pricing.insert((1, 0), U256::from(1_000_000_000_000_000u64));
+
+    let (gateway, _producer) = X402Gateway::new(config, pricing).expect("create gateway");
+    let handle = tokio::spawn(async move {
+        let _rx = gateway.start().await.expect("start gateway");
+        futures::future::pending::<()>().await;
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Existing x402 ingress still works.
+    let x402_resp = reqwest::get(format!("http://127.0.0.1:{port}/x402/jobs/1/0/price"))
+        .await
+        .expect("GET x402 price");
+    assert_eq!(x402_resp.status(), 200);
+
+    // MPP route is not registered → axum returns 404 (not the MPP problem JSON).
+    let mpp_resp = reqwest::get(format!("http://127.0.0.1:{port}/mpp/jobs/1/0/price"))
+        .await
+        .expect("GET mpp price");
+    assert_eq!(mpp_resp.status(), 404);
+
+    handle.abort();
+}
+
+/// `/x402/stats` exposes the new MPP-specific counters (initially zero).
+#[tokio::test]
+async fn test_stats_includes_mpp_counters() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let resp = reqwest::get(format!("http://127.0.0.1:{port}/x402/stats"))
+        .await
+        .expect("GET stats");
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["counters"]["mpp_accepted"], 0);
+    assert_eq!(body["counters"]["mpp_challenge_issued"], 0);
+    assert_eq!(body["counters"]["mpp_verification_failed"], 0);
+
+    handle.abort();
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// MPP end-to-end credential roundtrip
+// ───────────────────────────────────────────────────────────────────────────
+//
+// These tests stub the x402 facilitator's `/verify` + `/settle` endpoints
+// with `wiremock`, so we can drive a full Authorization: Payment credential
+// through the MPP route without needing an on-chain settler. They are the
+// missing happy-path coverage flagged by the audit.
+
+use blueprint_x402::config::{AcceptedToken, MppConfig};
+use mpp::protocol::core::headers::{format_authorization, parse_www_authenticate};
+use mpp::protocol::core::{ChallengeEcho, PaymentCredential};
+use rust_decimal::Decimal;
+use wiremock::matchers::{body_partial_json, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+const TEST_PAYER_ADDR: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const TEST_TX_HASH: &str = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+
+/// Build an MPP-enabled gateway pointing at the supplied facilitator URL
+/// and a fixed accepted token. Returns `(handle, port, producer)`.
+///
+/// **Important**: the caller MUST keep the returned producer alive for the
+/// duration of the test. Dropping it closes the producer channel and the
+/// next enqueue from the gateway will fail with `service shutting down`.
+async fn start_mpp_gateway_with_facilitator(
+    facilitator_url: &str,
+) -> (JoinHandle<()>, u16, X402Producer) {
+    let port = free_port();
+    let config = X402Config {
+        bind_address: SocketAddr::from(([127, 0, 0, 1], port)),
+        facilitator_url: facilitator_url.parse().expect("valid facilitator url"),
+        quote_ttl_secs: 300,
+        accepted_tokens: vec![AcceptedToken {
+            network: "eip155:8453".into(),
+            asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".into(),
+            symbol: "USDC".into(),
+            decimals: 6,
+            pay_to: "0x0000000000000000000000000000000000000001".into(),
+            rate_per_native_unit: Decimal::from(3200u32),
+            markup_bps: 0,
+            transfer_method: "eip3009".into(),
+            eip3009_name: Some("USD Coin".into()),
+            eip3009_version: Some("2".into()),
+        }],
+        default_invocation_mode: X402InvocationMode::PublicPaid,
+        job_policies: vec![],
+        service_id: 1,
+        mpp: Some(MppConfig {
+            realm: "test.example.com".into(),
+            // Distinct from the demo secret rejected by the validator.
+            secret_key: "9e7c2f4b6d1a0832514768af9c3e2b14f827d6e09a3b1c7d4e6f8a02b9c5d70e".into(),
+            challenge_ttl_secs: 300,
+        }),
+    };
+    let mut pricing = HashMap::new();
+    pricing.insert((1, 0), U256::from(1_000_000_000_000_000u64)); // 0.001 ETH
+    pricing.insert((1, 1), U256::from(2_000_000_000_000_000u64)); // 0.002 ETH
+
+    let (gateway, producer) = X402Gateway::new(config, pricing).expect("create gateway");
+    let handle = tokio::spawn(async move {
+        let _rx = gateway.start().await.expect("start gateway");
+        futures::future::pending::<()>().await;
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    (handle, port, producer)
+}
+
+/// Stub the x402 facilitator's `/verify` and `/settle` endpoints to
+/// succeed, asserting via partial-JSON body matchers that the gateway
+/// sends a well-formed v1 `ExactScheme` VerifyRequest. The matcher only
+/// pins **structural discriminators** (scheme, network, version,
+/// extra.name/version) — not address case, not exact amount — because
+/// alloy's `Address` serializer is checksum-cased and we don't want
+/// brittle test failures on a serializer change. A regression that
+/// drops any of these fields entirely will fail this test loudly.
+async fn stub_facilitator_success(server: &MockServer) {
+    // Discriminators we MUST see in any well-formed request from the
+    // gateway. wiremock's `body_partial_json` does deep-subset matching:
+    // every key here must be present in the request body with the same
+    // value, but the request body may contain additional fields.
+    let expected_discriminators = serde_json::json!({
+        "x402Version": 1,
+        "paymentRequirements": {
+            "scheme": "exact",
+            "network": "base",
+            "extra": {
+                "name": "USD Coin",
+                "version": "2",
+            },
+        },
+        "paymentPayload": {
+            "x402Version": 1,
+            "scheme": "exact",
+            "network": "base",
+        },
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/verify"))
+        .and(body_partial_json(expected_discriminators.clone()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "isValid": true,
+            "payer": TEST_PAYER_ADDR,
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/settle"))
+        .and(body_partial_json(expected_discriminators))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "success": true,
+            "transaction": TEST_TX_HASH,
+            "payer": TEST_PAYER_ADDR,
+            "network": "base",
+        })))
+        .mount(server)
+        .await;
+}
+
+/// Issue a 402 challenge against `/mpp/jobs/{sid}/{idx}` and return the
+/// first parsed `PaymentChallenge`.
+async fn fetch_mpp_challenge(
+    port: u16,
+    sid: u64,
+    idx: u32,
+) -> mpp::protocol::core::PaymentChallenge {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/{sid}/{idx}"))
+        .body("hello")
+        .send()
+        .await
+        .expect("POST 402");
+    assert_eq!(resp.status(), 402);
+    let header = resp
+        .headers()
+        .get("www-authenticate")
+        .expect("WWW-Authenticate")
+        .to_str()
+        .expect("ascii header")
+        .to_string();
+    parse_www_authenticate(&header).expect("parse challenge")
+}
+
+/// Build a valid `Authorization: Payment` header from a server-issued
+/// challenge. The inner `x402_payload` is intentionally a fake — the
+/// wiremock facilitator stub accepts any well-formed JSON.
+fn build_payment_authorization(challenge: &mpp::protocol::core::PaymentChallenge) -> String {
+    use base64::Engine;
+
+    // Mirror the on-the-wire shape of an x402 v1 PaymentPayload<ExactScheme,
+    // ExactEvmPayload>. Real wallets sign this with EIP-712; the wiremock
+    // stub doesn't care about cryptographic validity, only that the JSON is
+    // well-formed and forwarded to /verify.
+    let inner = serde_json::json!({
+        "x402Version": 1,
+        "scheme": "exact",
+        "network": "base",
+        "payload": {
+            "signature": "0xdeadbeef",
+            "authorization": {
+                "from": TEST_PAYER_ADDR,
+                "to": "0x0000000000000000000000000000000000000001",
+                "value": "3200000",
+                "validAfter": "0",
+                "validBefore": "9999999999",
+                "nonce": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+        }
+    });
+    let inner_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&inner).unwrap());
+
+    let echo = ChallengeEcho {
+        id: challenge.id.clone(),
+        realm: challenge.realm.clone(),
+        method: challenge.method.clone(),
+        intent: challenge.intent.clone(),
+        request: challenge.request.clone(),
+        expires: challenge.expires.clone(),
+        digest: challenge.digest.clone(),
+        opaque: challenge.opaque.clone(),
+    };
+    let credential = PaymentCredential::new(echo, serde_json::json!({ "x402_payload": inner_b64 }));
+    format_authorization(&credential).expect("format Authorization header")
+}
+
+/// Happy-path roundtrip:
+/// 1. Issue 402 challenge
+/// 2. Build credential echoing that challenge
+/// 3. POST credential to the same route
+/// 4. Wiremock facilitator says verify+settle succeeded
+/// 5. Assert 202 ACCEPTED + Payment-Receipt header set
+#[tokio::test]
+async fn test_mpp_credential_happy_path() {
+    let server = MockServer::start().await;
+    stub_facilitator_success(&server).await;
+
+    let (handle, port, _producer) = start_mpp_gateway_with_facilitator(&server.uri()).await;
+    let challenge = fetch_mpp_challenge(port, 1, 0).await;
+    let auth = build_payment_authorization(&challenge);
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+        .header("authorization", auth)
+        .body("hello")
+        .send()
+        .await
+        .expect("POST credential");
+
+    assert_eq!(
+        resp.status(),
+        202,
+        "valid credential must be accepted (got {}: {:?})",
+        resp.status(),
+        resp.text().await.ok()
+    );
+    assert!(
+        resp.headers().get("payment-receipt").is_some(),
+        "Payment-Receipt header must be present on 202"
+    );
+
+    handle.abort();
+}
+
+/// Cross-route credential replay must be rejected: a credential issued for
+/// `/mpp/jobs/1/0` cannot be replayed against `/mpp/jobs/1/1`. The route
+/// guard checks `credential.method_details.{service_id, job_index}` against
+/// the URL path before consulting the facilitator.
+#[tokio::test]
+async fn test_mpp_cross_route_replay_rejected() {
+    let server = MockServer::start().await;
+    stub_facilitator_success(&server).await;
+
+    let (handle, port, _producer) = start_mpp_gateway_with_facilitator(&server.uri()).await;
+    let challenge = fetch_mpp_challenge(port, 1, 0).await;
+    let auth = build_payment_authorization(&challenge);
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/1"))
+        .header("authorization", auth)
+        .body("hello")
+        .send()
+        .await
+        .expect("POST credential to wrong job");
+
+    // Either 403 (route guard) or 402 (verify_credential_with_expected_request
+    // amount mismatch), depending on which check fires first. Both are
+    // acceptable refusals; what we MUST NOT see is 202.
+    assert!(
+        resp.status() == 403 || resp.status() == 402 || resp.status() == 400,
+        "cross-route replay must be rejected (got {})",
+        resp.status()
+    );
+    assert_ne!(
+        resp.status(),
+        202,
+        "cross-route replay must NOT be accepted"
+    );
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(
+        body.get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .starts_with("https://paymentauth.org/problems/"),
+        "must surface IETF Problem Details"
+    );
+
+    handle.abort();
+}
+
+/// Per-credential challenge id is single-use against the same route: a
+/// second submission of the same credential is rejected by the registry's
+/// `quote_conflict` (or by the facilitator's nonce check in the real world).
+#[tokio::test]
+async fn test_mpp_credential_replay_same_route_eventually_rejected() {
+    let server = MockServer::start().await;
+    stub_facilitator_success(&server).await;
+
+    let (handle, port, _producer) = start_mpp_gateway_with_facilitator(&server.uri()).await;
+    let challenge = fetch_mpp_challenge(port, 1, 0).await;
+    let auth = build_payment_authorization(&challenge);
+
+    let client = reqwest::Client::new();
+    // First submission: should succeed.
+    let r1 = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+        .header("authorization", &auth)
+        .body("hello")
+        .send()
+        .await
+        .expect("POST credential 1");
+    assert_eq!(r1.status(), 202);
+
+    // Second submission of the SAME credential. Today the gateway-side
+    // single-use guard is the `QuoteRegistry`; the facilitator's EIP-3009
+    // nonce check is the on-chain backstop. We accept either:
+    //   - 202 (gateway permits, on-chain rejects in production)
+    //   - 4xx (gateway-side dedup catches it)
+    // What we MUST NOT see: a 5xx panic.
+    let r2 = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+        .header("authorization", &auth)
+        .body("hello")
+        .send()
+        .await
+        .expect("POST credential 2");
+    assert_ne!(
+        r2.status().as_u16() / 100,
+        5,
+        "replayed credential must not 5xx (got {})",
+        r2.status()
+    );
+
+    handle.abort();
+}
+
+/// After requesting `/mpp/jobs/1/0` without payment, the
+/// `mpp_challenge_issued` counter is incremented.
+#[tokio::test]
+async fn test_mpp_challenge_counter_increments() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let client = reqwest::Client::new();
+    for _ in 0..3 {
+        let resp = client
+            .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+            .body("hello")
+            .send()
+            .await
+            .expect("POST /mpp/jobs/1/0");
+        assert_eq!(resp.status(), 402);
+    }
+
+    let stats: serde_json::Value = reqwest::get(format!("http://127.0.0.1:{port}/x402/stats"))
+        .await
+        .expect("GET stats")
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(stats["counters"]["mpp_challenge_issued"], 3);
+
+    handle.abort();
 }

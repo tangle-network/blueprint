@@ -23,6 +23,17 @@ x402-types = { workspace = true }
 x402-axum = { workspace = true }
 x402-chain-eip155 = { workspace = true, features = ["server"] }
 
+# Machine Payments Protocol (MPP / Web Payment Auth)
+# `axum` feature enables the protocol-core header helpers (parse_authorization,
+# format_www_authenticate, format_receipt) and the ChargeMethod trait. We
+# implement our own ChargeMethod against the workspace alloy + the existing
+# x402 facilitator client; we deliberately do NOT enable mpp's `tempo` or
+# `evm` features so we don't pull tempo-alloy / tempo-primitives.
+mpp = { workspace = true, features = ["server", "axum"] }
+base64 = { workspace = true }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+time = { workspace = true, features = ["formatting", "parsing"] }
+
 # HTTP server
 axum = { workspace = true, features = ["tokio", "http1", "http2", "json"] }
 tower = { workspace = true, features = ["util"] }

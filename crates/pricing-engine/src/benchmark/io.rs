@@ -371,7 +371,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
                             match file.write_all(&buffer) {
                                 Ok(_) => {
                                     // Only sync every 10 writes to improve performance
-                                    if write_count % 10 == 0 {
+                                    if write_count.is_multiple_of(10) {
                                         let _ = file.sync_data(); // Ignore sync errors
                                     }
 
@@ -442,7 +442,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
                                 match file.write_all(&buffer) {
                                     Ok(_) => {
                                         // Only sync every 10 writes to improve performance
-                                        if write_count % 10 == 0 {
+                                        if write_count.is_multiple_of(10) {
                                             let _ = file.sync_data(); // Ignore sync errors
                                         }
 
