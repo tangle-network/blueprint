@@ -80,7 +80,7 @@ markup_bps = 300
 # MPP is the IETF standards-track Payment HTTP Authentication Scheme
 # (https://paymentauth.org). It uses standard `WWW-Authenticate: Payment` /
 # `Authorization: Payment` / `Payment-Receipt` headers and RFC 9457 Problem
-# Details errors. The Blueprint MPP method (`x402-evm`) wraps the same
+# Details errors. The Blueprint MPP method (`blueprintevm`) wraps the same
 # EIP-3009 / Permit2 payloads x402 clients already produce, so existing
 # x402 wallets work over the MPP wire format unchanged.
 #
@@ -98,5 +98,9 @@ markup_bps = 300
 # Comment out the entire section to disable the MPP ingress.
 [mpp]
 realm = "blueprint.example.com"
+# REPLACE THIS VALUE before deploying. Generate with `openssl rand -hex 32`.
+# The validator REJECTS the well-known example/demo secret_key values at
+# startup; this constant is intentionally a placeholder that will fail
+# X402Config::validate() so a copy-paste deployment cannot ship by accident.
 secret_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 challenge_ttl_secs = 300

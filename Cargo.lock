@@ -15943,12 +15943,14 @@ dependencies = [
  "alloy-provider",
  "alloy-sol-types",
  "alloy-transport",
+ "base64 0.22.1",
  "blueprint-core",
  "blueprint-router",
  "blueprint-runner",
  "blueprint-x402",
  "bytes",
  "futures",
+ "mpp",
  "reqwest 0.12.28",
  "rust_decimal",
  "serde",
@@ -15956,6 +15958,7 @@ dependencies = [
  "tokio",
  "toml 1.1.2+spec-1.1.0",
  "tower 0.5.3",
+ "wiremock",
  "workspace-hack",
 ]
 

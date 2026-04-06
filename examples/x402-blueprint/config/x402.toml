@@ -43,6 +43,9 @@ markup_bps = 200
 # transparently retry on a fresh 402).
 [mpp]
 realm = "x402-blueprint.example.com"
-# Demo only -- replace with `openssl rand -hex 32` in production.
-secret_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+# DEMO ONLY — generate a fresh value for production with `openssl rand -hex 32`.
+# The blueprint-x402 validator REJECTS the well-known sample secrets at startup
+# so this test fixture uses a distinct random-looking value. Do NOT copy this
+# constant into a production deployment.
+secret_key = "9e7c2f4b6d1a0832514768af9c3e2b14f827d6e09a3b1c7d4e6f8a02b9c5d70e"
 challenge_ttl_secs = 300

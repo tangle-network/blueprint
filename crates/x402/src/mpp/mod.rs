@@ -42,9 +42,9 @@
 
 pub mod credential;
 pub mod method;
-pub mod routes;
+pub(crate) mod routes;
 pub mod state;
 
-pub use credential::{MppCredentialPayload, MppMethodDetails};
-pub use method::{BlueprintEvmChargeMethod, METHOD_NAME};
+pub use credential::{Eip3009Extra, MppCredentialPayload, MppMethodDetails};
+pub use method::METHOD_NAME;
 pub use state::MppGatewayState;

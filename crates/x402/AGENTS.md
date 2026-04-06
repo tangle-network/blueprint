@@ -34,8 +34,8 @@ Both ingresses share **all** downstream plumbing — job pricing, accepted token
 - `X402CallerAuthMode` - Auth for restricted jobs: `payer_is_caller`, `delegated_caller_signature`
 - `X402InvocationMode` - How jobs are invoked after payment verification
 - `MppConfig` - Optional MPP ingress config: `realm`, `secret_key` (≥32 bytes), `challenge_ttl_secs`
-- `BlueprintEvmChargeMethod` - `mpp::ChargeMethod` impl that forwards verification to the configured x402 facilitator. Method name `"x402-evm"`.
-- `MppCredentialPayload` / `MppMethodDetails` - Wire types for the `x402-evm` MPP method
+- `BlueprintEvmChargeMethod` - `mpp::ChargeMethod` impl that forwards verification to the configured x402 facilitator. Method name `"blueprintevm"`.
+- `MppCredentialPayload` / `MppMethodDetails` - Wire types for the `blueprintevm` MPP method
 - `X402Error` - Error enum with HTTP status mappings; `Mpp(String)` variant for MPP-specific failures
 - Auth dry-run endpoint: `POST /x402/jobs/{service_id}/{job_index}/auth-dry-run`
 - MPP request endpoint: `POST /mpp/jobs/{service_id}/{job_index}` (only when MPP is configured)

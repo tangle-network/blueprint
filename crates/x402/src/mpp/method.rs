@@ -35,13 +35,21 @@ use x402_types::proto::v1 as proto_v1;
 
 use crate::config::AcceptedToken;
 use crate::mpp::credential::{MppCredentialPayload, MppMethodDetails};
+use crate::mpp::state::VerifiedPayerCache;
 
-/// MPP method name for the Blueprint x402-EVM bridge.
+/// MPP method name for the Blueprint EVM/EIP-3009 bridge.
 ///
-/// Clients setting up an MPP wallet against a Blueprint MPP gateway should
-/// register this method name. The credential payload format is documented
-/// in [`MppCredentialPayload`].
-pub const METHOD_NAME: &str = "x402-evm";
+/// The MPP spec ABNF for `method-name` is `1*LOWERALPHA` — lowercase
+/// ASCII letters only, no digits, no hyphens — so the obvious-looking
+/// `"x402-evm"` is rejected by the upstream `MethodName::is_valid()`
+/// check and would cause MPP-conformant clients (and our own
+/// `parse_www_authenticate` round-trip) to reject every challenge we
+/// emit. We use `"blueprintevm"` instead.
+///
+/// Clients setting up an MPP wallet against a Blueprint MPP gateway
+/// should register this method name. The credential payload format is
+/// documented in [`MppCredentialPayload`].
+pub const METHOD_NAME: &str = "blueprintevm";
 
 /// Default `maxTimeoutSeconds` advertised in PaymentRequirements when the
 /// gateway has no per-job override. Matches `x402-chain-eip155`'s default.
@@ -56,21 +64,47 @@ const DEFAULT_MAX_TIMEOUT_SECS: u64 = 300;
 /// 4. Look up the matching [`AcceptedToken`] by network + asset.
 /// 5. Build canonical `PaymentRequirements` from `(token, request)`.
 /// 6. Forward to the facilitator's `/verify` endpoint.
-/// 7. On `Valid`, forward to the facilitator's `/settle` endpoint.
+/// 7. On `Valid`, stash the facilitator-reported payer in the
+///    [`VerifiedPayerCache`] keyed by `credential.challenge.id`, and
+///    forward to the facilitator's `/settle` endpoint.
 /// 8. Translate the result into an `mpp::Receipt`.
+///
+/// # Safety
+///
+/// `BlueprintEvmChargeMethod::verify` is only safe to call from inside a
+/// [`mpp::server::Mpp::verify_credential_with_expected_request`] wrapper
+/// that pins `(amount, currency, recipient)` to a server-side expected
+/// value derived from `(service_id, job_index, price_wei)`. Without that
+/// wrapper an attacker can submit a credential whose echoed request claims
+/// `amount = "1"` against a job whose true price is much higher. The MPP
+/// route handler in [`crate::mpp::routes`] always uses the wrapped variant;
+/// other call sites MUST do the same.
 #[derive(Clone)]
-pub struct BlueprintEvmChargeMethod {
+pub(crate) struct BlueprintEvmChargeMethod {
     facilitator: Arc<FacilitatorClient>,
     accepted_tokens: Arc<Vec<AcceptedToken>>,
+    /// Side-channel for the facilitator-reported payer. Populated in
+    /// `verify` on `VerifyResponse::Valid` and drained by the MPP route
+    /// handler immediately afterwards. See [`VerifiedPayerCache`] for the
+    /// rationale.
+    verified_payers: VerifiedPayerCache,
 }
 
 impl BlueprintEvmChargeMethod {
     /// Build a charge method that talks to the supplied facilitator and
-    /// recognises the supplied set of accepted tokens.
-    pub fn new(facilitator: FacilitatorClient, accepted_tokens: Vec<AcceptedToken>) -> Self {
+    /// recognises the supplied set of accepted tokens. The `verified_payers`
+    /// cache is the same `Arc<DashMap<...>>` held by [`MppGatewayState`];
+    /// the route handler reads from it after each `verify` to enforce
+    /// `payer_is_caller` policies.
+    pub(crate) fn new(
+        facilitator: FacilitatorClient,
+        accepted_tokens: Vec<AcceptedToken>,
+        verified_payers: VerifiedPayerCache,
+    ) -> Self {
         Self {
             facilitator: Arc::new(facilitator),
             accepted_tokens: Arc::new(accepted_tokens),
+            verified_payers,
         }
     }
 
@@ -95,7 +129,7 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
             .payload_as::<MppCredentialPayload>()
             .map_err(|e| {
                 VerificationError::with_code(
-                    format!("invalid x402-evm credential payload: {e}"),
+                    format!("invalid blueprintevm credential payload: {e}"),
                     ErrorCode::InvalidPayload,
                 )
             });
@@ -104,14 +138,14 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
             .clone()
             .ok_or_else(|| {
                 VerificationError::with_code(
-                    "ChargeRequest.methodDetails is required for the x402-evm method",
+                    "ChargeRequest.methodDetails is required for the blueprintevm method",
                     ErrorCode::InvalidPayload,
                 )
             })
             .and_then(|v| {
                 serde_json::from_value::<MppMethodDetails>(v).map_err(|e| {
                     VerificationError::with_code(
-                        format!("invalid x402-evm methodDetails: {e}"),
+                        format!("invalid blueprintevm methodDetails: {e}"),
                         ErrorCode::InvalidPayload,
                     )
                 })
@@ -119,8 +153,10 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
         let amount_str = request.amount.clone();
         let currency = request.currency.clone();
         let recipient = request.recipient.clone();
+        let challenge_id = credential.challenge.id.clone();
         let facilitator = self.facilitator.clone();
         let tokens = self.accepted_tokens.clone();
+        let verified_payers = self.verified_payers.clone();
 
         async move {
             let cred_payload = cred_payload?;
@@ -217,8 +253,10 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
             };
 
             // x402 v1 PaymentRequirements expects the chain's wire-format
-            // network name (e.g. "base"), not the CAIP-2 form. Look it up.
-            let chain = ChainId::from_str_caip2(&token.network).ok_or_else(|| {
+            // network name (e.g. "base"), not the CAIP-2 form. Parse our
+            // CAIP-2 string into a ChainId via its `FromStr` impl, then ask
+            // x402-types for the registered network name.
+            let chain: ChainId = token.network.parse().map_err(|_| {
                 VerificationError::with_code(
                     format!("invalid CAIP-2 network {}", token.network),
                     ErrorCode::ChainIdMismatch,
@@ -282,8 +320,20 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
                     )
                 })?;
 
+            // Capture the facilitator-reported payer before settle so that
+            // the MPP route handler can enforce `payer_is_caller` policies.
+            // The cache is keyed by the HMAC-bound challenge id and drained
+            // by the route handler in the same request lifecycle.
             match verify_resp {
-                proto_v1::VerifyResponse::Valid { .. } => {}
+                proto_v1::VerifyResponse::Valid { payer } => {
+                    let payer_addr = payer.parse::<Address>().map_err(|_| {
+                        VerificationError::with_code(
+                            format!("facilitator returned non-address payer {payer}"),
+                            ErrorCode::InvalidPayload,
+                        )
+                    })?;
+                    verified_payers.insert(challenge_id.clone(), payer_addr);
+                }
                 proto_v1::VerifyResponse::Invalid { reason, .. } => {
                     return Err(VerificationError::with_code(
                         format!("facilitator rejected payment: {reason}"),
@@ -323,26 +373,15 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
                     Ok(Receipt::success(METHOD_NAME, transaction))
                 }
                 proto_v1::SettleResponse::Error { reason, .. } => {
+                    // Drop the cached payer entry on settle failure so we
+                    // don't leak it to a subsequent request reusing the same
+                    // challenge id (which the HMAC binding makes vanishingly
+                    // unlikely, but defence in depth is cheap).
+                    verified_payers.remove(&challenge_id);
                     Err(VerificationError::transaction_failed(reason))
                 }
             }
         }
-    }
-}
-
-/// Helper trait for parsing CAIP-2 chain identifiers (`namespace:reference`).
-///
-/// `x402-types` exposes [`ChainId::new`] and [`ChainId::from_network_name`]
-/// but no public CAIP-2 string parser today; we add a tiny wrapper here so
-/// the call site reads cleanly. The implementation matches `<ChainId as
-/// FromStr>::from_str`.
-trait ChainIdCaip2Ext: Sized {
-    fn from_str_caip2(s: &str) -> Option<Self>;
-}
-
-impl ChainIdCaip2Ext for ChainId {
-    fn from_str_caip2(s: &str) -> Option<Self> {
-        s.parse().ok()
     }
 }
 
@@ -371,12 +410,30 @@ mod tests {
         let facilitator =
             FacilitatorClient::try_new("https://facilitator.x402.rs/".parse().unwrap())
                 .expect("dummy facilitator");
-        BlueprintEvmChargeMethod::new(facilitator, vec![base_usdc()])
+        BlueprintEvmChargeMethod::new(
+            facilitator,
+            vec![base_usdc()],
+            std::sync::Arc::new(dashmap::DashMap::new()),
+        )
     }
 
     #[test]
-    fn method_name_is_x402_evm() {
+    fn method_name_is_blueprintevm() {
         assert_eq!(dummy_method().method(), METHOD_NAME);
+        assert_eq!(METHOD_NAME, "blueprintevm");
+    }
+
+    #[test]
+    fn method_name_passes_mpp_abnf_validation() {
+        // The upstream `mpp::MethodName::is_valid` ABNF is `1*LOWERALPHA`.
+        // If we ever regress and add a digit/hyphen to METHOD_NAME, the
+        // upstream parser will reject our own challenges and break the
+        // wire format. Pin the invariant explicitly.
+        let parsed = mpp::protocol::core::MethodName::from(METHOD_NAME);
+        assert!(
+            parsed.is_valid(),
+            "METHOD_NAME must satisfy mpp's MethodName::is_valid (1*LOWERALPHA)"
+        );
     }
 
     #[test]

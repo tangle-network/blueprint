@@ -12,6 +12,16 @@ use url::Url;
 
 use crate::error::X402Error;
 
+/// Demo `mpp.secret_key` values that ship in `examples/` and `config/`.
+/// Operators frequently copy-paste from those files; rejecting the demo
+/// values at validation time catches the most common HMAC-key footgun
+/// (deploying a server whose challenge IDs are forgeable by anyone with
+/// a copy of the SDK source).
+const MPP_FORBIDDEN_SECRETS: &[&str] = &[
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "0123456789abcdef0123456789abcdef",
+];
+
 /// How a job is exposed to the x402 HTTP ingress.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -388,6 +398,27 @@ impl X402Config {
                     mpp.secret_key.len()
                 )));
             }
+            // Reject the well-known example/demo secrets that ship in the
+            // repo. Operators copy-paste from `examples/`; we'd rather fail
+            // at startup than let a deployment go live with a publicly
+            // known HMAC key.
+            for forbidden in MPP_FORBIDDEN_SECRETS {
+                if mpp.secret_key == *forbidden {
+                    return Err(X402Error::Config(
+                        "mpp.secret_key matches a known example/demo value; \
+                         generate a fresh key with `openssl rand -hex 32` \
+                         before going to production"
+                            .into(),
+                    ));
+                }
+            }
+            // Reject single-byte-repeat patterns like "0000...000" or
+            // "aaaa...aaa" which pass the length check but have ~0 entropy.
+            if mpp.secret_key.as_bytes().windows(2).all(|w| w[0] == w[1]) {
+                return Err(X402Error::Config(
+                    "mpp.secret_key has insufficient entropy (all bytes identical)".into(),
+                ));
+            }
             if mpp.challenge_ttl_secs == 0 {
                 return Err(X402Error::Config(
                     "mpp.challenge_ttl_secs must be > 0".into(),
@@ -541,7 +572,9 @@ mod tests {
     fn good_mpp() -> MppConfig {
         MppConfig {
             realm: "blueprint.example.com".into(),
-            secret_key: "0123456789abcdef0123456789abcdef".into(),
+            // 64 hex chars (32 bytes), not on the forbidden list and not a
+            // single-byte repeat. Generated with `openssl rand -hex 32`.
+            secret_key: "9e7c2f4b6d1a0832514768af9c3e2b14f827d6e09a3b1c7d4e6f8a02b9c5d70e".into(),
             challenge_ttl_secs: 300,
         }
     }
@@ -613,6 +646,42 @@ mod tests {
             mpp: Some(good_mpp()),
         };
         config.validate().expect("good mpp config should validate");
+    }
+
+    #[test]
+    fn test_mpp_demo_secret_rejected() {
+        let mut mpp = good_mpp();
+        mpp.secret_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into();
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("example/demo value"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_low_entropy_secret_rejected() {
+        let mut mpp = good_mpp();
+        mpp.secret_key = "a".repeat(64);
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("insufficient entropy"), "{err}");
     }
 
     #[test]

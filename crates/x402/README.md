@@ -27,7 +27,7 @@ This crate exposes paid HTTP job execution for Blueprint runners over **two para
 
 MPP (Machine Payments Protocol) is the IETF standards-track Payment HTTP Authentication Scheme defined at <https://paymentauth.org> and documented at <https://mpp.dev>. The Blueprint MPP ingress is **additive**: existing x402 clients keep working, MPP gives you standardised headers, RFC 9457 errors, and a path to multi-method payments.
 
-The Blueprint MPP method is named `x402-evm`. Its credential payload wraps the **same** EIP-3009 / Permit2 `PaymentPayload` that x402 clients already produce, base64url-encoded into the MPP `PaymentCredential.payload`. Verification delegates to the same x402 facilitator the legacy ingress uses, so existing x402 wallets work over MPP unchanged.
+The Blueprint MPP method is named `blueprintevm` (the MPP `method-name` ABNF only allows lowercase letters, no digits or hyphens, so the obvious `x402-evm` is invalid per the spec). Its credential payload wraps the **same** EIP-3009 / Permit2 `PaymentPayload` that x402 clients already produce, base64url-encoded into the MPP `PaymentCredential.payload`. Verification delegates to the same x402 facilitator the legacy ingress uses, so existing x402 wallets work over MPP unchanged.
 
 To enable, add a `[mpp]` section to your `x402.toml`:
 

@@ -761,6 +761,7 @@ pub(crate) async fn handle_paid_job_inner(
                 &body,
                 headers,
                 mpp_caller_override,
+                protocol,
                 true,
             )
             .await
@@ -894,21 +895,31 @@ async fn authorize_restricted_job(
         body,
         headers,
         None,
+        PaymentProtocol::X402,
         enforce_replay_guard,
     )
     .await
 }
 
 /// Variant of [`authorize_restricted_job`] that accepts an out-of-band
-/// `payer` override.
+/// `payer` override and a wire `protocol` discriminator.
 ///
 /// The MPP ingress doesn't expose the `X-Payment-Response` header that
 /// the legacy x402 path reads via [`parse_settlement_details`]; instead,
-/// the verified payer comes from the MPP `Receipt.reference` (which is
-/// the on-chain settlement transaction's sender). This entry point lets
-/// the MPP route inject that payer for `auth_mode = payer_is_caller`
+/// the verified payer comes from the facilitator's `VerifyResponse.payer`
+/// stashed in the MPP route's `verified_payers` cache. This entry point
+/// lets the MPP route inject that payer for `auth_mode = payer_is_caller`
 /// while keeping all other restricted-auth checks (delegated signature
 /// verification, replay guard, on-chain `isPermittedCaller`) shared.
+///
+/// **Security:** The `protocol` parameter is load-bearing. When called
+/// with `PaymentProtocol::Mpp` and no `payer_override`, this function
+/// will NOT fall back to `parse_settlement_details(headers)` — an attacker
+/// can trivially forge an `X-Payment-Response` header on an MPP request,
+/// so reading it here would let them impersonate any address. The MPP
+/// route handler is expected to drain its `verified_payers` cache and
+/// pass the result here; if the cache was empty for some reason the
+/// route is responsible for failing closed *before* calling this helper.
 pub(crate) async fn authorize_restricted_job_with_payer(
     state: &GatewayState,
     policy: &JobPolicyConfig,
@@ -917,12 +928,21 @@ pub(crate) async fn authorize_restricted_job_with_payer(
     body: &Bytes,
     headers: &HeaderMap,
     payer_override: Option<Address>,
+    protocol: PaymentProtocol,
     enforce_replay_guard: bool,
 ) -> Result<Address, PolicyRejection> {
     let caller = match policy.auth_mode {
         X402CallerAuthMode::PayerIsCaller => {
             if let Some(payer) = payer_override {
                 payer
+            } else if protocol == PaymentProtocol::Mpp {
+                // MPP route is responsible for draining the verified-payer
+                // cache; if it didn't, never trust the request headers.
+                return Err(PolicyRejection::service_unavailable(
+                    "missing_settled_payer",
+                    "MPP payer_is_caller requires the facilitator-verified payer; \
+                     refusing to read X-Payment-Response from a non-x402 request",
+                ));
             } else {
                 let settlement = parse_settlement_details(headers).ok_or_else(|| {
                     PolicyRejection::bad_request(

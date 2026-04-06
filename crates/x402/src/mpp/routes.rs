@@ -111,14 +111,7 @@ pub(crate) async fn handle_mpp_job_request(
             // returned, and MPP follows that convention. We pick the first
             // accepted token as the canonical challenge body and emit one
             // header per token via `format_www_authenticate_many`.
-            return issue_challenge_response(
-                &state,
-                &mpp_state,
-                service_id,
-                job_index,
-                &price_wei,
-                policy_default_token(&mpp_state).as_ref(),
-            );
+            return issue_challenge_response(&state, &mpp_state, service_id, job_index, &price_wei);
         }
     };
 
@@ -260,8 +253,6 @@ pub(crate) async fn handle_mpp_job_request(
         expected_amount.clone(),
         token.clone(),
         method_details.clone(),
-        service_id,
-        job_index,
     );
 
     // Validate HMAC + expiry + amount/currency/recipient match, then run
@@ -301,21 +292,38 @@ pub(crate) async fn handle_mpp_job_request(
         }
     };
 
-    // Resolve attribution from the verified MPP receipt.
-    // `Receipt.reference` is the on-chain settlement transaction hash;
-    // we don't try to extract the payer from it (the facilitator already
-    // recorded it via VerifyResponse). Use the receipt token by symbol.
+    // Drain the facilitator-verified payer that BlueprintEvmChargeMethod
+    // stashed under the credential's challenge id during the verify call
+    // above. Removing the entry on read prevents accidental reuse.
+    let settled_payer = mpp_state
+        .verified_payers
+        .remove(&credential.challenge.id)
+        .map(|(_, payer)| payer);
+
+    // For `payer_is_caller` policies the gateway requires a verified
+    // on-chain payer. The MPP route never trusts the legacy x402
+    // `X-Payment-Response` header (an attacker could forge it alongside an
+    // unrelated MPP credential), so if the cache miss was unexpected we
+    // refuse the request rather than fall back to header parsing.
+    if matches!(policy.invocation_mode, X402InvocationMode::RestrictedPaid)
+        && policy.auth_mode == crate::config::X402CallerAuthMode::PayerIsCaller
+        && settled_payer.is_none()
+    {
+        state.counters.policy_error.fetch_add(1, Ordering::Relaxed);
+        return problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "verification-failed",
+            "facilitator did not return a verified payer for payer_is_caller policy",
+            Some(&credential.challenge.id),
+            service_id,
+            job_index,
+        );
+    }
+
     let attribution = PaymentAttribution {
         network: Some(token.network.clone()),
         token: Some(token.symbol.clone()),
-        // The facilitator's VerifyResponse already returned a payer to the
-        // ChargeMethod, but we don't currently thread it back through the
-        // mpp Receipt. For `payer_is_caller` policies the gateway will fall
-        // back to the regular header-based settlement context — operators
-        // requiring payer-as-caller for MPP today should also configure
-        // restricted_paid + DelegatedCallerSignature, which is wire-protocol
-        // agnostic. The facilitator-payer plumbing is tracked as TODO.
-        settled_payer: None,
+        settled_payer,
     };
 
     let enqueued = match handle_paid_job_inner(
@@ -413,27 +421,18 @@ pub(crate) async fn get_mpp_job_price(
 // Helpers
 // ───────────────────────────────────────────────────────────────────────────
 
-/// Pick a default accepted token to use as the headline challenge when the
-/// client did not specify a preference. Today this is just the first
-/// configured token; once MPP supports multi-token challenges via
-/// `format_www_authenticate_many` we'll emit one challenge per token.
-fn policy_default_token(mpp_state: &Arc<MppGatewayState>) -> Option<AcceptedToken> {
-    mpp_state.accepted_tokens.first().cloned()
-}
-
 /// Build the canonical [`ChargeRequest`] for a given (token, price) pair.
 ///
 /// This is the request the server *expects* to see echoed back inside any
 /// MPP credential for this route. It mirrors the on-wire shape that
-/// [`build_challenge`] embeds in `WWW-Authenticate`.
+/// [`build_challenge`] embeds in `WWW-Authenticate`. The
+/// `(service_id, job_index)` pair is read from `method_details`; the
+/// caller should set those before invoking this helper.
 fn build_charge_request(
     amount: String,
     token: AcceptedToken,
     method_details: MppMethodDetails,
-    service_id: u64,
-    job_index: u32,
 ) -> ChargeRequest {
-    let _ = (service_id, job_index); // included via method_details
     ChargeRequest {
         amount,
         currency: token.asset.clone(),
@@ -451,16 +450,14 @@ fn build_charge_request(
 }
 
 /// Issue a `402 Payment Required` response with one `WWW-Authenticate:
-/// Payment ...` challenge per accepted token. We pick the first token as
-/// the body of the 402; the rest are emitted as additional WWW-Authenticate
-/// headers per RFC 9110.
+/// Payment ...` challenge per accepted token, per RFC 9110 §15.5.2 which
+/// permits multiple WWW-Authenticate headers in a single 401/402 response.
 fn issue_challenge_response(
     state: &GatewayState,
     mpp_state: &Arc<MppGatewayState>,
     service_id: u64,
     job_index: u32,
     price_wei: &U256,
-    _headline_token: Option<&AcceptedToken>,
 ) -> Response {
     if mpp_state.accepted_tokens.is_empty() {
         return problem_response(
@@ -521,6 +518,22 @@ fn issue_challenge_response(
                 );
             }
         }
+    }
+
+    // RFC 9110 §15.5.2 says a 401/402 response MUST contain a
+    // `WWW-Authenticate` header. If every challenge failed to encode (e.g.
+    // a malformed token symbol broke header escaping for all of them), a
+    // bare 402 with no challenge would leave the client stuck. Fail loud
+    // instead so the operator's logs surface the misconfiguration.
+    if header_values.is_empty() {
+        return problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "verification-failed",
+            "no MPP challenges could be encoded as WWW-Authenticate headers",
+            None,
+            service_id,
+            job_index,
+        );
     }
 
     let body = json!({
@@ -589,8 +602,7 @@ fn build_challenge(
         job_index,
     };
 
-    let request =
-        build_charge_request(amount, token.clone(), method_details, service_id, job_index);
+    let request = build_charge_request(amount, token.clone(), method_details);
     let request_b64 = Base64UrlJson::from_typed(&request).map_err(|e| e.to_string())?;
 
     let expires =
@@ -653,14 +665,42 @@ fn success_response(
 
 /// Convert a [`PolicyRejection`] from the shared ingress helper into an
 /// RFC 9457 Problem Details response.
+///
+/// Each gateway-side rejection code is mapped to a distinct IETF Problem
+/// Details type suffix so that MPP clients can branch on the failure mode
+/// instead of treating every error as `verification-failed`.
 fn policy_rejection_to_problem(rej: PolicyRejection, service_id: u64, job_index: u32) -> Response {
     let code = match rej.code {
-        "x402_disabled" => "verification-failed",
+        // Job is not exposed via x402/MPP at all.
+        "x402_disabled" => "method-unsupported",
+        // Job key not in the operator's pricing table.
         "job_not_found" => "verification-failed",
-        "quote_conflict" => "verification-failed",
+        // Server already accepted a payment for this dynamic quote (race).
+        "quote_conflict" => "payment-replayed",
+        // Producer channel closed (gateway shutting down).
         "shutting_down" => "verification-failed",
-        "signature_replay" => "verification-failed",
-        "caller_not_permitted" => "verification-failed",
+        // Delegated-signature nonce was already consumed for this scope.
+        "signature_replay" => "payment-replayed",
+        // On-chain `isPermittedCaller` returned false.
+        "caller_not_permitted" => "caller-denied",
+        // Restricted policy with `payment_only` auth (config bug).
+        "invalid_policy" => "verification-failed",
+        // PayerIsCaller checks (header parsing errors etc).
+        "missing_settlement_context"
+        | "missing_settled_payer"
+        | "missing_caller"
+        | "invalid_caller"
+        | "missing_signature"
+        | "missing_signature_nonce"
+        | "invalid_signature_nonce"
+        | "missing_signature_expiry"
+        | "invalid_signature_expiry"
+        | "invalid_signature"
+        | "invalid_signature_recovery"
+        | "signature_mismatch"
+        | "signature_expired" => "malformed-credential",
+        // Upstream RPC / clock failures.
+        "permission_check_failed" | "clock_error" => "verification-failed",
         _ => "verification-failed",
     };
     problem_response(rej.status, code, rej.detail, None, service_id, job_index)
@@ -735,8 +775,6 @@ mod tests {
                 service_id: 1,
                 job_index: 0,
             },
-            1,
-            0,
         );
         assert_eq!(req.amount, "10000");
         assert_eq!(req.currency.to_lowercase(), token().asset.to_lowercase());
