@@ -13,6 +13,8 @@ use crate::blueprint::native::FilteredBlueprint;
 use crate::config::BlueprintManagerContext;
 use crate::config::SourceType;
 use crate::error::{Error, Result};
+#[cfg(feature = "remote-providers")]
+use crate::executor::remote_provider_integration::RemoteProviderManager;
 use crate::protocol::tangle::client::TangleProtocolClient;
 use crate::protocol::tangle::metadata::OnChainMetadataProvider;
 use crate::protocol::types::ProtocolEvent;
@@ -59,9 +61,24 @@ pub trait BlueprintMetadataProvider: Send + Sync {
     ) -> Result<Option<BlueprintMetadata>>;
 }
 
+/// Convert `ResourceLimits` to a `ResourceSpec` for remote cloud provisioning.
+#[cfg(feature = "remote-providers")]
+fn resource_spec_from_limits(limits: &ResourceLimits) -> blueprint_remote_providers::ResourceSpec {
+    blueprint_remote_providers::ResourceSpec {
+        cpu: f32::from(limits.cpu_count.unwrap_or(2)),
+        memory_gb: limits.memory_size as f32 / (1024.0 * 1024.0 * 1024.0),
+        storage_gb: limits.storage_space as f32 / (1024.0 * 1024.0 * 1024.0),
+        gpu_count: limits.gpu_count.map(u32::from),
+        allow_spot: false,
+        qos: blueprint_remote_providers::core::resources::QosParameters::default(),
+    }
+}
+
 /// Handles Tangle events and translates them into blueprint lifecycle actions.
 pub struct TangleEventHandler {
     metadata: Arc<dyn BlueprintMetadataProvider>,
+    #[cfg(feature = "remote-providers")]
+    remote_provider: Option<RemoteProviderManager>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -188,12 +205,36 @@ impl TangleEventHandler {
     pub fn new() -> Self {
         Self {
             metadata: Arc::new(OnChainMetadataProvider::new()),
+            #[cfg(feature = "remote-providers")]
+            remote_provider: None,
         }
     }
 
     #[must_use]
     pub fn with_metadata_provider(metadata: Arc<dyn BlueprintMetadataProvider>) -> Self {
-        Self { metadata }
+        Self {
+            metadata,
+            #[cfg(feature = "remote-providers")]
+            remote_provider: None,
+        }
+    }
+
+    /// Initialize remote provider manager from context.
+    #[cfg(feature = "remote-providers")]
+    pub async fn init_remote_provider(&mut self, ctx: &BlueprintManagerContext) -> Result<()> {
+        if ctx.remote_deployment_opts.enable_remote_deployments {
+            match RemoteProviderManager::new(ctx).await {
+                Ok(Some(manager)) => {
+                    info!("Remote provider manager initialized for GPU deployments");
+                    self.remote_provider = Some(manager);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    warn!(error = %e, "Failed to initialize remote provider manager");
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Initialize the handler by syncing the client with the latest observed block.
@@ -321,8 +362,17 @@ impl TangleEventHandler {
             if let Ok(evt) = log.log_decode::<ITangle::ServiceActivated>() {
                 let service_id = evt.inner.serviceId;
                 if let Some(metadata) = self.metadata.resolve_service(client, service_id).await? {
+                    let blueprint_id = metadata.blueprint_id;
+                    let gpu_requirements = metadata.gpu_requirements;
                     self.ensure_service_running(metadata, env, ctx, active_blueprints)
                         .await?;
+                    #[cfg(feature = "remote-providers")]
+                    self.notify_remote_service_initiated(
+                        blueprint_id,
+                        service_id,
+                        &gpu_requirements,
+                    )
+                    .await;
                 } else {
                     info!(
                         service_id,
@@ -334,6 +384,9 @@ impl TangleEventHandler {
                 if let Ok(service) = client.client().get_service(service_id).await {
                     self.stop_service(service.blueprintId, service_id, active_blueprints)
                         .await?;
+                    #[cfg(feature = "remote-providers")]
+                    self.notify_remote_service_terminated(service.blueprintId, service_id)
+                        .await;
                 }
             } else if let Ok(evt) = log.log_decode::<OperatorPreRegistered>() {
                 let blueprint_id = evt.inner.data.blueprintId;
@@ -639,6 +692,48 @@ impl TangleEventHandler {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(feature = "remote-providers")]
+impl TangleEventHandler {
+    async fn notify_remote_service_initiated(
+        &self,
+        blueprint_id: u64,
+        service_id: u64,
+        gpu: &GpuRequirements,
+    ) {
+        let Some(remote) = &self.remote_provider else {
+            return;
+        };
+        let mut limits = ResourceLimits::default();
+        apply_gpu_limits(gpu, &mut limits);
+        let resource_spec = resource_spec_from_limits(&limits);
+        if let Err(e) = remote
+            .on_service_initiated(blueprint_id, service_id, Some(resource_spec))
+            .await
+        {
+            warn!(
+                blueprint_id,
+                service_id,
+                error = %e,
+                "Remote provider failed to handle service initiation"
+            );
+        }
+    }
+
+    async fn notify_remote_service_terminated(&self, blueprint_id: u64, service_id: u64) {
+        let Some(remote) = &self.remote_provider else {
+            return;
+        };
+        if let Err(e) = remote.on_service_terminated(blueprint_id, service_id).await {
+            warn!(
+                blueprint_id,
+                service_id,
+                error = %e,
+                "Remote provider failed to handle service termination"
+            );
+        }
     }
 }
 

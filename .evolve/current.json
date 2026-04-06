@@ -1,0 +1,19 @@
+{
+  "generation": 3,
+  "pursuit": ".evolve/pursuits/2026-04-06-gen3-inference-migration.md",
+  "status": "advanced",
+  "last_updated": "2026-04-06",
+  "summary": "Gen 3: All 7 inference blueprints depend on tangle-inference-core and compile clean. vllm renamed to llm-inference-blueprint. 2 critical bugs fixed (nonce replay, double-sleep). MIGRATION.md published. −4,590 LOC total (25%). voice/llm achieved full 50%+ reduction; remaining 5 have partial server.rs rewrites.",
+  "baselines": {
+    "inference_blueprints_on_core": 7,
+    "all_compile_clean": true,
+    "total_inference_loc_before": 18144,
+    "total_inference_loc_after": 13554,
+    "loc_deleted": 4590,
+    "reduction_pct": 25,
+    "bugs_fixed": ["nonce_not_recorded_after_validate", "double_sleep_claim_payment"],
+    "vllm_renamed_to_llm": true,
+    "migration_doc_published": true,
+    "inference_core_tests": 19
+  }
+}

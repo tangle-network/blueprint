@@ -11,9 +11,21 @@ use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
 use crate::monitoring::discovery::{CloudCredentials, MachineTypeDiscovery};
+use crate::providers::akash::AkashAdapter;
 use crate::providers::azure::adapter::AzureAdapter;
+use crate::providers::bittensor_lium::BittensorLiumAdapter;
+use crate::providers::coreweave::CoreWeaveAdapter;
 use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
+use crate::providers::fluidstack::FluidstackAdapter;
 use crate::providers::gcp::GcpAdapter;
+use crate::providers::io_net::IoNetAdapter;
+use crate::providers::lambda_labs::LambdaLabsAdapter;
+use crate::providers::paperspace::PaperspaceAdapter;
+use crate::providers::prime_intellect::PrimeIntellectAdapter;
+use crate::providers::render::RenderAdapter;
+use crate::providers::runpod::RunPodAdapter;
+use crate::providers::tensordock::TensorDockAdapter;
+use crate::providers::vast_ai::VastAiAdapter;
 use crate::providers::vultr::adapter::VultrAdapter;
 use blueprint_core::{error, info, warn};
 use blueprint_std::collections::HashMap;
@@ -66,6 +78,102 @@ impl CloudProvisioner {
             providers.insert(
                 CloudProvider::Vultr,
                 Box::new(VultrAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Lambda Labs adapter
+        if std::env::var("LAMBDA_LABS_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::LambdaLabs,
+                Box::new(LambdaLabsAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // RunPod adapter
+        if std::env::var("RUNPOD_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::RunPod,
+                Box::new(RunPodAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Vast.ai adapter
+        if std::env::var("VAST_AI_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::VastAi,
+                Box::new(VastAiAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // CoreWeave adapter
+        if std::env::var("COREWEAVE_TOKEN").is_ok() {
+            providers.insert(
+                CloudProvider::CoreWeave,
+                Box::new(CoreWeaveAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Paperspace adapter
+        if std::env::var("PAPERSPACE_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::Paperspace,
+                Box::new(PaperspaceAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Fluidstack adapter
+        if std::env::var("FLUIDSTACK_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::Fluidstack,
+                Box::new(FluidstackAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // TensorDock adapter
+        if std::env::var("TENSORDOCK_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::TensorDock,
+                Box::new(TensorDockAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Akash adapter
+        if std::env::var("AKASH_RPC_URL").is_ok() {
+            providers.insert(
+                CloudProvider::Akash,
+                Box::new(AkashAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // io.net adapter
+        if std::env::var("IO_NET_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::IoNet,
+                Box::new(IoNetAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Prime Intellect adapter
+        if std::env::var("PRIME_INTELLECT_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::PrimeIntellect,
+                Box::new(PrimeIntellectAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Render adapter
+        if std::env::var("RENDER_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::Render,
+                Box::new(RenderAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Bittensor/Lium adapter
+        if std::env::var("LIUM_API_KEY").is_ok() {
+            providers.insert(
+                CloudProvider::BittensorLium,
+                Box::new(BittensorLiumAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
             );
         }
 

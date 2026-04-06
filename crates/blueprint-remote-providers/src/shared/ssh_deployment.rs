@@ -173,4 +173,136 @@ impl SshDeploymentConfig {
             additional_metadata: HashMap::new(),
         }
     }
+
+    /// Create Lambda Labs SSH configuration
+    pub fn lambda_labs() -> Self {
+        Self {
+            username: "ubuntu".to_string(),
+            key_path: std::env::var("LAMBDA_LABS_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-lambda".to_string(),
+            provider_name: "lambda-labs".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create RunPod SSH configuration
+    pub fn runpod() -> Self {
+        Self {
+            username: "root".to_string(),
+            key_path: std::env::var("RUNPOD_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-runpod".to_string(),
+            provider_name: "runpod".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create Vast.ai SSH configuration
+    pub fn vast_ai() -> Self {
+        Self {
+            username: "root".to_string(),
+            key_path: std::env::var("VAST_AI_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-vastai".to_string(),
+            provider_name: "vast-ai".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create CoreWeave SSH configuration
+    pub fn coreweave() -> Self {
+        Self {
+            username: "coreweave".to_string(),
+            key_path: std::env::var("COREWEAVE_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-coreweave".to_string(),
+            provider_name: "coreweave".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create Paperspace SSH configuration
+    pub fn paperspace() -> Self {
+        Self {
+            username: "paperspace".to_string(),
+            key_path: std::env::var("PAPERSPACE_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-paperspace".to_string(),
+            provider_name: "paperspace".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create Fluidstack SSH configuration
+    pub fn fluidstack() -> Self {
+        Self {
+            username: "ubuntu".to_string(),
+            key_path: std::env::var("FLUIDSTACK_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-fluidstack".to_string(),
+            provider_name: "fluidstack".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create TensorDock SSH configuration
+    pub fn tensordock() -> Self {
+        Self {
+            username: "user".to_string(),
+            key_path: std::env::var("TENSORDOCK_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-tensordock".to_string(),
+            provider_name: "tensordock".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create Akash SSH configuration
+    pub fn akash() -> Self {
+        Self {
+            username: "root".to_string(),
+            key_path: std::env::var("AKASH_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-akash".to_string(),
+            provider_name: "akash".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create io.net SSH configuration
+    pub fn io_net() -> Self {
+        Self {
+            username: "root".to_string(),
+            key_path: std::env::var("IO_NET_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-ionet".to_string(),
+            provider_name: "io-net".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create Prime Intellect SSH configuration
+    pub fn prime_intellect() -> Self {
+        Self {
+            username: "ubuntu".to_string(),
+            key_path: std::env::var("PRIME_INTELLECT_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-prime".to_string(),
+            provider_name: "prime-intellect".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create Render SSH configuration
+    pub fn render() -> Self {
+        Self {
+            username: "render".to_string(),
+            key_path: std::env::var("RENDER_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-render".to_string(),
+            provider_name: "render".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create Bittensor/Lium SSH configuration
+    pub fn bittensor_lium() -> Self {
+        Self {
+            username: "root".to_string(),
+            key_path: std::env::var("LIUM_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-lium".to_string(),
+            provider_name: "bittensor-lium".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
 }

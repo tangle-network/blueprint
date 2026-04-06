@@ -136,12 +136,30 @@ impl AutoDeploymentManager {
             | DeploymentType::DigitalOceanDoks
             | DeploymentType::VultrVke => false,
 
+            // CoreWeave uses Kubernetes natively
+            #[cfg(feature = "kubernetes")]
+            DeploymentType::CoreWeaveWorkload => true,
+
+            #[cfg(not(feature = "kubernetes"))]
+            DeploymentType::CoreWeaveWorkload => false,
+
             // VM deployments and SSH are always available
             DeploymentType::AwsEc2
             | DeploymentType::GcpGce
             | DeploymentType::AzureVm
             | DeploymentType::DigitalOceanDroplet
             | DeploymentType::VultrInstance
+            | DeploymentType::LambdaLabsInstance
+            | DeploymentType::RunPodInstance
+            | DeploymentType::VastAiInstance
+            | DeploymentType::PaperspaceMachine
+            | DeploymentType::FluidstackServer
+            | DeploymentType::TensorDockServer
+            | DeploymentType::AkashLease
+            | DeploymentType::IoNetCluster
+            | DeploymentType::PrimeIntellectPod
+            | DeploymentType::RenderDispersedNode
+            | DeploymentType::BittensorLiumMiner
             | DeploymentType::SshRemote
             | DeploymentType::BareMetal => true,
 
@@ -405,6 +423,20 @@ impl AutoDeploymentManager {
             DeploymentType::DigitalOceanDroplet => matches!(provider, CloudProvider::DigitalOcean),
             DeploymentType::VultrInstance => matches!(provider, CloudProvider::Vultr),
 
+            // GPU cloud provider deployments
+            DeploymentType::LambdaLabsInstance => matches!(provider, CloudProvider::LambdaLabs),
+            DeploymentType::RunPodInstance => matches!(provider, CloudProvider::RunPod),
+            DeploymentType::VastAiInstance => matches!(provider, CloudProvider::VastAi),
+            DeploymentType::CoreWeaveWorkload => matches!(provider, CloudProvider::CoreWeave),
+            DeploymentType::PaperspaceMachine => matches!(provider, CloudProvider::Paperspace),
+            DeploymentType::FluidstackServer => matches!(provider, CloudProvider::Fluidstack),
+            DeploymentType::TensorDockServer => matches!(provider, CloudProvider::TensorDock),
+            DeploymentType::AkashLease => matches!(provider, CloudProvider::Akash),
+            DeploymentType::IoNetCluster => matches!(provider, CloudProvider::IoNet),
+            DeploymentType::PrimeIntellectPod => matches!(provider, CloudProvider::PrimeIntellect),
+            DeploymentType::RenderDispersedNode => matches!(provider, CloudProvider::Render),
+            DeploymentType::BittensorLiumMiner => matches!(provider, CloudProvider::BittensorLium),
+
             // SSH remote is always available
             DeploymentType::SshRemote => true,
             DeploymentType::BareMetal => true,
@@ -427,6 +459,18 @@ impl AutoDeploymentManager {
             CloudProvider::Azure => DeploymentType::AzureVm,
             CloudProvider::DigitalOcean => DeploymentType::DigitalOceanDroplet,
             CloudProvider::Vultr => DeploymentType::VultrInstance,
+            CloudProvider::LambdaLabs => DeploymentType::LambdaLabsInstance,
+            CloudProvider::RunPod => DeploymentType::RunPodInstance,
+            CloudProvider::VastAi => DeploymentType::VastAiInstance,
+            CloudProvider::CoreWeave => DeploymentType::CoreWeaveWorkload,
+            CloudProvider::Paperspace => DeploymentType::PaperspaceMachine,
+            CloudProvider::Fluidstack => DeploymentType::FluidstackServer,
+            CloudProvider::TensorDock => DeploymentType::TensorDockServer,
+            CloudProvider::Akash => DeploymentType::AkashLease,
+            CloudProvider::IoNet => DeploymentType::IoNetCluster,
+            CloudProvider::PrimeIntellect => DeploymentType::PrimeIntellectPod,
+            CloudProvider::Render => DeploymentType::RenderDispersedNode,
+            CloudProvider::BittensorLium => DeploymentType::BittensorLiumMiner,
             _ => DeploymentType::SshRemote,
         }
     }
