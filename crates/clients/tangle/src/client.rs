@@ -2686,10 +2686,11 @@ impl TangleClient {
         let account = self.account();
         let start = count.saturating_sub(5);
         for candidate in (start..count).rev() {
-            if let Ok(request) = self.get_service_request(candidate).await {
-                if request.blueprintId == blueprint_id && request.requester == account {
-                    return Ok(candidate);
-                }
+            if let Ok(request) = self.get_service_request(candidate).await
+                && request.blueprintId == blueprint_id
+                && request.requester == account
+            {
+                return Ok(candidate);
             }
         }
 

@@ -274,16 +274,14 @@ pub async fn wait_for_peer_info<K: KeyType>(
             let peer_info1 = handle1.peer_info(&handle2.local_peer_id);
             let peer_info2 = handle2.peer_info(&handle1.local_peer_id);
 
-            if let Some(peer_info) = peer_info1 {
-                if peer_info.identify_info.is_some() {
-                    // Also verify reverse direction
-                    if let Some(peer_info) = peer_info2 {
-                        if peer_info.identify_info.is_some() {
-                            info!("Identify info populated in both directions");
-                            break;
-                        }
-                    }
-                }
+            if let Some(peer_info) = peer_info1
+                && peer_info.identify_info.is_some()
+                && let Some(peer_info) = peer_info2
+                && peer_info.identify_info.is_some()
+            {
+                // Also verify reverse direction
+                info!("Identify info populated in both directions");
+                break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }

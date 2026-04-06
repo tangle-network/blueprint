@@ -246,21 +246,21 @@ pub fn inject_execution_profile(profiling_data: &str, profile: ExecutionProfile)
         return default_metadata_payload(profile).to_string();
     }
 
-    if let Ok(mut value) = serde_json::from_str::<Value>(trimmed) {
-        if let Some(root) = value.as_object_mut() {
-            if let Some(schema) = root.get("schema").and_then(Value::as_str) {
-                if schema != METADATA_SCHEMA_V1 {
-                    return json!({
-                        "schema": METADATA_SCHEMA_V1,
-                        EXECUTION_PROFILE_KEY: profile_to_value(profile),
-                        JOB_PROFILES_BLOB_KEY: trimmed,
-                    })
-                    .to_string();
-                }
-            }
-            upsert_execution_profile(root, profile);
-            return value.to_string();
+    if let Ok(mut value) = serde_json::from_str::<Value>(trimmed)
+        && let Some(root) = value.as_object_mut()
+    {
+        if let Some(schema) = root.get("schema").and_then(Value::as_str)
+            && schema != METADATA_SCHEMA_V1
+        {
+            return json!({
+                "schema": METADATA_SCHEMA_V1,
+                EXECUTION_PROFILE_KEY: profile_to_value(profile),
+                JOB_PROFILES_BLOB_KEY: trimmed,
+            })
+            .to_string();
         }
+        upsert_execution_profile(root, profile);
+        return value.to_string();
     }
 
     json!({

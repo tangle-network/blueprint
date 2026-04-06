@@ -308,7 +308,7 @@ mod tests {
 
         let parties = HashMap::from_iter([(0, handle1.local_peer_id), (1, handle2.local_peer_id)]);
 
-        let mut handles = vec![handle1, handle2];
+        let mut handles = [handle1, handle2];
 
         // Convert handles to mutable references for wait_for_all_handshakes
         let handle_refs: Vec<&mut NetworkServiceHandle<K256Ecdsa>> = handles.iter_mut().collect();
