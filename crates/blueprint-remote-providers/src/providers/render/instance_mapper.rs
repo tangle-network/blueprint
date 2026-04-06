@@ -106,6 +106,10 @@ mod tests {
 
     #[test]
     fn unknown_tier_falls_back() {
-        assert_eq!(RenderInstanceMapper::estimate_hourly_cost("ultra"), 1.50);
+        let cost = RenderInstanceMapper::estimate_hourly_cost("ultra");
+        assert!(
+            (cost - 1.50).abs() < f64::EPSILON,
+            "expected 1.50, got {cost}"
+        );
     }
 }

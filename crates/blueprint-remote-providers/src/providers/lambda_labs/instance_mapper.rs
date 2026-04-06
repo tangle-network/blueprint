@@ -137,9 +137,10 @@ mod tests {
 
     #[test]
     fn unknown_instance_falls_back_to_default_cost() {
-        assert_eq!(
-            LambdaLabsInstanceMapper::estimate_hourly_cost("gpu_42x_unobtainium"),
-            2.0
+        let cost = LambdaLabsInstanceMapper::estimate_hourly_cost("gpu_42x_unobtainium");
+        assert!(
+            (cost - 2.0).abs() < f64::EPSILON,
+            "expected 2.0, got {cost}"
         );
     }
 }

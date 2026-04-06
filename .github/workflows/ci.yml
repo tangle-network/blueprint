@@ -126,8 +126,15 @@ jobs:
 
   testing:
     needs: [generate-matrix]
+    if: ${{ needs.generate-matrix.outputs.matrix != '[]' && needs.generate-matrix.outputs.matrix != '' }}
     timeout-minutes: 45
-    name: cargo test (${{ join(fromJSON(matrix.bundle.packages), ', ') }})
+    # The matrix entries are already parsed JSON objects (we did
+    # `fromJSON(needs.generate-matrix.outputs.matrix)` in `matrix.bundle`
+    # below), so `matrix.bundle.packages` is *already* an array. Calling
+    # `fromJSON()` on it here would error and silently kill the matrix
+    # fan-out (which is what was happening on main: only 6 jobs ran
+    # instead of the 6 + ~15 test bundles intended by the rewrite).
+    name: cargo test (${{ join(matrix.bundle.packages, ', ') }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

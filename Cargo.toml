@@ -335,7 +335,7 @@ fatfs = { version = "0.3.6", default-features = false }
 tokio-vsock = { version = "0.7.1", default-features = false }
 nix = { version = "0.31.1", default-features = false }
 capctl = { version = "0.2.4", default-features = false }
-netdev = { version = "0.35.3", default-features = false }
+netdev = { version = "0.41", default-features = false }
 nftables = { version = "0.6.3", default-features = false }
 
 # Development & Testing
@@ -378,7 +378,7 @@ opentelemetry_sdk = { version = "0.29", default-features = false }
 opentelemetry-semantic-conventions = { version = "0.29", default-features = false }
 opentelemetry_api = { version = "0.20", default-features = false }
 tracing-loki = { version = "0.2", default-features = false }
-tracing-opentelemetry = { version = "0.30", default-features = false }
+tracing-opentelemetry = { version = "0.32", default-features = false }
 urlencoding = { version = "2.1.3", default-features = false }
 
 # Testing
@@ -455,8 +455,8 @@ aws-smithy-mocks-experimental = { version = "0.2", default-features = false }
 aws-lc-rs = { version = "1.13", default-features = false }
 
 # Azure SDK
-azure_core = { version = "0.20", default-features = false }
-azure_identity = { version = "0.20", default-features = false }
+azure_core = { version = "0.33", default-features = false }
+azure_identity = { version = "0.33", default-features = false }
 
 # Additional dependencies
 openssl = { version = "0.10", default-features = false }
