@@ -50,13 +50,15 @@
 pub mod config;
 pub mod error;
 pub mod gateway;
+pub mod mpp;
 pub mod producer;
 pub mod quote_registry;
 pub mod settlement;
 
-pub use config::{JobPolicyConfig, X402CallerAuthMode, X402Config, X402InvocationMode};
+pub use config::{JobPolicyConfig, MppConfig, X402CallerAuthMode, X402Config, X402InvocationMode};
 pub use error::X402Error;
 pub use gateway::X402Gateway;
+pub use mpp::{BlueprintEvmChargeMethod, METHOD_NAME, MppCredentialPayload, MppMethodDetails};
 pub use producer::X402Producer;
 pub use quote_registry::QuoteRegistry;
-pub use settlement::SettlementOption;
+pub use settlement::{PaymentProtocol, SettlementOption};

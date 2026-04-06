@@ -29,3 +29,20 @@ decimals = 6
 pay_to = "0x0000000000000000000000000000000000000001"
 rate_per_native_unit = "3200.00"
 markup_bps = 200
+
+# Optional: enable the parallel MPP (Machine Payments Protocol) ingress.
+#
+# When this section is present the gateway also exposes
+#   POST /mpp/jobs/{service_id}/{job_index}
+# alongside the existing /x402/jobs/... routes. The two ingresses share the
+# same job pricing, accepted-token table, restricted-auth modes, and producer
+# stream — clients can pick whichever wire format their wallet speaks.
+#
+# `secret_key` MUST be at least 32 bytes of entropy and SHOULD be rotated on
+# a schedule (rotation invalidates outstanding challenges; in-flight clients
+# transparently retry on a fresh 402).
+[mpp]
+realm = "x402-blueprint.example.com"
+# Demo only -- replace with `openssl rand -hex 32` in production.
+secret_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+challenge_ttl_secs = 300

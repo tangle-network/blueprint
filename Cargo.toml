@@ -442,6 +442,7 @@ metrics = { version = "0.24.2", default-features = false }
 x402-types = { version = "1", default-features = false }
 x402-axum = { version = "1", default-features = false }
 x402-chain-eip155 = { version = "1", default-features = false }
+mpp = { version = "0.8", default-features = false }
 
 # AWS SDK (additional)
 aws-sdk-lambda = { version = "1", default-features = false }

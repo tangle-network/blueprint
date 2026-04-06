@@ -252,6 +252,7 @@ mod tests {
             default_invocation_mode: X402InvocationMode::Disabled,
             job_policies: vec![],
             service_id: 0,
+            mpp: None,
         };
 
         assert_eq!(

@@ -320,6 +320,7 @@ fn test_settlement_with_custom_token_address() {
         job_policies: vec![],
 
         service_id: 1,
+        mpp: None,
     };
 
     let price_wei = U256::from(1_000_000_000_000_000u64); // 0.001 ETH
@@ -370,6 +371,7 @@ fn test_settlement_with_multiple_tokens() {
         job_policies: vec![],
 
         service_id: 1,
+        mpp: None,
     };
 
     let price_wei = U256::from(1_000_000_000_000_000u64); // 0.001 ETH
@@ -385,4 +387,277 @@ fn test_settlement_with_multiple_tokens() {
     // DAI: 0.001 * 3200 * 1.01 = 3.232 DAI = 3232000000000000000 (18 decimals, 1% markup)
     assert_eq!(options[1].symbol, "DAI");
     assert_eq!(options[1].amount, "3232000000000000000");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MPP (Machine Payments Protocol) integration tests
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// These tests exercise the parallel /mpp/jobs/... ingress added by the
+// blueprint-x402 MPP integration. The example x402.toml now ships with an
+// `[mpp]` section so `start_gateway` brings the MPP routes up automatically.
+
+/// `GET /mpp/jobs/1/0/price` returns settlement options carrying
+/// `protocol: "mpp"` with the same converted amount as the x402 path.
+#[tokio::test]
+async fn test_mpp_price_discovery() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let resp = reqwest::get(format!("http://127.0.0.1:{port}/mpp/jobs/1/0/price"))
+        .await
+        .expect("GET /mpp price");
+
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let options = body["settlement_options"].as_array().unwrap();
+    assert!(
+        !options.is_empty(),
+        "must advertise at least one MPP method"
+    );
+    assert_eq!(options[0]["protocol"], "mpp");
+    // Same wei→token math as the x402 path: 0.001 ETH * 3200 USDC * 1.02 markup = 3.264 USDC.
+    assert_eq!(options[0]["amount"], "3264000");
+    assert_eq!(options[0]["scheme"], "charge");
+
+    handle.abort();
+}
+
+/// `GET /mpp/jobs/1/99/price` for an unknown job is rejected with a 404
+/// RFC 9457 Problem Details payload.
+#[tokio::test]
+async fn test_mpp_unknown_job_returns_problem() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let resp = reqwest::get(format!("http://127.0.0.1:{port}/mpp/jobs/1/99/price"))
+        .await
+        .expect("GET /mpp unknown");
+
+    assert_eq!(resp.status(), 404);
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("application/problem+json")
+    );
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], 404);
+    assert!(
+        body["type"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("https://paymentauth.org/problems/"),
+        "MPP errors must use IETF Problem Details type URIs"
+    );
+
+    handle.abort();
+}
+
+/// `POST /mpp/jobs/1/0` without an `Authorization: Payment` header returns
+/// `402 Payment Required` with `WWW-Authenticate: Payment` headers — one
+/// per accepted token.
+#[tokio::test]
+async fn test_mpp_unpaid_returns_challenge() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+        .body("hello")
+        .send()
+        .await
+        .expect("POST /mpp/jobs/1/0");
+
+    assert_eq!(resp.status(), 402, "MPP must speak HTTP 402 like x402");
+
+    let challenges: Vec<_> = resp
+        .headers()
+        .get_all("www-authenticate")
+        .iter()
+        .filter_map(|v| v.to_str().ok().map(str::to_owned))
+        .collect();
+    assert!(
+        !challenges.is_empty(),
+        "must emit at least one WWW-Authenticate: Payment header"
+    );
+    for challenge in &challenges {
+        assert!(
+            challenge.starts_with("Payment "),
+            "WWW-Authenticate must use Payment scheme: {challenge}"
+        );
+        assert!(
+            challenge.contains("method=\"x402-evm\""),
+            "challenge must advertise method=x402-evm: {challenge}"
+        );
+        assert!(
+            challenge.contains("intent=\"charge\""),
+            "challenge must advertise intent=charge: {challenge}"
+        );
+    }
+
+    // The 402 body MUST be RFC 9457 Problem Details.
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("application/problem+json")
+    );
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], 402);
+    assert!(body["challenge_ids"].is_array());
+
+    handle.abort();
+}
+
+/// `POST /mpp/jobs/1/0` with a malformed `Authorization: Payment` header
+/// returns a 400 with the `malformed-credential` IETF code.
+#[tokio::test]
+async fn test_mpp_malformed_credential_returns_problem() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+        .header("authorization", "Payment not-base64url-and-not-json")
+        .body("hello")
+        .send()
+        .await
+        .expect("POST /mpp with bad credential");
+
+    assert_eq!(resp.status(), 400);
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("application/problem+json")
+    );
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], 400);
+    assert!(
+        body["type"]
+            .as_str()
+            .unwrap_or_default()
+            .ends_with("malformed-credential"),
+        "type must signal malformed-credential, got {}",
+        body["type"]
+    );
+
+    handle.abort();
+}
+
+/// MPP routes are NOT registered when the operator omits the `[mpp]` config
+/// section. This test starts a gateway with MPP disabled and asserts that
+/// `/mpp/jobs/...` returns 404 from the axum router (no route match), while
+/// the legacy `/x402/jobs/...` endpoints still work.
+#[tokio::test]
+async fn test_mpp_routes_disabled_when_unconfigured() {
+    use blueprint_x402::config::AcceptedToken;
+    use rust_decimal::Decimal;
+
+    // Build a minimal config WITHOUT [mpp].
+    let config = X402Config {
+        bind_address: SocketAddr::from(([127, 0, 0, 1], free_port())),
+        facilitator_url: "https://facilitator.x402.org".parse().unwrap(),
+        quote_ttl_secs: 300,
+        accepted_tokens: vec![AcceptedToken {
+            network: "eip155:8453".into(),
+            asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".into(),
+            symbol: "USDC".into(),
+            decimals: 6,
+            pay_to: "0x0000000000000000000000000000000000000001".into(),
+            rate_per_native_unit: Decimal::from(3200u32),
+            markup_bps: 0,
+            transfer_method: "permit2".into(),
+            eip3009_name: None,
+            eip3009_version: None,
+        }],
+        default_invocation_mode: X402InvocationMode::PublicPaid,
+        job_policies: vec![],
+        service_id: 1,
+        mpp: None,
+    };
+    let port = config.bind_address.port();
+
+    let mut pricing = HashMap::new();
+    pricing.insert((1, 0), U256::from(1_000_000_000_000_000u64));
+
+    let (gateway, _producer) = X402Gateway::new(config, pricing).expect("create gateway");
+    let handle = tokio::spawn(async move {
+        let _rx = gateway.start().await.expect("start gateway");
+        futures::future::pending::<()>().await;
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Existing x402 ingress still works.
+    let x402_resp = reqwest::get(format!("http://127.0.0.1:{port}/x402/jobs/1/0/price"))
+        .await
+        .expect("GET x402 price");
+    assert_eq!(x402_resp.status(), 200);
+
+    // MPP route is not registered → axum returns 404 (not the MPP problem JSON).
+    let mpp_resp = reqwest::get(format!("http://127.0.0.1:{port}/mpp/jobs/1/0/price"))
+        .await
+        .expect("GET mpp price");
+    assert_eq!(mpp_resp.status(), 404);
+
+    handle.abort();
+}
+
+/// `/x402/stats` exposes the new MPP-specific counters (initially zero).
+#[tokio::test]
+async fn test_stats_includes_mpp_counters() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let resp = reqwest::get(format!("http://127.0.0.1:{port}/x402/stats"))
+        .await
+        .expect("GET stats");
+    assert_eq!(resp.status(), 200);
+
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["counters"]["mpp_accepted"], 0);
+    assert_eq!(body["counters"]["mpp_challenge_issued"], 0);
+    assert_eq!(body["counters"]["mpp_verification_failed"], 0);
+
+    handle.abort();
+}
+
+/// After requesting `/mpp/jobs/1/0` without payment, the
+/// `mpp_challenge_issued` counter is incremented.
+#[tokio::test]
+async fn test_mpp_challenge_counter_increments() {
+    let port = free_port();
+    let pricing = load_example_pricing();
+    let (handle, _producer) = start_gateway(port, pricing).await;
+
+    let client = reqwest::Client::new();
+    for _ in 0..3 {
+        let resp = client
+            .post(format!("http://127.0.0.1:{port}/mpp/jobs/1/0"))
+            .body("hello")
+            .send()
+            .await
+            .expect("POST /mpp/jobs/1/0");
+        assert_eq!(resp.status(), 402);
+    }
+
+    let stats: serde_json::Value = reqwest::get(format!("http://127.0.0.1:{port}/x402/stats"))
+        .await
+        .expect("GET stats")
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(stats["counters"]["mpp_challenge_issued"], 3);
+
+    handle.abort();
 }

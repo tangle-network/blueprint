@@ -92,6 +92,15 @@ pub struct JobPolicyConfig {
 /// pay_to = "0xYourOperatorAddressOnBase"
 /// rate_per_native_unit = "3200.00"
 /// markup_bps = 200
+///
+/// # Optional: enable the parallel MPP (Machine Payments Protocol) ingress.
+/// # When present, the gateway also accepts WWW-Authenticate: Payment /
+/// # Authorization: Payment / Payment-Receipt headers under /mpp/jobs/...
+/// # using the same job pricing, accepted tokens, and restricted-auth modes.
+/// [mpp]
+/// realm = "blueprint.example.com"
+/// secret_key = "0123456789abcdef0123456789abcdef"
+/// challenge_ttl_secs = 300
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct X402Config {
@@ -121,6 +130,64 @@ pub struct X402Config {
     /// The service ID this gateway serves (set at runtime, not from TOML).
     #[serde(default)]
     pub service_id: u64,
+
+    /// Optional MPP (Machine Payments Protocol) ingress configuration.
+    ///
+    /// When `Some`, the gateway exposes parallel `/mpp/jobs/{service_id}/{job_index}`
+    /// routes that speak the IETF Payment authentication scheme defined at
+    /// <https://paymentauth.org>. The MPP ingress shares all downstream
+    /// plumbing (job pricing, restricted-auth, producer, quote registry) with
+    /// the existing x402 ingress; only the wire format differs.
+    ///
+    /// When `None`, the MPP routes are not registered (existing x402 surface
+    /// is unchanged).
+    #[serde(default)]
+    pub mpp: Option<MppConfig>,
+}
+
+/// Configuration for the optional MPP (Machine Payments Protocol) ingress.
+///
+/// MPP is an IETF standards-track HTTP 402 protocol that uses standard
+/// `WWW-Authenticate: Payment` / `Authorization: Payment` / `Payment-Receipt`
+/// headers and RFC 9457 Problem Details for errors. See
+/// <https://paymentauth.org> and <https://mpp.dev>.
+///
+/// The blueprint-x402 MPP ingress is **additive** to the existing x402
+/// ingress. Both ingresses share:
+/// - Job pricing (`job_pricing` in [`X402Gateway::new`](crate::X402Gateway::new))
+/// - Accepted tokens / cross-chain markup
+/// - Restricted-caller policy and on-chain `isPermittedCaller` checks
+/// - Replay protection on delegated caller signatures
+/// - The producer/runner injection path
+///
+/// Only the wire protocol on the request side differs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MppConfig {
+    /// MPP realm string. Identifies this server in the `WWW-Authenticate`
+    /// challenge. Typically the public hostname (e.g. `blueprint.example.com`).
+    pub realm: String,
+
+    /// HMAC secret used to bind challenge IDs to their parameters.
+    ///
+    /// Must be at least 32 bytes of entropy. The MPP server uses this to
+    /// implement stateless challenge verification per the IETF spec — the
+    /// challenge ID is an HMAC-SHA256 over the challenge fields, so the
+    /// server can verify that a returned credential was issued by *this*
+    /// instance without any per-challenge storage.
+    ///
+    /// **Operators**: rotate this on a schedule. Rotation invalidates all
+    /// outstanding challenges; in-flight clients will retry on a fresh `402`.
+    pub secret_key: String,
+
+    /// How long (seconds) a generated MPP challenge remains valid.
+    /// Must be ≤ [`X402Config::quote_ttl_secs`] to keep the two ingresses
+    /// in sync. Default: 300 seconds.
+    #[serde(default = "default_mpp_challenge_ttl")]
+    pub challenge_ttl_secs: u64,
+}
+
+fn default_mpp_challenge_ttl() -> u64 {
+    300
 }
 
 /// A token the operator accepts for x402 payment.
@@ -311,6 +378,29 @@ impl X402Config {
             }
         }
 
+        if let Some(mpp) = &self.mpp {
+            if mpp.realm.trim().is_empty() {
+                return Err(X402Error::Config("mpp.realm must not be empty".into()));
+            }
+            if mpp.secret_key.len() < 32 {
+                return Err(X402Error::Config(format!(
+                    "mpp.secret_key must be at least 32 bytes (got {})",
+                    mpp.secret_key.len()
+                )));
+            }
+            if mpp.challenge_ttl_secs == 0 {
+                return Err(X402Error::Config(
+                    "mpp.challenge_ttl_secs must be > 0".into(),
+                ));
+            }
+            if mpp.challenge_ttl_secs > self.quote_ttl_secs {
+                return Err(X402Error::Config(format!(
+                    "mpp.challenge_ttl_secs ({}) must be <= quote_ttl_secs ({}) so MPP challenges expire before their backing quotes",
+                    mpp.challenge_ttl_secs, self.quote_ttl_secs
+                )));
+            }
+        }
+
         Ok(())
     }
 
@@ -417,6 +507,7 @@ mod tests {
                 tangle_contract: None,
             }],
             service_id: 0,
+            mpp: None,
         };
 
         let err = config.validate().unwrap_err();
@@ -440,10 +531,88 @@ mod tests {
                 tangle_contract: Some("0x0000000000000000000000000000000000000001".into()),
             }],
             service_id: 0,
+            mpp: None,
         };
 
         let err = config.validate().unwrap_err();
         assert!(err.to_string().contains("payment_only"), "{err}");
+    }
+
+    fn good_mpp() -> MppConfig {
+        MppConfig {
+            realm: "blueprint.example.com".into(),
+            secret_key: "0123456789abcdef0123456789abcdef".into(),
+            challenge_ttl_secs: 300,
+        }
+    }
+
+    #[test]
+    fn test_mpp_short_secret_key_rejected() {
+        let mut mpp = good_mpp();
+        mpp.secret_key = "tooshort".into();
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("at least 32 bytes"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_empty_realm_rejected() {
+        let mut mpp = good_mpp();
+        mpp.realm = "  ".into();
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("realm"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_challenge_ttl_must_not_exceed_quote_ttl() {
+        let mut mpp = good_mpp();
+        mpp.challenge_ttl_secs = 600;
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(mpp),
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("challenge_ttl_secs"), "{err}");
+    }
+
+    #[test]
+    fn test_mpp_good_config_accepted() {
+        let config = X402Config {
+            bind_address: default_bind_address(),
+            facilitator_url: "https://example.com".parse().unwrap(),
+            quote_ttl_secs: 300,
+            accepted_tokens: vec![usdc_token(0)],
+            default_invocation_mode: X402InvocationMode::Disabled,
+            job_policies: vec![],
+            service_id: 0,
+            mpp: Some(good_mpp()),
+        };
+        config.validate().expect("good mpp config should validate");
     }
 
     #[test]
@@ -465,6 +634,7 @@ mod tests {
             default_invocation_mode: X402InvocationMode::Disabled,
             job_policies: vec![policy.clone(), policy],
             service_id: 0,
+            mpp: None,
         };
 
         let err = config.validate().unwrap_err();
