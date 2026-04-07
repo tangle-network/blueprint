@@ -33,4 +33,4 @@ Crate `blueprint-auth`: HTTP/WebSocket authentication system for Blueprint servi
 - Depends on `blueprint-crypto` (bn254 feature) for BN254 BLS signature verification.
 - Depends on `blueprint-std` for RNG and standard library abstractions.
 - Used by the Blueprint Manager and remote provider infrastructure for service authentication.
-- Dev-depends on `blueprint-sdk` for integration tests.
+- Has no dev-dep on `blueprint-sdk`. The umbrella SDK depends transitively on this crate, so a circular dev-dep would deadlock `cargo publish` (see the comment in `Cargo.toml [dev-dependencies]`).

@@ -33,7 +33,11 @@ serde_json = { workspace = true, features = ["alloc"], optional = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["macros", "std"] }
+# Path-only — see crates/core/Cargo.toml for the rationale. trybuild tests
+# under `tests/debug_job/{pass,fail}/*.rs` need to compile against the
+# umbrella SDK surface, but the dep itself must not appear in the
+# published manifest or `cargo publish` deadlocks on the workspace cycle.
+blueprint-sdk = { path = "../sdk", features = ["macros", "std"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }

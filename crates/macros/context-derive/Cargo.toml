@@ -23,7 +23,11 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-context-derive = { path = ".", features = ["std", "evm", "tangle", "networking"] }
-blueprint-sdk = { workspace = true, features = [
+# Path-only — see crates/core/Cargo.toml for the rationale. The trybuild
+# UI tests under `tests/ui/*.rs` exercise the derive macro against the
+# umbrella SDK's re-exports, but the dep itself must not appear in the
+# published manifest or `cargo publish` deadlocks on the workspace cycle.
+blueprint-sdk = { path = "../../sdk", features = [
     "std",
     "macros",
     "evm",

@@ -20,7 +20,16 @@ tracing = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["std"] }
+# Path-only dev-dep on the umbrella SDK. The workspace declares
+# `blueprint-sdk = { version = "...", path = "./crates/sdk" }`, but a
+# circular dev-dep on the umbrella crate breaks `cargo publish`: cargo
+# would carry the version constraint into this published manifest and
+# then fail to resolve `blueprint-sdk = "^0.2.0-alpha.X"` against
+# crates.io (the umbrella depends on this crate, so the umbrella can
+# never be on crates.io before this crate is). The path-only form is
+# stripped from the published manifest entirely, while local doctests
+# and tests still resolve via the workspace path.
+blueprint-sdk = { path = "../sdk", features = ["std"] }
 serde_json = { workspace = true, features = ["alloc"] }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
 tokio = { workspace = true, features = ["full"] }
