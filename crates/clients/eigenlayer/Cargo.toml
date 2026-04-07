@@ -42,10 +42,12 @@ url = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
-blueprint-chain-setup-anvil = { workspace = true }
-blueprint-evm-extra = { workspace = true }
-blueprint-core-testing-utils = { workspace = true }
-blueprint-eigenlayer-testing-utils = { workspace = true }
+# Path-only dev-deps to break publish cycles via testing-utils -> runner -> client-eigenlayer.
+# Cargo strips path-only dev-deps from published manifests.
+blueprint-chain-setup-anvil = { path = "../../chain-setup/anvil" }
+blueprint-evm-extra = { path = "../../evm-extra" }
+blueprint-core-testing-utils = { path = "../../testing-utils/core" }
+blueprint-eigenlayer-testing-utils = { path = "../../testing-utils/eigenlayer" }
 alloy-primitives = { workspace = true }
 eigenlayer-contract-deployer = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

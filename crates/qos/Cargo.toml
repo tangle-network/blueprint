@@ -59,9 +59,11 @@ workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-blueprint-anvil-testing-utils = { workspace = true }
-blueprint-router = { workspace = true }
-blueprint-tangle-extra = { workspace = true }
+# Path-only dev-deps to break publish cycles via testing-utils -> runner -> qos.
+# Cargo strips path-only dev-deps from published manifests.
+blueprint-anvil-testing-utils = { path = "../testing-utils/anvil" }
+blueprint-router = { path = "../router" }
+blueprint-tangle-extra = { path = "../tangle-extra" }
 hex = { workspace = true }
 
 [build-dependencies]

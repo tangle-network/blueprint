@@ -52,8 +52,12 @@ workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-blueprint-chain-setup-anvil = { workspace = true }
-blueprint-anvil-testing-utils = { workspace = true }
+# Path-only dev-deps to break the publish cycle:
+# blueprint-anvil-testing-utils -> blueprint-runner -> blueprint-client-tangle.
+# Cargo strips path-only dev-deps from published manifests, so the cycle never
+# reaches crates.io. See `crates/auth/Cargo.toml` for more on this trap.
+blueprint-chain-setup-anvil = { path = "../../chain-setup/anvil" }
+blueprint-anvil-testing-utils = { path = "../../testing-utils/anvil" }
 anyhow = { workspace = true }
 hex = { workspace = true }
 
