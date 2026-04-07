@@ -127,7 +127,14 @@ jobs:
   testing:
     needs: [generate-matrix]
     if: ${{ needs.generate-matrix.outputs.matrix != '[]' && needs.generate-matrix.outputs.matrix != '' }}
-    timeout-minutes: 45
+    # 90 minutes, not 45: the biggest bundles (cargo-tangle and the
+    # blueprint-client-core group of 8) take ~46-48 minutes to fresh-
+    # compile + test on shared GH runners, which hit the old 45min
+    # ceiling on every cold-cache run (including main's own CI runs
+    # 24052887535 and 24047749608). Doubling the budget gives worst-
+    # case runners real headroom without changing the time-to-signal
+    # on a warm-cache run (which stays well under the old 45min).
+    timeout-minutes: 90
     # The matrix entries are already parsed JSON objects (we did
     # `fromJSON(needs.generate-matrix.outputs.matrix)` in `matrix.bundle`
     # below), so `matrix.bundle.packages` is *already* an array. Calling

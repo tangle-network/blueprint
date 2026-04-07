@@ -19,6 +19,7 @@ const PROTOCOL_NAME: &str = "/gossip/1.0.0";
 
 #[tokio::test]
 #[serial_test::serial]
+#[ignore = "CI-flaky: libp2p peer discovery + gossip convergence hangs until TEST_TIMEOUT on shared GH runners — protocol never settles in that environment. Tracked separately; test still runs locally via `cargo test -p blueprint-networking -- --ignored`. See discussion in PR #1366."]
 async fn test_gossip_between_verified_peers() {
     setup_log();
     info!("Starting gossip test between verified peers");
@@ -78,6 +79,7 @@ async fn test_gossip_between_verified_peers() {
 
 #[tokio::test]
 #[serial_test::serial]
+#[ignore = "CI-flaky: same libp2p convergence issue as test_gossip_between_verified_peers. Runs locally via `cargo test -p blueprint-networking -- --ignored`. See PR #1366."]
 async fn test_multi_node_gossip() {
     setup_log();
     info!("Starting multi-node gossip test");

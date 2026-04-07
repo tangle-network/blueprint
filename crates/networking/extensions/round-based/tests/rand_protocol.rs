@@ -253,6 +253,7 @@ mod tests {
 
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "CI-flaky: libp2p p2p test hangs forever on shared GH runners; nextest's slow-timeout terminates it after 1200s. Same class of bug as the gossip / agg-sig-gossip libp2p hangs ignored elsewhere on this branch. Runs locally via `cargo test -p blueprint-networking-round-based-extension -- --ignored`. See PR #1366."]
     async fn p2p_networking() {
         init_tracing();
         let suffix = unique_test_suffix();

@@ -58,7 +58,14 @@ workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["std"] }
+# Note: do NOT add `blueprint-sdk` here. The workspace declares it with both
+# a `path` and a `version`, so cargo publish would carry the version
+# constraint into this crate's published manifest and then fail to resolve
+# `^0.2.0-alpha.X` against crates.io (the umbrella depends on this crate,
+# so the umbrella can never be on crates.io before this crate is). If you
+# need SDK re-exports in tests, either depend on the underlying sub-crates
+# directly or use a path-only override:
+#   blueprint-sdk = { path = "../sdk", features = ["std"] }
 serde_json = { workspace = true, features = ["alloc"] }
 bytes = { workspace = true }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter", "make"] }

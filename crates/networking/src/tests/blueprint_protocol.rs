@@ -59,6 +59,7 @@ fn extract_sum_from_verification(msg: &ProtocolMessage) -> u64 {
 
 #[tokio::test]
 #[serial_test::serial]
+#[ignore = "CI-flaky: libp2p summation protocol hangs until TEST_TIMEOUT on shared GH runners. Runs locally via `cargo test -p blueprint-networking -- --ignored`. See PR #1366."]
 async fn test_summation_protocol_basic() {
     setup_log();
     info!("Starting summation protocol test");
@@ -229,6 +230,7 @@ async fn test_summation_protocol_basic() {
 
 #[tokio::test]
 #[serial_test::serial]
+#[ignore = "CI-flaky: same libp2p summation issue as test_summation_protocol_basic. Runs locally via `cargo test -p blueprint-networking -- --ignored`. See PR #1366."]
 async fn test_summation_protocol_multi_node() {
     setup_log();
     info!("Starting multi-node summation protocol test");

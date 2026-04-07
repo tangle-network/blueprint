@@ -104,10 +104,44 @@ These require `--test-threads=1` or nextest serial execution:
 
 ### External Dependencies
 - **Substrate**: sp-core, sp-runtime (v34-39.x)
-- **Alloy**: EVM interaction (v0.12)
+- **Alloy**: EVM interaction (v1.8.x)
 - **libp2p**: P2P networking (v0.55)
 - **Eigensdk**: EigenLayer integration (v0.5)
 - **Foundry**: Smart contract compilation
+
+### Workspace Dependency Hygiene
+
+**Never add a `[dev-dependencies]` entry on `blueprint-sdk` (or any other workspace umbrella crate that re-exports the dependent crate) using `workspace = true`.**
+
+The workspace declares `blueprint-sdk = { version = "...", path = "./crates/sdk" }` — the `version + path` combo means cargo will write the version constraint into a published crate's manifest and then resolve it against crates.io at publish time. Because `blueprint-sdk` itself depends on most leaf crates (`blueprint-core`, `blueprint-router`, `blueprint-runner`, `blueprint-auth`, `blueprint-macros`, `blueprint-context-derive`, etc.), a workspace-style dev-dep on the umbrella creates a publish-time circular dependency:
+
+```
+cargo publish blueprint-core 0.2.0-alpha.X
+  → resolves dev-dep `blueprint-sdk = "^0.2.0-alpha.X"` against crates.io
+  → fails because blueprint-sdk 0.2.0-alpha.X isn't published yet
+  → and it can't be, because blueprint-sdk depends on blueprint-core
+```
+
+This deadlock is what kept the entire `0.2.0-alpha.2` release stuck on crates.io with only `0.2.0-alpha.1` published until the fix landed.
+
+**The rule:** if a leaf crate's tests, doctests, or trybuild fixtures need access to the umbrella SDK's re-exports, use a **path-only** dev-dep that bypasses the workspace dep table entirely:
+
+```toml
+# correct: stripped from the published manifest, still resolves locally for cargo test
+[dev-dependencies]
+blueprint-sdk = { path = "../sdk", features = ["std"] }
+```
+
+```toml
+# wrong: cargo publish carries the version constraint into the published manifest
+# and then deadlocks on the workspace cycle
+[dev-dependencies]
+blueprint-sdk = { workspace = true, features = ["std"] }
+```
+
+If a test doesn't actually need the umbrella, just delete the dev-dep — many of the historical entries were vestigial. The truly clean alternative is to depend on the underlying sub-crate directly (e.g. `blueprint-router::Router` instead of `blueprint-sdk::Router`).
+
+**Detection:** if `gh run view <publish-crates run> --log` shows `failed to select a version for the requirement \`blueprint-* = "^X.Y.Z-alpha.N"\` ... candidate versions found which didn't match: X.Y.Z-alpha.{N-1}`, this is the symptom. The fix is always: convert the dev-dep to path-only.
 
 ## Harness Process (Required)
 

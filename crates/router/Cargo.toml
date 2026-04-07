@@ -23,7 +23,11 @@ futures = { workspace = true, features = ["alloc"] }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
-blueprint-sdk = { workspace = true, features = ["macros"]}
+# Path-only — see crates/core/Cargo.toml for the rationale. The doctest
+# in docs/with_context.md references `blueprint_sdk::Router`, which is a
+# re-export of this crate's own `Router`. The path-only form is stripped
+# from the published manifest entirely, breaking the publish-time cycle.
+blueprint-sdk = { path = "../sdk", features = ["macros"] }
 tracing-subscriber = { workspace = true, features = ["json", "env-filter"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
