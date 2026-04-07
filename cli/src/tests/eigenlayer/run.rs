@@ -18,6 +18,7 @@ use crate::command::run::run_eigenlayer_avs;
 use crate::utils::workspace_root;
 
 #[tokio::test]
+#[ignore = "CI-slow: end-to-end EigenLayer AVS run takes >20min on shared GH runners and is terminated by nextest's slow-timeout. Needs an anvil + AVS contract deploy + binary build + run cycle that the test environment can't satisfy in CI. Runs locally via `cargo test -p cargo-tangle -- --ignored`. See PR #1366."]
 async fn test_run_eigenlayer_avs() -> Result<()> {
     setup_log();
 
