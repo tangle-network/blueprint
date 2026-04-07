@@ -111,9 +111,21 @@ These require `--test-threads=1` or nextest serial execution:
 
 ### Workspace Dependency Hygiene
 
-**Never add a `[dev-dependencies]` entry on `blueprint-sdk` (or any other workspace umbrella crate that re-exports the dependent crate) using `workspace = true`.**
+**Never add a `[dev-dependencies]` entry using `workspace = true` on any workspace member that participates (directly or transitively) in a publish cycle with the current crate.**
 
-The workspace declares `blueprint-sdk = { version = "...", path = "./crates/sdk" }` — the `version + path` combo means cargo will write the version constraint into a published crate's manifest and then resolve it against crates.io at publish time. Because `blueprint-sdk` itself depends on most leaf crates (`blueprint-core`, `blueprint-router`, `blueprint-runner`, `blueprint-auth`, `blueprint-macros`, `blueprint-context-derive`, etc.), a workspace-style dev-dep on the umbrella creates a publish-time circular dependency:
+The umbrella case (`blueprint-sdk`) is the obvious one, but the same trap fires on *any* internal cycle. Cycles we hit on `0.2.0-alpha.2` after the umbrella fix landed:
+
+- `blueprint-client-tangle` → DEV `blueprint-anvil-testing-utils` → `blueprint-runner` → `blueprint-client-tangle` (optional)
+- `blueprint-client-evm` → DEV `blueprint-anvil-testing-utils` → … → `blueprint-client-evm`
+- `blueprint-client-eigenlayer` → DEV `blueprint-eigenlayer-testing-utils` → `blueprint-runner` → `blueprint-client-eigenlayer`
+- `blueprint-tangle-extra` → DEV `blueprint-anvil-testing-utils` → `blueprint-client-tangle` → `blueprint-tangle-extra`
+- `blueprint-qos` → DEV `blueprint-anvil-testing-utils` → `blueprint-runner` → `blueprint-qos`
+- `blueprint-eigenlayer-extra` → DEV `blueprint-eigenlayer-testing-utils` → `blueprint-runner` (eigenlayer feature) → `blueprint-eigenlayer-extra`
+- `blueprint-pricing-engine`, `blueprint-manager`, `cargo-tangle` — same pattern via testing-utils
+
+In every case, a production crate's `[dev-dependencies]` entry pulled in a testing utility that reaches back into the production crate via the runner/clients chain. The fix is exactly the same as the umbrella case: convert the dev-dep to path-only.
+
+The workspace declares each crate as `name = { version = "...", path = "./crates/..." }` — the `version + path` combo means cargo will write the version constraint into a published crate's manifest and then resolve it against crates.io at publish time. Because the testing-utils → runner → client/qos/extra chain creates back-edges, a workspace-style dev-dep on a testing crate from a production crate forms a publish-time circular dependency:
 
 ```
 cargo publish blueprint-core 0.2.0-alpha.X
@@ -124,11 +136,12 @@ cargo publish blueprint-core 0.2.0-alpha.X
 
 This deadlock is what kept the entire `0.2.0-alpha.2` release stuck on crates.io with only `0.2.0-alpha.1` published until the fix landed.
 
-**The rule:** if a leaf crate's tests, doctests, or trybuild fixtures need access to the umbrella SDK's re-exports, use a **path-only** dev-dep that bypasses the workspace dep table entirely:
+**The rule:** if a crate's tests, doctests, or trybuild fixtures need access to another workspace crate that's part of the publish set, use a **path-only** dev-dep that bypasses the workspace dep table entirely:
 
 ```toml
 # correct: stripped from the published manifest, still resolves locally for cargo test
 [dev-dependencies]
+blueprint-anvil-testing-utils = { path = "../testing-utils/anvil" }
 blueprint-sdk = { path = "../sdk", features = ["std"] }
 ```
 
@@ -136,12 +149,25 @@ blueprint-sdk = { path = "../sdk", features = ["std"] }
 # wrong: cargo publish carries the version constraint into the published manifest
 # and then deadlocks on the workspace cycle
 [dev-dependencies]
+blueprint-anvil-testing-utils = { workspace = true }
 blueprint-sdk = { workspace = true, features = ["std"] }
 ```
 
-If a test doesn't actually need the umbrella, just delete the dev-dep — many of the historical entries were vestigial. The truly clean alternative is to depend on the underlying sub-crate directly (e.g. `blueprint-router::Router` instead of `blueprint-sdk::Router`).
+Path-only dev-deps still respect features. If a test doesn't actually need the dep, just delete it — many of the historical entries were vestigial.
 
 **Detection:** if `gh run view <publish-crates run> --log` shows `failed to select a version for the requirement \`blueprint-* = "^X.Y.Z-alpha.N"\` ... candidate versions found which didn't match: X.Y.Z-alpha.{N-1}`, this is the symptom. The fix is always: convert the dev-dep to path-only.
+
+**Audit command:** before bumping versions and running `publish-crates`, sanity-check the publish surface:
+
+```sh
+cargo metadata --no-deps --format-version 1 \
+  | python3 -c 'import json,sys; m=json.load(sys.stdin); ws={p["name"] for p in m["packages"]}; \
+[print(p["name"], "→", d["name"]) for p in m["packages"] if p["name"] in ws \
+ for d in p["dependencies"] if d.get("kind")=="dev" and d["name"] in ws \
+ and not d["name"].startswith("workspace-hack") and d.get("req","*")!="*"]'
+```
+
+Any line printed is a workspace dev-dep that retained its version constraint in the published manifest. Confirm it does not form a cycle (target's transitive regular deps must not lead back to the source crate); if it does, convert to path-only.
 
 ## Harness Process (Required)
 

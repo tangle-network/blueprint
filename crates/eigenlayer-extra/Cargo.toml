@@ -58,7 +58,9 @@ chrono = { workspace = true, features = ["serde", "clock"] }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
-blueprint-eigenlayer-testing-utils = { workspace = true }
+# Path-only dev-dep: testing-utils -> runner -> eigenlayer-extra cycle.
+# Cargo strips path-only dev-deps from published manifests.
+blueprint-eigenlayer-testing-utils = { path = "../testing-utils/eigenlayer" }
 tempfile = { workspace = true }
 
 [features]

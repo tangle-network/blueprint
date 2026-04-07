@@ -194,47 +194,51 @@ echo ""
 echo "========================================="
 if ((${#failed_packages[@]} > 0)); then
     echo "⚠ Pass 1: Published $((total_packages - ${#failed_packages[@]}))/$total_packages packages"
-    echo "${#failed_packages[@]} failed — running pass 2 (deps may now be available)..."
+    echo "${#failed_packages[@]} failed — entering retry loop (deps may now be available)..."
     echo ""
 
-    # Pass 2: retry all failures (deps from pass 1 should now be indexed)
-    sleep 30
-    declare -a pass2_failed=()
-    for ((i=0; i<${#failed_packages[@]}; i++)); do
-        package="${failed_packages[$i]}"
-        echo "[Pass 2: $((i+1))/${#failed_packages[@]}] Publishing $package"
-        output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1 || true)
-        if echo "$output" | grep -q "Uploading\|Published"; then
-            echo "✓ Successfully published $package"
-        elif echo "$output" | grep -q "already exists"; then
-            echo "✓ $package already published (skipped)"
-        else
-            echo "✗ Failed: $(echo "$output" | grep "required by\|version for\|prerelease\|error" | head -2)"
-            pass2_failed+=("$package")
-        fi
-        sleep 10
-    done
-
-    if ((${#pass2_failed[@]} > 0 && ${#pass2_failed[@]} < ${#failed_packages[@]})); then
+    # Loop retry passes until no further progress is made.
+    # The internal dep graph is ~14 layers deep, so a fixed-pass approach
+    # (the old 3-pass version) would leak ~10 layers' worth of crates.
+    # Cap at 20 passes as a safety net so we never spin forever on a true
+    # cycle that the topo sort can't break.
+    pass=2
+    max_passes=20
+    while ((${#failed_packages[@]} > 0 && pass <= max_passes)); do
         echo ""
-        echo "Pass 2 made progress — running pass 3..."
+        echo "Pass $pass: retrying ${#failed_packages[@]} failed package(s)..."
         sleep 30
-        declare -a pass3_failed=()
-        for package in "${pass2_failed[@]}"; do
-            echo "[Pass 3] Publishing $package"
+
+        declare -a next_failed=()
+        for ((i=0; i<${#failed_packages[@]}; i++)); do
+            package="${failed_packages[$i]}"
+            echo "[Pass $pass: $((i+1))/${#failed_packages[@]}] Publishing $package"
             output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1 || true)
-            if echo "$output" | grep -q "Uploading\|Published\|already exists"; then
-                echo "✓ $package"
+            if echo "$output" | grep -q "Uploading\|Published"; then
+                echo "✓ Successfully published $package"
+            elif echo "$output" | grep -q "already exists"; then
+                echo "✓ $package already published (skipped)"
             else
-                echo "✗ $package"
-                pass3_failed+=("$package")
+                echo "✗ Failed: $(echo "$output" | grep "required by\|version for\|prerelease\|error" | head -2)"
+                next_failed+=("$package")
             fi
             sleep 10
         done
-        failed_packages=("${pass3_failed[@]}")
-    else
-        failed_packages=("${pass2_failed[@]}")
-    fi
+
+        # Bail out if we made zero progress this pass — that's a true cycle,
+        # not a "needs more time" situation.
+        if ((${#next_failed[@]} == ${#failed_packages[@]})); then
+            echo ""
+            echo "Pass $pass made no progress — remaining failures look like a true cycle."
+            failed_packages=("${next_failed[@]}")
+            break
+        fi
+
+        echo ""
+        echo "Pass $pass: published $((${#failed_packages[@]} - ${#next_failed[@]})), ${#next_failed[@]} still failing"
+        failed_packages=("${next_failed[@]}")
+        ((pass++))
+    done
 fi
 
 echo ""

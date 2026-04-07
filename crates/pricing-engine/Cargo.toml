@@ -83,9 +83,11 @@ workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true, features = ["net"] }
-blueprint-networking = { workspace = true, features = ["testing"] }
-blueprint-testing-utils = { workspace = true }
-blueprint-anvil-testing-utils = { workspace = true }
+# Path-only dev-deps to break publish cycles via testing-utils -> client-tangle -> pricing-engine.
+# Cargo strips path-only dev-deps from published manifests.
+blueprint-networking = { path = "../networking", features = ["testing"] }
+blueprint-testing-utils = { path = "../testing-utils" }
+blueprint-anvil-testing-utils = { path = "../testing-utils/anvil" }
 tempfile = { workspace = true }
 alloy-network = { workspace = true }
 alloy-signer-local = { workspace = true }

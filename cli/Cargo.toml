@@ -77,9 +77,11 @@ dirs = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
-blueprint-keystore = { workspace = true, features = ["bn254"] }
+# Path-only dev-deps to break publish cycles via testing-utils -> client-tangle -> cargo-tangle.
+# Cargo strips path-only dev-deps from published manifests.
+blueprint-keystore = { path = "../crates/keystore", features = ["bn254"] }
 tempfile = { workspace = true }
-blueprint-testing-utils = { workspace = true, features = ["anvil", "eigenlayer"] }
+blueprint-testing-utils = { path = "../crates/testing-utils", features = ["anvil", "eigenlayer"] }
 alloy-contract = { workspace = true }
 assert_cmd = "2.0"
 
