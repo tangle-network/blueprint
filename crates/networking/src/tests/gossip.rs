@@ -12,7 +12,11 @@ use blueprint_crypto::k256::K256Ecdsa;
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(20);
+// 60s, not 20s: libp2p peer discovery + gossip convergence on a loaded
+// shared CI runner routinely needs more than 20s to settle. This value
+// must leave enough headroom for the worst-case runner to reach steady
+// state; tight values here manifest as CI flakes only on busy days.
+const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 const NETWORK_NAME: &str = "gossip";
 const INSTANCE_NAME: &str = "1.0.0";
 const PROTOCOL_NAME: &str = "/gossip/1.0.0";

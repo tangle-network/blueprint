@@ -14,7 +14,11 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+// 180s, not 60s: the summation-protocol tests reliably come in at
+// ~61s on loaded CI runners (we saw 61.32s in run 24057638071),
+// missing the old 60s ceiling by ~1s. Triple the budget so the
+// runner's worst-case doesn't live on a knife edge.
+const TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
 // Protocol message types
 #[derive(Debug, Clone, Serialize, Deserialize)]

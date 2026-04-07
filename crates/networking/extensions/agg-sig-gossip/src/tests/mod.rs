@@ -153,8 +153,13 @@ async fn run_signature_aggregation_test<S: AggregatableSignature + 'static>(
     // Test message
     let message = b"test message";
 
-    // Increase timeout for testing
-    let protocol_timeout = Duration::from_secs(15);
+    // 60s, not 15s: BLS / BN254 aggregation on libp2p needs the peers to
+    // discover each other, establish transport, exchange shares, and
+    // complete the aggregation round. On a loaded shared CI runner the
+    // 15s budget is too tight — we saw all 4 aggregation tests fail
+    // repeatedly on run 24057638071 with `Err(Timeout)`. 60s leaves
+    // enough headroom for the worst-case runner.
+    let protocol_timeout = Duration::from_secs(60);
     info!("Protocol timeout set to {:?}", protocol_timeout);
 
     // Use multiple aggregators for better reliability
