@@ -1,0 +1,27 @@
+name: Live Integration Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      providers:
+        description: 'Providers to test (comma-separated: lambda_labs,runpod,tensordock)'
+        default: 'lambda_labs'
+
+jobs:
+  live-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/blueprint-remote-providers
+      - name: Run live tests
+        env:
+          LAMBDA_LABS_API_KEY: ${{ secrets.LAMBDA_LABS_API_KEY }}
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          TENSORDOCK_API_KEY: ${{ secrets.TENSORDOCK_API_KEY }}
+          TENSORDOCK_API_TOKEN: ${{ secrets.TENSORDOCK_API_TOKEN }}
+        run: |
+          cargo test -p blueprint-remote-providers --test live_integration -- --ignored --nocapture
