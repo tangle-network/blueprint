@@ -1348,4 +1348,135 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
         assert!(err.message().contains("Unknown pricing_model"));
     }
+
+    // ── TEE pricing (GetJobPrice with require_tee) ─────────────────────
+
+    fn make_tee_service(job_entries: Vec<((u64, u32), U256)>) -> PricingEngineService {
+        let mut svc = PricingEngineService::new_with_configs(
+            test_config(),
+            test_benchmark_cache(),
+            test_pricing_config(),
+            test_job_pricing_config(job_entries),
+            SubscriptionPricingConfig::new(),
+            test_signer(),
+        );
+        svc.pow_difficulty = TEST_POW_DIFFICULTY;
+        svc = svc.with_tee_pricing(crate::pricing::TeePricing {
+            available: true,
+            multiplier: rust_decimal::Decimal::new(15, 1), // 1.5x
+            provider: "aws_nitro".to_string(),
+        });
+        svc
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_tee_multiplier() {
+        let base_price = U256::from(1_000_000u64);
+        let svc = make_tee_service(vec![((42, 0), base_price)]);
+        let (ts, pow) = valid_pow(42).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 42,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: true,
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        let returned_price = U256::from_be_slice(&details.price);
+        // 1.5x multiplier: 1_000_000 * 1.5 = 1_500_000
+        assert_eq!(
+            returned_price,
+            U256::from(1_500_000u64),
+            "TEE price should be 1.5x base: expected 1500000, got {returned_price}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_tee_unavailable_rejects() {
+        // Default service has TEE unavailable
+        let svc = make_service(vec![((42, 0), U256::from(1_000_000u64))]);
+        let (ts, pow) = valid_pow(42).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 42,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: true,
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::Unavailable);
+        assert!(
+            err.message().contains("TEE"),
+            "error should mention TEE: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_tee_response_fields() {
+        let svc = make_tee_service(vec![((10, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(10).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 10,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: true,
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        assert!(resp.tee_attested, "tee_attested should be true");
+        assert_eq!(
+            resp.tee_provider, "aws_nitro",
+            "tee_provider should be aws_nitro"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_tee_confidentiality_bound() {
+        let svc = make_tee_service(vec![((10, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(10).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 10,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: true,
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        assert_eq!(
+            details.confidentiality, 1,
+            "confidentiality should be 1 when require_tee=true"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_no_tee_confidentiality_zero() {
+        let svc = make_service(vec![((10, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(10).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 10,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: false,
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        assert_eq!(
+            details.confidentiality, 0,
+            "confidentiality should be 0 when require_tee=false"
+        );
+    }
 }
