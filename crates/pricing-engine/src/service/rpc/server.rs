@@ -85,6 +85,8 @@ pub struct PricingEngineService {
     /// Optional x402 settlement config. When set, `GetJobPriceResponse` includes
     /// cross-chain payment options alongside the signed quote.
     x402_config: Option<X402SettlementConfig>,
+    /// TEE pricing configuration. Controls availability, multiplier, and provider name.
+    tee_config: crate::pricing::TeePricing,
 }
 
 impl PricingEngineService {
@@ -128,6 +130,7 @@ impl PricingEngineService {
             signer,
             pow_difficulty: DEFAULT_POW_DIFFICULTY,
             x402_config: None,
+            tee_config: crate::pricing::TeePricing::default(),
         }
     }
 
@@ -168,6 +171,15 @@ impl PricingEngineService {
     /// payment options that clients can use to settle via x402.
     pub fn with_x402_settlement(mut self, config: X402SettlementConfig) -> Self {
         self.x402_config = Some(config);
+        self
+    }
+
+    /// Attach TEE pricing configuration.
+    ///
+    /// Controls whether this operator advertises TEE capability and
+    /// what price multiplier to apply for TEE-attested quotes.
+    pub fn with_tee_pricing(mut self, tee_config: crate::pricing::TeePricing) -> Self {
+        self.tee_config = tee_config;
         self
     }
 
@@ -318,9 +330,24 @@ impl PricingEngine for PricingEngineService {
         // Get the total cost from the price model
         let crate::pricing::PriceModel {
             resources: price_resources,
-            total_cost,
+            total_cost: base_cost,
             ..
         } = price_model;
+
+        // Apply TEE pricing multiplier if requested
+        let require_tee = req.require_tee;
+        let total_cost = crate::pricing::apply_tee_pricing(base_cost, require_tee, &self.tee_config)
+            .map_err(|e| match e {
+                crate::error::PricingError::TeeNotAvailable => {
+                    Status::unavailable("TEE execution is not available on this operator")
+                }
+                other => Status::internal(format!("TEE pricing error: {other}")),
+            })?;
+        let (tee_attested, tee_provider) = if require_tee && self.tee_config.available {
+            (true, self.tee_config.provider.clone())
+        } else {
+            (false, String::new())
+        };
 
         let security_commitment = AssetSecurityCommitment {
             asset: security_requirements.asset.clone(),
@@ -364,7 +391,14 @@ impl PricingEngine for PricingEngineService {
             security_commitments: vec![security_commitment],
         };
 
-        let signable_quote = SignableQuote::new(quote_details, total_cost).map_err(|e| {
+        let confidentiality = if require_tee {
+            crate::signer::Confidentiality::Required
+        } else {
+            crate::signer::Confidentiality::Any
+        };
+        let signable_quote =
+            SignableQuote::with_confidentiality(quote_details, total_cost, confidentiality)
+                .map_err(|e| {
             error!(
                 "Failed to prepare signable quote for blueprint ID {}: {}",
                 blueprint_id, e
@@ -402,6 +436,8 @@ impl PricingEngine for PricingEngineService {
             signature: sig_bytes,
             operator_id: signed_quote.operator_id.0.to_vec(),
             proof_of_work: signed_quote.proof_of_work,
+            tee_attested,
+            tee_provider,
         };
 
         info!("Sending signed quote for blueprint ID: {}", blueprint_id);
@@ -450,6 +486,14 @@ impl PricingEngine for PricingEngineService {
             return Err(Status::invalid_argument("Invalid proof of work"));
         }
 
+        // Reject TEE requests if operator doesn't support TEE
+        let require_tee = req.require_tee;
+        if require_tee && !self.tee_config.available {
+            return Err(Status::unavailable(
+                "TEE execution is not available on this operator",
+            ));
+        }
+
         // Look up per-job price from config
         let job_pricing = self.job_pricing_config.lock().await;
         let price = match job_pricing.get(&(service_id, job_index)) {
@@ -465,6 +509,25 @@ impl PricingEngine for PricingEngineService {
             }
         };
         drop(job_pricing);
+
+        // Apply TEE multiplier to the wei price if TEE is requested.
+        let price = if require_tee {
+            // Convert U256 → Decimal, apply multiplier, convert back
+            let price_dec = rust_decimal::Decimal::from_str_exact(&price.to_string())
+                .map_err(|e| Status::internal(format!("price→Decimal: {e}")))?;
+            let adjusted = price_dec * self.tee_config.multiplier;
+            let adjusted_str = adjusted.floor().to_string();
+            alloy_primitives::U256::from_str_radix(&adjusted_str, 10)
+                .map_err(|e| Status::internal(format!("Decimal→U256: {e}")))?
+        } else {
+            price
+        };
+
+        let (tee_attested, tee_provider) = if require_tee && self.tee_config.available {
+            (true, self.tee_config.provider.clone())
+        } else {
+            (false, String::new())
+        };
 
         let timestamp = current_timestamp;
         let expiry = timestamp + self.config.quote_validity_duration_secs;
@@ -527,6 +590,8 @@ impl PricingEngine for PricingEngineService {
             proof_of_work: signed.proof_of_work,
             settlement_options,
             x402_endpoint,
+            tee_attested,
+            tee_provider,
         };
 
         info!(
@@ -604,6 +669,30 @@ pub async fn run_rpc_server(
     subscription_config: SubscriptionPricingConfig,
     signer: Arc<Mutex<OperatorSigner>>,
 ) -> anyhow::Result<()> {
+    run_rpc_server_with_tee(
+        config,
+        benchmark_cache,
+        pricing_config,
+        job_pricing_config,
+        subscription_config,
+        signer,
+        crate::pricing::TeePricing::default(),
+    )
+    .await
+}
+
+/// Run the gRPC server with TEE pricing configuration.
+pub async fn run_rpc_server_with_tee(
+    config: Arc<OperatorConfig>,
+    benchmark_cache: Arc<BenchmarkCache>,
+    pricing_config: Arc<
+        Mutex<std::collections::HashMap<Option<u64>, Vec<crate::pricing::ResourcePricing>>>,
+    >,
+    job_pricing_config: Arc<Mutex<JobPricingConfig>>,
+    subscription_config: SubscriptionPricingConfig,
+    signer: Arc<Mutex<OperatorSigner>>,
+    tee_config: crate::pricing::TeePricing,
+) -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.rpc_bind_address, config.rpc_port).parse()?;
     info!("gRPC server listening on {}", addr);
 
@@ -614,7 +703,8 @@ pub async fn run_rpc_server(
         job_pricing_config,
         subscription_config,
         signer,
-    );
+    )
+    .with_tee_pricing(tee_config);
     let server = PricingEngineServer::new(pricing_service);
 
     let cors = CorsLayer::new()
@@ -722,6 +812,7 @@ mod tests {
             job_index: 0,
             proof_of_work: pow,
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -750,6 +841,7 @@ mod tests {
                 job_index: idx,
                 proof_of_work: pow,
                 challenge_timestamp: ts,
+                require_tee: false,
             });
             let resp = svc.get_job_price(req).await.unwrap().into_inner();
             let details = resp.quote_details.unwrap();
@@ -773,6 +865,7 @@ mod tests {
             job_index: 0,
             proof_of_work: pow,
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -792,6 +885,7 @@ mod tests {
             job_index: 0,
             proof_of_work: pow,
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -810,6 +904,7 @@ mod tests {
             job_index: 1,
             proof_of_work: pow,
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -826,6 +921,7 @@ mod tests {
             job_index: 0,
             proof_of_work: pow,
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -843,6 +939,7 @@ mod tests {
             job_index: 0,
             proof_of_work: vec![],
             challenge_timestamp: 0, // 0 = missing
+            require_tee: false,
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -860,6 +957,7 @@ mod tests {
             job_index: 0,
             proof_of_work: vec![],
             challenge_timestamp: old_ts,
+            require_tee: false,
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -877,6 +975,7 @@ mod tests {
             job_index: 0,
             proof_of_work: vec![],
             challenge_timestamp: future_ts,
+            require_tee: false,
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -896,6 +995,7 @@ mod tests {
             job_index: 0,
             proof_of_work: vec![0u8; 32], // garbage PoW
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -913,6 +1013,7 @@ mod tests {
             job_index: 0,
             proof_of_work: vec![], // empty PoW
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -942,6 +1043,7 @@ mod tests {
             job_index: 0,
             proof_of_work: pow,
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -973,6 +1075,7 @@ mod tests {
             job_index: 0,
             proof_of_work: pow,
             challenge_timestamp: ts,
+            require_tee: false,
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();

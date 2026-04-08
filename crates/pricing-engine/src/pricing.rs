@@ -80,6 +80,53 @@ pub fn calculate_resource_price(
     adjusted_base_cost * adjusted_time_cost * security_factor
 }
 
+/// TEE pricing configuration.
+///
+/// Loaded from the `[tee]` section of pricing.toml:
+/// ```toml
+/// [tee]
+/// available = true
+/// multiplier = 1.5
+/// provider = "aws_nitro"
+/// ```
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TeePricing {
+    /// Whether this operator can provide TEE execution.
+    pub available: bool,
+    /// Price multiplier when TEE is requested (e.g. 1.5 = 50% premium).
+    pub multiplier: Decimal,
+    /// TEE provider name (e.g. "aws_nitro", "intel_tdx").
+    pub provider: String,
+}
+
+impl Default for TeePricing {
+    fn default() -> Self {
+        Self {
+            available: false,
+            multiplier: Decimal::ONE,
+            provider: String::new(),
+        }
+    }
+}
+
+/// Apply TEE pricing adjustment to a base cost.
+///
+/// If `require_tee` is true and TEE is available, multiplies by the configured
+/// TEE premium. If `require_tee` is true but TEE is unavailable, returns an error.
+pub fn apply_tee_pricing(
+    base_cost: Decimal,
+    require_tee: bool,
+    tee_config: &TeePricing,
+) -> Result<Decimal> {
+    if !require_tee {
+        return Ok(base_cost);
+    }
+    if !tee_config.available {
+        return Err(PricingError::TeeNotAvailable);
+    }
+    Ok(base_cost * tee_config.multiplier)
+}
+
 /// Calculate the price for a subscription-based blueprint.
 /// Returns a flat rate per billing interval, ignoring resource usage and TTL.
 pub fn calculate_subscription_price(
@@ -517,4 +564,54 @@ pub fn load_subscription_pricing_from_toml(
     }
 
     Ok(config)
+}
+
+/// Load TEE pricing from a pricing.toml file.
+///
+/// Reads the `[tee]` section. Returns `TeePricing::default()` (unavailable) if absent.
+///
+/// ```toml
+/// [tee]
+/// available = true
+/// multiplier = 1.5
+/// provider = "aws_nitro"
+/// ```
+pub fn load_tee_pricing_from_toml(content: &str) -> Result<TeePricing> {
+    let parsed: toml::Value = toml::from_str(content)?;
+
+    let Some(tee_section) = parsed.get("tee").and_then(|v| v.as_table()) else {
+        return Ok(TeePricing::default());
+    };
+
+    let available = tee_section
+        .get("available")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let multiplier = tee_section
+        .get("multiplier")
+        .and_then(|v| {
+            v.as_float()
+                .and_then(|f| Decimal::try_from(f).ok())
+                .or_else(|| v.as_integer().map(Decimal::from))
+        })
+        .unwrap_or(Decimal::ONE);
+
+    if multiplier <= Decimal::ZERO {
+        return Err(PricingError::Config(
+            "TEE multiplier must be positive".to_string(),
+        ));
+    }
+
+    let provider = tee_section
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Ok(TeePricing {
+        available,
+        multiplier,
+        provider,
+    })
 }

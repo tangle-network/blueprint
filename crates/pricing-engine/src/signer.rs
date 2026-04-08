@@ -36,9 +36,33 @@ pub struct SignableQuote {
     abi_details: ITangleTypes::QuoteDetails,
 }
 
+/// Confidentiality level for EIP-712 quote signing.
+///
+/// Prevents replay: a non-TEE quote can't be submitted for a TEE-required service.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Confidentiality {
+    /// No TEE required.
+    Any = 0,
+    /// TEE is required.
+    Required = 1,
+    /// TEE is preferred but not mandatory.
+    Preferred = 2,
+}
+
 impl SignableQuote {
+    /// Create a new signable quote with default confidentiality (Any = 0).
     pub fn new(details: pricing_engine::QuoteDetails, total_cost: Decimal) -> Result<Self> {
-        let abi_details = build_abi_quote_details(&details, total_cost)?;
+        Self::with_confidentiality(details, total_cost, Confidentiality::Any)
+    }
+
+    /// Create a new signable quote with explicit confidentiality level.
+    pub fn with_confidentiality(
+        details: pricing_engine::QuoteDetails,
+        total_cost: Decimal,
+        confidentiality: Confidentiality,
+    ) -> Result<Self> {
+        let abi_details = build_abi_quote_details(&details, total_cost, confidentiality as u8)?;
         Ok(Self {
             proto_details: details,
             abi_details,
@@ -246,6 +270,7 @@ pub fn job_quote_digest_eip712(
 fn build_abi_quote_details(
     details: &pricing_engine::QuoteDetails,
     total_cost: Decimal,
+    confidentiality: u8,
 ) -> Result<ITangleTypes::QuoteDetails> {
     let security_commitments = details
         .security_commitments
@@ -264,7 +289,7 @@ fn build_abi_quote_details(
         totalCost: decimal_to_scaled_amount(total_cost)?,
         timestamp: details.timestamp,
         expiry: details.expiry,
-        confidentiality: 0u8,
+        confidentiality,
         securityCommitments: security_commitments,
         resourceCommitments: resource_commitments,
     })

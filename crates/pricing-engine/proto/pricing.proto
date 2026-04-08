@@ -75,6 +75,8 @@ message GetPriceRequest {
   // subscription rate instead of computing from resources and TTL.
   // Defaults to PAY_ONCE (0) for backwards compatibility.
   PricingModelHint pricing_model = 7;
+  // Whether the customer requires TEE-attested service execution.
+  bool require_tee = 8;
 }
 
 // Resource requirement for a specific resource type
@@ -95,6 +97,10 @@ message GetPriceResponse {
   bytes operator_id = 3;
   // Proof of work response
   bytes proof_of_work = 4;
+  // Whether this quote is backed by TEE attestation.
+  bool tee_attested = 5;
+  // TEE provider name (e.g. "aws_nitro", "intel_tdx"). Empty if not attested.
+  string tee_provider = 6;
 }
 
 // The detailed quote information
@@ -139,6 +145,8 @@ message GetJobPriceRequest {
   bytes proof_of_work = 3;
   // Timestamp used for generating the challenge
   uint64 challenge_timestamp = 4;
+  // Whether the customer requires TEE-attested service execution.
+  bool require_tee = 5;
 }
 
 // Response message for GetJobPrice RPC
@@ -158,6 +166,10 @@ message GetJobPriceResponse {
   repeated SettlementOption settlement_options = 5;
   // Operator's x402 gateway endpoint URL (e.g. "https://operator.example.com:8402")
   string x402_endpoint = 6;
+  // Whether this quote is backed by TEE attestation.
+  bool tee_attested = 7;
+  // TEE provider name (e.g. "aws_nitro", "intel_tdx"). Empty if not attested.
+  string tee_provider = 8;
 }
 
 // A cross-chain settlement option for x402 payment.
