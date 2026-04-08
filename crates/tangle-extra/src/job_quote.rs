@@ -236,6 +236,11 @@ fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
 /// for submission via `TangleClient::submit_job_from_quote`.
 ///
 /// Produces a 65-byte ECDSA signature (r || s || v) where v = 27 + recovery_id.
+///
+/// NOTE: The on-chain `JobQuoteDetails` struct does not yet include `confidentiality`.
+/// The EIP-712 typehash signs over it, so once the Solidity struct is updated this
+/// conversion must include the field. Until then, only `confidentiality = 0` quotes
+/// will verify on-chain correctly.
 impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::SignedJobQuote {
     fn from(quote: SignedJobQuote) -> Self {
         use blueprint_crypto::BytesEncoding;
@@ -312,6 +317,27 @@ mod tests {
         assert_ne!(
             hash_job_quote_details(&details1),
             hash_job_quote_details(&details2)
+        );
+    }
+
+    #[test]
+    fn test_confidentiality_changes_hash() {
+        let base = JobQuoteDetails {
+            service_id: 1,
+            job_index: 0,
+            price: U256::from(100u64),
+            timestamp: 1700000000,
+            expiry: 1700003600,
+            confidentiality: 0,
+        };
+        let tee_required = JobQuoteDetails {
+            confidentiality: 1,
+            ..base.clone()
+        };
+        // A non-TEE quote must NOT be replayable as a TEE-required quote
+        assert_ne!(
+            hash_job_quote_details(&base),
+            hash_job_quote_details(&tee_required),
         );
     }
 

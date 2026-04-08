@@ -247,7 +247,12 @@ fn proto_to_native_job_quote(
         price,
         timestamp: details.timestamp,
         expiry: details.expiry,
-        confidentiality: details.confidentiality as u8,
+        confidentiality: u8::try_from(details.confidentiality).map_err(|_| {
+            PricingError::Signing(format!(
+                "confidentiality {} exceeds u8 range (max 255)",
+                details.confidentiality
+            ))
+        })?,
     })
 }
 
