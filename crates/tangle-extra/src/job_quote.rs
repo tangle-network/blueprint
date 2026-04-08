@@ -550,7 +550,7 @@ mod tests {
             confidentiality: 0,
         };
 
-        let digest = job_quote_digest_eip712(&details, domain);
+        let _digest = job_quote_digest_eip712(&details, domain);
 
         // Sign and verify the digest recovers to the expected address
         let mut signer = JobQuoteSigner::new(keypair, domain).unwrap();
