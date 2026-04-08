@@ -200,6 +200,8 @@ impl OperatorSigner {
     ///
     /// The EIP-712 digest matches `SignatureLib.computeJobQuoteDigest()` in tnt-core.
     /// Uses `sign_prehash_recoverable` to sign the raw digest directly.
+    /// The proto `details.confidentiality` is bound into the EIP-712 signature
+    /// to prevent replay of a non-TEE quote for a TEE-required service.
     pub fn sign_job_quote(
         &mut self,
         details: &crate::pricing_engine::JobQuoteDetails,
@@ -245,6 +247,7 @@ fn proto_to_native_job_quote(
         price,
         timestamp: details.timestamp,
         expiry: details.expiry,
+        confidentiality: details.confidentiality as u8,
     })
 }
 

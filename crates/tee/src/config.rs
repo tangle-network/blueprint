@@ -271,8 +271,12 @@ pub struct TeeKeyExchangeConfig {
     ///
     /// This prevents a compromised operator from substituting a different TEE's
     /// attestation during key exchange.
-    #[serde(default)]
+    #[serde(default = "default_on_chain_verification")]
     pub on_chain_verification: bool,
+}
+
+fn default_on_chain_verification() -> bool {
+    true
 }
 
 fn default_session_ttl_secs() -> u64 {
@@ -288,7 +292,7 @@ impl Default for TeeKeyExchangeConfig {
         Self {
             session_ttl_secs: default_session_ttl_secs(),
             max_sessions: default_max_sessions(),
-            on_chain_verification: false,
+            on_chain_verification: true,
         }
     }
 }

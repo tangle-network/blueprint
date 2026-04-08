@@ -152,6 +152,8 @@ fn test_resource_spec_conversion_accuracy() {
             memory_size: 8 * 1024 * 1024 * 1024, // 8 GB in bytes
             storage_space: 100 * 1024 * 1024 * 1024, // 100 GB in bytes
             gpu_count: Some(1),
+            gpu_policy: blueprint_manager::rt::GpuSchedulingPolicy::Required,
+            gpu_min_vram_gb: Some(40),
             network_bandwidth: Some(1000), // 1 Gbps
         };
 

@@ -79,7 +79,7 @@ pub fn build_capabilities_matrix(
 
     for (provider, _region) in &providers_with_regions {
         let selection = map_provider_instance(provider, &spec);
-        let provider_supports_tee = supports_tee(provider);
+        let provider_supports_tee = provider_supports_tee_instances(provider);
         let hourly = selection.estimated_hourly_cost.unwrap_or(0.0);
 
         // Skip providers that returned zero cost (unconfigured or mapping failed)
@@ -146,7 +146,7 @@ pub fn derive_pricing(cap: &OperatorCapability, margin: f64) -> DerivedPricing {
 #[derive(Debug, Clone)]
 pub struct ThroughputEstimate {
     /// Tokens per GPU-hour (input + output combined). Varies by model size:
-    /// - 7B model on A100: ~200K tokens/hr
+    /// - 7B model on A100: ~100-150K tokens/hr
     /// - 70B model on A100: ~30K tokens/hr
     /// - 405B on 8xA100: ~15K tokens/hr
     pub tokens_per_hour: f64,
@@ -162,11 +162,22 @@ pub struct ThroughputEstimate {
 impl Default for ThroughputEstimate {
     fn default() -> Self {
         Self {
-            tokens_per_hour: 50_000.0, // conservative: 70B model on A100
+            tokens_per_hour: 30_000.0, // conservative: 70B model on A100 (published benchmarks: 20-35K)
             images_per_hour: 400.0,     // conservative: SDXL on A100
             token_decimals: 6,          // USDC default
         }
     }
+}
+
+/// Safely convert an f64 to u64, clamping NaN/Inf/negative to 0 and overflow to u64::MAX.
+fn safe_f64_to_u64(value: f64) -> u64 {
+    if value.is_nan() || value.is_infinite() || value < 0.0 {
+        return 0;
+    }
+    if value > u64::MAX as f64 {
+        return u64::MAX;
+    }
+    value as u64
 }
 
 pub fn derive_pricing_with_throughput(
@@ -178,10 +189,10 @@ pub fn derive_pricing_with_throughput(
     let base_unit = 10_f64.powi(throughput.token_decimals as i32);
 
     let cost_per_token = (hourly / throughput.tokens_per_hour) * base_unit;
-    let price_per_input_token = (cost_per_token * 0.4).ceil() as u64;
-    let price_per_output_token = (cost_per_token * 1.0).ceil() as u64;
-    let price_per_compute_second = ((hourly / 3600.0) * base_unit).ceil() as u64;
-    let price_per_image = ((hourly / throughput.images_per_hour) * base_unit).ceil() as u64;
+    let price_per_input_token = safe_f64_to_u64((cost_per_token * 0.4).ceil());
+    let price_per_output_token = safe_f64_to_u64((cost_per_token * 1.0).ceil());
+    let price_per_compute_second = safe_f64_to_u64(((hourly / 3600.0) * base_unit).ceil());
+    let price_per_image = safe_f64_to_u64(((hourly / throughput.images_per_hour) * base_unit).ceil());
 
     DerivedPricing {
         capability: cap.clone(),
@@ -234,10 +245,18 @@ pub fn generate_pricing_toml(configs: &[DerivedPricing], tee_capable: bool) -> S
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-fn supports_tee(provider: &CloudProvider) -> bool {
+/// Whether a cloud provider offers TEE-capable instances.
+///
+/// This answers "can this PROVIDER provision TEE instances?", not "is THIS
+/// machine running in a TEE?". For local hardware detection, see
+/// `blueprint_tee::runtime::detect::detect_tee_provider`.
+fn provider_supports_tee_instances(provider: &CloudProvider) -> bool {
     matches!(
         provider,
-        CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure | CloudProvider::CoreWeave
+        CloudProvider::AWS       // Nitro Enclaves, SEV-SNP on c6a/m6a
+        | CloudProvider::GCP     // Confidential VMs (SEV-SNP, TDX)
+        | CloudProvider::Azure   // DCasv5 (SEV-SNP), ECasv5
+        | CloudProvider::CoreWeave // Can provision on TDX/SEV hardware
     )
 }
 
@@ -273,7 +292,8 @@ fn map_provider_instance(provider: &CloudProvider, spec: &ResourceSpec) -> Insta
 
 fn estimate_vram_mib(instance_type: &str) -> u32 {
     let lower = instance_type.to_lowercase();
-    if lower.contains("h100") || lower.contains("h200") { 81920 }
+    if lower.contains("h200") { 144384 } // 141 GB HBM3e
+    else if lower.contains("h100") { 81920 }
     else if lower.contains("a100") && lower.contains("80") { 81920 }
     else if lower.contains("a100") { 40960 }
     else if lower.contains("a6000") || lower.contains("rtx6000") { 49152 }
@@ -334,17 +354,21 @@ mod tests {
 
     #[test]
     fn tee_only_hyperscalers_and_coreweave() {
-        assert!(supports_tee(&CloudProvider::AWS));
-        assert!(supports_tee(&CloudProvider::GCP));
-        assert!(supports_tee(&CloudProvider::Azure));
-        assert!(supports_tee(&CloudProvider::CoreWeave));
+        assert!(provider_supports_tee_instances(&CloudProvider::AWS));
+        assert!(provider_supports_tee_instances(&CloudProvider::GCP));
+        assert!(provider_supports_tee_instances(&CloudProvider::Azure));
+        assert!(provider_supports_tee_instances(&CloudProvider::CoreWeave));
         // GPU marketplaces don't offer TEE
-        assert!(!supports_tee(&CloudProvider::RunPod));
-        assert!(!supports_tee(&CloudProvider::LambdaLabs));
-        assert!(!supports_tee(&CloudProvider::VastAi));
-        assert!(!supports_tee(&CloudProvider::Paperspace));
-        assert!(!supports_tee(&CloudProvider::Fluidstack));
-        assert!(!supports_tee(&CloudProvider::TensorDock));
+        assert!(!provider_supports_tee_instances(&CloudProvider::RunPod));
+        assert!(!provider_supports_tee_instances(&CloudProvider::LambdaLabs));
+        assert!(!provider_supports_tee_instances(&CloudProvider::VastAi));
+        assert!(!provider_supports_tee_instances(&CloudProvider::Paperspace));
+        assert!(!provider_supports_tee_instances(&CloudProvider::Fluidstack));
+        assert!(!provider_supports_tee_instances(&CloudProvider::TensorDock));
+        // Decentralized providers: Akash can run on TEE hardware but we can't
+        // guarantee it; Render has no TEE offering.
+        assert!(!provider_supports_tee_instances(&CloudProvider::Akash));
+        assert!(!provider_supports_tee_instances(&CloudProvider::Render));
     }
 
     // ── Pricing derivation ──────────────────────────────────────────────
@@ -477,5 +501,25 @@ mod tests {
         let toml = generate_pricing_toml(&[], false);
         assert!(toml.contains("[default]"));
         assert!(toml.contains("[tee]"));
+    }
+
+    #[test]
+    fn vram_h200_separate_from_h100() {
+        assert_eq!(estimate_vram_mib("gpu_1x_h200"), 144384);
+        assert_eq!(estimate_vram_mib("H200_SXM"), 144384);
+        // H100 is still 80 GB
+        assert_eq!(estimate_vram_mib("gpu_1x_h100_pcie"), 81920);
+    }
+
+    #[test]
+    fn pricing_with_18_decimal_token_doesnt_overflow() {
+        let cap = OperatorCapability { hourly_cost_usd: 100.0, ..a100_cap() };
+        let pricing = derive_pricing_with_throughput(&cap, 10.0, &ThroughputEstimate {
+            tokens_per_hour: 1.0,  // extreme: 1 token per hour
+            images_per_hour: 1.0,
+            token_decimals: 18,    // ETH-like
+        });
+        // Should not panic, values should be capped at u64::MAX or saturated
+        assert!(pricing.price_per_input_token > 0);
     }
 }

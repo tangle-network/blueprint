@@ -6,9 +6,9 @@ use blueprint_tee::errors::TeeError;
 #[test]
 fn test_default_config() {
     let config = TeeConfig::default();
-    assert_eq!(config.mode, TeeMode::Disabled);
+    assert_eq!(config.mode, TeeMode::Auto);
     assert_eq!(config.requirement, TeeRequirement::Preferred);
-    assert!(!config.is_enabled());
+    assert!(config.is_enabled());
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn test_builder_defaults() {
     let config = TeeConfig::builder()
         .build()
         .expect("should build with defaults");
-    assert_eq!(config.mode, TeeMode::Disabled);
+    assert_eq!(config.mode, TeeMode::Auto);
     assert_eq!(config.requirement, TeeRequirement::Preferred);
     assert_eq!(config.max_attestation_age_secs, 3600);
     assert_eq!(config.key_exchange.session_ttl_secs, 300);
@@ -120,7 +120,7 @@ fn test_key_exchange_config_defaults() {
     let config = TeeKeyExchangeConfig::default();
     assert_eq!(config.session_ttl_secs, 300);
     assert_eq!(config.max_sessions, 64);
-    assert!(!config.on_chain_verification);
+    assert!(config.on_chain_verification);
 }
 
 #[test]
@@ -148,8 +148,18 @@ fn test_lifecycle_policy_cloud_managed_when_enabled() {
 }
 
 #[test]
-fn test_lifecycle_policy_container_when_disabled() {
+fn test_lifecycle_policy_cloud_managed_when_auto() {
+    // Auto mode is considered enabled, so lifecycle is CloudManaged
     let config = TeeConfig::default();
+    assert_eq!(config.lifecycle_policy(), RuntimeLifecyclePolicy::CloudManaged);
+}
+
+#[test]
+fn test_lifecycle_policy_container_when_disabled() {
+    let config = TeeConfig::builder()
+        .mode(TeeMode::Disabled)
+        .build()
+        .unwrap();
     assert_eq!(config.lifecycle_policy(), RuntimeLifecyclePolicy::Container);
 }
 

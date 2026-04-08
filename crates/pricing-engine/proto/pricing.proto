@@ -201,4 +201,8 @@ message JobQuoteDetails {
   uint64 timestamp = 4;
   // Expiry timestamp for the quote
   uint64 expiry = 5;
+  // Confidentiality level (0=Any, 1=Required, 2=Preferred).
+  // Bound into the EIP-712 signature to prevent replay of
+  // a non-TEE quote for a TEE-required service.
+  uint32 confidentiality = 6;
 }

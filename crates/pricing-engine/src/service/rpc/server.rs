@@ -532,12 +532,14 @@ impl PricingEngine for PricingEngineService {
         let timestamp = current_timestamp;
         let expiry = timestamp + self.config.quote_validity_duration_secs;
 
+        let confidentiality = if require_tee { 1u32 } else { 0u32 };
         let proto_details = ProtoJobQuoteDetails {
             service_id,
             job_index,
             price: price.to_be_bytes_vec(),
             timestamp,
             expiry,
+            confidentiality,
         };
 
         // Generate proof of work for response
@@ -1158,6 +1160,7 @@ mod tests {
                 maximum_exposure_percent: 100,
             }),
             pricing_model: 1, // SUBSCRIPTION
+            require_tee: false,
         });
 
         let resp = svc.get_price(req).await.unwrap().into_inner();
@@ -1196,6 +1199,7 @@ mod tests {
                 maximum_exposure_percent: 100,
             }),
             pricing_model: 1, // SUBSCRIPTION
+            require_tee: false,
         });
 
         // Should succeed despite no benchmark profile
@@ -1238,6 +1242,7 @@ mod tests {
                 maximum_exposure_percent: 100,
             }),
             pricing_model: 1, // SUBSCRIPTION
+            require_tee: false,
         });
 
         let err = svc.get_price(req).await.unwrap_err();
@@ -1268,6 +1273,7 @@ mod tests {
                 maximum_exposure_percent: 100,
             }),
             pricing_model: 0, // PAY_ONCE (default)
+            require_tee: false,
         });
 
         // Should fail because no benchmark profile exists
@@ -1298,6 +1304,7 @@ mod tests {
                 maximum_exposure_percent: 100,
             }),
             pricing_model: 2, // EVENT_DRIVEN
+            require_tee: false,
         });
 
         let resp = svc.get_price(req).await.unwrap().into_inner();
@@ -1332,6 +1339,7 @@ mod tests {
                 maximum_exposure_percent: 100,
             }),
             pricing_model: 99, // Unknown
+            require_tee: false,
         });
 
         let err = svc.get_price(req).await.unwrap_err();
