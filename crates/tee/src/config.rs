@@ -10,8 +10,11 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TeeMode {
-    /// TEE is disabled; no TEE operations are performed.
+    /// Probe for TEE hardware at startup.
+    /// If detected, activate TEE (equivalent to Direct). Otherwise, run without TEE.
     #[default]
+    Auto,
+    /// TEE is disabled; no TEE operations are performed.
     Disabled,
     /// The runner itself is executing inside a TEE.
     /// Device passthrough, hardened defaults, native attestation.
@@ -398,8 +401,8 @@ impl TeeConfig {
             ));
         }
 
-        // TEE-enabled configs must use SealedOnly
-        if self.mode != TeeMode::Disabled
+        // TEE-enabled configs must use SealedOnly (Auto is exempt — resolved at runtime)
+        if !matches!(self.mode, TeeMode::Disabled | TeeMode::Auto)
             && self.secret_injection != SecretInjectionPolicy::SealedOnly
         {
             return Err(TeeError::Config(
@@ -543,7 +546,8 @@ impl TeeConfigBuilder {
         // TEE-enabled deployments must use SealedOnly secret injection.
         // Container recreation (env-var re-injection) invalidates attestation,
         // breaks sealed secrets, and loses the on-chain deployment ID.
-        let secret_injection = if mode != TeeMode::Disabled {
+        // Auto mode uses EnvOrSealed until resolved at runtime.
+        let secret_injection = if !matches!(mode, TeeMode::Disabled | TeeMode::Auto) {
             SecretInjectionPolicy::SealedOnly
         } else {
             SecretInjectionPolicy::EnvOrSealed

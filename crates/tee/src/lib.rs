@@ -64,3 +64,4 @@ pub use runtime::{
     BackendRegistry, TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeePublicKey,
     TeeRuntimeBackend,
 };
+pub use runtime::detect::detect_tee_provider;
