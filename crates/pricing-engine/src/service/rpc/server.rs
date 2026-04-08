@@ -2,7 +2,8 @@ use crate::benchmark_cache::BenchmarkCache;
 use crate::config::OperatorConfig;
 use crate::pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
 use crate::pricing::{
-    SubscriptionPricing, calculate_event_price, calculate_price, calculate_subscription_price,
+    SubscriptionPricing, calculate_event_price, calculate_price_with_curve,
+    calculate_subscription_price,
 };
 use crate::signer::{OperatorSigner, SignableQuote, SignedQuote as SignerSignedQuote};
 use blueprint_core::{error, info, warn};
@@ -87,6 +88,8 @@ pub struct PricingEngineService {
     x402_config: Option<X402SettlementConfig>,
     /// TEE pricing configuration. Controls availability, multiplier, and provider name.
     tee_config: crate::pricing::TeePricing,
+    /// Optional TTL pricing curve for non-linear duration-based pricing.
+    ttl_curve: Option<crate::pricing::TtlPricingCurve>,
 }
 
 impl PricingEngineService {
@@ -131,6 +134,7 @@ impl PricingEngineService {
             pow_difficulty: DEFAULT_POW_DIFFICULTY,
             x402_config: None,
             tee_config: crate::pricing::TeePricing::default(),
+            ttl_curve: None,
         }
     }
 
@@ -180,6 +184,16 @@ impl PricingEngineService {
     /// what price multiplier to apply for TEE-attested quotes.
     pub fn with_tee_pricing(mut self, tee_config: crate::pricing::TeePricing) -> Self {
         self.tee_config = tee_config;
+        self
+    }
+
+    /// Attach a TTL pricing curve for non-linear duration-based pricing.
+    ///
+    /// When set, the pricing engine applies a curve multiplier to TTL-based
+    /// quotes instead of pure linear scaling. This allows operators to offer
+    /// volume discounts for longer commitments.
+    pub fn with_ttl_curve(mut self, curve: crate::pricing::TtlPricingCurve) -> Self {
+        self.ttl_curve = Some(curve);
         self
     }
 
@@ -308,12 +322,13 @@ impl PricingEngine for PricingEngineService {
                 };
 
                 let pricing_config = self.pricing_config.lock().await;
-                match calculate_price(
+                match calculate_price_with_curve(
                     benchmark_profile,
                     &pricing_config,
                     Some(blueprint_id),
                     ttl_blocks,
                     Some(&security_requirements),
+                    self.ttl_curve.as_ref(),
                 ) {
                     Ok(model) => model,
                     Err(e) => {
