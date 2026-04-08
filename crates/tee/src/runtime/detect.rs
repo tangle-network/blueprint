@@ -49,11 +49,7 @@ pub fn detect_tee_provider() -> Option<TeeProvider> {
 
     // GCP Confidential Space: attestation token file (only exists in real
     // Confidential Space, more robust than env var alone)
-    if std::path::Path::new(
-        "/run/container_launcher/attestation_verifier_claims_token",
-    )
-    .exists()
-    {
+    if std::path::Path::new("/run/container_launcher/attestation_verifier_claims_token").exists() {
         return Some(TeeProvider::GcpConfidential);
     }
     // Fallback: env var (less secure but catches more configurations)

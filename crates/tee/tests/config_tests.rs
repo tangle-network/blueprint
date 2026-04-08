@@ -151,7 +151,10 @@ fn test_lifecycle_policy_cloud_managed_when_enabled() {
 fn test_lifecycle_policy_cloud_managed_when_auto() {
     // Auto mode is considered enabled, so lifecycle is CloudManaged
     let config = TeeConfig::default();
-    assert_eq!(config.lifecycle_policy(), RuntimeLifecyclePolicy::CloudManaged);
+    assert_eq!(
+        config.lifecycle_policy(),
+        RuntimeLifecyclePolicy::CloudManaged
+    );
 }
 
 #[test]

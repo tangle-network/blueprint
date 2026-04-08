@@ -4,10 +4,10 @@
 //! Used during pre-registration to auto-generate registration payloads and
 //! pricing configs without the operator manually declaring hardware specs.
 
-use blueprint_remote_providers::core::resources::ResourceSpec;
-use blueprint_remote_providers::CloudProvider;
-use blueprint_remote_providers::providers::common::InstanceSelection;
 use crate::config::BlueprintManagerContext;
+use blueprint_remote_providers::CloudProvider;
+use blueprint_remote_providers::core::resources::ResourceSpec;
+use blueprint_remote_providers::providers::common::InstanceSelection;
 use serde::{Deserialize, Serialize};
 
 /// A single deployable configuration an operator can offer.
@@ -163,8 +163,8 @@ impl Default for ThroughputEstimate {
     fn default() -> Self {
         Self {
             tokens_per_hour: 30_000.0, // conservative: 70B model on A100 (published benchmarks: 20-35K)
-            images_per_hour: 400.0,     // conservative: SDXL on A100
-            token_decimals: 6,          // USDC default
+            images_per_hour: 400.0,    // conservative: SDXL on A100
+            token_decimals: 6,         // USDC default
         }
     }
 }
@@ -192,7 +192,8 @@ pub fn derive_pricing_with_throughput(
     let price_per_input_token = safe_f64_to_u64((cost_per_token * 0.4).ceil());
     let price_per_output_token = safe_f64_to_u64((cost_per_token * 1.0).ceil());
     let price_per_compute_second = safe_f64_to_u64(((hourly / 3600.0) * base_unit).ceil());
-    let price_per_image = safe_f64_to_u64(((hourly / throughput.images_per_hour) * base_unit).ceil());
+    let price_per_image =
+        safe_f64_to_u64(((hourly / throughput.images_per_hour) * base_unit).ceil());
 
     DerivedPricing {
         capability: cap.clone(),
@@ -214,7 +215,8 @@ pub fn generate_pricing_toml(configs: &[DerivedPricing], tee_capable: bool) -> S
         if cap.gpu_count > 0 {
             toml.push_str(&format!(
                 "  {{ kind = \"GPU\", count = {}, price_per_unit_rate = {:.6} }},\n",
-                cap.gpu_count, cap.hourly_cost_usd * primary.margin / cap.gpu_count as f64
+                cap.gpu_count,
+                cap.hourly_cost_usd * primary.margin / cap.gpu_count as f64
             ));
         }
         toml.push_str(&format!(
@@ -226,7 +228,10 @@ pub fn generate_pricing_toml(configs: &[DerivedPricing], tee_capable: bool) -> S
         // Per-job pricing
         toml.push_str(&format!(
             "# Auto-generated from {} {} (${:.2}/hr + {:.0}% margin)\n",
-            cap.provider, cap.instance_type, cap.hourly_cost_usd, (primary.margin - 1.0) * 100.0
+            cap.provider,
+            cap.instance_type,
+            cap.hourly_cost_usd,
+            (primary.margin - 1.0) * 100.0
         ));
         toml.push_str(&format!(
             "[0]\n0 = \"{}\"\n\n",
@@ -264,19 +269,71 @@ fn configured_providers(
     config: &blueprint_remote_providers::config::CloudConfig,
 ) -> Vec<(CloudProvider, String)> {
     let mut providers = Vec::new();
-    if let Some(c) = &config.lambda_labs { if c.enabled { providers.push((CloudProvider::LambdaLabs, c.region.clone())); } }
-    if let Some(c) = &config.runpod { if c.enabled { providers.push((CloudProvider::RunPod, c.region.clone())); } }
-    if let Some(c) = &config.vast_ai { if c.enabled { providers.push((CloudProvider::VastAi, "global".into())); } }
-    if let Some(c) = &config.coreweave { if c.enabled { providers.push((CloudProvider::CoreWeave, c.region.clone())); } }
-    if let Some(c) = &config.paperspace { if c.enabled { providers.push((CloudProvider::Paperspace, c.region.clone())); } }
-    if let Some(c) = &config.fluidstack { if c.enabled { providers.push((CloudProvider::Fluidstack, c.region.clone())); } }
-    if let Some(c) = &config.tensordock { if c.enabled { providers.push((CloudProvider::TensorDock, c.region.clone())); } }
-    if let Some(c) = &config.akash { if c.enabled { providers.push((CloudProvider::Akash, "global".into())); } }
-    if let Some(c) = &config.io_net { if c.enabled { providers.push((CloudProvider::IoNet, c.region.clone())); } }
-    if let Some(c) = &config.prime_intellect { if c.enabled { providers.push((CloudProvider::PrimeIntellect, c.region.clone())); } }
-    if let Some(c) = &config.aws { if c.enabled { providers.push((CloudProvider::AWS, c.region.clone())); } }
-    if let Some(c) = &config.gcp { if c.enabled { providers.push((CloudProvider::GCP, c.region.clone())); } }
-    if let Some(c) = &config.azure { if c.enabled { providers.push((CloudProvider::Azure, c.region.clone())); } }
+    if let Some(c) = &config.lambda_labs {
+        if c.enabled {
+            providers.push((CloudProvider::LambdaLabs, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.runpod {
+        if c.enabled {
+            providers.push((CloudProvider::RunPod, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.vast_ai {
+        if c.enabled {
+            providers.push((CloudProvider::VastAi, "global".into()));
+        }
+    }
+    if let Some(c) = &config.coreweave {
+        if c.enabled {
+            providers.push((CloudProvider::CoreWeave, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.paperspace {
+        if c.enabled {
+            providers.push((CloudProvider::Paperspace, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.fluidstack {
+        if c.enabled {
+            providers.push((CloudProvider::Fluidstack, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.tensordock {
+        if c.enabled {
+            providers.push((CloudProvider::TensorDock, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.akash {
+        if c.enabled {
+            providers.push((CloudProvider::Akash, "global".into()));
+        }
+    }
+    if let Some(c) = &config.io_net {
+        if c.enabled {
+            providers.push((CloudProvider::IoNet, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.prime_intellect {
+        if c.enabled {
+            providers.push((CloudProvider::PrimeIntellect, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.aws {
+        if c.enabled {
+            providers.push((CloudProvider::AWS, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.gcp {
+        if c.enabled {
+            providers.push((CloudProvider::GCP, c.region.clone()));
+        }
+    }
+    if let Some(c) = &config.azure {
+        if c.enabled {
+            providers.push((CloudProvider::Azure, c.region.clone()));
+        }
+    }
     providers
 }
 
@@ -292,18 +349,33 @@ fn map_provider_instance(provider: &CloudProvider, spec: &ResourceSpec) -> Insta
 
 fn estimate_vram_mib(instance_type: &str) -> u32 {
     let lower = instance_type.to_lowercase();
-    if lower.contains("h200") { 144384 } // 141 GB HBM3e
-    else if lower.contains("h100") { 81920 }
-    else if lower.contains("a100") && lower.contains("80") { 81920 }
-    else if lower.contains("a100") { 40960 }
-    else if lower.contains("a6000") || lower.contains("rtx6000") { 49152 }
-    else if lower.contains("a40") { 49152 }
-    else if lower.contains("4090") { 24576 }
-    else if lower.contains("3090") { 24576 }
-    else if lower.contains("a10") { 24576 }
-    else if lower.contains("t4") { 16384 }
-    else if lower.contains("4080") { 16384 }
-    else { 16384 } // default to T4 class
+    if lower.contains("h200") {
+        144384
+    }
+    // 141 GB HBM3e
+    else if lower.contains("h100") {
+        81920
+    } else if lower.contains("a100") && lower.contains("80") {
+        81920
+    } else if lower.contains("a100") {
+        40960
+    } else if lower.contains("a6000") || lower.contains("rtx6000") {
+        49152
+    } else if lower.contains("a40") {
+        49152
+    } else if lower.contains("4090") {
+        24576
+    } else if lower.contains("3090") {
+        24576
+    } else if lower.contains("a10") {
+        24576
+    } else if lower.contains("t4") {
+        16384
+    } else if lower.contains("4080") {
+        16384
+    } else {
+        16384
+    } // default to T4 class
 }
 
 #[cfg(test)]
@@ -333,8 +405,8 @@ mod tests {
 
     #[test]
     fn vram_a100_40_vs_80() {
-        assert_eq!(estimate_vram_mib("gpu_1x_a100"), 40960);      // no "80" → 40GB
-        assert_eq!(estimate_vram_mib("a100_80gb_pcie"), 81920);    // has "80" → 80GB
+        assert_eq!(estimate_vram_mib("gpu_1x_a100"), 40960); // no "80" → 40GB
+        assert_eq!(estimate_vram_mib("a100_80gb_pcie"), 81920); // has "80" → 80GB
         assert_eq!(estimate_vram_mib("NVIDIA A100 80GB PCIe"), 81920);
     }
 
@@ -376,9 +448,18 @@ mod tests {
     #[test]
     fn derive_pricing_all_fields_nonzero() {
         let pricing = derive_pricing(&a100_cap(), 1.3);
-        assert!(pricing.price_per_input_token > 0, "input token price must be > 0");
-        assert!(pricing.price_per_output_token > 0, "output token price must be > 0");
-        assert!(pricing.price_per_compute_second > 0, "compute second price must be > 0");
+        assert!(
+            pricing.price_per_input_token > 0,
+            "input token price must be > 0"
+        );
+        assert!(
+            pricing.price_per_output_token > 0,
+            "output token price must be > 0"
+        );
+        assert!(
+            pricing.price_per_compute_second > 0,
+            "compute second price must be > 0"
+        );
         assert!(pricing.price_per_image > 0, "image price must be > 0");
     }
 
@@ -388,13 +469,17 @@ mod tests {
         assert!(
             pricing.price_per_output_token > pricing.price_per_input_token,
             "output ({}) should cost more than input ({})",
-            pricing.price_per_output_token, pricing.price_per_input_token
+            pricing.price_per_output_token,
+            pricing.price_per_input_token
         );
     }
 
     #[test]
     fn margin_increases_all_prices() {
-        let cap = OperatorCapability { hourly_cost_usd: 10.0, ..a100_cap() };
+        let cap = OperatorCapability {
+            hourly_cost_usd: 10.0,
+            ..a100_cap()
+        };
         let low = derive_pricing(&cap, 1.0);
         let high = derive_pricing(&cap, 2.0);
         assert!(high.price_per_input_token > low.price_per_input_token);
@@ -405,48 +490,82 @@ mod tests {
 
     #[test]
     fn custom_throughput_changes_prices() {
-        let cap = OperatorCapability { hourly_cost_usd: 5.0, ..a100_cap() };
-        let fast = derive_pricing_with_throughput(&cap, 1.0, &ThroughputEstimate {
-            tokens_per_hour: 200_000.0, // fast GPU
-            images_per_hour: 2000.0,
-            token_decimals: 6,
-        });
-        let slow = derive_pricing_with_throughput(&cap, 1.0, &ThroughputEstimate {
-            tokens_per_hour: 10_000.0, // slow GPU
-            images_per_hour: 100.0,
-            token_decimals: 6,
-        });
+        let cap = OperatorCapability {
+            hourly_cost_usd: 5.0,
+            ..a100_cap()
+        };
+        let fast = derive_pricing_with_throughput(
+            &cap,
+            1.0,
+            &ThroughputEstimate {
+                tokens_per_hour: 200_000.0, // fast GPU
+                images_per_hour: 2000.0,
+                token_decimals: 6,
+            },
+        );
+        let slow = derive_pricing_with_throughput(
+            &cap,
+            1.0,
+            &ThroughputEstimate {
+                tokens_per_hour: 10_000.0, // slow GPU
+                images_per_hour: 100.0,
+                token_decimals: 6,
+            },
+        );
         // Slower throughput → higher per-token cost
         assert!(
             slow.price_per_input_token > fast.price_per_input_token,
             "slow ({}) should cost more per token than fast ({})",
-            slow.price_per_input_token, fast.price_per_input_token
+            slow.price_per_input_token,
+            fast.price_per_input_token
         );
     }
 
     #[test]
     fn token_decimals_affect_prices() {
-        let cap = OperatorCapability { hourly_cost_usd: 1.0, ..a100_cap() };
-        let usdc = derive_pricing_with_throughput(&cap, 1.0, &ThroughputEstimate {
-            token_decimals: 6, ..ThroughputEstimate::default()
-        });
-        let eth = derive_pricing_with_throughput(&cap, 1.0, &ThroughputEstimate {
-            token_decimals: 18, ..ThroughputEstimate::default()
-        });
+        let cap = OperatorCapability {
+            hourly_cost_usd: 1.0,
+            ..a100_cap()
+        };
+        let usdc = derive_pricing_with_throughput(
+            &cap,
+            1.0,
+            &ThroughputEstimate {
+                token_decimals: 6,
+                ..ThroughputEstimate::default()
+            },
+        );
+        let eth = derive_pricing_with_throughput(
+            &cap,
+            1.0,
+            &ThroughputEstimate {
+                token_decimals: 18,
+                ..ThroughputEstimate::default()
+            },
+        );
         // 18-decimal token should have much larger base unit numbers
         assert!(
             eth.price_per_input_token > usdc.price_per_input_token,
             "18-decimal ({}) should be larger than 6-decimal ({})",
-            eth.price_per_input_token, usdc.price_per_input_token
+            eth.price_per_input_token,
+            usdc.price_per_input_token
         );
     }
 
     #[test]
     fn compute_second_is_hourly_divided_by_3600() {
-        let cap = OperatorCapability { hourly_cost_usd: 3600.0, ..a100_cap() };
-        let pricing = derive_pricing_with_throughput(&cap, 1.0, &ThroughputEstimate {
-            token_decimals: 6, ..ThroughputEstimate::default()
-        });
+        let cap = OperatorCapability {
+            hourly_cost_usd: 3600.0,
+            ..a100_cap()
+        };
+        let pricing = derive_pricing_with_throughput(
+            &cap,
+            1.0,
+            &ThroughputEstimate {
+                token_decimals: 6,
+                ..ThroughputEstimate::default()
+            },
+        );
         // $3600/hr / 3600 sec = $1/sec = 1_000_000 base units (6 decimals)
         assert_eq!(pricing.price_per_compute_second, 1_000_000);
     }
@@ -492,8 +611,14 @@ mod tests {
     fn toml_includes_source_comment() {
         let pricing = derive_pricing(&a100_cap(), 1.3);
         let toml = generate_pricing_toml(&[pricing], false);
-        assert!(toml.contains("Auto-generated"), "TOML should have source comment");
-        assert!(toml.contains("Lambda Labs"), "TOML should name the provider");
+        assert!(
+            toml.contains("Auto-generated"),
+            "TOML should have source comment"
+        );
+        assert!(
+            toml.contains("Lambda Labs"),
+            "TOML should name the provider"
+        );
     }
 
     #[test]
@@ -513,12 +638,19 @@ mod tests {
 
     #[test]
     fn pricing_with_18_decimal_token_doesnt_overflow() {
-        let cap = OperatorCapability { hourly_cost_usd: 100.0, ..a100_cap() };
-        let pricing = derive_pricing_with_throughput(&cap, 10.0, &ThroughputEstimate {
-            tokens_per_hour: 1.0,  // extreme: 1 token per hour
-            images_per_hour: 1.0,
-            token_decimals: 18,    // ETH-like
-        });
+        let cap = OperatorCapability {
+            hourly_cost_usd: 100.0,
+            ..a100_cap()
+        };
+        let pricing = derive_pricing_with_throughput(
+            &cap,
+            10.0,
+            &ThroughputEstimate {
+                tokens_per_hour: 1.0, // extreme: 1 token per hour
+                images_per_hour: 1.0,
+                token_decimals: 18, // ETH-like
+            },
+        );
         // Should not panic, values should be capped at u64::MAX or saturated
         assert!(pricing.price_per_input_token > 0);
     }

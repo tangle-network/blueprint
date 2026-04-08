@@ -336,13 +336,15 @@ impl PricingEngine for PricingEngineService {
 
         // Apply TEE pricing multiplier if requested
         let require_tee = req.require_tee;
-        let total_cost = crate::pricing::apply_tee_pricing(base_cost, require_tee, &self.tee_config)
-            .map_err(|e| match e {
-                crate::error::PricingError::TeeNotAvailable => {
-                    Status::unavailable("TEE execution is not available on this operator")
-                }
-                other => Status::internal(format!("TEE pricing error: {other}")),
-            })?;
+        let total_cost =
+            crate::pricing::apply_tee_pricing(base_cost, require_tee, &self.tee_config).map_err(
+                |e| match e {
+                    crate::error::PricingError::TeeNotAvailable => {
+                        Status::unavailable("TEE execution is not available on this operator")
+                    }
+                    other => Status::internal(format!("TEE pricing error: {other}")),
+                },
+            )?;
         let (tee_attested, tee_provider) = if require_tee && self.tee_config.available {
             (true, self.tee_config.provider.clone())
         } else {
@@ -399,12 +401,12 @@ impl PricingEngine for PricingEngineService {
         let signable_quote =
             SignableQuote::with_confidentiality(quote_details, total_cost, confidentiality)
                 .map_err(|e| {
-            error!(
-                "Failed to prepare signable quote for blueprint ID {}: {}",
-                blueprint_id, e
-            );
-            Status::internal("Failed to build signable quote")
-        })?;
+                    error!(
+                        "Failed to prepare signable quote for blueprint ID {}: {}",
+                        blueprint_id, e
+                    );
+                    Status::internal("Failed to build signable quote")
+                })?;
 
         // Generate proof of work for the response
         let response_pow = generate_proof(&challenge, self.pow_difficulty)

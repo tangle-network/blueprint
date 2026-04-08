@@ -783,17 +783,18 @@ where
         #[cfg(feature = "tee")]
         let router = {
             // Check TEE_MODE env var override
-            let env_tee_mode = std::env::var("TEE_MODE").ok().and_then(|v| {
-                match v.to_lowercase().as_str() {
-                    "auto" => Some(blueprint_tee::TeeMode::Auto),
-                    "required" => Some(blueprint_tee::TeeMode::Direct),
-                    "disabled" => Some(blueprint_tee::TeeMode::Disabled),
-                    other => {
-                        tracing::warn!(value = other, "Unknown TEE_MODE value, ignoring");
-                        None
-                    }
-                }
-            });
+            let env_tee_mode =
+                std::env::var("TEE_MODE")
+                    .ok()
+                    .and_then(|v| match v.to_lowercase().as_str() {
+                        "auto" => Some(blueprint_tee::TeeMode::Auto),
+                        "required" => Some(blueprint_tee::TeeMode::Direct),
+                        "disabled" => Some(blueprint_tee::TeeMode::Disabled),
+                        other => {
+                            tracing::warn!(value = other, "Unknown TEE_MODE value, ignoring");
+                            None
+                        }
+                    });
 
             let should_auto_detect = if let Some(env_mode) = env_tee_mode {
                 match env_mode {
@@ -806,7 +807,8 @@ where
 
             if should_auto_detect {
                 // Check for explicit disable via env var
-                let disabled_by_env = matches!(env_tee_mode, Some(blueprint_tee::TeeMode::Disabled));
+                let disabled_by_env =
+                    matches!(env_tee_mode, Some(blueprint_tee::TeeMode::Disabled));
 
                 if disabled_by_env {
                     tracing::info!(target: "blueprint-runner", "TEE disabled via TEE_MODE=disabled");
@@ -821,9 +823,9 @@ where
                     // Start the TEE auth service
                     let tee_config = blueprint_tee::TeeConfig::builder()
                         .mode(blueprint_tee::TeeMode::Direct)
-                        .provider_selector(blueprint_tee::TeeProviderSelector::AllowList(
-                            vec![provider],
-                        ))
+                        .provider_selector(blueprint_tee::TeeProviderSelector::AllowList(vec![
+                            provider,
+                        ]))
                         .build()
                         .expect("auto-detected TEE config must be valid");
                     self = self.tee(tee_config);
@@ -835,8 +837,7 @@ where
                     );
                     router.layer(blueprint_tee::TeeLayer::new())
                 } else {
-                    let is_required =
-                        matches!(env_tee_mode, Some(blueprint_tee::TeeMode::Direct));
+                    let is_required = matches!(env_tee_mode, Some(blueprint_tee::TeeMode::Direct));
                     if is_required {
                         return Err(Error::BackgroundService(
                             "TEE_MODE=required but no TEE hardware detected".to_string(),
