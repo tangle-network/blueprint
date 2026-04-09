@@ -1,5 +1,8 @@
 use crate::command::harness::config::HarnessConfig;
+use crate::command::service::build_request_params;
 use crate::command::tangle::DevnetStack;
+use alloy_primitives::{Address, Bytes, U256};
+use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
 use color_eyre::eyre::{Result, eyre};
 use std::io::Write as _;
 use std::net::TcpListener;
@@ -20,11 +23,13 @@ struct SpawnedBlueprint {
 
 pub struct Orchestrator {
     stack: DevnetStack,
+    client: TangleClient,
     blueprints: Vec<SpawnedBlueprint>,
 }
 
 impl Orchestrator {
     /// Boot the local devnet (anvil + Tangle Core contracts + keystore).
+    /// Creates a TangleClient for on-chain service creation.
     pub async fn bootstrap(config: &HarnessConfig) -> Result<Self> {
         if !config.chain.anvil {
             return Err(eyre!(
@@ -37,10 +42,30 @@ impl Orchestrator {
         println!("  HTTP RPC:  {}", stack.http_rpc_url());
         println!("  WS RPC:    {}", stack.ws_rpc_url());
         println!("  Tangle:    {:?}", stack.tangle_contract());
+
+        // Build a TangleClient for on-chain operations (service creation, etc.)
+        let settings = TangleSettings {
+            blueprint_id: 0,
+            service_id: None,
+            tangle_contract: stack.tangle_contract(),
+            restaking_contract: stack.restaking_contract(),
+            status_registry_contract: stack.status_registry_contract(),
+        };
+        let client_config = TangleClientConfig::new(
+            stack.http_rpc_url(),
+            stack.ws_rpc_url(),
+            stack.keystore_path(),
+            settings,
+        );
+        let client = TangleClient::new(client_config)
+            .await
+            .map_err(|e| eyre!("failed to build TangleClient: {e}"))?;
+        println!("  Operator:  {:?}", client.account());
         println!();
 
         Ok(Self {
             stack,
+            client,
             blueprints: Vec::new(),
         })
     }
@@ -51,19 +76,35 @@ impl Orchestrator {
         let self_exe = std::env::current_exe()
             .map_err(|e| eyre!("failed to find cargo-tangle binary: {e}"))?;
 
+        let operator_address = self.client.account();
+
         for (idx, bp) in config.blueprints.iter().enumerate() {
             let port = bp
                 .port
                 .unwrap_or_else(|| allocate_free_port().unwrap_or(9000 + idx as u16));
 
-            // For the MVP, all blueprints reuse blueprint_id 0 (pre-seeded by DevnetStack).
-            // Each gets a unique service_id via incrementing from the default.
-            // A future version will dynamically register blueprints on-chain.
-            let service_id = self.stack.default_service_id() + idx as u64;
+            // Create a real on-chain service for this blueprint via request_service.
+            // This is the production-faithful flow: blueprint_id 0 (pre-seeded), but
+            // each config entry gets its own service_id so managers don't conflict.
+            let blueprint_id = 0u64; // pre-seeded by DevnetStack
+            let params = build_request_params(
+                blueprint_id,
+                vec![operator_address], // this operator serves it
+                None,                   // no operator_exposures
+                vec![],                 // any caller permitted
+                1000,                   // ttl_blocks
+                Address::ZERO,          // native token for payment
+                U256::ZERO,             // no initial payment in dev
+                Bytes::new(),           // empty service config
+            );
+            let (_tx, service_id) = self
+                .client
+                .request_service(params)
+                .await
+                .map_err(|e| eyre!("[{}] failed to create on-chain service: {e}", bp.name))?;
 
             println!(
-                "[{}] Starting '{}' (service_id={}, port={}, path={})",
-                idx + 1,
+                "[{}] Service created on-chain: service_id={}, port={}, path={}",
                 bp.name,
                 service_id,
                 port,
@@ -74,12 +115,7 @@ impl Orchestrator {
             let settings_dir = tempfile::TempDir::new()
                 .map_err(|e| eyre!("failed to create temp settings dir: {e}"))?;
             let settings_path = settings_dir.path().join("settings.env");
-            write_settings_env(
-                &settings_path,
-                0, // blueprint_id — MVP: all use pre-seeded 0
-                service_id,
-                &self.stack,
-            )?;
+            write_settings_env(&settings_path, blueprint_id, service_id, &self.stack)?;
 
             // Build the subprocess command
             let binary = bp
