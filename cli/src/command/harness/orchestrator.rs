@@ -92,7 +92,7 @@ impl Orchestrator {
                 vec![operator_address], // this operator serves it
                 None,                   // no operator_exposures
                 vec![],                 // any caller permitted
-                1000,                   // ttl_blocks
+                7200,                   // ttl_blocks (contract min is 3600)
                 Address::ZERO,          // native token for payment
                 U256::ZERO,             // no initial payment in dev
                 Bytes::new(),           // empty service config
