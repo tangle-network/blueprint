@@ -524,4 +524,143 @@ mod tests {
         assert_eq!(config.timeout_secs, 10);
         assert_eq!(config.sse_capacity, 16);
     }
+
+    // ── Real e2e: webhook delivery + HMAC verification ──────────────────
+
+    #[tokio::test]
+    async fn webhook_e2e_delivery_and_signature_verification() {
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+
+        let secret = "e2e-test-secret";
+        let received: Arc<Mutex<Option<(String, Vec<u8>)>>> = Arc::new(Mutex::new(None));
+        let received_clone = received.clone();
+
+        // Stand up a real HTTP server
+        let app = axum::Router::new().route(
+            "/callback",
+            axum::routing::post(
+                move |headers: axum::http::HeaderMap, body: axum::body::Bytes| {
+                    let received = received_clone.clone();
+                    async move {
+                        let sig = headers
+                            .get("x-webhook-signature")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or("")
+                            .to_string();
+                        *received.lock().await = Some((sig, body.to_vec()));
+                        "ok"
+                    }
+                },
+            ),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        // Deliver a webhook to the real server
+        let notifier = JobNotifier::new(NotifierConfig {
+            signing_secret: secret.into(),
+            max_retries: 0,
+            timeout_secs: 5,
+            ..Default::default()
+        });
+
+        let event = JobEvent {
+            status: JobStatus::Completed,
+            result: Some(serde_json::json!({"video_url": "https://cdn.example.com/out.mp4"})),
+            ..Default::default()
+        };
+
+        let url = format!("http://{addr}/callback");
+        notifier.notify("job-e2e", event, Some(&url)).await.unwrap();
+
+        // Verify the server received it
+        let (sig, body) = received
+            .lock()
+            .await
+            .take()
+            .expect("server should have received the webhook");
+        assert!(!body.is_empty(), "body should not be empty");
+
+        // Parse the payload
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["job_id"], "job-e2e");
+        assert_eq!(payload["event"]["status"], "completed");
+        assert_eq!(
+            payload["event"]["result"]["video_url"],
+            "https://cdn.example.com/out.mp4"
+        );
+
+        // Verify the HMAC signature — same way a customer would
+        let sig_hex = sig
+            .strip_prefix("sha256=")
+            .expect("should have sha256= prefix");
+        let sig_bytes = hex::decode(sig_hex).unwrap();
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(&body);
+        let expected = mac.finalize().into_bytes();
+        assert_eq!(
+            expected.as_slice(),
+            sig_bytes.as_slice(),
+            "HMAC signature mismatch — customer verification would fail"
+        );
+    }
+
+    #[tokio::test]
+    async fn sse_e2e_full_lifecycle() {
+        // Simulate: queued → processing (50%) → processing (100%) → completed
+        let notifier = JobNotifier::new(test_config());
+
+        let mut rx = notifier.subscribe("lifecycle-job").await;
+
+        let statuses = vec![
+            (JobStatus::Queued, None, None),
+            (JobStatus::Processing, Some(50), None),
+            (JobStatus::Processing, Some(100), None),
+            (
+                JobStatus::Completed,
+                None,
+                Some(serde_json::json!({"url": "https://result.mp4"})),
+            ),
+        ];
+
+        for (status, progress, result) in &statuses {
+            notifier
+                .notify(
+                    "lifecycle-job",
+                    JobEvent {
+                        status: *status,
+                        progress: *progress,
+                        result: result.clone(),
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+        }
+
+        // Receive all 4 events in order
+        let e1 = rx.recv().await.unwrap();
+        assert_eq!(e1.status, JobStatus::Queued);
+
+        let e2 = rx.recv().await.unwrap();
+        assert_eq!(e2.status, JobStatus::Processing);
+        assert_eq!(e2.progress, Some(50));
+
+        let e3 = rx.recv().await.unwrap();
+        assert_eq!(e3.status, JobStatus::Processing);
+        assert_eq!(e3.progress, Some(100));
+
+        let e4 = rx.recv().await.unwrap();
+        assert_eq!(e4.status, JobStatus::Completed);
+        assert!(e4.result.is_some());
+
+        // Channel should be cleaned up after terminal event
+        assert_eq!(notifier.active_channels().await, 0);
+    }
 }
