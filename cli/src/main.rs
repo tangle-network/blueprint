@@ -117,6 +117,14 @@ enum Commands {
         #[command(subcommand)]
         command: OperatorCommands,
     },
+
+    /// Spin up a local Tangle dev environment with multiple blueprints
+    /// running against real on-chain infrastructure.
+    #[command(visible_alias = "h")]
+    Harness {
+        #[command(subcommand)]
+        command: cargo_tangle::command::harness::HarnessCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -2509,6 +2517,9 @@ async fn main() -> Result<()> {
                 log_tx("Operator cancel-exit", &tx, json);
             }
         },
+        Commands::Harness { command } => {
+            cargo_tangle::command::harness::execute(command).await?;
+        }
     }
 
     Ok(())

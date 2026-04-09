@@ -393,6 +393,9 @@ impl PricingEngine for PricingEngineService {
             })
             .collect::<std::result::Result<Vec<_>, Status>>()?;
 
+        // Precision limitation: the proto field `total_cost_rate` is `double` (f64),
+        // so Decimal values exceeding f64's 53-bit mantissa will lose precision.
+        // Changing this requires a proto schema migration.
         let total_cost_f64 = total_cost.to_f64().ok_or_else(|| {
             Status::internal(format!("Total cost {total_cost} exceeds f64 range"))
         })?;

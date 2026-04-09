@@ -45,6 +45,7 @@ bytes = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 # Notifier feature deps (outbound webhooks + SSE)
+rand = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json"], optional = true }
 tokio-stream = { version = "0.1", optional = true }
 
@@ -57,7 +58,7 @@ http = { workspace = true }
 [features]
 default = ["std"]
 std = ["blueprint-core/std", "blueprint-runner/std"]
-notifier = ["reqwest", "tokio-stream"]
+notifier = ["rand", "reqwest", "tokio-stream"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

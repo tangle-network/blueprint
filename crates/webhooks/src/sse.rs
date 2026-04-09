@@ -16,6 +16,7 @@
 use crate::notifier::JobNotifier;
 use axum::Router;
 use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::get;
@@ -41,11 +42,46 @@ pub fn router(notifier: Arc<JobNotifier>) -> Router {
         .with_state(notifier)
 }
 
+/// Extract and validate the bearer token from the Authorization header.
+fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+}
+
 async fn sse_handler(
     State(notifier): State<Arc<JobNotifier>>,
     Path(job_id): Path<String>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
-    let rx = notifier.subscribe(&job_id).await;
+    // H1: Require bearer token authentication
+    let token = match extract_bearer_token(&headers) {
+        Some(t) => t.to_string(),
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                "missing or malformed Authorization: Bearer <token> header",
+            )
+                .into_response();
+        }
+    };
+
+    if !notifier.validate_job_token(&job_id, &token).await {
+        return (StatusCode::FORBIDDEN, "invalid token for this job").into_response();
+    }
+
+    let rx = match notifier.subscribe(&job_id).await {
+        Some(rx) => rx,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "SSE channel capacity exceeded",
+            )
+                .into_response();
+        }
+    };
+
     let stream = BroadcastStream::new(rx).filter_map(|result| match result {
         Ok(event) => {
             let data = serde_json::to_string(&event)
@@ -53,17 +89,22 @@ async fn sse_handler(
             let sse_event = Event::default().event(event.status.to_string()).data(data);
             Some(Ok::<_, std::convert::Infallible>(sse_event))
         }
-        Err(_) => {
-            tracing::warn!("SSE subscriber lagged or channel closed");
-            None
+        Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
+            tracing::warn!(skipped = n, "SSE subscriber lagged, sending error event");
+            let sse_event = Event::default()
+                .event("error")
+                .data(format!(r#"{{"error":"lagged","skipped":{n}}}"#));
+            Some(Ok(sse_event))
         }
     });
 
-    Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(std::time::Duration::from_secs(15))
-            .text("ping"),
-    )
+    Sse::new(stream)
+        .keep_alive(
+            KeepAlive::new()
+                .interval(std::time::Duration::from_secs(15))
+                .event(Event::default().comment("ping")),
+        )
+        .into_response()
 }
 
 #[cfg(test)]
@@ -87,6 +128,9 @@ mod tests {
         let notifier = test_notifier();
         let app = router(notifier.clone());
 
+        // Register the job and get a token
+        let token = notifier.register_job("test-job").await;
+
         // Subscribe first so the channel exists
         let _rx = notifier.subscribe("test-job").await;
 
@@ -105,6 +149,7 @@ mod tests {
 
         let req = Request::get("/v1/jobs/test-job/events")
             .header("Accept", "text/event-stream")
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -133,5 +178,49 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         // axum returns 404 for unmatched routes
         assert_eq!(resp.status(), 404);
+    }
+
+    #[tokio::test]
+    async fn sse_auth_rejects_missing_token() {
+        let notifier = test_notifier();
+        let app = router(notifier.clone());
+        notifier.register_job("auth-job").await;
+
+        let req = Request::get("/v1/jobs/auth-job/events")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn sse_auth_rejects_invalid_token() {
+        let notifier = test_notifier();
+        let app = router(notifier.clone());
+        notifier.register_job("auth-job2").await;
+
+        let req = Request::get("/v1/jobs/auth-job2/events")
+            .header("Authorization", "Bearer totally-wrong-token")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn sse_auth_rejects_unregistered_job() {
+        let notifier = test_notifier();
+        let app = router(notifier.clone());
+
+        // Don't register the job — any token should be rejected
+        let req = Request::get("/v1/jobs/unknown-job/events")
+            .header("Authorization", "Bearer some-token")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 }
