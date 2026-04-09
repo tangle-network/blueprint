@@ -102,7 +102,7 @@ async fn sse_handler(
         .keep_alive(
             KeepAlive::new()
                 .interval(std::time::Duration::from_secs(15))
-                .text("ping"),
+                .event(Event::default().comment("ping")),
         )
         .into_response()
 }

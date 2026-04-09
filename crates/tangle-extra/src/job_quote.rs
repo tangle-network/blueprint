@@ -39,6 +39,41 @@ pub enum JobQuoteError {
 
 type Result<T> = core::result::Result<T, JobQuoteError>;
 
+/// Typed confidentiality levels for job quotes.
+///
+/// Maps to the on-chain `uint8 confidentiality` field:
+/// - 0 = Any (no TEE requirement)
+/// - 1 = Required (must run in TEE)
+/// - 2 = Preferred (prefer TEE, allow non-TEE)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Confidentiality {
+    Any = 0,
+    Required = 1,
+    Preferred = 2,
+}
+
+impl From<Confidentiality> for u8 {
+    fn from(c: Confidentiality) -> u8 {
+        c as u8
+    }
+}
+
+impl TryFrom<u8> for Confidentiality {
+    type Error = JobQuoteError;
+
+    fn try_from(value: u8) -> Result<Self> {
+        match value {
+            0 => Ok(Confidentiality::Any),
+            1 => Ok(Confidentiality::Required),
+            2 => Ok(Confidentiality::Preferred),
+            _ => Err(JobQuoteError::Signing(format!(
+                "invalid confidentiality level: {value} (expected 0, 1, or 2)"
+            ))),
+        }
+    }
+}
+
 /// Per-job quote details that get EIP-712 signed
 ///
 /// Matches `Types.JobQuoteDetails` in tnt-core:
@@ -63,6 +98,14 @@ pub struct JobQuoteDetails {
     /// 0 = Any (no TEE), 1 = Required, 2 = Preferred.
     /// Prevents replay of a non-TEE quote for a TEE-required service.
     pub confidentiality: u8,
+}
+
+impl JobQuoteDetails {
+    /// Parse the raw `confidentiality` field into a typed enum.
+    /// Returns `None` if the value is not a recognized level.
+    pub fn confidentiality_level(&self) -> Option<Confidentiality> {
+        Confidentiality::try_from(self.confidentiality).ok()
+    }
 }
 
 /// A signed job quote ready for on-chain submission
