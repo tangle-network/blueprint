@@ -27,14 +27,21 @@
 //! ```
 
 use hmac::{Hmac, Mac};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, broadcast};
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Maximum number of dead-letter entries retained.
+const MAX_DEAD_LETTERS: usize = 1000;
+
+/// Maximum number of concurrent SSE channels (job subscriptions).
+const MAX_CHANNELS: usize = 10_000;
 
 /// Job lifecycle status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,19 +178,35 @@ pub struct FailedDelivery {
 ///
 /// Manages SSE broadcast channels per job and delivers webhook callbacks
 /// to customer-provided URLs with HMAC-SHA256 signatures.
+///
+/// Webhook signatures include a `X-Webhook-Timestamp` header for replay
+/// protection. The HMAC is computed over `"{timestamp}.{body}"` (Stripe's
+/// format). Receivers should reject timestamps older than 5 minutes.
 pub struct JobNotifier {
     config: NotifierConfig,
     /// Per-job SSE broadcast channels.
     channels: Arc<RwLock<HashMap<String, broadcast::Sender<JobEvent>>>>,
     /// HTTP client for webhook delivery.
     client: reqwest::Client,
-    /// Dead-letter queue for failed deliveries.
-    dead_letters: Arc<RwLock<Vec<FailedDelivery>>>,
+    /// Dead-letter queue for failed deliveries (capped at `MAX_DEAD_LETTERS`).
+    dead_letters: Arc<RwLock<VecDeque<FailedDelivery>>>,
+    /// Per-job bearer tokens for SSE authentication.
+    /// Maps job_id → auth token. Populated by `register_job()`.
+    job_tokens: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl JobNotifier {
     /// Create a new notifier.
+    ///
+    /// If `config.signing_secret` is empty, a warning is logged. Webhook
+    /// delivery will be rejected at call time — SSE-only usage is fine.
     pub fn new(config: NotifierConfig) -> Self {
+        if config.signing_secret.is_empty() {
+            tracing::warn!(
+                "notifier created with empty signing_secret — webhook delivery will be rejected"
+            );
+        }
+
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
             .build()
@@ -193,26 +216,66 @@ impl JobNotifier {
             config,
             channels: Arc::new(RwLock::new(HashMap::new())),
             client,
-            dead_letters: Arc::new(RwLock::new(Vec::new())),
+            dead_letters: Arc::new(RwLock::new(VecDeque::new())),
+            job_tokens: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Register a job and generate a crypto-random bearer token for SSE auth.
+    ///
+    /// Returns the hex-encoded token. The caller must pass this token to
+    /// the customer so they can connect to the SSE endpoint.
+    pub async fn register_job(&self, job_id: &str) -> String {
+        let mut rng = rand::thread_rng();
+        let mut bytes = [0u8; 32];
+        rng.fill(&mut bytes);
+        let token: String = hex::encode(bytes);
+        self.job_tokens
+            .write()
+            .await
+            .insert(job_id.to_string(), token.clone());
+        token
+    }
+
+    /// Validate a bearer token for a given job_id.
+    /// Returns `true` if the token matches.
+    pub async fn validate_job_token(&self, job_id: &str, token: &str) -> bool {
+        let tokens = self.job_tokens.read().await;
+        tokens.get(job_id).map_or(false, |expected| {
+            use subtle::ConstantTimeEq;
+            expected.as_bytes().ct_eq(token.as_bytes()).into()
+        })
     }
 
     /// Subscribe to SSE events for a job. Returns a broadcast receiver.
     ///
     /// If no channel exists yet, one is created. Multiple subscribers can
-    /// listen to the same job.
-    pub async fn subscribe(&self, job_id: &str) -> broadcast::Receiver<JobEvent> {
+    /// listen to the same job. Returns `None` if the channel cap
+    /// (`MAX_CHANNELS`) is reached and this job doesn't already have one.
+    pub async fn subscribe(&self, job_id: &str) -> Option<broadcast::Receiver<JobEvent>> {
         let mut channels = self.channels.write().await;
-        channels
-            .entry(job_id.to_string())
-            .or_insert_with(|| broadcast::channel(self.config.sse_capacity).0)
-            .subscribe()
+        if !channels.contains_key(job_id) && channels.len() >= MAX_CHANNELS {
+            tracing::error!(
+                job_id,
+                max = MAX_CHANNELS,
+                "SSE channel cap reached, refusing new subscription"
+            );
+            return None;
+        }
+        Some(
+            channels
+                .entry(job_id.to_string())
+                .or_insert_with(|| broadcast::channel(self.config.sse_capacity).0)
+                .subscribe(),
+        )
     }
 
     /// Emit a job event.
     ///
     /// Broadcasts to all SSE subscribers and, if a webhook URL is provided,
-    /// delivers to the customer's callback endpoint with HMAC signature.
+    /// spawns an async task to deliver to the customer's callback endpoint
+    /// with HMAC signature. Webhook delivery is fire-and-forget — failures
+    /// are logged and dead-lettered but do not fail this call.
     pub async fn notify(
         &self,
         job_id: &str,
@@ -230,107 +293,50 @@ impl JobNotifier {
             }
         }
 
-        // Deliver webhook callback
+        // Deliver webhook callback (fire-and-forget)
         if let Some(url) = webhook_url {
-            self.deliver_webhook(job_id, &event, url).await?;
+            let job_id_owned = job_id.to_string();
+            let event_clone = event.clone();
+            let url_owned = url.to_string();
+            let client = self.client.clone();
+            let config = self.config.clone();
+            let dead_letters = self.dead_letters.clone();
+
+            tokio::spawn(async move {
+                if let Err(e) = deliver_webhook_inner(
+                    &client,
+                    &config,
+                    &job_id_owned,
+                    &event_clone,
+                    &url_owned,
+                    &dead_letters,
+                )
+                .await
+                {
+                    tracing::error!(
+                        job_id = %job_id_owned,
+                        url = %url_owned,
+                        error = %e,
+                        "webhook delivery failed (fire-and-forget)"
+                    );
+                }
+            });
         }
 
-        // Clean up terminal job channels
+        // Clean up terminal job channels and tokens
         if is_terminal {
             let mut channels = self.channels.write().await;
             channels.remove(job_id);
+            drop(channels);
+            self.job_tokens.write().await.remove(job_id);
         }
 
         Ok(())
     }
 
-    /// Deliver a webhook callback with HMAC-SHA256 signature and retries.
-    async fn deliver_webhook(
-        &self,
-        job_id: &str,
-        event: &JobEvent,
-        url: &str,
-    ) -> Result<(), crate::error::WebhookError> {
-        let payload = serde_json::to_string(&WebhookPayload {
-            job_id: job_id.to_string(),
-            event: event.clone(),
-        })
-        .map_err(|e| crate::error::WebhookError::Server(format!("serialize: {e}")))?;
-
-        let signature = self.sign_payload(payload.as_bytes());
-
-        let mut last_error = String::new();
-        for attempt in 0..=self.config.max_retries {
-            if attempt > 0 {
-                let delay = self.config.retry_base_ms * 2u64.saturating_pow(attempt - 1);
-                tokio::time::sleep(Duration::from_millis(delay)).await;
-                tracing::info!(job_id, attempt, url, "retrying webhook delivery");
-            }
-
-            match self
-                .client
-                .post(url)
-                .header("Content-Type", "application/json")
-                .header("X-Webhook-Signature", format!("sha256={signature}"))
-                .header("X-Job-Id", job_id)
-                .body(payload.clone())
-                .send()
-                .await
-            {
-                Ok(resp) if resp.status().is_success() => {
-                    tracing::info!(job_id, url, status = %resp.status(), "webhook delivered");
-                    return Ok(());
-                }
-                Ok(resp) => {
-                    last_error = format!("HTTP {}", resp.status());
-                    tracing::warn!(
-                        job_id, url, status = %resp.status(), attempt,
-                        "webhook delivery got non-success status"
-                    );
-                }
-                Err(e) => {
-                    last_error = e.to_string();
-                    tracing::warn!(
-                        job_id, url, error = %e, attempt,
-                        "webhook delivery failed"
-                    );
-                }
-            }
-        }
-
-        // All retries exhausted — dead-letter
-        let failed = FailedDelivery {
-            job_id: job_id.to_string(),
-            url: url.to_string(),
-            attempts: self.config.max_retries + 1,
-            last_error: last_error.clone(),
-            payload,
-        };
-        tracing::error!(
-            job_id,
-            url,
-            attempts = failed.attempts,
-            "webhook delivery exhausted all retries, dead-lettered"
-        );
-        self.dead_letters.write().await.push(failed);
-
-        Err(crate::error::WebhookError::Server(format!(
-            "webhook delivery to {url} failed after {} attempts: {last_error}",
-            self.config.max_retries + 1
-        )))
-    }
-
-    /// HMAC-SHA256 sign a payload, returning hex-encoded signature.
-    fn sign_payload(&self, payload: &[u8]) -> String {
-        let mut mac =
-            HmacSha256::new_from_slice(self.config.signing_secret.as_bytes()).expect("valid key");
-        mac.update(payload);
-        hex::encode(mac.finalize().into_bytes())
-    }
-
     /// Get a snapshot of failed deliveries for monitoring/retry.
     pub async fn dead_letters(&self) -> Vec<FailedDelivery> {
-        self.dead_letters.read().await.clone()
+        self.dead_letters.read().await.iter().cloned().collect()
     }
 
     /// Clear the dead-letter queue (e.g., after manual inspection).
@@ -342,6 +348,120 @@ impl JobNotifier {
     pub async fn active_channels(&self) -> usize {
         self.channels.read().await.len()
     }
+
+    /// HMAC-SHA256 sign a payload with timestamp, returning `(signature_hex, timestamp)`.
+    ///
+    /// The signed content is `"{timestamp}.{payload}"` (Stripe's format).
+    /// Returns an error if the signing secret is empty.
+    fn sign_payload_with_timestamp(
+        config: &NotifierConfig,
+        payload: &[u8],
+    ) -> Result<(String, u64), crate::error::WebhookError> {
+        if config.signing_secret.is_empty() {
+            return Err(crate::error::WebhookError::DeliveryFailed(
+                "cannot sign webhook: signing_secret is empty".into(),
+            ));
+        }
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let mut mac = HmacSha256::new_from_slice(config.signing_secret.as_bytes())
+            .expect("HMAC accepts any key length");
+        // Stripe format: "{timestamp}.{body}"
+        mac.update(timestamp.to_string().as_bytes());
+        mac.update(b".");
+        mac.update(payload);
+        Ok((hex::encode(mac.finalize().into_bytes()), timestamp))
+    }
+}
+
+/// Standalone webhook delivery with HMAC-SHA256 signature and retries.
+///
+/// Runs inside a spawned task — does not block `notify()`.
+async fn deliver_webhook_inner(
+    client: &reqwest::Client,
+    config: &NotifierConfig,
+    job_id: &str,
+    event: &JobEvent,
+    url: &str,
+    dead_letters: &Arc<RwLock<VecDeque<FailedDelivery>>>,
+) -> Result<(), crate::error::WebhookError> {
+    let payload = serde_json::to_string(&WebhookPayload {
+        job_id: job_id.to_string(),
+        event: event.clone(),
+    })
+    .map_err(|e| crate::error::WebhookError::Server(format!("serialize: {e}")))?;
+
+    // H2: reject empty signing secret
+    let (signature, timestamp) =
+        JobNotifier::sign_payload_with_timestamp(config, payload.as_bytes())?;
+
+    let mut last_error = String::new();
+    for attempt in 0..=config.max_retries {
+        if attempt > 0 {
+            let delay = config.retry_base_ms * 2u64.saturating_pow(attempt - 1);
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+            tracing::info!(job_id, attempt, url, "retrying webhook delivery");
+        }
+
+        match client
+            .post(url)
+            .header("Content-Type", "application/json")
+            .header("X-Webhook-Signature", format!("sha256={signature}"))
+            .header("X-Webhook-Timestamp", timestamp.to_string())
+            .header("X-Job-Id", job_id)
+            .body(payload.clone())
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => {
+                tracing::info!(job_id, url, status = %resp.status(), "webhook delivered");
+                return Ok(());
+            }
+            Ok(resp) => {
+                last_error = format!("HTTP {}", resp.status());
+                tracing::warn!(
+                    job_id, url, status = %resp.status(), attempt,
+                    "webhook delivery got non-success status"
+                );
+            }
+            Err(e) => {
+                last_error = e.to_string();
+                tracing::warn!(
+                    job_id, url, error = %e, attempt,
+                    "webhook delivery failed"
+                );
+            }
+        }
+    }
+
+    // All retries exhausted — dead-letter (capped at MAX_DEAD_LETTERS)
+    let failed = FailedDelivery {
+        job_id: job_id.to_string(),
+        url: url.to_string(),
+        attempts: config.max_retries + 1,
+        last_error: last_error.clone(),
+        payload,
+    };
+    tracing::error!(
+        job_id,
+        url,
+        attempts = failed.attempts,
+        "webhook delivery exhausted all retries, dead-lettered"
+    );
+    {
+        let mut dl = dead_letters.write().await;
+        if dl.len() >= MAX_DEAD_LETTERS {
+            dl.pop_front(); // drop oldest
+        }
+        dl.push_back(failed);
+    }
+
+    Err(crate::error::WebhookError::DeliveryFailed(format!(
+        "webhook delivery to {url} failed after {} attempts: {last_error}",
+        config.max_retries + 1
+    )))
 }
 
 #[cfg(test)]
@@ -366,34 +486,70 @@ mod tests {
     }
 
     #[test]
-    fn hmac_signature_deterministic() {
-        let notifier = JobNotifier::new(test_config());
-        let sig1 = notifier.sign_payload(b"hello");
-        let sig2 = notifier.sign_payload(b"hello");
-        assert_eq!(sig1, sig2);
-        // Different payload → different sig
-        let sig3 = notifier.sign_payload(b"world");
-        assert_ne!(sig1, sig3);
+    fn hmac_signature_with_timestamp() {
+        let config = test_config();
+        let (sig1, ts1) = JobNotifier::sign_payload_with_timestamp(&config, b"hello").unwrap();
+        let (sig2, ts2) = JobNotifier::sign_payload_with_timestamp(&config, b"hello").unwrap();
+        // Timestamps should be the same second (or very close)
+        assert!(ts2.abs_diff(ts1) <= 1);
+        // Same payload at same timestamp produces same sig (timestamps may differ by 1s
+        // across calls, so we just check both are valid hex)
+        assert_eq!(sig1.len(), 64); // sha256 hex
+        assert_eq!(sig2.len(), 64);
     }
 
     #[test]
-    fn hmac_signature_verifiable() {
-        let notifier = JobNotifier::new(test_config());
+    fn hmac_signature_verifiable_with_timestamp() {
+        let config = test_config();
         let payload = b"test payload";
-        let sig_hex = notifier.sign_payload(payload);
+        let (sig_hex, timestamp) =
+            JobNotifier::sign_payload_with_timestamp(&config, payload).unwrap();
 
-        // Verify with the same secret
+        // Verify with the same secret and timestamp
         let sig_bytes = hex::decode(&sig_hex).unwrap();
         let mut mac = HmacSha256::new_from_slice(b"test-secret").unwrap();
+        mac.update(timestamp.to_string().as_bytes());
+        mac.update(b".");
         mac.update(payload);
         let expected = mac.finalize().into_bytes();
         assert_eq!(expected.as_slice(), sig_bytes.as_slice());
     }
 
+    #[test]
+    fn empty_secret_rejects_webhook_signing() {
+        let config = NotifierConfig {
+            signing_secret: String::new(),
+            ..Default::default()
+        };
+        let result = JobNotifier::sign_payload_with_timestamp(&config, b"payload");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("signing_secret is empty"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn timestamp_included_in_hmac() {
+        let config = test_config();
+        let payload = b"same payload";
+        let (sig, ts) = JobNotifier::sign_payload_with_timestamp(&config, payload).unwrap();
+
+        // Manually compute with a different timestamp — should differ
+        let fake_ts = ts + 999;
+        let mut mac = HmacSha256::new_from_slice(config.signing_secret.as_bytes()).unwrap();
+        mac.update(fake_ts.to_string().as_bytes());
+        mac.update(b".");
+        mac.update(payload);
+        let wrong_sig = hex::encode(mac.finalize().into_bytes());
+        assert_ne!(sig, wrong_sig, "timestamp must affect the signature");
+    }
+
     #[tokio::test]
     async fn sse_subscribe_and_receive() {
         let notifier = JobNotifier::new(test_config());
-        let mut rx = notifier.subscribe("job-1").await;
+        let mut rx = notifier.subscribe("job-1").await.unwrap();
 
         notifier
             .notify(
@@ -416,7 +572,7 @@ mod tests {
     #[tokio::test]
     async fn terminal_event_cleans_up_channel() {
         let notifier = JobNotifier::new(test_config());
-        let _rx = notifier.subscribe("job-2").await;
+        let _rx = notifier.subscribe("job-2").await.unwrap();
         assert_eq!(notifier.active_channels().await, 1);
 
         notifier
@@ -438,8 +594,8 @@ mod tests {
     #[tokio::test]
     async fn multiple_subscribers_same_job() {
         let notifier = JobNotifier::new(test_config());
-        let mut rx1 = notifier.subscribe("job-3").await;
-        let mut rx2 = notifier.subscribe("job-3").await;
+        let mut rx1 = notifier.subscribe("job-3").await.unwrap();
+        let mut rx2 = notifier.subscribe("job-3").await.unwrap();
 
         notifier
             .notify(
@@ -466,6 +622,7 @@ mod tests {
             ..Default::default()
         });
 
+        // notify() no longer returns webhook errors (fire-and-forget)
         let result = notifier
             .notify(
                 "job-4",
@@ -476,8 +633,11 @@ mod tests {
                 Some("http://127.0.0.1:1/nonexistent"),
             )
             .await;
+        assert!(result.is_ok());
 
-        assert!(result.is_err());
+        // Wait for the spawned delivery task to complete
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
         let dead = notifier.dead_letters().await;
         assert_eq!(dead.len(), 1);
         assert_eq!(dead[0].job_id, "job-4");
@@ -525,6 +685,73 @@ mod tests {
         assert_eq!(config.sse_capacity, 16);
     }
 
+    #[tokio::test]
+    async fn dead_letter_cap_works() {
+        let config = NotifierConfig {
+            signing_secret: "secret".into(),
+            max_retries: 0,
+            timeout_secs: 1,
+            ..Default::default()
+        };
+        let notifier = JobNotifier::new(config.clone());
+
+        // Directly fill the dead-letter queue past the cap
+        {
+            let mut dl = notifier.dead_letters.write().await;
+            for i in 0..MAX_DEAD_LETTERS {
+                dl.push_back(FailedDelivery {
+                    job_id: format!("old-{i}"),
+                    url: "http://example.com".into(),
+                    attempts: 1,
+                    last_error: "test".into(),
+                    payload: "{}".into(),
+                });
+            }
+            assert_eq!(dl.len(), MAX_DEAD_LETTERS);
+        }
+
+        // Add one more via the delivery path
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(1))
+            .build()
+            .unwrap();
+        let event = JobEvent {
+            status: JobStatus::Failed,
+            ..Default::default()
+        };
+        let _ = deliver_webhook_inner(
+            &client,
+            &config,
+            "overflow-job",
+            &event,
+            "http://127.0.0.1:1/nope",
+            &notifier.dead_letters,
+        )
+        .await;
+
+        let dl = notifier.dead_letters().await;
+        assert_eq!(dl.len(), MAX_DEAD_LETTERS, "cap must not be exceeded");
+        // Oldest entry should have been evicted
+        assert_eq!(dl[0].job_id, "old-1", "oldest entry should be evicted");
+        assert_eq!(
+            dl.last().unwrap().job_id,
+            "overflow-job",
+            "newest entry should be at the end"
+        );
+    }
+
+    #[tokio::test]
+    async fn sse_auth_register_and_validate() {
+        let notifier = JobNotifier::new(test_config());
+
+        let token = notifier.register_job("auth-job").await;
+        assert_eq!(token.len(), 64, "token should be 32 bytes hex-encoded");
+
+        assert!(notifier.validate_job_token("auth-job", &token).await);
+        assert!(!notifier.validate_job_token("auth-job", "wrong-token").await);
+        assert!(!notifier.validate_job_token("no-such-job", &token).await);
+    }
+
     // ── Real e2e: webhook delivery + HMAC verification ──────────────────
 
     #[tokio::test]
@@ -533,7 +760,7 @@ mod tests {
         use tokio::sync::Mutex;
 
         let secret = "e2e-test-secret";
-        let received: Arc<Mutex<Option<(String, Vec<u8>)>>> = Arc::new(Mutex::new(None));
+        let received: Arc<Mutex<Option<(String, String, Vec<u8>)>>> = Arc::new(Mutex::new(None));
         let received_clone = received.clone();
 
         // Stand up a real HTTP server
@@ -548,7 +775,12 @@ mod tests {
                             .and_then(|v| v.to_str().ok())
                             .unwrap_or("")
                             .to_string();
-                        *received.lock().await = Some((sig, body.to_vec()));
+                        let ts = headers
+                            .get("x-webhook-timestamp")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or("")
+                            .to_string();
+                        *received.lock().await = Some((sig, ts, body.to_vec()));
                         "ok"
                     }
                 },
@@ -578,13 +810,17 @@ mod tests {
         let url = format!("http://{addr}/callback");
         notifier.notify("job-e2e", event, Some(&url)).await.unwrap();
 
+        // Wait for spawned delivery
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
         // Verify the server received it
-        let (sig, body) = received
+        let (sig, ts, body) = received
             .lock()
             .await
             .take()
             .expect("server should have received the webhook");
         assert!(!body.is_empty(), "body should not be empty");
+        assert!(!ts.is_empty(), "timestamp header must be present");
 
         // Parse the payload
         let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -595,18 +831,31 @@ mod tests {
             "https://cdn.example.com/out.mp4"
         );
 
-        // Verify the HMAC signature — same way a customer would
+        // Verify the HMAC signature with timestamp — same way a customer would
         let sig_hex = sig
             .strip_prefix("sha256=")
             .expect("should have sha256= prefix");
         let sig_bytes = hex::decode(sig_hex).unwrap();
         let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(ts.as_bytes());
+        mac.update(b".");
         mac.update(&body);
         let expected = mac.finalize().into_bytes();
         assert_eq!(
             expected.as_slice(),
             sig_bytes.as_slice(),
             "HMAC signature mismatch — customer verification would fail"
+        );
+
+        // Verify timestamp is recent (within 10 seconds)
+        let ts_val: u64 = ts.parse().expect("timestamp should be numeric");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert!(
+            now.abs_diff(ts_val) < 10,
+            "timestamp should be recent, got {ts_val} vs now {now}"
         );
     }
 
@@ -615,7 +864,7 @@ mod tests {
         // Simulate: queued → processing (50%) → processing (100%) → completed
         let notifier = JobNotifier::new(test_config());
 
-        let mut rx = notifier.subscribe("lifecycle-job").await;
+        let mut rx = notifier.subscribe("lifecycle-job").await.unwrap();
 
         let statuses = vec![
             (JobStatus::Queued, None, None),
