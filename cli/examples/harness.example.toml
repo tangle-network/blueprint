@@ -1,0 +1,19 @@
+# Example harness config — copy to ~/.tangle/harness.toml and adjust.
+
+[chain]
+anvil = true
+include_anvil_logs = false
+
+[router]
+spawn = false  # Local router not yet wired; start separately.
+
+[[blueprint]]
+name = "llm"
+path = "~/code/llm-inference-blueprint"
+env.MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+env.BACKEND = "vllm"
+
+[[blueprint]]
+name = "avatar"
+path = "~/code/avatar-inference-blueprint"
+env.HEYGEN_API_KEY = "${HEYGEN_API_KEY}"
