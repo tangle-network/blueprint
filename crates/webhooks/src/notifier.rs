@@ -226,10 +226,15 @@ impl JobNotifier {
     /// Returns the hex-encoded token. The caller must pass this token to
     /// the customer so they can connect to the SSE endpoint.
     pub async fn register_job(&self, job_id: &str) -> String {
-        let mut rng = rand::thread_rng();
-        let mut bytes = [0u8; 32];
-        rng.fill(&mut bytes);
-        let token: String = hex::encode(bytes);
+        // Use OsRng (Send + Sync) rather than thread_rng() (Rc-based, !Send).
+        // Keeps the resulting future `Send` so handlers using this work
+        // across axum's threaded runtime.
+        let token: String = {
+            use rand::RngCore;
+            let mut bytes = [0u8; 32];
+            rand::rngs::OsRng.fill_bytes(&mut bytes);
+            hex::encode(bytes)
+        };
         self.job_tokens
             .write()
             .await
