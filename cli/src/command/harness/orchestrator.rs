@@ -153,6 +153,30 @@ impl Orchestrator {
                     cmd.env(key, &val);
                 }
             }
+
+            // Inject Tangle protocol env vars — needed by BlueprintEnvironment::load()
+            // in operator binaries (every #[arg(env)] field reads from env vars)
+            cmd.env("HTTP_RPC_URL", self.stack.http_rpc_url().as_str());
+            cmd.env("WS_RPC_URL", self.stack.ws_rpc_url().as_str());
+            cmd.env("KEYSTORE_URI", &self.stack.keystore_path());
+            cmd.env("DATA_DIR", self.stack.data_dir().display().to_string());
+            cmd.env("BLUEPRINT_ID", blueprint_id.to_string());
+            cmd.env("SERVICE_ID", service_id.to_string());
+            cmd.env(
+                "TANGLE_CONTRACT",
+                format!("{:?}", self.stack.tangle_contract()),
+            );
+            cmd.env(
+                "RESTAKING_CONTRACT",
+                format!("{:?}", self.stack.restaking_contract()),
+            );
+            cmd.env(
+                "STATUS_REGISTRY_CONTRACT",
+                format!("{:?}", self.stack.status_registry_contract()),
+            );
+            cmd.env("PROTOCOL", "tangle");
+            cmd.env("TEST_MODE", "true");
+
             // Inject per-blueprint env (MODEL, API keys, etc.)
             for (k, v) in &bp.env {
                 cmd.env(k, v);
