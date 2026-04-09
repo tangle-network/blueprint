@@ -44,6 +44,10 @@ pub struct RouterConfig {
     /// Port for the router (default 3000).
     #[serde(default = "default_router_port")]
     pub port: u16,
+    /// Router URL to register operators with after health check.
+    /// Set to "https://router.tangle.tools" for production or "http://localhost:3000" for local.
+    #[serde(default)]
+    pub url: Option<String>,
 }
 
 impl Default for RouterConfig {
@@ -51,8 +55,22 @@ impl Default for RouterConfig {
         Self {
             spawn: false,
             port: default_router_port(),
+            url: None,
         }
     }
+}
+
+/// A model served by this operator, registered with the router.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModelSpec {
+    /// Model ID (e.g. "meta-llama/Llama-3.1-8B-Instruct")
+    pub id: String,
+    /// Input price per token (optional)
+    #[serde(default)]
+    pub input_price: f64,
+    /// Output price per token (optional)
+    #[serde(default)]
+    pub output_price: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -74,6 +92,17 @@ pub struct BlueprintSpec {
     /// Startup timeout in seconds (default 120).
     #[serde(default = "default_startup_timeout")]
     pub startup_timeout_secs: u64,
+    /// Blueprint type for router registration (e.g. "llm", "embedding", "image").
+    #[serde(default)]
+    pub blueprint_type: Option<String>,
+    /// Models this operator serves (registered with the router for discovery).
+    #[serde(default)]
+    pub models: Vec<ModelSpec>,
+    /// Public endpoint URL override for router registration.
+    /// If not set, uses http://localhost:{port}. Set this to a tunnel URL
+    /// (ngrok, cloudflare) when registering with the production router.
+    #[serde(default)]
+    pub public_url: Option<String>,
 }
 
 fn default_true() -> bool {

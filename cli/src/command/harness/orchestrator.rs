@@ -1,4 +1,4 @@
-use crate::command::harness::config::HarnessConfig;
+use crate::command::harness::config::{BlueprintSpec, HarnessConfig};
 use crate::command::service::build_request_params;
 use crate::command::tangle::DevnetStack;
 use alloy_primitives::{Address, Bytes, U256};
@@ -205,8 +205,27 @@ impl Orchestrator {
                 Ok(()) => println!("[{}] Healthy", bp.name),
                 Err(e) => {
                     eprintln!("[{}] Health check failed: {e}", bp.name);
-                    // Don't abort other blueprints — some may not have HTTP health endpoints
-                    // (they use on-chain events only). Log the warning and continue.
+                }
+            }
+        }
+
+        // Register operators with the router (if configured)
+        if let Some(router_url) = &config.router.url {
+            println!();
+            println!("Registering operators with router at {router_url} ...");
+            for bp in &self.blueprints {
+                let spec = config
+                    .blueprints
+                    .iter()
+                    .find(|s| s.name == bp.name)
+                    .unwrap();
+                let endpoint_url = spec
+                    .public_url
+                    .clone()
+                    .unwrap_or_else(|| format!("http://127.0.0.1:{}", bp.port));
+                match register_with_router(router_url, &bp.name, &endpoint_url, spec).await {
+                    Ok(()) => println!("[{}] Registered with router", bp.name),
+                    Err(e) => eprintln!("[{}] Router registration failed: {e}", bp.name),
                 }
             }
         }
@@ -380,4 +399,92 @@ async fn wait_for_any_exit(blueprints: &mut [SpawnedBlueprint]) -> Option<(Strin
         }
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
+}
+
+/// Register an operator with the Tangle Router via POST /api/operators.
+async fn register_with_router(
+    router_url: &str,
+    name: &str,
+    endpoint_url: &str,
+    spec: &BlueprintSpec,
+) -> Result<()> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let blueprint_type = spec.blueprint_type.as_deref().unwrap_or("inference");
+
+    // Build the JSON payload
+    let models_json: Vec<String> = spec
+        .models
+        .iter()
+        .map(|m| {
+            format!(
+                r#"{{"modelId":"{}","inputPrice":{},"outputPrice":{}}}"#,
+                m.id, m.input_price, m.output_price
+            )
+        })
+        .collect();
+    let models_array = format!("[{}]", models_json.join(","));
+
+    let body = format!(
+        r#"{{"name":"{}","endpointUrl":"{}","blueprintType":"{}","models":{}}}"#,
+        name, endpoint_url, blueprint_type, models_array
+    );
+
+    // Parse the router URL to get host:port
+    let url = router_url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+    let is_https = router_url.starts_with("https://");
+
+    if is_https {
+        // For HTTPS (production router), shell out to curl
+        let output = tokio::process::Command::new("curl")
+            .args([
+                "-s",
+                "-X",
+                "POST",
+                &format!("{router_url}/api/operators"),
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                &body,
+            ])
+            .output()
+            .await
+            .map_err(|e| eyre!("curl failed: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(eyre!("router registration failed: {stderr}"));
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if stdout.contains("error") {
+            return Err(eyre!("router returned error: {stdout}"));
+        }
+    } else {
+        // For HTTP (local router), use raw TCP
+        let (addr, _) = url.split_once('/').unwrap_or((url, ""));
+        let mut stream = tokio::net::TcpStream::connect(addr)
+            .await
+            .map_err(|e| eyre!("failed to connect to router at {addr}: {e}"))?;
+
+        let req = format!(
+            "POST /api/operators HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream.write_all(req.as_bytes()).await?;
+
+        let mut buf = vec![0u8; 4096];
+        let n = stream.read(&mut buf).await?;
+        let response = String::from_utf8_lossy(&buf[..n]);
+
+        if !response.contains("200") && !response.contains("201") {
+            return Err(eyre!(
+                "router registration failed: {}",
+                response.lines().next().unwrap_or("unknown")
+            ));
+        }
+    }
+
+    Ok(())
 }
