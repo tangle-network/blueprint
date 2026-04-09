@@ -1,22 +1,35 @@
 use crate::command::harness::config::HarnessConfig;
-use crate::command::run::tangle::run_blueprint;
-use crate::command::tangle::{DevnetStack, SpawnMethod, run_opts_from_stack};
-use blueprint_runner::tangle::config::TangleProtocolSettings;
+use crate::command::service::build_request_params;
+use crate::command::tangle::DevnetStack;
+use alloy_primitives::{Address, Bytes, U256};
+use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
 use color_eyre::eyre::{Result, eyre};
+use std::io::Write as _;
+use std::net::TcpListener;
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
 use tokio::task::JoinHandle;
+
+/// A spawned blueprint-manager subprocess with isolated env.
+struct SpawnedBlueprint {
+    name: String,
+    service_id: u64,
+    port: u16,
+    child: Child,
+    _log_task: JoinHandle<()>,
+    _settings_dir: tempfile::TempDir,
+}
 
 pub struct Orchestrator {
     stack: DevnetStack,
-    handles: Vec<BlueprintTask>,
-}
-
-pub struct BlueprintTask {
-    pub name: String,
-    pub handle: JoinHandle<Result<()>>,
+    client: TangleClient,
+    blueprints: Vec<SpawnedBlueprint>,
 }
 
 impl Orchestrator {
-    /// Bring up the devnet stack (anvil + contracts + keystore).
+    /// Boot the local devnet (anvil + Tangle Core contracts + keystore).
+    /// Creates a TangleClient for on-chain service creation.
     pub async fn bootstrap(config: &HarnessConfig) -> Result<Self> {
         if !config.chain.anvil {
             return Err(eyre!(
@@ -28,93 +41,343 @@ impl Orchestrator {
         let stack = DevnetStack::spawn(config.chain.include_anvil_logs).await?;
         println!("  HTTP RPC:  {}", stack.http_rpc_url());
         println!("  WS RPC:    {}", stack.ws_rpc_url());
-        println!("  Tangle:    {}", stack.tangle_contract());
+        println!("  Tangle:    {:?}", stack.tangle_contract());
+
+        // Build a TangleClient for on-chain operations (service creation, etc.)
+        let settings = TangleSettings {
+            blueprint_id: 0,
+            service_id: None,
+            tangle_contract: stack.tangle_contract(),
+            restaking_contract: stack.restaking_contract(),
+            status_registry_contract: stack.status_registry_contract(),
+        };
+        let client_config = TangleClientConfig::new(
+            stack.http_rpc_url(),
+            stack.ws_rpc_url(),
+            stack.keystore_path(),
+            settings,
+        );
+        let client = TangleClient::new(client_config)
+            .await
+            .map_err(|e| eyre!("failed to build TangleClient: {e}"))?;
+        println!("  Operator:  {:?}", client.account());
         println!();
 
         Ok(Self {
             stack,
-            handles: Vec::new(),
+            client,
+            blueprints: Vec::new(),
         })
     }
 
-    /// Spawn blueprint-manager for each configured blueprint.
-    /// Each blueprint runs as an independent tokio task against the shared devnet stack.
+    /// For each blueprint in config, spawn a `cargo-tangle blueprint run` subprocess
+    /// with its own settings.env, env vars, and service_id.
     pub async fn spawn_blueprints(&mut self, config: &HarnessConfig) -> Result<()> {
-        // Inject all blueprint env vars up front so child processes spawned by
-        // blueprint-manager inherit them. Conflicting keys across blueprints are
-        // unsupported in this MVP — last-write wins.
-        for bp in &config.blueprints {
-            for (k, v) in &bp.env {
-                // Safety: env mutation happens before any tasks are spawned.
-                unsafe { std::env::set_var(k, v) };
-            }
-        }
+        let self_exe = std::env::current_exe()
+            .map_err(|e| eyre!("failed to find cargo-tangle binary: {e}"))?;
+
+        let operator_address = self.client.account();
 
         for (idx, bp) in config.blueprints.iter().enumerate() {
+            let port = bp
+                .port
+                .unwrap_or_else(|| allocate_free_port().unwrap_or(9000 + idx as u16));
+
+            // Create a real on-chain service for this blueprint via request_service.
+            // This is the production-faithful flow: blueprint_id 0 (pre-seeded), but
+            // each config entry gets its own service_id so managers don't conflict.
+            let blueprint_id = 0u64; // pre-seeded by DevnetStack
+            let params = build_request_params(
+                blueprint_id,
+                vec![operator_address], // this operator serves it
+                None,                   // no operator_exposures
+                vec![],                 // any caller permitted
+                1000,                   // ttl_blocks
+                Address::ZERO,          // native token for payment
+                U256::ZERO,             // no initial payment in dev
+                Bytes::new(),           // empty service config
+            );
+            let (_tx, service_id) = self
+                .client
+                .request_service(params)
+                .await
+                .map_err(|e| eyre!("[{}] failed to create on-chain service: {e}", bp.name))?;
+
             println!(
-                "[{}] Starting blueprint-manager for '{}' at {}",
-                idx + 1,
+                "[{}] Service created on-chain: service_id={}, port={}, path={}",
                 bp.name,
+                service_id,
+                port,
                 bp.path.display()
             );
 
-            // For the MVP every blueprint reuses the harness default service id.
-            // A future revision will mint a service per blueprint via on-chain RFQ.
-            let settings = TangleProtocolSettings {
-                blueprint_id: 0,
-                service_id: Some(self.stack.default_service_id()),
-                tangle_contract: self.stack.tangle_contract(),
-                restaking_contract: self.stack.restaking_contract(),
-                status_registry_contract: self.stack.status_registry_contract(),
-            };
+            // Write a per-blueprint settings.env with the on-chain config
+            let settings_dir = tempfile::TempDir::new()
+                .map_err(|e| eyre!("failed to create temp settings dir: {e}"))?;
+            let settings_path = settings_dir.path().join("settings.env");
+            write_settings_env(&settings_path, blueprint_id, service_id, &self.stack)?;
 
-            let mut run_opts =
-                run_opts_from_stack(&self.stack, &settings, false, SpawnMethod::Native);
-            run_opts.shutdown_after = None;
+            // Build the subprocess command
+            let binary = bp
+                .binary
+                .as_ref()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| self_exe.clone());
 
-            let name = bp.name.clone();
-            let handle = tokio::spawn(async move {
-                let result = run_blueprint(run_opts).await;
-                if let Err(e) = &result {
-                    eprintln!("[{name}] blueprint-manager exited with error: {e}");
+            let mut cmd = Command::new(&binary);
+
+            // If using self-exe (cargo-tangle), add subcommand args
+            if bp.binary.is_none() {
+                cmd.args(["tangle", "blueprint", "run", "--no-vm", "--settings-file"]);
+                cmd.arg(&settings_path);
+                cmd.args(["--http-rpc-url"]);
+                cmd.arg(self.stack.http_rpc_url().as_str());
+                cmd.args(["--ws-rpc-url"]);
+                cmd.arg(self.stack.ws_rpc_url().as_str());
+                cmd.args(["--keystore-path"]);
+                cmd.arg(&self.stack.keystore_path());
+            }
+
+            // Per-blueprint env isolation: clear and inject only what's needed
+            cmd.env_clear();
+            // Inherit essential system env
+            for key in &[
+                "PATH",
+                "HOME",
+                "USER",
+                "TMPDIR",
+                "RUST_LOG",
+                "RUST_BACKTRACE",
+            ] {
+                if let Ok(val) = std::env::var(key) {
+                    cmd.env(key, &val);
                 }
-                result
-            });
+            }
+            // Inject per-blueprint env (MODEL, API keys, etc.)
+            for (k, v) in &bp.env {
+                cmd.env(k, v);
+            }
+            // Inject port
+            cmd.env("PORT", port.to_string());
 
-            self.handles.push(BlueprintTask {
+            // Working directory is the blueprint repo
+            cmd.current_dir(&bp.path);
+
+            // Pipe stdout/stderr for log forwarding
+            cmd.stdout(std::process::Stdio::piped());
+            cmd.stderr(std::process::Stdio::piped());
+
+            let mut child = cmd.spawn().map_err(|e| {
+                eyre!(
+                    "failed to spawn blueprint-manager for '{}': {e}\n  binary: {}\n  cwd: {}",
+                    bp.name,
+                    binary.display(),
+                    bp.path.display()
+                )
+            })?;
+
+            // Spawn log forwarder
+            let log_task =
+                spawn_log_forwarder(bp.name.clone(), child.stdout.take(), child.stderr.take());
+
+            self.blueprints.push(SpawnedBlueprint {
                 name: bp.name.clone(),
-                handle,
+                service_id,
+                port,
+                child,
+                _log_task: log_task,
+                _settings_dir: settings_dir,
             });
+        }
+
+        // Health checks
+        for bp in &self.blueprints {
+            let spec = config
+                .blueprints
+                .iter()
+                .find(|s| s.name == bp.name)
+                .unwrap();
+            let timeout = Duration::from_secs(spec.startup_timeout_secs);
+            let health_url = format!("http://127.0.0.1:{}{}", bp.port, spec.health_path);
+
+            println!("[{}] Waiting for health at {} ...", bp.name, health_url);
+            match wait_for_health(&health_url, timeout).await {
+                Ok(()) => println!("[{}] Healthy", bp.name),
+                Err(e) => {
+                    eprintln!("[{}] Health check failed: {e}", bp.name);
+                    // Don't abort other blueprints — some may not have HTTP health endpoints
+                    // (they use on-chain events only). Log the warning and continue.
+                }
+            }
         }
 
         Ok(())
     }
 
-    /// Wait for SIGTERM/SIGINT, then shut down all blueprints gracefully.
-    pub async fn run_until_shutdown(self) -> Result<()> {
+    /// Block until Ctrl-C or a blueprint exits, then clean up everything.
+    pub async fn run_until_shutdown(mut self) -> Result<()> {
         println!();
-        println!("Harness up. {} blueprint(s) running.", self.handles.len());
+        println!(
+            "Harness up. {} blueprint(s) running.",
+            self.blueprints.len()
+        );
         println!("Press Ctrl+C to stop.");
         println!();
 
-        tokio::signal::ctrl_c()
-            .await
-            .map_err(|e| eyre!("failed to listen for Ctrl-C: {e}"))?;
-
-        println!();
-        println!("Shutdown signal received, stopping blueprints...");
-
-        for task in &self.handles {
-            task.handle.abort();
+        // Wait for either Ctrl-C or any child to exit unexpectedly
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                println!();
+                println!("Shutdown signal received, stopping blueprints...");
+            }
+            result = wait_for_any_exit(&mut self.blueprints) => {
+                match result {
+                    Some((name, code)) => {
+                        eprintln!();
+                        eprintln!("[{name}] exited unexpectedly with code {code:?}, shutting down...");
+                    }
+                    None => {
+                        eprintln!("All blueprints exited.");
+                    }
+                }
+            }
         }
 
-        for task in self.handles {
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(5), task.handle).await;
+        // Graceful shutdown: SIGTERM → wait 5s → SIGKILL
+        for bp in &mut self.blueprints {
+            let _ = bp.child.start_kill();
+        }
+        for bp in &mut self.blueprints {
+            let _ = tokio::time::timeout(Duration::from_secs(5), bp.child.wait()).await;
         }
 
         self.stack.shutdown().await;
-
         println!("Harness stopped.");
         Ok(())
+    }
+}
+
+/// Write a settings.env file for one blueprint subprocess.
+fn write_settings_env(
+    path: &std::path::Path,
+    blueprint_id: u64,
+    service_id: u64,
+    stack: &DevnetStack,
+) -> Result<()> {
+    let mut f = std::fs::File::create(path)
+        .map_err(|e| eyre!("failed to create settings.env at {}: {e}", path.display()))?;
+    writeln!(f, "BLUEPRINT_ID={blueprint_id}")?;
+    writeln!(f, "SERVICE_ID={service_id}")?;
+    writeln!(f, "TANGLE_CONTRACT={:?}", stack.tangle_contract())?;
+    writeln!(f, "RESTAKING_CONTRACT={:?}", stack.restaking_contract())?;
+    writeln!(
+        f,
+        "STATUS_REGISTRY_CONTRACT={:?}",
+        stack.status_registry_contract()
+    )?;
+    Ok(())
+}
+
+/// Allocate a free port by briefly binding to :0.
+fn allocate_free_port() -> Result<u16> {
+    let listener =
+        TcpListener::bind("127.0.0.1:0").map_err(|e| eyre!("failed to allocate free port: {e}"))?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    Ok(port)
+}
+
+/// Poll an HTTP health endpoint until 200 or timeout.
+/// Uses raw TCP + HTTP/1.1 to avoid adding reqwest as a CLI dependency.
+async fn wait_for_health(url: &str, timeout: Duration) -> Result<()> {
+    let start = tokio::time::Instant::now();
+    let mut last_error = String::new();
+
+    // Parse host:port from url (expects http://127.0.0.1:{port}{path})
+    let url = url.trim_start_matches("http://");
+    let (addr, path) = url.split_once('/').unwrap_or((url, ""));
+    let path = format!("/{path}");
+
+    loop {
+        if start.elapsed() > timeout {
+            return Err(eyre!(
+                "health check timed out after {}s — last error: {last_error}",
+                timeout.as_secs()
+            ));
+        }
+
+        match tokio::net::TcpStream::connect(addr).await {
+            Ok(mut stream) => {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let req =
+                    format!("GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n");
+                if stream.write_all(req.as_bytes()).await.is_ok() {
+                    let mut buf = vec![0u8; 256];
+                    if let Ok(n) = stream.read(&mut buf).await {
+                        let response = String::from_utf8_lossy(&buf[..n]);
+                        if response.contains("200") {
+                            return Ok(());
+                        }
+                        last_error = response.lines().next().unwrap_or("unknown").to_string();
+                    }
+                }
+            }
+            Err(e) => {
+                last_error = e.to_string();
+            }
+        }
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
+/// Spawn a task that reads stdout+stderr and prefixes each line with [name].
+fn spawn_log_forwarder(
+    name: String,
+    stdout: Option<tokio::process::ChildStdout>,
+    stderr: Option<tokio::process::ChildStderr>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let name2 = name.clone();
+
+        let stdout_task = tokio::spawn(async move {
+            if let Some(out) = stdout {
+                let reader = BufReader::new(out);
+                let mut lines = reader.lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    println!("[{name}] {line}");
+                }
+            }
+        });
+
+        let stderr_task = tokio::spawn(async move {
+            if let Some(err) = stderr {
+                let reader = BufReader::new(err);
+                let mut lines = reader.lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    eprintln!("[{name2}] {line}");
+                }
+            }
+        });
+
+        let _ = tokio::join!(stdout_task, stderr_task);
+    })
+}
+
+/// Wait until any child process exits. Returns the name and exit code.
+async fn wait_for_any_exit(blueprints: &mut [SpawnedBlueprint]) -> Option<(String, Option<i32>)> {
+    loop {
+        for bp in blueprints.iter_mut() {
+            match bp.child.try_wait() {
+                Ok(Some(status)) => {
+                    return Some((bp.name.clone(), status.code()));
+                }
+                Ok(None) => {} // still running
+                Err(_) => {
+                    return Some((bp.name.clone(), None));
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
