@@ -236,11 +236,6 @@ fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
 /// for submission via `TangleClient::submit_job_from_quote`.
 ///
 /// Produces a 65-byte ECDSA signature (r || s || v) where v = 27 + recovery_id.
-///
-/// NOTE: The on-chain `JobQuoteDetails` struct does not yet include `confidentiality`.
-/// The EIP-712 typehash signs over it, so once the Solidity struct is updated this
-/// conversion must include the field. Until then, only `confidentiality = 0` quotes
-/// will verify on-chain correctly.
 impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::SignedJobQuote {
     fn from(quote: SignedJobQuote) -> Self {
         use blueprint_crypto::BytesEncoding;
@@ -253,6 +248,7 @@ impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::
                 price: quote.details.price,
                 timestamp: quote.details.timestamp,
                 expiry: quote.details.expiry,
+                confidentiality: quote.details.confidentiality,
             },
             signature: sig_bytes.into(),
             operator: quote.operator,
