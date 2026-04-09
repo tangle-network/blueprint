@@ -3,6 +3,7 @@ use crate::error::{PricingError, Result};
 use crate::pricing_engine::AssetSecurityRequirements;
 use crate::types::ResourceUnit;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml;
@@ -29,9 +30,9 @@ pub fn block_time() -> Decimal {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TtlPricingCurve {
     /// Multiplier values at evenly-spaced TTL points. Must have at least 2 elements.
-    pub multipliers: Vec<f64>,
+    multipliers: Vec<f64>,
     /// The TTL duration (in seconds) that the last element corresponds to.
-    pub max_duration_secs: u64,
+    max_duration_secs: u64,
 }
 
 impl Default for TtlPricingCurve {
@@ -45,6 +46,26 @@ impl Default for TtlPricingCurve {
 }
 
 impl TtlPricingCurve {
+    /// Construct a validated TTL pricing curve.
+    pub fn new(multipliers: Vec<f64>, max_duration_secs: u64) -> std::result::Result<Self, String> {
+        let curve = Self {
+            multipliers,
+            max_duration_secs,
+        };
+        curve.validate()?;
+        Ok(curve)
+    }
+
+    /// Read-only access to the multiplier values.
+    pub fn multipliers(&self) -> &[f64] {
+        &self.multipliers
+    }
+
+    /// Read-only access to the max duration in seconds.
+    pub fn max_duration_secs(&self) -> u64 {
+        self.max_duration_secs
+    }
+
     /// Evaluate the curve at a given TTL duration in seconds.
     /// Returns the interpolated multiplier.
     pub fn evaluate(&self, ttl_secs: u64) -> Decimal {
@@ -140,7 +161,9 @@ fn calculate_ttl_price_adjustment(
     let ttl_seconds = Decimal::from(time_blocks) * block_time();
     match ttl_curve {
         Some(curve) => {
-            let ttl_secs_u64 = (time_blocks as u128 * 6).min(u64::MAX as u128) as u64;
+            let block_time_secs = block_time().to_u64().unwrap_or(6);
+            let ttl_secs_u64 =
+                (time_blocks as u128 * block_time_secs as u128).min(u64::MAX as u128) as u64;
             ttl_seconds * curve.evaluate(ttl_secs_u64)
         }
         None => ttl_seconds,
@@ -787,12 +810,7 @@ pub fn load_ttl_curve_from_toml(content: &str) -> Result<Option<TtlPricingCurve>
         })
         .collect::<Result<Vec<f64>>>()?;
 
-    let curve = TtlPricingCurve {
-        multipliers,
-        max_duration_secs,
-    };
-    curve
-        .validate()
+    let curve = TtlPricingCurve::new(multipliers, max_duration_secs)
         .map_err(|e| PricingError::Config(format!("ttl_curve: {e}")))?;
 
     Ok(Some(curve))
@@ -815,10 +833,7 @@ mod tests {
 
     #[test]
     fn discount_curve_interpolates() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![1.0, 0.5],
-            max_duration_secs: 100,
-        };
+        let curve = TtlPricingCurve::new(vec![1.0, 0.5], 100).unwrap();
         // At t=0: 1.0, at t=50: 0.75, at t=100: 0.5
         assert_eq!(curve.evaluate(0), Decimal::ONE);
         assert_eq!(curve.evaluate(100), Decimal::try_from(0.5).unwrap());
@@ -830,10 +845,11 @@ mod tests {
     #[test]
     fn multi_point_curve() {
         // [1.2, 1.0, 0.8, 0.5, 0.35] over 4 months
-        let curve = TtlPricingCurve {
-            multipliers: vec![1.2, 1.0, 0.8, 0.5, 0.35],
-            max_duration_secs: 4 * 30 * 86400, // ~120 days
-        };
+        let curve = TtlPricingCurve::new(
+            vec![1.2, 1.0, 0.8, 0.5, 0.35],
+            4 * 30 * 86400, // ~120 days
+        )
+        .unwrap();
         // At t=0: 1.2 (spot premium)
         assert_eq!(curve.evaluate(0), Decimal::try_from(1.2).unwrap());
         // At max: 0.35
@@ -848,79 +864,48 @@ mod tests {
 
     #[test]
     fn clamp_beyond_max_duration() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![1.0, 0.5],
-            max_duration_secs: 100,
-        };
+        let curve = TtlPricingCurve::new(vec![1.0, 0.5], 100).unwrap();
         // Beyond max should clamp to last value
         assert_eq!(curve.evaluate(200), Decimal::try_from(0.5).unwrap());
         assert_eq!(curve.evaluate(u64::MAX), Decimal::try_from(0.5).unwrap());
     }
 
     #[test]
-    fn single_multiplier_returns_constant() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![0.8],
-            max_duration_secs: 1000,
-        };
-        assert_eq!(curve.evaluate(0), Decimal::try_from(0.8).unwrap());
-        assert_eq!(curve.evaluate(500), Decimal::try_from(0.8).unwrap());
+    fn single_multiplier_rejected_by_constructor() {
+        assert!(TtlPricingCurve::new(vec![0.8], 1000).is_err());
     }
 
     #[test]
-    fn empty_multipliers_returns_one() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![],
-            max_duration_secs: 1000,
-        };
-        assert_eq!(curve.evaluate(42), Decimal::ONE);
+    fn empty_multipliers_rejected_by_constructor() {
+        assert!(TtlPricingCurve::new(vec![], 1000).is_err());
     }
 
     // ── Validation ──────────────────────────────────────────────────────
 
     #[test]
-    fn validate_rejects_too_few() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![1.0],
-            max_duration_secs: 100,
-        };
-        assert!(curve.validate().is_err());
+    fn new_rejects_too_few() {
+        assert!(TtlPricingCurve::new(vec![1.0], 100).is_err());
     }
 
     #[test]
-    fn validate_rejects_too_many() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![1.0; 101],
-            max_duration_secs: 100,
-        };
-        assert!(curve.validate().is_err());
+    fn new_rejects_too_many() {
+        assert!(TtlPricingCurve::new(vec![1.0; 101], 100).is_err());
     }
 
     #[test]
-    fn validate_rejects_negative() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![1.0, -0.5],
-            max_duration_secs: 100,
-        };
-        assert!(curve.validate().is_err());
+    fn new_rejects_negative() {
+        assert!(TtlPricingCurve::new(vec![1.0, -0.5], 100).is_err());
     }
 
     #[test]
-    fn validate_rejects_nan() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![1.0, f64::NAN],
-            max_duration_secs: 100,
-        };
-        assert!(curve.validate().is_err());
+    fn new_rejects_nan() {
+        assert!(TtlPricingCurve::new(vec![1.0, f64::NAN], 100).is_err());
     }
 
     #[test]
-    fn validate_accepts_100_elements() {
-        let curve = TtlPricingCurve {
-            multipliers: (0..100).map(|i| 1.0 - i as f64 * 0.005).collect(),
-            max_duration_secs: 31_536_000,
-        };
-        assert!(curve.validate().is_ok());
+    fn new_accepts_100_elements() {
+        let multipliers: Vec<f64> = (0..100).map(|i| 1.0 - i as f64 * 0.005).collect();
+        assert!(TtlPricingCurve::new(multipliers, 31_536_000).is_ok());
     }
 
     // ── TOML loading ────────────────────────────────────────────────────
@@ -939,8 +924,8 @@ max_duration_secs = 31536000
 multipliers = [1.2, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.45, 0.4, 0.38, 0.36, 0.35]
 "#;
         let curve = load_ttl_curve_from_toml(toml).unwrap().unwrap();
-        assert_eq!(curve.multipliers.len(), 12);
-        assert_eq!(curve.max_duration_secs, 31_536_000);
+        assert_eq!(curve.multipliers().len(), 12);
+        assert_eq!(curve.max_duration_secs(), 31_536_000);
         assert_eq!(curve.evaluate(0), Decimal::try_from(1.2).unwrap());
     }
 
@@ -958,10 +943,11 @@ multipliers = [1.0]
 
     #[test]
     fn resource_price_with_discount_curve() {
-        let curve = TtlPricingCurve {
-            multipliers: vec![1.0, 0.5], // 50% discount at max duration
-            max_duration_secs: 600,      // 600 seconds = 100 blocks at 6s
-        };
+        let curve = TtlPricingCurve::new(
+            vec![1.0, 0.5], // 50% discount at max duration
+            600,            // 600 seconds = 100 blocks at 6s
+        )
+        .unwrap();
 
         let linear_price = calculate_resource_price(1, Decimal::ONE, 100, None);
         let curved_price =
