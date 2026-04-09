@@ -14,9 +14,10 @@ use blueprint_pricing_engine_lib::{
     cleanup,
     error::{PricingError, Result},
     handle_blueprint_update, init_benchmark_cache, init_job_pricing_config, init_operator_signer,
-    init_pricing_config, init_subscription_pricing_config, load_operator_config,
+    init_pricing_config, init_subscription_pricing_config, init_tee_pricing_config,
+    load_operator_config,
     service::blockchain::event::BlockchainEvent,
-    service::rpc::server::{JobPricingConfig, run_rpc_server},
+    service::rpc::server::{JobPricingConfig, run_rpc_server_with_tee},
     signer::QuoteSigningDomain,
     spawn_event_processor, start_blockchain_listener, wait_for_shutdown,
 };
@@ -171,6 +172,9 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     // Initialize subscription pricing from the same pricing config file.
     let subscription_config = init_subscription_pricing_config(pricing_config_path).await?;
 
+    // Initialize TEE pricing from the same pricing config file.
+    let tee_config = init_tee_pricing_config(pricing_config_path).await?;
+
     // Initialize operator signer
     let operator_signer = init_operator_signer(
         &config,
@@ -187,13 +191,14 @@ pub async fn run_app(cli: Cli) -> Result<()> {
 
     // Start the gRPC server
     let server_handle = tokio::spawn(async move {
-        if let Err(e) = run_rpc_server(
+        if let Err(e) = run_rpc_server_with_tee(
             config,
             benchmark_cache,
             pricing_config,
             job_pricing_config,
             subscription_config,
             operator_signer,
+            tee_config,
         )
         .await
         {

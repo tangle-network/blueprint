@@ -10,8 +10,11 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TeeMode {
-    /// TEE is disabled; no TEE operations are performed.
+    /// Probe for TEE hardware at startup.
+    /// If detected, activate TEE (equivalent to Direct). Otherwise, run without TEE.
     #[default]
+    Auto,
+    /// TEE is disabled; no TEE operations are performed.
     Disabled,
     /// The runner itself is executing inside a TEE.
     /// Device passthrough, hardened defaults, native attestation.
@@ -268,8 +271,12 @@ pub struct TeeKeyExchangeConfig {
     ///
     /// This prevents a compromised operator from substituting a different TEE's
     /// attestation during key exchange.
-    #[serde(default)]
+    #[serde(default = "default_on_chain_verification")]
     pub on_chain_verification: bool,
+}
+
+fn default_on_chain_verification() -> bool {
+    true
 }
 
 fn default_session_ttl_secs() -> u64 {
@@ -285,7 +292,7 @@ impl Default for TeeKeyExchangeConfig {
         Self {
             session_ttl_secs: default_session_ttl_secs(),
             max_sessions: default_max_sessions(),
-            on_chain_verification: false,
+            on_chain_verification: true,
         }
     }
 }
@@ -398,8 +405,8 @@ impl TeeConfig {
             ));
         }
 
-        // TEE-enabled configs must use SealedOnly
-        if self.mode != TeeMode::Disabled
+        // TEE-enabled configs must use SealedOnly (Auto is exempt — resolved at runtime)
+        if !matches!(self.mode, TeeMode::Disabled | TeeMode::Auto)
             && self.secret_injection != SecretInjectionPolicy::SealedOnly
         {
             return Err(TeeError::Config(
@@ -543,7 +550,8 @@ impl TeeConfigBuilder {
         // TEE-enabled deployments must use SealedOnly secret injection.
         // Container recreation (env-var re-injection) invalidates attestation,
         // breaks sealed secrets, and loses the on-chain deployment ID.
-        let secret_injection = if mode != TeeMode::Disabled {
+        // Auto mode uses EnvOrSealed until resolved at runtime.
+        let secret_injection = if !matches!(mode, TeeMode::Disabled | TeeMode::Auto) {
             SecretInjectionPolicy::SealedOnly
         } else {
             SecretInjectionPolicy::EnvOrSealed

@@ -218,6 +218,7 @@ mod evm_listener_tests {
             security_requirements,
             challenge_timestamp,
             pricing_model: 0,
+            require_tee: false,
         };
 
         let response = client.get_price(request).await?.into_inner();
@@ -440,6 +441,7 @@ mod evm_listener_tests {
                 security_requirements,
                 challenge_timestamp,
                 pricing_model: 0,
+                require_tee: false,
             };
 
             let response = grpc_client.get_price(request).await?.into_inner();
@@ -573,6 +575,7 @@ mod evm_listener_tests {
             }),
             challenge_timestamp: expired_timestamp,
             pricing_model: 0,
+            require_tee: false,
         };
 
         let result = client.get_price(request).await;
@@ -656,6 +659,7 @@ mod evm_listener_tests {
             }),
             challenge_timestamp,
             pricing_model: 0,
+            require_tee: false,
         };
 
         let result = client.get_price(request).await;
@@ -737,6 +741,7 @@ mod evm_listener_tests {
             }),
             challenge_timestamp,
             pricing_model: 0,
+            require_tee: false,
         };
 
         let result = client.get_price(request).await;
@@ -810,6 +815,7 @@ mod evm_listener_tests {
                 }),
                 challenge_timestamp,
                 pricing_model: 0,
+                require_tee: false,
             };
 
             let response = grpc_client.get_price(request).await?.into_inner();
@@ -1227,6 +1233,7 @@ mod evm_listener_tests {
             security_requirements: None, // Missing!
             challenge_timestamp,
             pricing_model: 0,
+            require_tee: false,
         };
 
         let result = client.get_price(request).await;
@@ -1312,6 +1319,7 @@ mod evm_listener_tests {
             }),
             challenge_timestamp,
             pricing_model: 0,
+            require_tee: false,
         };
 
         // Zero TTL should still be handled (quote can have zero TTL)
@@ -1414,6 +1422,7 @@ mod evm_listener_tests {
             }),
             challenge_timestamp,
             pricing_model: 0,
+            require_tee: false,
         };
 
         Ok(client.get_price(request).await?.into_inner())

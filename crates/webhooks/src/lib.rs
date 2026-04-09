@@ -37,7 +37,18 @@ pub mod error;
 pub mod gateway;
 pub mod producer;
 
+/// Outbound job notifications — push completion events to customers.
+#[cfg(feature = "notifier")]
+pub mod notifier;
+
+/// SSE endpoint for real-time job status streaming.
+#[cfg(feature = "notifier")]
+pub mod sse;
+
 pub use config::WebhookConfig;
 pub use error::WebhookError;
 pub use gateway::WebhookGateway;
 pub use producer::WebhookProducer;
+
+#[cfg(feature = "notifier")]
+pub use notifier::{JobEvent, JobNotifier, JobStatus, NotifierConfig};

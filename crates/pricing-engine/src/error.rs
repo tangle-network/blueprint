@@ -51,6 +51,9 @@ pub enum PricingError {
     #[error("HTTP error: {0}")]
     HttpError(String),
 
+    #[error("TEE not available on this operator")]
+    TeeNotAvailable,
+
     #[error("Other error: {0}")]
     Other(String),
 }

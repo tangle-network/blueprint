@@ -41,14 +41,18 @@ pub use error::{PricingError, Result};
 pub use handlers::handle_blueprint_update;
 pub use pow::{DEFAULT_POW_DIFFICULTY, generate_challenge, generate_proof, verify_proof};
 pub use pricing::{
-    PriceModel, ResourcePricing, SubscriptionPricing, calculate_price, load_job_pricing_from_toml,
-    load_pricing_from_toml, load_subscription_pricing_from_toml,
+    PriceModel, ResourcePricing, SubscriptionPricing, TeePricing, apply_tee_pricing,
+    calculate_price, load_job_pricing_from_toml, load_pricing_from_toml,
+    load_subscription_pricing_from_toml, load_tee_pricing_from_toml,
 };
 pub use service::blockchain::event::BlockchainEvent;
 pub use service::rpc::server::{
     JobPricingConfig, PricingEngineService, SubscriptionPricingConfig, run_rpc_server,
+    run_rpc_server_with_tee,
 };
-pub use signer::{OperatorId, OperatorSigner, SignableQuote, SignedJobQuote, SignedQuote};
+pub use signer::{
+    Confidentiality, OperatorId, OperatorSigner, SignableQuote, SignedJobQuote, SignedQuote,
+};
 
 use blueprint_core::info;
 use std::collections::HashMap;
@@ -90,6 +94,24 @@ pub async fn init_job_pricing_config(
         job_config.len()
     );
     Ok(Arc::new(Mutex::new(job_config)))
+}
+
+/// Load TEE pricing config from the same TOML file used for resource pricing.
+/// Reads the `[tee]` section; defaults to unavailable if absent.
+pub async fn init_tee_pricing_config(config_path: impl AsRef<Path>) -> Result<TeePricing> {
+    let content = tokio::fs::read_to_string(config_path.as_ref())
+        .await
+        .map_err(PricingError::Io)?;
+    let tee_config = pricing::load_tee_pricing_from_toml(&content)?;
+    if tee_config.available {
+        info!(
+            "TEE pricing loaded: provider={}, multiplier={}",
+            tee_config.provider, tee_config.multiplier
+        );
+    } else {
+        info!("TEE pricing: not available (no [tee] section or available=false)");
+    }
+    Ok(tee_config)
 }
 
 /// Load subscription pricing config from the same TOML file used for resource pricing.

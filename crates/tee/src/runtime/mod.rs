@@ -4,6 +4,7 @@
 //! and a registry for provider discovery.
 
 pub mod backend;
+pub mod detect;
 pub mod direct;
 pub mod registry;
 

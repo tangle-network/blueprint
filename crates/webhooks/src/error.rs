@@ -26,6 +26,11 @@ pub enum WebhookError {
     /// TOML parsing error.
     #[error(transparent)]
     TomlParse(#[from] toml::de::Error),
+
+    /// Webhook delivery failed (outbound notification).
+    #[cfg(feature = "notifier")]
+    #[error("webhook delivery failed: {0}")]
+    DeliveryFailed(String),
 }
 
 impl From<WebhookError> for blueprint_runner::error::RunnerError {
