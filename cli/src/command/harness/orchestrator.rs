@@ -126,6 +126,12 @@ impl Orchestrator {
 
             let mut cmd = Command::new(&binary);
 
+            // Operator binaries built with BlueprintRunner expect a `run` subcommand
+            // (from ContextConfig::parse() which defines the clap structure).
+            if bp.binary.is_some() {
+                cmd.arg("run");
+            }
+
             // If using self-exe (cargo-tangle), add subcommand args
             if bp.binary.is_none() {
                 cmd.args(["tangle", "blueprint", "run", "--no-vm", "--settings-file"]);
@@ -181,8 +187,11 @@ impl Orchestrator {
             for (k, v) in &bp.env {
                 cmd.env(k, v);
             }
-            // Inject port
+            // Inject port into standard and operator-config env vars
             cmd.env("PORT", port.to_string());
+            // Common operator config env overrides (prefix__key format)
+            cmd.env("MODAL_OP_SERVER__PORT", port.to_string());
+            cmd.env("VLLM_OP_SERVER__PORT", port.to_string());
 
             // Working directory is the blueprint repo
             cmd.current_dir(&bp.path);
@@ -213,6 +222,9 @@ impl Orchestrator {
                 _settings_dir: settings_dir,
             });
         }
+
+        // Give operator binaries a moment to start up before health checking
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
         // Health checks
         for bp in &self.blueprints {
