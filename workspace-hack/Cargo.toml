@@ -23,7 +23,7 @@ alloy-contract = { version = "1", default-features = false, features = ["pubsub"
 alloy-core = { version = "1", features = ["dyn-abi", "json-abi", "k256", "rlp"] }
 alloy-dyn-abi = { version = "1", features = ["eip712"] }
 alloy-eip7702 = { version = "0.6", default-features = false, features = ["k256", "serde", "std"] }
-alloy-eips = { version = "1", default-features = false, features = ["k256", "kzg", "serde", "std"] }
+alloy-eips = { version = "2", default-features = false, features = ["k256", "kzg", "serde", "std"] }
 alloy-json-abi = { version = "1", features = ["serde_json"] }
 alloy-network = { version = "1", default-features = false, features = ["k256"] }
 alloy-primitives = { version = "1", features = ["k256", "rlp", "serde"] }
@@ -222,7 +222,7 @@ alloy-contract = { version = "1", default-features = false, features = ["pubsub"
 alloy-core = { version = "1", features = ["dyn-abi", "json-abi", "k256", "rlp"] }
 alloy-dyn-abi = { version = "1", features = ["eip712"] }
 alloy-eip7702 = { version = "0.6", default-features = false, features = ["k256", "serde", "std"] }
-alloy-eips = { version = "1", default-features = false, features = ["k256", "kzg", "serde", "std"] }
+alloy-eips = { version = "2", default-features = false, features = ["k256", "kzg", "serde", "std"] }
 alloy-json-abi = { version = "1", features = ["serde_json"] }
 alloy-network = { version = "1", default-features = false, features = ["k256"] }
 alloy-primitives = { version = "1", features = ["k256", "rlp", "serde"] }
