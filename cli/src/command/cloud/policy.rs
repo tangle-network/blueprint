@@ -145,14 +145,28 @@ impl Default for RemoteDeploymentPolicy {
     fn default() -> Self {
         Self {
             providers: ProviderPreferences {
-                gpu_providers: vec![CloudProvider::GCP, CloudProvider::AWS],
+                gpu_providers: vec![
+                    CloudProvider::RunPod,
+                    CloudProvider::LambdaLabs,
+                    CloudProvider::VastAi,
+                    CloudProvider::PrimeIntellect,
+                    CloudProvider::Crusoe,
+                    CloudProvider::GCP,
+                    CloudProvider::AWS,
+                ],
                 cpu_intensive: vec![
+                    CloudProvider::Hetzner,
                     CloudProvider::Vultr,
                     CloudProvider::DigitalOcean,
                     CloudProvider::AWS,
                 ],
-                memory_intensive: vec![CloudProvider::AWS, CloudProvider::GCP],
-                cost_optimized: vec![CloudProvider::Vultr, CloudProvider::DigitalOcean],
+                memory_intensive: vec![CloudProvider::AWS, CloudProvider::GCP, CloudProvider::Hetzner],
+                cost_optimized: vec![
+                    CloudProvider::VastAi,
+                    CloudProvider::Hetzner,
+                    CloudProvider::Vultr,
+                    CloudProvider::DigitalOcean,
+                ],
             },
             cost_limits: CostPolicy {
                 max_hourly_cost: Some(5.0),
@@ -532,6 +546,12 @@ fn parse_providers(input: &str) -> Result<Vec<CloudProvider>> {
                 "azure" => Ok(CloudProvider::Azure),
                 "digitalocean" | "do" => Ok(CloudProvider::DigitalOcean),
                 "vultr" => Ok(CloudProvider::Vultr),
+                "hetzner" => Ok(CloudProvider::Hetzner),
+                "runpod" => Ok(CloudProvider::RunPod),
+                "lambda" | "lambda-labs" | "lambdalabs" => Ok(CloudProvider::LambdaLabs),
+                "prime-intellect" | "primeintellect" | "pi" => Ok(CloudProvider::PrimeIntellect),
+                "vast" | "vast-ai" | "vastai" => Ok(CloudProvider::VastAi),
+                "crusoe" => Ok(CloudProvider::Crusoe),
                 _ => Err(color_eyre::eyre::eyre!("Unknown provider: {}", trimmed)),
             }
         })

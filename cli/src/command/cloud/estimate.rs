@@ -113,6 +113,12 @@ pub async fn estimate(opts: EstimateOptions) -> Result<()> {
             CloudProvider::Azure,
             CloudProvider::DigitalOcean,
             CloudProvider::Vultr,
+            CloudProvider::Hetzner,
+            CloudProvider::RunPod,
+            CloudProvider::LambdaLabs,
+            CloudProvider::PrimeIntellect,
+            CloudProvider::VastAi,
+            CloudProvider::Crusoe,
         ];
 
         let mut estimates = Vec::new();
@@ -249,6 +255,12 @@ fn get_instance_type(provider: CloudProvider, cpu: f32, memory: f32, gpu: Option
             CloudProvider::AWS => "p3.2xlarge",
             CloudProvider::GCP => "n1-standard-8-nvidia-t4",
             CloudProvider::Azure => "NC6s_v3",
+            CloudProvider::RunPod => "NVIDIA A100 80GB PCIe",
+            CloudProvider::LambdaLabs => "gpu_1x_a100",
+            CloudProvider::VastAi => "RTX 4090",
+            CloudProvider::PrimeIntellect => "a100-80gb",
+            CloudProvider::Hetzner => "GX11",
+            CloudProvider::Crusoe => "a100.1x",
             _ => "GPU Instance",
         }
         .to_string()
@@ -304,6 +316,22 @@ fn get_instance_type(provider: CloudProvider, cpu: f32, memory: f32, gpu: Option
                 "vc2-8c-32gb"
             }
             .to_string(),
+            CloudProvider::Hetzner => if cpu <= 2.0 && memory <= 4.0 {
+                "cpx11"
+            } else if cpu <= 4.0 && memory <= 8.0 {
+                "cpx21"
+            } else if cpu <= 8.0 && memory <= 16.0 {
+                "cpx31"
+            } else {
+                "cpx41"
+            }
+            .to_string(),
+            // GPU-focused providers — CPU-only instances aren't their primary offering
+            CloudProvider::RunPod
+            | CloudProvider::LambdaLabs
+            | CloudProvider::VastAi
+            | CloudProvider::PrimeIntellect
+            | CloudProvider::Crusoe => "CPU Instance".to_string(),
         }
     }
 }
@@ -323,6 +351,12 @@ fn calculate_costs(
         CloudProvider::Azure => 0.11 * cpu + 0.009 * memory,
         CloudProvider::DigitalOcean => 0.08 * cpu + 0.006 * memory,
         CloudProvider::Vultr => 0.07 * cpu + 0.005 * memory,
+        CloudProvider::Hetzner => 0.05 * cpu + 0.004 * memory,
+        CloudProvider::RunPod => 0.06 * cpu + 0.005 * memory,
+        CloudProvider::LambdaLabs => 0.08 * cpu + 0.006 * memory,
+        CloudProvider::PrimeIntellect => 0.07 * cpu + 0.005 * memory,
+        CloudProvider::VastAi => 0.04 * cpu + 0.003 * memory,
+        CloudProvider::Crusoe => 0.08 * cpu + 0.006 * memory,
     };
 
     // Add GPU costs
@@ -331,6 +365,12 @@ fn calculate_costs(
             CloudProvider::AWS => 3.06 * gpu_count as f32,
             CloudProvider::GCP => 2.48 * gpu_count as f32,
             CloudProvider::Azure => 2.88 * gpu_count as f32,
+            CloudProvider::RunPod => 1.19 * gpu_count as f32,
+            CloudProvider::LambdaLabs => 1.29 * gpu_count as f32,
+            CloudProvider::VastAi => 0.80 * gpu_count as f32,
+            CloudProvider::PrimeIntellect => 1.10 * gpu_count as f32,
+            CloudProvider::Hetzner => 1.99 * gpu_count as f32,
+            CloudProvider::Crusoe => 2.06 * gpu_count as f32,
             _ => 2.50 * gpu_count as f32,
         }
     } else {
@@ -365,6 +405,12 @@ async fn get_best_instance_and_price(
         CloudProvider::Azure => RemoteCloudProvider::Azure,
         CloudProvider::DigitalOcean => RemoteCloudProvider::DigitalOcean,
         CloudProvider::Vultr => RemoteCloudProvider::Vultr,
+        CloudProvider::Hetzner => RemoteCloudProvider::Hetzner,
+        CloudProvider::RunPod => RemoteCloudProvider::RunPod,
+        CloudProvider::LambdaLabs => RemoteCloudProvider::LambdaLabs,
+        CloudProvider::PrimeIntellect => RemoteCloudProvider::PrimeIntellect,
+        CloudProvider::VastAi => RemoteCloudProvider::VastAi,
+        CloudProvider::Crusoe => RemoteCloudProvider::Crusoe,
     };
 
     if let Some((discovery, _credentials)) = discovery_result {

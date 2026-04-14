@@ -3,7 +3,9 @@ use crate::core::resources::ResourceSpec;
 use crate::providers::akash::AkashInstanceMapper;
 use crate::providers::bittensor_lium::BittensorLiumInstanceMapper;
 use crate::providers::coreweave::CoreWeaveInstanceMapper;
+use crate::providers::crusoe::CrusoeInstanceMapper;
 use crate::providers::fluidstack::FluidstackInstanceMapper;
+use crate::providers::hetzner::HetznerInstanceMapper;
 use crate::providers::io_net::IoNetInstanceMapper;
 use crate::providers::lambda_labs::LambdaLabsInstanceMapper;
 use crate::providers::paperspace::PaperspaceInstanceMapper;
@@ -58,6 +60,8 @@ impl InstanceTypeMapper {
             CloudProvider::BittensorLium => {
                 Self::from_common(BittensorLiumInstanceMapper::map(spec))
             }
+            CloudProvider::Hetzner => Self::from_common(HetznerInstanceMapper::map(spec)),
+            CloudProvider::Crusoe => Self::from_common(CrusoeInstanceMapper::map(spec)),
             _ => Self::map_generic_instance(spec),
         }
     }

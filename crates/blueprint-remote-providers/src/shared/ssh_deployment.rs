@@ -207,6 +207,28 @@ impl SshDeploymentConfig {
         }
     }
 
+    /// Create Hetzner Cloud SSH configuration
+    pub fn hetzner() -> Self {
+        Self {
+            username: "root".to_string(),
+            key_path: std::env::var("HETZNER_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-hetzner".to_string(),
+            provider_name: "hetzner".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
+    /// Create Crusoe Cloud SSH configuration
+    pub fn crusoe() -> Self {
+        Self {
+            username: "crusoe".to_string(),
+            key_path: std::env::var("CRUSOE_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-crusoe".to_string(),
+            provider_name: "crusoe".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
     /// Create CoreWeave SSH configuration
     pub fn coreweave() -> Self {
         Self {

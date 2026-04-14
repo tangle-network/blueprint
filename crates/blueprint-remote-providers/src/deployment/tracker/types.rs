@@ -112,6 +112,8 @@ pub enum DeploymentType {
     PrimeIntellectPod,
     RenderDispersedNode,
     BittensorLiumMiner,
+    HetznerServer,
+    CrusoeVm,
 
     // Other
     SshRemote,

@@ -183,6 +183,15 @@ fn credentials_present(provider: CloudProvider) -> bool {
         }
         CloudProvider::DigitalOcean => std::env::var("DIGITALOCEAN_TOKEN").is_ok(),
         CloudProvider::Vultr => std::env::var("VULTR_API_KEY").is_ok(),
+        CloudProvider::Hetzner => std::env::var("HETZNER_API_TOKEN").is_ok(),
+        CloudProvider::RunPod => std::env::var("RUNPOD_API_KEY").is_ok(),
+        CloudProvider::LambdaLabs => std::env::var("LAMBDA_LABS_API_KEY").is_ok(),
+        CloudProvider::PrimeIntellect => std::env::var("PRIME_INTELLECT_API_KEY").is_ok(),
+        CloudProvider::VastAi => std::env::var("VAST_AI_API_KEY").is_ok(),
+        CloudProvider::Crusoe => {
+            std::env::var("CRUSOE_API_KEY").is_ok()
+                && std::env::var("CRUSOE_API_SECRET").is_ok()
+        }
     }
 }
 
@@ -322,6 +331,12 @@ fn region_env_var(provider: CloudProvider) -> &'static str {
         CloudProvider::Azure => "AZURE_DEFAULT_REGION",
         CloudProvider::DigitalOcean => "DO_REGION",
         CloudProvider::Vultr => "VULTR_DEFAULT_REGION",
+        CloudProvider::Hetzner => "HETZNER_REGION",
+        CloudProvider::RunPod => "RUNPOD_REGION",
+        CloudProvider::LambdaLabs => "LAMBDA_LABS_REGION",
+        CloudProvider::PrimeIntellect => "PRIME_INTELLECT_REGION",
+        CloudProvider::VastAi => "VAST_AI_REGION",
+        CloudProvider::Crusoe => "CRUSOE_REGION",
     }
 }
 
@@ -340,6 +355,12 @@ fn default_region(provider: CloudProvider) -> &'static str {
         CloudProvider::Azure => "eastus",
         CloudProvider::DigitalOcean => "nyc3",
         CloudProvider::Vultr => "ewr",
+        CloudProvider::Hetzner => "fsn1",
+        CloudProvider::RunPod => "US",
+        CloudProvider::LambdaLabs => "us-west-1",
+        CloudProvider::PrimeIntellect => "us-east",
+        CloudProvider::VastAi => "any",
+        CloudProvider::Crusoe => "us-east1",
     }
 }
 
@@ -348,7 +369,14 @@ fn default_tee_backend(provider: CloudProvider) -> Option<&'static str> {
         CloudProvider::AWS => Some("aws-nitro"),
         CloudProvider::GCP => Some("gcp-confidential"),
         CloudProvider::Azure => Some("azure-skr"),
-        CloudProvider::DigitalOcean | CloudProvider::Vultr => None,
+        CloudProvider::DigitalOcean
+        | CloudProvider::Vultr
+        | CloudProvider::Hetzner
+        | CloudProvider::RunPod
+        | CloudProvider::LambdaLabs
+        | CloudProvider::PrimeIntellect
+        | CloudProvider::VastAi
+        | CloudProvider::Crusoe => None,
     }
 }
 

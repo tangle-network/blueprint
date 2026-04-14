@@ -110,6 +110,10 @@ pub enum CloudProvider {
     Render,
     /// Bittensor Lium (subnet 51) — decentralized GPU rental
     BittensorLium,
+    /// Hetzner Cloud — European cloud with dedicated GPU servers
+    Hetzner,
+    /// Crusoe Energy — clean-energy GPU cloud (L40S, A100, H100)
+    Crusoe,
     /// Generic cloud provider
     Generic,
     /// Local Docker
@@ -141,6 +145,8 @@ impl core::fmt::Display for CloudProvider {
             CloudProvider::PrimeIntellect => write!(f, "Prime Intellect"),
             CloudProvider::Render => write!(f, "Render"),
             CloudProvider::BittensorLium => write!(f, "Bittensor Lium"),
+            CloudProvider::Hetzner => write!(f, "Hetzner"),
+            CloudProvider::Crusoe => write!(f, "Crusoe"),
             CloudProvider::Generic => write!(f, "Generic"),
             CloudProvider::DockerLocal => write!(f, "Docker (Local)"),
             CloudProvider::DockerRemote(host) => write!(f, "Docker (Remote: {host})"),

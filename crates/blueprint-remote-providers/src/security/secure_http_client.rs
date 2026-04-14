@@ -488,6 +488,18 @@ impl ApiAuthentication {
     pub fn bittensor_lium(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
+
+    /// Create Hetzner Cloud API authentication
+    pub fn hetzner(api_token: String) -> Self {
+        Self::Bearer { token: api_token }
+    }
+
+    /// Create Crusoe Cloud API authentication (key:secret as Bearer)
+    pub fn crusoe(api_key: String, api_secret: String) -> Self {
+        Self::Bearer {
+            token: format!("{api_key}:{api_secret}"),
+        }
+    }
 }
 
 impl Default for SecureHttpClient {

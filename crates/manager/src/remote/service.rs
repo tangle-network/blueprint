@@ -1177,6 +1177,24 @@ fn convert_provider(
         crate::remote::provider_selector::CloudProvider::Vultr => {
             Ok(blueprint_remote_providers::CloudProvider::Vultr)
         }
+        crate::remote::provider_selector::CloudProvider::Hetzner => {
+            Ok(blueprint_remote_providers::CloudProvider::Hetzner)
+        }
+        crate::remote::provider_selector::CloudProvider::RunPod => {
+            Ok(blueprint_remote_providers::CloudProvider::RunPod)
+        }
+        crate::remote::provider_selector::CloudProvider::LambdaLabs => {
+            Ok(blueprint_remote_providers::CloudProvider::LambdaLabs)
+        }
+        crate::remote::provider_selector::CloudProvider::PrimeIntellect => {
+            Ok(blueprint_remote_providers::CloudProvider::PrimeIntellect)
+        }
+        crate::remote::provider_selector::CloudProvider::VastAi => {
+            Ok(blueprint_remote_providers::CloudProvider::VastAi)
+        }
+        crate::remote::provider_selector::CloudProvider::Crusoe => {
+            Ok(blueprint_remote_providers::CloudProvider::Crusoe)
+        }
         crate::remote::provider_selector::CloudProvider::Generic => Err(Error::Other(
             "Generic provider cannot be converted to a provider-specific cloud API operation"
                 .to_string(),
@@ -1222,6 +1240,24 @@ fn infer_remote_provider_from_context(
     if context.contains("vultr") || context.contains("vke") {
         return Some(blueprint_remote_providers::CloudProvider::Vultr);
     }
+    if context.contains("hetzner") {
+        return Some(blueprint_remote_providers::CloudProvider::Hetzner);
+    }
+    if context.contains("runpod") {
+        return Some(blueprint_remote_providers::CloudProvider::RunPod);
+    }
+    if context.contains("lambda") {
+        return Some(blueprint_remote_providers::CloudProvider::LambdaLabs);
+    }
+    if context.contains("prime") || context.contains("primeintellect") {
+        return Some(blueprint_remote_providers::CloudProvider::PrimeIntellect);
+    }
+    if context.contains("vast") {
+        return Some(blueprint_remote_providers::CloudProvider::VastAi);
+    }
+    if context.contains("crusoe") {
+        return Some(blueprint_remote_providers::CloudProvider::Crusoe);
+    }
     None
 }
 
@@ -1234,7 +1270,13 @@ fn resolve_provider_region(ctx: &BlueprintManagerContext, provider: CloudProvide
             CloudProvider::Azure => config.azure.as_ref().map(|c| c.region.clone()),
             CloudProvider::DigitalOcean => config.digital_ocean.as_ref().map(|c| c.region.clone()),
             CloudProvider::Vultr => config.vultr.as_ref().map(|c| c.region.clone()),
-            CloudProvider::Generic => None,
+            CloudProvider::Hetzner
+            | CloudProvider::RunPod
+            | CloudProvider::LambdaLabs
+            | CloudProvider::PrimeIntellect
+            | CloudProvider::VastAi
+            | CloudProvider::Crusoe
+            | CloudProvider::Generic => None,
         };
         if let Some(region) = configured {
             return region;
@@ -1247,6 +1289,12 @@ fn resolve_provider_region(ctx: &BlueprintManagerContext, provider: CloudProvide
         CloudProvider::Azure => "eastus".to_string(),
         CloudProvider::DigitalOcean => "nyc3".to_string(),
         CloudProvider::Vultr => "ewr".to_string(),
+        CloudProvider::Hetzner => "fsn1".to_string(),
+        CloudProvider::RunPod => "US".to_string(),
+        CloudProvider::LambdaLabs => "us-west-1".to_string(),
+        CloudProvider::PrimeIntellect => "us-east".to_string(),
+        CloudProvider::VastAi => "any".to_string(),
+        CloudProvider::Crusoe => "us-east1".to_string(),
         CloudProvider::Generic => "default".to_string(),
     }
 }
@@ -1279,6 +1327,8 @@ fn deployment_type_for_provider(
         blueprint_remote_providers::CloudProvider::BittensorLium => {
             DeploymentType::BittensorLiumMiner
         }
+        blueprint_remote_providers::CloudProvider::Hetzner => DeploymentType::HetznerServer,
+        blueprint_remote_providers::CloudProvider::Crusoe => DeploymentType::CrusoeVm,
         blueprint_remote_providers::CloudProvider::Linode
         | blueprint_remote_providers::CloudProvider::Generic
         | blueprint_remote_providers::CloudProvider::DockerLocal

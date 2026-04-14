@@ -32,6 +32,18 @@ pub enum CloudProvider {
     DigitalOcean,
     #[value(name = "vultr")]
     Vultr,
+    #[value(name = "hetzner")]
+    Hetzner,
+    #[value(name = "runpod")]
+    RunPod,
+    #[value(name = "lambda", alias = "lambda-labs")]
+    LambdaLabs,
+    #[value(name = "prime-intellect", alias = "pi")]
+    PrimeIntellect,
+    #[value(name = "vast", alias = "vast-ai")]
+    VastAi,
+    #[value(name = "crusoe")]
+    Crusoe,
 }
 
 impl From<CloudProvider> for RemoteCloudProvider {
@@ -42,6 +54,12 @@ impl From<CloudProvider> for RemoteCloudProvider {
             CloudProvider::Azure => RemoteCloudProvider::Azure,
             CloudProvider::DigitalOcean => RemoteCloudProvider::DigitalOcean,
             CloudProvider::Vultr => RemoteCloudProvider::Vultr,
+            CloudProvider::Hetzner => RemoteCloudProvider::Hetzner,
+            CloudProvider::RunPod => RemoteCloudProvider::RunPod,
+            CloudProvider::LambdaLabs => RemoteCloudProvider::LambdaLabs,
+            CloudProvider::PrimeIntellect => RemoteCloudProvider::PrimeIntellect,
+            CloudProvider::VastAi => RemoteCloudProvider::VastAi,
+            CloudProvider::Crusoe => RemoteCloudProvider::Crusoe,
         }
     }
 }
@@ -54,6 +72,12 @@ impl std::fmt::Display for CloudProvider {
             Self::Azure => write!(f, "Azure"),
             Self::DigitalOcean => write!(f, "DigitalOcean"),
             Self::Vultr => write!(f, "Vultr"),
+            Self::Hetzner => write!(f, "Hetzner"),
+            Self::RunPod => write!(f, "RunPod"),
+            Self::LambdaLabs => write!(f, "Lambda Labs"),
+            Self::PrimeIntellect => write!(f, "Prime Intellect"),
+            Self::VastAi => write!(f, "Vast.ai"),
+            Self::Crusoe => write!(f, "Crusoe"),
         }
     }
 }

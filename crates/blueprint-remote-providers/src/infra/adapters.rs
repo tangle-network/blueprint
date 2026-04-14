@@ -13,9 +13,11 @@ pub use crate::providers::aws::AwsAdapter;
 pub use crate::providers::azure::adapter::AzureAdapter;
 pub use crate::providers::bittensor_lium::BittensorLiumAdapter;
 pub use crate::providers::coreweave::CoreWeaveAdapter;
+pub use crate::providers::crusoe::CrusoeAdapter;
 pub use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
 pub use crate::providers::fluidstack::FluidstackAdapter;
 pub use crate::providers::gcp::GcpAdapter;
+pub use crate::providers::hetzner::HetznerAdapter;
 pub use crate::providers::io_net::IoNetAdapter;
 pub use crate::providers::lambda_labs::LambdaLabsAdapter;
 pub use crate::providers::paperspace::PaperspaceAdapter;
@@ -103,6 +105,14 @@ impl AdapterFactory {
                 let adapter = BittensorLiumAdapter::new().await?;
                 Ok(Arc::new(adapter))
             }
+            CloudProvider::Hetzner => {
+                let adapter = HetznerAdapter::new().await?;
+                Ok(Arc::new(adapter))
+            }
+            CloudProvider::Crusoe => {
+                let adapter = CrusoeAdapter::new().await?;
+                Ok(Arc::new(adapter))
+            }
             _ => Err(Error::Other(format!(
                 "Provider {provider:?} not supported yet"
             ))),
@@ -117,6 +127,8 @@ impl AdapterFactory {
             CloudProvider::Azure,
             CloudProvider::DigitalOcean,
             CloudProvider::Vultr,
+            CloudProvider::Hetzner,
+            CloudProvider::Crusoe,
             CloudProvider::LambdaLabs,
             CloudProvider::RunPod,
             CloudProvider::VastAi,
@@ -141,6 +153,8 @@ impl AdapterFactory {
                 | CloudProvider::Azure
                 | CloudProvider::DigitalOcean
                 | CloudProvider::Vultr
+                | CloudProvider::Hetzner
+                | CloudProvider::Crusoe
                 | CloudProvider::LambdaLabs
                 | CloudProvider::RunPod
                 | CloudProvider::VastAi
@@ -209,6 +223,6 @@ mod tests {
         assert!(providers.contains(&CloudProvider::DigitalOcean));
         assert!(providers.contains(&CloudProvider::Vultr));
         assert!(providers.contains(&CloudProvider::GCP));
-        assert_eq!(providers.len(), 17);
+        assert_eq!(providers.len(), 19);
     }
 }
