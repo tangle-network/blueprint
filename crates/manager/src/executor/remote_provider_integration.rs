@@ -364,6 +364,16 @@ fn configured_provider_regions(ctx: &BlueprintManagerContext) -> HashMap<CloudPr
                 regions.insert(CloudProvider::BittensorLium, "global".to_string());
             }
         }
+        if let Some(cfg) = &config.hetzner {
+            if cfg.enabled {
+                regions.insert(CloudProvider::Hetzner, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.crusoe {
+            if cfg.enabled {
+                regions.insert(CloudProvider::Crusoe, cfg.region.clone());
+            }
+        }
     }
     regions
 }
