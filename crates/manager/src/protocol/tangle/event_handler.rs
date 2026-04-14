@@ -284,8 +284,15 @@ impl TangleEventHandler {
                 logs: evt.logs.clone(),
                 inner: evt,
             });
-            self.handle_event(client, &proto_event, env, ctx, active_blueprints)
-                .await?;
+            if let Err(e) = self
+                .handle_event(client, &proto_event, env, ctx, active_blueprints)
+                .await
+            {
+                warn!(
+                    error = %e,
+                    "Non-fatal error replaying historical events during init — continuing"
+                );
+            }
         }
 
         // Fallback: if no services were discovered via events (e.g. Anvil
@@ -364,8 +371,18 @@ impl TangleEventHandler {
                 if let Some(metadata) = self.metadata.resolve_service(client, service_id).await? {
                     let blueprint_id = metadata.blueprint_id;
                     let gpu_requirements = metadata.gpu_requirements;
-                    self.ensure_service_running(metadata, env, ctx, active_blueprints)
-                        .await?;
+                    if let Err(e) = self
+                        .ensure_service_running(metadata, env, ctx, active_blueprints)
+                        .await
+                    {
+                        warn!(
+                            service_id,
+                            blueprint_id,
+                            error = %e,
+                            "Failed to start service — continuing with remaining services"
+                        );
+                        continue;
+                    }
                     #[cfg(feature = "remote-providers")]
                     self.notify_remote_service_initiated(
                         blueprint_id,
