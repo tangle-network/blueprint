@@ -214,7 +214,10 @@ impl RemoteProviderManager {
                 CloudProvider::CoreWeave,
                 CloudProvider::Crusoe,
                 CloudProvider::PrimeIntellect,
-                CloudProvider::Hetzner,
+                // NOTE: Hetzner sells GPU-matrix dedicated servers, but that's
+                // their Robot API / manual ordering flow — not the Cloud API
+                // this adapter uses. Keep Hetzner in the CPU list only until
+                // someone wires up the Robot API.
                 CloudProvider::Akash,
                 CloudProvider::IoNet,
                 CloudProvider::Render,

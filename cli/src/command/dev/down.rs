@@ -26,6 +26,9 @@ pub fn execute(args: DownArgs) -> Result<()> {
     }
 
     let mut stopped = 0usize;
+    // `dev up` only writes anvil.pid today. manager.pid is intentionally
+    // tolerated here so an external orchestrator (or a future `dev up
+    // --with-manager`) can drop one alongside and we'll clean it up too.
     for (label, file) in [("anvil", "anvil.pid"), ("manager", "manager.pid")] {
         let path = dev_dir.join(file);
         if let Some(pid) = read_pid(&path) {
@@ -79,9 +82,10 @@ fn workspace_is_dev() -> bool {
     let Ok(s) = fs::read_to_string(WORKSPACE_FILE) else {
         return false;
     };
-    // Crude but correct: we wrote `network = "local"` with a `[networks.local]` block and
-    // a `127.0.0.1:8545` URL. Don't delete someone else's .tangle.toml.
-    s.contains("network = \"local\"") && s.contains("http://127.0.0.1:")
+    // Positive identification only: the marker header is written by
+    // `dev up` and nothing else writes it. A user-authored workspace that
+    // happens to match some pattern is NEVER deleted.
+    s.contains(crate::command::dev::up::MANAGED_MARKER)
 }
 
 fn read_pid(path: &Path) -> Option<u32> {

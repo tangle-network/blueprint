@@ -20,6 +20,9 @@ use tokio::task::JoinHandle;
 #[cfg(feature = "remote-providers")]
 pub(crate) mod remote_provider_integration;
 
+#[cfg(feature = "remote-providers")]
+pub mod capabilities;
+
 pub struct BlueprintManagerHandle {
     shutdown_call: Option<tokio::sync::oneshot::Sender<()>>,
     start_tx: Option<tokio::sync::oneshot::Sender<()>>,

@@ -158,6 +158,9 @@ pub struct BlueprintRunnerBuilder<F> {
     background_services: Vec<Box<DynBackgroundService<'static>>>,
     shutdown_handler: F,
     faas_registry: faas::FaasRegistry,
+    /// Whether `.tee()` was called explicitly, suppressing auto-detection.
+    #[cfg(feature = "tee")]
+    tee_explicitly_configured: bool,
 }
 
 impl<F> BlueprintRunnerBuilder<F>
@@ -579,6 +582,7 @@ where
     #[cfg(feature = "tee")]
     #[must_use]
     pub fn tee(mut self, config: blueprint_tee::TeeConfig) -> Self {
+        self.tee_explicitly_configured = true;
         if config.is_enabled() {
             // Wrap TeeAuthService in a BackgroundService adapter
             struct TeeAuthServiceAdapter {
@@ -753,6 +757,8 @@ where
             background_services: self.background_services,
             shutdown_handler: handler,
             faas_registry: self.faas_registry,
+            #[cfg(feature = "tee")]
+            tee_explicitly_configured: self.tee_explicitly_configured,
         }
     }
 
@@ -764,14 +770,92 @@ where
     ///
     /// If at any point the runner fails, an error will be returned. See [`Self::with_shutdown_handler`]
     /// to understand what this means for your running services.
-    pub async fn run(self) -> Result<(), Error> {
-        let Some(router) = self.router else {
+    pub async fn run(mut self) -> Result<(), Error> {
+        let Some(router) = self.router.take() else {
             return Err(Error::NoRouter);
         };
 
         if self.producers.is_empty() {
             return Err(Error::NoProducers);
         }
+
+        // TEE auto-detection and auto-wrapping
+        #[cfg(feature = "tee")]
+        let router = {
+            // Check TEE_MODE env var override
+            let env_tee_mode =
+                std::env::var("TEE_MODE")
+                    .ok()
+                    .and_then(|v| match v.to_lowercase().as_str() {
+                        "auto" => Some(blueprint_tee::TeeMode::Auto),
+                        "required" => Some(blueprint_tee::TeeMode::Direct),
+                        "disabled" => Some(blueprint_tee::TeeMode::Disabled),
+                        other => {
+                            tracing::warn!(value = other, "Unknown TEE_MODE value, ignoring");
+                            None
+                        }
+                    });
+
+            let should_auto_detect = if let Some(env_mode) = env_tee_mode {
+                match env_mode {
+                    blueprint_tee::TeeMode::Disabled => false,
+                    _ => !self.tee_explicitly_configured,
+                }
+            } else {
+                !self.tee_explicitly_configured
+            };
+
+            if should_auto_detect {
+                // Check for explicit disable via env var
+                let disabled_by_env =
+                    matches!(env_tee_mode, Some(blueprint_tee::TeeMode::Disabled));
+
+                if disabled_by_env {
+                    tracing::info!(target: "blueprint-runner", "TEE disabled via TEE_MODE=disabled");
+                    router
+                } else if let Some(provider) = blueprint_tee::detect_tee_provider() {
+                    tracing::info!(
+                        target: "blueprint-runner",
+                        ?provider,
+                        "TEE hardware detected — activating TEE mode"
+                    );
+
+                    // Start the TEE auth service
+                    let tee_config = blueprint_tee::TeeConfig::builder()
+                        .mode(blueprint_tee::TeeMode::Direct)
+                        .provider_selector(blueprint_tee::TeeProviderSelector::AllowList(vec![
+                            provider,
+                        ]))
+                        .build()
+                        .expect("auto-detected TEE config must be valid");
+                    self = self.tee(tee_config);
+
+                    // Wrap all routes with TeeLayer
+                    tracing::info!(
+                        target: "blueprint-runner",
+                        "Wrapping all routes with TeeLayer for attestation"
+                    );
+                    router.layer(blueprint_tee::TeeLayer::new())
+                } else {
+                    let is_required = matches!(env_tee_mode, Some(blueprint_tee::TeeMode::Direct));
+                    if is_required {
+                        return Err(Error::BackgroundService(
+                            "TEE_MODE=required but no TEE hardware detected".to_string(),
+                        ));
+                    }
+                    tracing::info!(
+                        target: "blueprint-runner",
+                        "No TEE hardware detected — running without TEE"
+                    );
+                    router
+                }
+            } else {
+                router
+            }
+        };
+
+        #[cfg(not(feature = "tee"))]
+        let router = router;
 
         let runner = FinalizedBlueprintRunner {
             config: self.config,
@@ -891,6 +975,8 @@ impl BlueprintRunner {
             background_services: Vec::new(),
             shutdown_handler: future::pending(),
             faas_registry: faas::FaasRegistry::new(),
+            #[cfg(feature = "tee")]
+            tee_explicitly_configured: false,
         }
     }
 }

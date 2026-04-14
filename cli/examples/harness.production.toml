@@ -1,0 +1,138 @@
+# Tangle Cloud Operator Harness — Production-like setup
+#
+# Runs all inference blueprints locally with API-proxy backends,
+# registers them with the Tangle Router for real e2e testing.
+#
+# Prerequisites:
+#   1. Copy .env.harness.example → .env.harness and fill in API keys
+#   2. Source it: `source .env.harness`
+#   3. Run: `cargo tangle harness up --config cli/examples/harness.production.toml`
+#
+# For local router: set url = "http://localhost:3000" and run:
+#   cd ~/code/tangle-router && pnpm dev
+#
+# For production router: set url = "https://router.tangle.tools"
+#   Operators must be publicly reachable (use ngrok/cloudflare tunnel)
+#   and set `public_url` per blueprint.
+
+[chain]
+anvil = true
+include_anvil_logs = false
+
+[router]
+# Register operators with the router after they're healthy.
+# Use "http://localhost:3000" for local dev or "https://router.tangle.tools" for production.
+url = "http://localhost:3000"
+
+# ─── LLM Inference ─────────────────────────────────────────────────────
+# Proxies to any OpenAI-compatible backend (vLLM, OpenRouter, Together, Groq).
+# No local GPU required — set VLLM_BACKEND_URL to a remote API.
+[[blueprint]]
+name = "llm-operator"
+path = "~/code/llm-inference-blueprint"
+port = 9001
+health_path = "/health"
+startup_timeout_secs = 60
+blueprint_type = "llm"
+models = [
+  { id = "meta-llama/Llama-3.1-8B-Instruct", input_price = 0.0001, output_price = 0.0002 },
+  { id = "meta-llama/Llama-3.1-70B-Instruct", input_price = 0.001, output_price = 0.002 },
+]
+
+[blueprint.env]
+VLLM_BACKEND_URL = "${VLLM_BACKEND_URL}"
+HF_TOKEN = "${HF_TOKEN}"
+
+# ─── Embedding ──────────────────────────────────────────────────────────
+[[blueprint]]
+name = "embedding-operator"
+path = "~/code/embedding-inference-blueprint"
+port = 9002
+health_path = "/health"
+startup_timeout_secs = 60
+blueprint_type = "embedding"
+models = [
+  { id = "BAAI/bge-large-en-v1.5", input_price = 0.00005 },
+]
+
+[blueprint.env]
+EMBEDDING_BACKEND_URL = "${EMBEDDING_BACKEND_URL}"
+
+# ─── Image Generation ──────────────────────────────────────────────────
+[[blueprint]]
+name = "image-operator"
+path = "~/code/image-gen-inference-blueprint"
+port = 9003
+health_path = "/health"
+startup_timeout_secs = 60
+blueprint_type = "image"
+models = [
+  { id = "stable-diffusion-xl", input_price = 0.02 },
+]
+
+[blueprint.env]
+REPLICATE_API_TOKEN = "${REPLICATE_API_TOKEN}"
+IMAGE_BACKEND = "replicate"
+
+# ─── Voice (TTS + STT) ─────────────────────────────────────────────────
+[[blueprint]]
+name = "voice-operator"
+path = "~/code/voice-inference-blueprint"
+port = 9004
+health_path = "/health"
+startup_timeout_secs = 60
+blueprint_type = "voice"
+models = [
+  { id = "whisper-large-v3", input_price = 0.001 },
+  { id = "coqui-xtts-v2", input_price = 0.002 },
+]
+
+[blueprint.env]
+VOICE_BACKEND = "api"
+OPENAI_API_KEY = "${OPENAI_API_KEY}"
+
+# ─── Avatar Generation ─────────────────────────────────────────────────
+[[blueprint]]
+name = "avatar-operator"
+path = "~/code/avatar-inference-blueprint"
+port = 9005
+health_path = "/health"
+startup_timeout_secs = 60
+blueprint_type = "avatar"
+models = [
+  { id = "avatar-heygen", input_price = 0.05 },
+]
+
+[blueprint.env]
+HEYGEN_API_KEY = "${HEYGEN_API_KEY}"
+AVATAR_BACKEND = "heygen"
+
+# ─── Video Generation ──────────────────────────────────────────────────
+[[blueprint]]
+name = "video-operator"
+path = "~/code/video-gen-inference-blueprint"
+port = 9006
+health_path = "/health"
+startup_timeout_secs = 60
+blueprint_type = "video"
+models = [
+  { id = "stable-video-diffusion", input_price = 0.1 },
+]
+
+[blueprint.env]
+REPLICATE_API_TOKEN = "${REPLICATE_API_TOKEN}"
+VIDEO_BACKEND = "replicate"
+
+# ─── Vector Store ───────────────────────────────────────────────────────
+# Uses InMemory backend — no external dependencies needed.
+[[blueprint]]
+name = "vector-operator"
+path = "~/code/vector-store-blueprint"
+port = 9007
+health_path = "/health"
+startup_timeout_secs = 30
+blueprint_type = "vector-store"
+models = []
+
+[blueprint.env]
+VECTOR_BACKEND = "inmemory"

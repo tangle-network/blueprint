@@ -118,7 +118,11 @@ impl TangleWorkspace {
             return Self::load(&path).map(Some);
         }
 
-        let start = env::current_dir().context("resolving CWD for workspace discovery")?;
+        let raw = env::current_dir().context("resolving CWD for workspace discovery")?;
+        // Canonicalise so the walk resolves through symlinks into the real
+        // project tree — otherwise a symlinked project dir never finds its
+        // real parent.
+        let start = fs::canonicalize(&raw).unwrap_or(raw);
         let mut dir: Option<&Path> = Some(&start);
         while let Some(d) = dir {
             let candidate = d.join(WORKSPACE_FILE);
@@ -147,20 +151,64 @@ impl TangleWorkspace {
         })
     }
 
-    /// Serialise + atomically write to disk.
-    pub fn write(&self) -> Result<()> {
+    /// Serialise + atomically write to disk. Optionally prepend a header
+    /// (e.g. a managed-by marker) so external tooling can recognise the file.
+    pub fn write_with_header(&self, header: Option<&str>) -> Result<()> {
         let raw = Raw {
             network: Some(self.active.clone()),
             networks: self.networks.clone(),
             defaults: self.defaults.clone(),
         };
-        let body = toml::to_string_pretty(&raw).context("serialising workspace")?;
+        let mut body = String::new();
+        if let Some(h) = header {
+            body.push_str(h);
+            if !h.ends_with('\n') {
+                body.push('\n');
+            }
+            body.push('\n');
+        }
+        body.push_str(&toml::to_string_pretty(&raw).context("serialising workspace")?);
         atomic_write(&self.source, &body)
+    }
+
+    /// Serialise + atomically write to disk without a header.
+    pub fn write(&self) -> Result<()> {
+        self.write_with_header(None)
     }
 }
 
+/// Atomically write `body` to `path`.
+///
+/// Uses a PID- and nanosecond-suffixed sibling file so an interrupted write
+/// never leaves an ambiguous `.tangle.tmp` that could shadow a real file (the
+/// naive `path.with_extension("tmp")` collapses `.tangle.toml` -> `.tangle.tmp`
+/// because `set_extension` strips the last extension including on dotfiles).
+/// Stale siblings from prior crashes are cleaned up opportunistically.
 fn atomic_write(path: &Path, body: &str) -> Result<()> {
-    let tmp = path.with_extension("tmp");
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let fname = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| eyre!("non-utf8 workspace path"))?;
+    // Best-effort sweep of stale siblings from previous crashes. Temp files are
+    // siblings named `<fname>.tmp.<pid>.<nonce>` (no extra leading dot, since
+    // `fname` is typically already a dotfile).
+    let tmp_prefix = format!("{fname}.tmp.");
+    if let Ok(entries) = fs::read_dir(parent) {
+        for e in entries.flatten() {
+            if let Some(name) = e.file_name().to_str() {
+                if name.starts_with(&tmp_prefix) {
+                    let _ = fs::remove_file(e.path());
+                }
+            }
+        }
+    }
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let tmp = parent.join(format!("{fname}.tmp.{}.{nonce}", std::process::id()));
     fs::write(&tmp, body).with_context(|| format!("writing {}", tmp.display()))?;
     fs::rename(&tmp, path)
         .with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()))?;
@@ -230,5 +278,68 @@ service_id   = 0
             reloaded.active_network().unwrap().chain_id,
             Some(31337)
         );
+    }
+
+    #[test]
+    fn malformed_toml_gives_specific_error() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join(WORKSPACE_FILE);
+        fs::write(&path, "this = is [ not valid toml").unwrap();
+        let err = TangleWorkspace::load(&path).unwrap_err();
+        assert!(err.to_string().contains("parsing"), "{err}");
+    }
+
+    #[test]
+    fn write_with_header_roundtrip_prepends_marker() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join(WORKSPACE_FILE);
+        fs::write(&path, sample()).unwrap();
+        let ws = TangleWorkspace::load(&path).unwrap();
+        let out = dir.path().join("header.toml");
+        let mut ws2 = ws.clone();
+        ws2.source = out.clone();
+        ws2.write_with_header(Some("# managed-by = \"test\"")).unwrap();
+        let body = fs::read_to_string(&out).unwrap();
+        assert!(body.starts_with("# managed-by = \"test\""), "{body}");
+        // Marker doesn't break parsing.
+        let reloaded = TangleWorkspace::load(&out).unwrap();
+        assert_eq!(reloaded.active, ws.active);
+    }
+
+    #[test]
+    fn atomic_write_cleans_up_orphan_tmp_siblings() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join(".tangle.toml");
+        // Plant an orphan tmp sibling from a hypothetical prior crash.
+        let orphan = dir.path().join(".tangle.toml.tmp.9999999.123");
+        fs::write(&orphan, "garbage").unwrap();
+        assert!(orphan.exists());
+
+        fs::write(&path, sample()).unwrap();
+        let ws = TangleWorkspace::load(&path).unwrap();
+        ws.write().unwrap();
+        // The write should have swept the orphan.
+        assert!(!orphan.exists(), "orphan tmp file should be cleaned up");
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn env_override_wins_over_discovery() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("custom-name.toml");
+        fs::write(&path, sample()).unwrap();
+        // SAFETY: single-threaded test; no other test in this module touches
+        // $TANGLE_CONFIG concurrently.
+        // SAFETY: set_var/remove_var are unsafe since Rust 1.87.
+        unsafe {
+            std::env::set_var(WORKSPACE_ENV, &path);
+        }
+        let loaded = TangleWorkspace::discover()
+            .unwrap()
+            .expect("env var should make discovery succeed");
+        assert_eq!(loaded.source, path);
+        unsafe {
+            std::env::remove_var(WORKSPACE_ENV);
+        }
     }
 }

@@ -119,11 +119,21 @@ enum Commands {
         command: OperatorCommands,
     },
 
-    /// Local developer workflow: spin up a Tangle devnet + write `.tangle.toml`
-    /// so every subsequent cargo-tangle command just works.
+    /// Zero-config developer workspace: spin up a local devnet and write
+    /// `.tangle.toml` so every subsequent cargo-tangle command works with
+    /// no contract-address / RPC flags. Pair with `harness` when you need
+    /// the full multi-blueprint + router stack.
     Dev {
         #[command(subcommand)]
         command: DevCommands,
+    },
+
+    /// Spin up a local Tangle dev environment with multiple blueprints
+    /// running against real on-chain infrastructure.
+    #[command(visible_alias = "h")]
+    Harness {
+        #[command(subcommand)]
+        command: cargo_tangle::command::harness::HarnessCommands,
     },
 }
 
@@ -2522,6 +2532,9 @@ async fn main() -> Result<()> {
             DevCommands::Down(args) => dev::down::execute(args)?,
             DevCommands::Status => dev::status::execute()?,
         },
+        Commands::Harness { command } => {
+            cargo_tangle::command::harness::execute(command).await?;
+        }
     }
 
     Ok(())

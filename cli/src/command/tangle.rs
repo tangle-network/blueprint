@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -52,10 +53,16 @@ pub struct TangleClientArgs {
     /// Override the active network from `.tangle.toml`.
     #[arg(long, value_name = "NAME")]
     pub network: Option<String>,
+    /// Memoised output of `resolve()` so multiple accessors don't re-read
+    /// `.tangle.toml`. Also prevents inconsistency if the file changes
+    /// mid-command.
+    #[clap(skip)]
+    #[doc(hidden)]
+    resolved: OnceCell<Resolved>,
 }
 
 /// Fully-resolved parameters after merging CLI + workspace + defaults.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Resolved {
     http_rpc_url: Url,
     ws_rpc_url: Url,
@@ -66,7 +73,17 @@ struct Resolved {
 }
 
 impl TangleClientArgs {
-    fn resolve(&self) -> Result<Resolved> {
+    fn resolve(&self) -> Result<&Resolved> {
+        if let Some(r) = self.resolved.get() {
+            return Ok(r);
+        }
+        let r = self.resolve_fresh()?;
+        // Ignore any race — first writer wins, we return whatever's there.
+        let _ = self.resolved.set(r);
+        Ok(self.resolved.get().expect("just set"))
+    }
+
+    fn resolve_fresh(&self) -> Result<Resolved> {
         let ws = TangleWorkspace::discover()?;
         let net: Option<&Network> = match (&self.network, ws.as_ref()) {
             (Some(name), Some(ws)) => Some(ws.network(name)?),
@@ -80,6 +97,9 @@ impl TangleClientArgs {
             .or_else(|| net.map(|n| n.http_rpc_url.clone()))
             .unwrap_or_else(|| Url::parse("http://127.0.0.1:8545").expect("literal url"));
 
+        // NB: historical default was port 8546 (geth convention); current
+        // Anvil binds http + ws on the same port. We default to 8545 for the
+        // Anvil case but document loudly for anyone relying on the old default.
         let ws_rpc_url = self
             .ws_rpc_url
             .clone()
@@ -144,8 +164,8 @@ impl TangleClientArgs {
         };
 
         Ok(TangleClientConfig::new(
-            r.http_rpc_url,
-            r.ws_rpc_url,
+            r.http_rpc_url.clone(),
+            r.ws_rpc_url.clone(),
             r.keystore_path.display().to_string(),
             settings,
         ))
@@ -165,24 +185,23 @@ impl TangleClientArgs {
 
     /// Resolved keystore path (CLI > workspace default > `./keystore`).
     pub fn keystore_path(&self) -> Result<PathBuf> {
-        Ok(self.resolve()?.keystore_path)
+        Ok(self.resolve()?.keystore_path.clone())
     }
 
     /// Resolved HTTP RPC URL.
     pub fn http_rpc_url(&self) -> Result<Url> {
-        Ok(self.resolve()?.http_rpc_url)
+        Ok(self.resolve()?.http_rpc_url.clone())
     }
 
     /// Resolved WebSocket RPC URL.
     pub fn ws_rpc_url(&self) -> Result<Url> {
-        Ok(self.resolve()?.ws_rpc_url)
+        Ok(self.resolve()?.ws_rpc_url.clone())
     }
 }
 
-fn missing_addr_err(field: &str, env_name: &str) -> color_eyre::eyre::Report {
+fn missing_addr_err(field: &str, _env_name: &str) -> color_eyre::eyre::Report {
     eyre!(
-        "missing {field}: pass --{} or define it in a `.tangle.toml` file (see `cargo-tangle dev up`). \
-         The environment variable used in docs is {env_name}.",
+        "missing {field}: pass --{} or define it in `.tangle.toml`. Run `cargo-tangle dev up` to auto-generate a workspace for local development.",
         field.replace('_', "-")
     )
 }
@@ -206,6 +225,7 @@ impl TangleClientArgs {
             restaking_contract: Some(restaking_contract.into()),
             status_registry_contract,
             network: None,
+            resolved: OnceCell::new(),
         }
     }
 }
@@ -338,15 +358,11 @@ impl DevnetStack {
         self.harness.status_registry_contract
     }
 
-    /// Consume the stack and shut down resources.
+    /// Consume the stack and shut down resources. Cleanup happens via the
+    /// default Drop impls of `TangleHarness` (stops anvil) and `TempDir`
+    /// (removes the scratch dir).
     pub async fn shutdown(self) {
         drop(self);
-    }
-}
-
-impl Drop for DevnetStack {
-    fn drop(&mut self) {
-        // Harness and tempdir cleanup happens automatically.
     }
 }
 

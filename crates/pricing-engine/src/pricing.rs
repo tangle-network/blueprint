@@ -3,6 +3,7 @@ use crate::error::{PricingError, Result};
 use crate::pricing_engine::AssetSecurityRequirements;
 use crate::types::ResourceUnit;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml;
@@ -10,6 +11,104 @@ use toml;
 /// The average block time in seconds
 pub fn block_time() -> Decimal {
     Decimal::new(6, 0)
+}
+
+/// TTL-based pricing curve: multipliers at evenly-spaced duration points.
+///
+/// Operators define a vector of multipliers. Element 0 corresponds to TTL=0,
+/// the last element corresponds to `max_duration_secs`. Values between points
+/// are linearly interpolated. TTLs beyond `max_duration_secs` clamp to the
+/// last multiplier.
+///
+/// ```toml
+/// [ttl_curve]
+/// max_duration_secs = 31536000  # 1 year
+/// multipliers = [1.2, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.45, 0.4, 0.38, 0.36, 0.35]
+/// # index:        0    1    2    3    4    5    6    7     8    9     10    11
+/// # ~months:      0    1    2    3    4    5    6    7     8    9     10    11
+/// ```
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TtlPricingCurve {
+    /// Multiplier values at evenly-spaced TTL points. Must have at least 2 elements.
+    multipliers: Vec<f64>,
+    /// The TTL duration (in seconds) that the last element corresponds to.
+    max_duration_secs: u64,
+}
+
+impl Default for TtlPricingCurve {
+    fn default() -> Self {
+        Self {
+            // Linear: single multiplier of 1.0 at both endpoints = pure linear pricing
+            multipliers: vec![1.0, 1.0],
+            max_duration_secs: 31_536_000, // 1 year
+        }
+    }
+}
+
+impl TtlPricingCurve {
+    /// Construct a validated TTL pricing curve.
+    pub fn new(multipliers: Vec<f64>, max_duration_secs: u64) -> std::result::Result<Self, String> {
+        let curve = Self {
+            multipliers,
+            max_duration_secs,
+        };
+        curve.validate()?;
+        Ok(curve)
+    }
+
+    /// Read-only access to the multiplier values.
+    pub fn multipliers(&self) -> &[f64] {
+        &self.multipliers
+    }
+
+    /// Read-only access to the max duration in seconds.
+    pub fn max_duration_secs(&self) -> u64 {
+        self.max_duration_secs
+    }
+
+    /// Evaluate the curve at a given TTL duration in seconds.
+    /// Returns the interpolated multiplier.
+    pub fn evaluate(&self, ttl_secs: u64) -> Decimal {
+        if self.multipliers.is_empty() {
+            return Decimal::ONE;
+        }
+        if self.multipliers.len() == 1 || self.max_duration_secs == 0 {
+            return Decimal::try_from(self.multipliers[0]).unwrap_or(Decimal::ONE);
+        }
+
+        let t = (ttl_secs as f64 / self.max_duration_secs as f64).clamp(0.0, 1.0);
+        let n = self.multipliers.len() - 1;
+        let idx = t * n as f64;
+        let lo = (idx.floor() as usize).min(n);
+        let hi = (lo + 1).min(n);
+        let frac = idx - lo as f64;
+
+        let value = self.multipliers[lo] * (1.0 - frac) + self.multipliers[hi] * frac;
+        // Clamp to non-negative
+        Decimal::try_from(value.max(0.0)).unwrap_or(Decimal::ZERO)
+    }
+
+    /// Validate the curve configuration.
+    pub fn validate(&self) -> std::result::Result<(), String> {
+        if self.multipliers.len() < 2 {
+            return Err("ttl_curve.multipliers must have at least 2 elements".into());
+        }
+        if self.multipliers.len() > 100 {
+            return Err("ttl_curve.multipliers must have at most 100 elements".into());
+        }
+        if self.max_duration_secs == 0 {
+            return Err("ttl_curve.max_duration_secs must be > 0".into());
+        }
+        for (i, &m) in self.multipliers.iter().enumerate() {
+            if m.is_nan() || m.is_infinite() {
+                return Err(format!("ttl_curve.multipliers[{i}] is NaN or infinite"));
+            }
+            if m < 0.0 {
+                return Err(format!("ttl_curve.multipliers[{i}] is negative: {m}"));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -50,11 +149,25 @@ fn calculate_base_resource_cost(resource_count: u64, resource_price_rate: Decima
     Decimal::from(resource_count) * resource_price_rate
 }
 
-/// Calculate the time-based price adjustment factor based on TTL in blocks
-/// Each block represents BLOCK_TIME seconds
-fn calculate_ttl_price_adjustment(time_blocks: u64) -> Decimal {
-    // We multiply the input TTL by BLOCK_TIME
-    Decimal::from(time_blocks) * block_time()
+/// Calculate the time-based price adjustment factor based on TTL in blocks.
+///
+/// When a `TtlPricingCurve` is provided, the TTL is converted to seconds and
+/// the curve multiplier is applied: `ttl_seconds * curve_multiplier`.
+/// When no curve is provided, falls back to pure linear: `ttl_blocks * BLOCK_TIME`.
+fn calculate_ttl_price_adjustment(
+    time_blocks: u64,
+    ttl_curve: Option<&TtlPricingCurve>,
+) -> Decimal {
+    let ttl_seconds = Decimal::from(time_blocks) * block_time();
+    match ttl_curve {
+        Some(curve) => {
+            let block_time_secs = block_time().to_u64().unwrap_or(6);
+            let ttl_secs_u64 =
+                (time_blocks as u128 * block_time_secs as u128).min(u64::MAX as u128) as u64;
+            ttl_seconds * curve.evaluate(ttl_secs_u64)
+        }
+        None => ttl_seconds,
+    }
 }
 
 /// Function that applies security requirement adjustments to the cost
@@ -65,19 +178,84 @@ fn calculate_security_rate_adjustment(
     Decimal::ONE
 }
 
-/// Calculate the price for a specific resource based on count, rate, TTL, and security requirements
-/// Following the formula: calculate_base_resource_cost(cost * count) * calculate_ttl_price_adjustment(time_blocks) * calculate_security_rate_adjustment(security requirements)
+/// Calculate the price for a specific resource based on count, rate, TTL, and security requirements.
+///
+/// Formula: `base_cost(count * rate) * ttl_adjustment(blocks, curve) * security_factor`
 pub fn calculate_resource_price(
     count: u64,
     price_per_unit_rate: Decimal,
     ttl_blocks: u64,
     security_requirements: Option<&AssetSecurityRequirements>,
 ) -> Decimal {
+    calculate_resource_price_with_curve(
+        count,
+        price_per_unit_rate,
+        ttl_blocks,
+        security_requirements,
+        None,
+    )
+}
+
+/// Calculate resource price with an optional TTL pricing curve.
+pub fn calculate_resource_price_with_curve(
+    count: u64,
+    price_per_unit_rate: Decimal,
+    ttl_blocks: u64,
+    security_requirements: Option<&AssetSecurityRequirements>,
+    ttl_curve: Option<&TtlPricingCurve>,
+) -> Decimal {
     let adjusted_base_cost = calculate_base_resource_cost(count, price_per_unit_rate);
-    let adjusted_time_cost = calculate_ttl_price_adjustment(ttl_blocks);
+    let adjusted_time_cost = calculate_ttl_price_adjustment(ttl_blocks, ttl_curve);
     let security_factor = calculate_security_rate_adjustment(security_requirements);
 
     adjusted_base_cost * adjusted_time_cost * security_factor
+}
+
+/// TEE pricing configuration.
+///
+/// Loaded from the `[tee]` section of pricing.toml:
+/// ```toml
+/// [tee]
+/// available = true
+/// multiplier = 1.5
+/// provider = "aws_nitro"
+/// ```
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TeePricing {
+    /// Whether this operator can provide TEE execution.
+    pub available: bool,
+    /// Price multiplier when TEE is requested (e.g. 1.5 = 50% premium).
+    pub multiplier: Decimal,
+    /// TEE provider name (e.g. "aws_nitro", "intel_tdx").
+    pub provider: String,
+}
+
+impl Default for TeePricing {
+    fn default() -> Self {
+        Self {
+            available: false,
+            multiplier: Decimal::ONE,
+            provider: String::new(),
+        }
+    }
+}
+
+/// Apply TEE pricing adjustment to a base cost.
+///
+/// If `require_tee` is true and TEE is available, multiplies by the configured
+/// TEE premium. If `require_tee` is true but TEE is unavailable, returns an error.
+pub fn apply_tee_pricing(
+    base_cost: Decimal,
+    require_tee: bool,
+    tee_config: &TeePricing,
+) -> Result<Decimal> {
+    if !require_tee {
+        return Ok(base_cost);
+    }
+    if !tee_config.available {
+        return Err(PricingError::TeeNotAvailable);
+    }
+    Ok(base_cost * tee_config.multiplier)
 }
 
 /// Calculate the price for a subscription-based blueprint.
@@ -117,6 +295,25 @@ pub fn calculate_price(
     ttl_blocks: u64,
     security_requirements: Option<&AssetSecurityRequirements>,
 ) -> Result<PriceModel> {
+    calculate_price_with_curve(
+        profile,
+        pricing_config,
+        blueprint_id,
+        ttl_blocks,
+        security_requirements,
+        None,
+    )
+}
+
+/// Calculates a price with an optional TTL pricing curve for non-linear duration pricing.
+pub fn calculate_price_with_curve(
+    profile: BenchmarkProfile,
+    pricing_config: &HashMap<Option<u64>, Vec<ResourcePricing>>,
+    blueprint_id: Option<u64>,
+    ttl_blocks: u64,
+    security_requirements: Option<&AssetSecurityRequirements>,
+    ttl_curve: Option<&TtlPricingCurve>,
+) -> Result<PriceModel> {
     let mut resources = Vec::new();
     let mut total_cost = Decimal::ZERO;
 
@@ -144,8 +341,13 @@ pub fn calculate_price(
             return;
         }
         if let Some(&price_per_unit) = resource_price_map.get(&kind) {
-            let adjusted_price =
-                calculate_resource_price(count, price_per_unit, ttl_blocks, security_requirements);
+            let adjusted_price = calculate_resource_price_with_curve(
+                count,
+                price_per_unit,
+                ttl_blocks,
+                security_requirements,
+                ttl_curve,
+            );
             resources.push(ResourcePricing {
                 kind,
                 count,
@@ -517,4 +719,248 @@ pub fn load_subscription_pricing_from_toml(
     }
 
     Ok(config)
+}
+
+/// Load TEE pricing from a pricing.toml file.
+///
+/// Reads the `[tee]` section. Returns `TeePricing::default()` (unavailable) if absent.
+///
+/// ```toml
+/// [tee]
+/// available = true
+/// multiplier = 1.5
+/// provider = "aws_nitro"
+/// ```
+pub fn load_tee_pricing_from_toml(content: &str) -> Result<TeePricing> {
+    let parsed: toml::Value = toml::from_str(content)?;
+
+    let Some(tee_section) = parsed.get("tee").and_then(|v| v.as_table()) else {
+        return Ok(TeePricing::default());
+    };
+
+    let available = tee_section
+        .get("available")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let multiplier = tee_section
+        .get("multiplier")
+        .and_then(|v| {
+            v.as_float()
+                .and_then(|f| Decimal::try_from(f).ok())
+                .or_else(|| v.as_integer().map(Decimal::from))
+        })
+        .unwrap_or(Decimal::ONE);
+
+    if multiplier <= Decimal::ZERO {
+        return Err(PricingError::Config(
+            "TEE multiplier must be positive".to_string(),
+        ));
+    }
+
+    let provider = tee_section
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Ok(TeePricing {
+        available,
+        multiplier,
+        provider,
+    })
+}
+
+/// Load TTL pricing curve from a pricing.toml file.
+///
+/// Reads the `[ttl_curve]` section. Returns `None` if absent (pure linear pricing).
+///
+/// ```toml
+/// [ttl_curve]
+/// max_duration_secs = 31536000
+/// multipliers = [1.2, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.45, 0.4, 0.38, 0.36, 0.35]
+/// ```
+pub fn load_ttl_curve_from_toml(content: &str) -> Result<Option<TtlPricingCurve>> {
+    let parsed: toml::Value = toml::from_str(content)?;
+
+    let Some(section) = parsed.get("ttl_curve").and_then(|v| v.as_table()) else {
+        return Ok(None);
+    };
+
+    let max_duration_secs = section
+        .get("max_duration_secs")
+        .and_then(|v| v.as_integer())
+        .map(|v| v as u64)
+        .unwrap_or(31_536_000);
+
+    let multipliers = section
+        .get("multipliers")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            PricingError::Config("ttl_curve requires a 'multipliers' array".to_string())
+        })?
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            v.as_float()
+                .or_else(|| v.as_integer().map(|n| n as f64))
+                .ok_or_else(|| {
+                    PricingError::Config(format!("ttl_curve.multipliers[{i}] must be a number"))
+                })
+        })
+        .collect::<Result<Vec<f64>>>()?;
+
+    let curve = TtlPricingCurve::new(multipliers, max_duration_secs)
+        .map_err(|e| PricingError::Config(format!("ttl_curve: {e}")))?;
+
+    Ok(Some(curve))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── TtlPricingCurve evaluation ──────────────────────────────────────
+
+    #[test]
+    fn linear_curve_matches_no_curve() {
+        let curve = TtlPricingCurve::default(); // [1.0, 1.0]
+        // At any point, multiplier should be 1.0
+        assert_eq!(curve.evaluate(0), Decimal::ONE);
+        assert_eq!(curve.evaluate(15_768_000), Decimal::ONE); // 6 months
+        assert_eq!(curve.evaluate(31_536_000), Decimal::ONE); // 1 year
+    }
+
+    #[test]
+    fn discount_curve_interpolates() {
+        let curve = TtlPricingCurve::new(vec![1.0, 0.5], 100).unwrap();
+        // At t=0: 1.0, at t=50: 0.75, at t=100: 0.5
+        assert_eq!(curve.evaluate(0), Decimal::ONE);
+        assert_eq!(curve.evaluate(100), Decimal::try_from(0.5).unwrap());
+        // Midpoint
+        let mid = curve.evaluate(50);
+        assert_eq!(mid, Decimal::try_from(0.75).unwrap());
+    }
+
+    #[test]
+    fn multi_point_curve() {
+        // [1.2, 1.0, 0.8, 0.5, 0.35] over 4 months
+        let curve = TtlPricingCurve::new(
+            vec![1.2, 1.0, 0.8, 0.5, 0.35],
+            4 * 30 * 86400, // ~120 days
+        )
+        .unwrap();
+        // At t=0: 1.2 (spot premium)
+        assert_eq!(curve.evaluate(0), Decimal::try_from(1.2).unwrap());
+        // At max: 0.35
+        assert_eq!(
+            curve.evaluate(4 * 30 * 86400),
+            Decimal::try_from(0.35).unwrap()
+        );
+        // Quarter way (between index 0 and 1): 1.2 → 1.0
+        let quarter = curve.evaluate(30 * 86400);
+        assert_eq!(quarter, Decimal::ONE);
+    }
+
+    #[test]
+    fn clamp_beyond_max_duration() {
+        let curve = TtlPricingCurve::new(vec![1.0, 0.5], 100).unwrap();
+        // Beyond max should clamp to last value
+        assert_eq!(curve.evaluate(200), Decimal::try_from(0.5).unwrap());
+        assert_eq!(curve.evaluate(u64::MAX), Decimal::try_from(0.5).unwrap());
+    }
+
+    #[test]
+    fn single_multiplier_rejected_by_constructor() {
+        assert!(TtlPricingCurve::new(vec![0.8], 1000).is_err());
+    }
+
+    #[test]
+    fn empty_multipliers_rejected_by_constructor() {
+        assert!(TtlPricingCurve::new(vec![], 1000).is_err());
+    }
+
+    // ── Validation ──────────────────────────────────────────────────────
+
+    #[test]
+    fn new_rejects_too_few() {
+        assert!(TtlPricingCurve::new(vec![1.0], 100).is_err());
+    }
+
+    #[test]
+    fn new_rejects_too_many() {
+        assert!(TtlPricingCurve::new(vec![1.0; 101], 100).is_err());
+    }
+
+    #[test]
+    fn new_rejects_negative() {
+        assert!(TtlPricingCurve::new(vec![1.0, -0.5], 100).is_err());
+    }
+
+    #[test]
+    fn new_rejects_nan() {
+        assert!(TtlPricingCurve::new(vec![1.0, f64::NAN], 100).is_err());
+    }
+
+    #[test]
+    fn new_accepts_100_elements() {
+        let multipliers: Vec<f64> = (0..100).map(|i| 1.0 - i as f64 * 0.005).collect();
+        assert!(TtlPricingCurve::new(multipliers, 31_536_000).is_ok());
+    }
+
+    // ── TOML loading ────────────────────────────────────────────────────
+
+    #[test]
+    fn load_ttl_curve_from_toml_absent() {
+        let toml = "[tee]\navailable = false\n";
+        assert!(load_ttl_curve_from_toml(toml).unwrap().is_none());
+    }
+
+    #[test]
+    fn load_ttl_curve_from_toml_present() {
+        let toml = r#"
+[ttl_curve]
+max_duration_secs = 31536000
+multipliers = [1.2, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.45, 0.4, 0.38, 0.36, 0.35]
+"#;
+        let curve = load_ttl_curve_from_toml(toml).unwrap().unwrap();
+        assert_eq!(curve.multipliers().len(), 12);
+        assert_eq!(curve.max_duration_secs(), 31_536_000);
+        assert_eq!(curve.evaluate(0), Decimal::try_from(1.2).unwrap());
+    }
+
+    #[test]
+    fn load_ttl_curve_rejects_invalid() {
+        let toml = r#"
+[ttl_curve]
+max_duration_secs = 100
+multipliers = [1.0]
+"#;
+        assert!(load_ttl_curve_from_toml(toml).is_err());
+    }
+
+    // ── Integration: curve affects resource pricing ─────────────────────
+
+    #[test]
+    fn resource_price_with_discount_curve() {
+        let curve = TtlPricingCurve::new(
+            vec![1.0, 0.5], // 50% discount at max duration
+            600,            // 600 seconds = 100 blocks at 6s
+        )
+        .unwrap();
+
+        let linear_price = calculate_resource_price(1, Decimal::ONE, 100, None);
+        let curved_price =
+            calculate_resource_price_with_curve(1, Decimal::ONE, 100, None, Some(&curve));
+
+        // At max duration (100 blocks = 600 seconds), multiplier = 0.5
+        assert_eq!(curved_price, linear_price * Decimal::try_from(0.5).unwrap());
+    }
+
+    #[test]
+    fn resource_price_no_curve_is_linear() {
+        let price_a = calculate_resource_price(1, Decimal::ONE, 100, None);
+        let price_b = calculate_resource_price_with_curve(1, Decimal::ONE, 100, None, None);
+        assert_eq!(price_a, price_b);
+    }
 }
