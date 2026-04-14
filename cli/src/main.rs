@@ -15,6 +15,7 @@ use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use blueprint_runner::error::ConfigError;
 use cargo_tangle::command::create::{BlueprintType, TemplateVariables, new_blueprint};
 use cargo_tangle::command::debug::{self, DebugCommands};
+use cargo_tangle::command::dev::{self, DevCommands};
 use cargo_tangle::command::delegator;
 use cargo_tangle::command::deploy::eigenlayer::deploy_eigenlayer;
 use cargo_tangle::command::deploy::tangle as deploy_tangle;
@@ -116,6 +117,13 @@ enum Commands {
     Operator {
         #[command(subcommand)]
         command: OperatorCommands,
+    },
+
+    /// Local developer workflow: spin up a Tangle devnet + write `.tangle.toml`
+    /// so every subsequent cargo-tangle command just works.
+    Dev {
+        #[command(subcommand)]
+        command: DevCommands,
     },
 }
 
@@ -1765,7 +1773,7 @@ async fn main() -> Result<()> {
                         tangle_contract: settings.tangle_contract,
                         restaking_contract: settings.restaking_contract,
                         status_registry_contract: settings.status_registry_contract,
-                        keystore_path: network.keystore_path().display().to_string(),
+                        keystore_path: network.keystore_path()?.display().to_string(),
                         data_dir,
                         allow_unchecked_attestations,
                         registration_mode: false,
@@ -2212,7 +2220,7 @@ async fn main() -> Result<()> {
             } => {
                 let config = network.client_config(blueprint_id, Some(service_id))?;
                 let keystore =
-                    cargo_tangle::command::signer::load_keystore(network.keystore_path())?;
+                    cargo_tangle::command::signer::load_keystore(network.keystore_path()?)?;
                 let mut signing_key =
                     cargo_tangle::command::signer::load_ecdsa_signing_key(&keystore)?;
                 operator::submit_heartbeat(
@@ -2508,6 +2516,11 @@ async fn main() -> Result<()> {
                     .map_err(|e| eyre!(e.to_string()))?;
                 log_tx("Operator cancel-exit", &tx, json);
             }
+        },
+        Commands::Dev { command } => match command {
+            DevCommands::Up(args) => dev::up::execute(args).await?,
+            DevCommands::Down(args) => dev::down::execute(args)?,
+            DevCommands::Status => dev::status::execute()?,
         },
     }
 
@@ -2837,7 +2850,8 @@ async fn register_operator(
     blueprint_id: u64,
     registration_inputs: Option<PathBuf>,
 ) -> Result<()> {
-    ensure_keys(network.keystore_path(), &[SupportedKey::Ecdsa])?;
+    let keystore_path = network.keystore_path()?;
+    ensure_keys(&keystore_path, &[SupportedKey::Ecdsa])?;
 
     let registration_payload = if let Some(path) = registration_inputs {
         Some(Bytes::from(fs::read(&path).map_err(|e| {
@@ -2847,9 +2861,10 @@ async fn register_operator(
         None
     };
 
-    let rpc_endpoint = rpc_endpoint.unwrap_or_else(|| network.http_rpc_url.to_string());
+    let rpc_endpoint =
+        rpc_endpoint.unwrap_or_else(|| network.http_rpc_url().ok().map(|u| u.to_string()).unwrap_or_default());
     let client = network.connect(blueprint_id, None).await?;
-    let signer = load_evm_signer(network.keystore_path())?;
+    let signer = load_evm_signer(&keystore_path)?;
 
     println!("Registering operator {}", signer.operator_address);
     let tx = client

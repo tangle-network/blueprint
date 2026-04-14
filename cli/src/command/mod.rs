@@ -3,6 +3,7 @@ pub mod cloud;
 pub mod create;
 pub mod debug;
 pub mod delegator;
+pub mod dev;
 pub mod deploy;
 pub mod eigenlayer;
 pub mod jobs;

@@ -15,41 +15,117 @@ use tempfile::TempDir;
 use url::Url;
 
 use crate::command::run::tangle::RunOpts;
+use crate::workspace::{Network, TangleWorkspace};
 use blueprint_manager::config::SourceType;
 
 /// Shared CLI arguments for connecting to the Tangle stack.
-#[derive(Args, Debug, Clone)]
+///
+/// All fields are optional at the CLI level. A value is resolved from (in order):
+///
+///   1. The command-line flag.
+///   2. The network entry in `.tangle.toml` (see [`crate::workspace`]).
+///   3. For RPC URLs and keystore path only: a sensible devnet default.
+///
+/// This means `cargo-tangle jobs submit --job 0 --payload-hex ...` works with no
+/// other flags when a `.tangle.toml` is present — contract addresses and endpoints
+/// come from the workspace.
+#[derive(Args, Debug, Clone, Default)]
 pub struct TangleClientArgs {
     /// HTTP RPC endpoint.
-    #[arg(long, value_name = "URL", default_value = "http://127.0.0.1:8545")]
-    pub http_rpc_url: Url,
+    #[arg(long, value_name = "URL")]
+    pub http_rpc_url: Option<Url>,
     /// WebSocket RPC endpoint.
-    #[arg(long, value_name = "URL", default_value = "ws://127.0.0.1:8546")]
-    pub ws_rpc_url: Url,
+    #[arg(long, value_name = "URL")]
+    pub ws_rpc_url: Option<Url>,
     /// Path to the keystore directory.
-    #[arg(long, default_value = "./keystore")]
-    pub keystore_path: PathBuf,
+    #[arg(long)]
+    pub keystore_path: Option<PathBuf>,
     /// Tangle contract address.
     #[arg(long, value_name = "ADDRESS")]
-    pub tangle_contract: String,
+    pub tangle_contract: Option<String>,
     /// Restaking contract address.
     #[arg(long, value_name = "ADDRESS")]
-    pub restaking_contract: String,
+    pub restaking_contract: Option<String>,
     /// Optional status registry contract address.
     #[arg(long, value_name = "ADDRESS")]
     pub status_registry_contract: Option<String>,
+    /// Override the active network from `.tangle.toml`.
+    #[arg(long, value_name = "NAME")]
+    pub network: Option<String>,
+}
+
+/// Fully-resolved parameters after merging CLI + workspace + defaults.
+#[derive(Debug)]
+struct Resolved {
+    http_rpc_url: Url,
+    ws_rpc_url: Url,
+    keystore_path: PathBuf,
+    tangle: Address,
+    restaking: Address,
+    status: Address,
 }
 
 impl TangleClientArgs {
-    fn parse_addresses(&self) -> Result<(Address, Address, Address)> {
-        let tangle = parse_address(&self.tangle_contract, "TANGLE_CONTRACT")?;
-        let restaking = parse_address(&self.restaking_contract, "RESTAKING_CONTRACT")?;
-        let status = if let Some(value) = &self.status_registry_contract {
-            parse_address(value, "STATUS_REGISTRY_CONTRACT")?
-        } else {
-            Address::ZERO
+    fn resolve(&self) -> Result<Resolved> {
+        let ws = TangleWorkspace::discover()?;
+        let net: Option<&Network> = match (&self.network, ws.as_ref()) {
+            (Some(name), Some(ws)) => Some(ws.network(name)?),
+            (None, Some(ws)) => Some(ws.active_network()?),
+            _ => None,
         };
-        Ok((tangle, restaking, status))
+
+        let http_rpc_url = self
+            .http_rpc_url
+            .clone()
+            .or_else(|| net.map(|n| n.http_rpc_url.clone()))
+            .unwrap_or_else(|| Url::parse("http://127.0.0.1:8545").expect("literal url"));
+
+        let ws_rpc_url = self
+            .ws_rpc_url
+            .clone()
+            .or_else(|| net.map(|n| n.ws_rpc_url.clone()))
+            .unwrap_or_else(|| Url::parse("ws://127.0.0.1:8545").expect("literal url"));
+
+        let keystore_path = self
+            .keystore_path
+            .clone()
+            .or_else(|| {
+                ws.as_ref()
+                    .and_then(|w| w.defaults.keystore_path.clone())
+            })
+            .unwrap_or_else(|| PathBuf::from("./keystore"));
+
+        let tangle = match (&self.tangle_contract, net) {
+            (Some(s), _) => parse_address(s, "TANGLE_CONTRACT")?,
+            (None, Some(n)) => n.tangle_contract,
+            (None, None) => {
+                return Err(missing_addr_err("tangle_contract", "TANGLE_CONTRACT"));
+            }
+        };
+        let restaking = match (&self.restaking_contract, net) {
+            (Some(s), _) => parse_address(s, "RESTAKING_CONTRACT")?,
+            (None, Some(n)) => n.restaking_contract,
+            (None, None) => {
+                return Err(missing_addr_err(
+                    "restaking_contract",
+                    "RESTAKING_CONTRACT",
+                ));
+            }
+        };
+        let status = match (&self.status_registry_contract, net) {
+            (Some(s), _) => parse_address(s, "STATUS_REGISTRY_CONTRACT")?,
+            (None, Some(n)) => n.status_registry_contract.unwrap_or(Address::ZERO),
+            (None, None) => Address::ZERO,
+        };
+
+        Ok(Resolved {
+            http_rpc_url,
+            ws_rpc_url,
+            keystore_path,
+            tangle,
+            restaking,
+            status,
+        })
     }
 
     /// Build a client config using the provided blueprint/service identifiers.
@@ -58,19 +134,19 @@ impl TangleClientArgs {
         blueprint_id: u64,
         service_id: Option<u64>,
     ) -> Result<TangleClientConfig> {
-        let (tangle, restaking, status) = self.parse_addresses()?;
+        let r = self.resolve()?;
         let settings = TangleSettings {
             blueprint_id,
             service_id,
-            tangle_contract: tangle,
-            restaking_contract: restaking,
-            status_registry_contract: status,
+            tangle_contract: r.tangle,
+            restaking_contract: r.restaking,
+            status_registry_contract: r.status,
         };
 
         Ok(TangleClientConfig::new(
-            self.http_rpc_url.clone(),
-            self.ws_rpc_url.clone(),
-            self.keystore_path.display().to_string(),
+            r.http_rpc_url,
+            r.ws_rpc_url,
+            r.keystore_path.display().to_string(),
             settings,
         ))
     }
@@ -87,10 +163,50 @@ impl TangleClientArgs {
             .map_err(|e| eyre!(e.to_string()))
     }
 
-    /// Absolute keystore path on disk.
-    #[must_use]
-    pub fn keystore_path(&self) -> &PathBuf {
-        &self.keystore_path
+    /// Resolved keystore path (CLI > workspace default > `./keystore`).
+    pub fn keystore_path(&self) -> Result<PathBuf> {
+        Ok(self.resolve()?.keystore_path)
+    }
+
+    /// Resolved HTTP RPC URL.
+    pub fn http_rpc_url(&self) -> Result<Url> {
+        Ok(self.resolve()?.http_rpc_url)
+    }
+
+    /// Resolved WebSocket RPC URL.
+    pub fn ws_rpc_url(&self) -> Result<Url> {
+        Ok(self.resolve()?.ws_rpc_url)
+    }
+}
+
+fn missing_addr_err(field: &str, env_name: &str) -> color_eyre::eyre::Report {
+    eyre!(
+        "missing {field}: pass --{} or define it in a `.tangle.toml` file (see `cargo-tangle dev up`). \
+         The environment variable used in docs is {env_name}.",
+        field.replace('_', "-")
+    )
+}
+
+#[cfg(test)]
+impl TangleClientArgs {
+    /// Construct a fully-specified args bundle for unit/integration tests.
+    pub fn for_testing(
+        http_rpc_url: Url,
+        ws_rpc_url: Url,
+        keystore_path: PathBuf,
+        tangle_contract: impl Into<String>,
+        restaking_contract: impl Into<String>,
+        status_registry_contract: Option<String>,
+    ) -> Self {
+        Self {
+            http_rpc_url: Some(http_rpc_url),
+            ws_rpc_url: Some(ws_rpc_url),
+            keystore_path: Some(keystore_path),
+            tangle_contract: Some(tangle_contract.into()),
+            restaking_contract: Some(restaking_contract.into()),
+            status_registry_contract,
+            network: None,
+        }
     }
 }
 

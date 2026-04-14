@@ -98,14 +98,14 @@ async fn resolve_request_defaults(
     harness: &TangleHarness,
     keystore_path: &Path,
 ) -> Result<Option<RequestDefaults>> {
-    let client_args = TangleClientArgs {
-        http_rpc_url: harness.http_endpoint().clone(),
-        ws_rpc_url: harness.ws_endpoint().clone(),
-        keystore_path: keystore_path.to_path_buf(),
-        tangle_contract: format!("{:#x}", harness.tangle_contract),
-        restaking_contract: format!("{:#x}", harness.restaking_contract),
-        status_registry_contract: Some(format!("{:#x}", harness.status_registry_contract)),
-    };
+    let client_args = TangleClientArgs::for_testing(
+        harness.http_endpoint().clone(),
+        harness.ws_endpoint().clone(),
+        keystore_path.to_path_buf(),
+        format!("{:#x}", harness.tangle_contract),
+        format!("{:#x}", harness.restaking_contract),
+        Some(format!("{:#x}", harness.status_registry_contract)),
+    );
     let client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
     let (min_operators, pricing_model, subscription_rate, event_rate) = client
         .get_blueprint_config(LOCAL_BLUEPRINT_ID)
@@ -339,14 +339,14 @@ async fn cli_service_approve_creates_new_service() -> Result<()> {
         }
     };
 
-    let client_args = TangleClientArgs {
-        http_rpc_url: harness.http_endpoint().clone(),
-        ws_rpc_url: harness.ws_endpoint().clone(),
-        keystore_path: keystore_path.clone(),
-        tangle_contract: format!("{:#x}", harness.tangle_contract),
-        restaking_contract: format!("{:#x}", harness.restaking_contract),
-        status_registry_contract: Some(format!("{:#x}", harness.status_registry_contract)),
-    };
+    let client_args = TangleClientArgs::for_testing(
+        harness.http_endpoint().clone(),
+        harness.ws_endpoint().clone(),
+        keystore_path.clone(),
+        format!("{:#x}", harness.tangle_contract),
+        format!("{:#x}", harness.restaking_contract),
+        Some(format!("{:#x}", harness.status_registry_contract)),
+    );
     let admin_client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
     let before = admin_client.service_count().await?;
 
@@ -392,14 +392,14 @@ async fn cli_service_reject_marks_request_rejected() -> Result<()> {
         }
     };
 
-    let client_args = TangleClientArgs {
-        http_rpc_url: harness.http_endpoint().clone(),
-        ws_rpc_url: harness.ws_endpoint().clone(),
-        keystore_path: keystore_path.clone(),
-        tangle_contract: format!("{:#x}", harness.tangle_contract),
-        restaking_contract: format!("{:#x}", harness.restaking_contract),
-        status_registry_contract: Some(format!("{:#x}", harness.status_registry_contract)),
-    };
+    let client_args = TangleClientArgs::for_testing(
+        harness.http_endpoint().clone(),
+        harness.ws_endpoint().clone(),
+        keystore_path.clone(),
+        format!("{:#x}", harness.tangle_contract),
+        format!("{:#x}", harness.restaking_contract),
+        Some(format!("{:#x}", harness.status_registry_contract)),
+    );
     let admin_client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
 
     let request_id = submit_service_request(&network_args, &defaults).await?;
@@ -444,14 +444,14 @@ async fn cli_service_join_and_leave_dynamic_service() -> Result<()> {
     seed_specific_operator_key(&keystore_path, OPERATOR2_PRIVATE_KEY)?;
     let network_args = network_cli_args(&harness, &keystore_path);
 
-    let client_args = TangleClientArgs {
-        http_rpc_url: harness.http_endpoint().clone(),
-        ws_rpc_url: harness.ws_endpoint().clone(),
-        keystore_path: keystore_path.clone(),
-        tangle_contract: format!("{:#x}", harness.tangle_contract),
-        restaking_contract: format!("{:#x}", harness.restaking_contract),
-        status_registry_contract: Some(format!("{:#x}", harness.status_registry_contract)),
-    };
+    let client_args = TangleClientArgs::for_testing(
+        harness.http_endpoint().clone(),
+        harness.ws_endpoint().clone(),
+        keystore_path.clone(),
+        format!("{:#x}", harness.tangle_contract),
+        format!("{:#x}", harness.restaking_contract),
+        Some(format!("{:#x}", harness.status_registry_contract)),
+    );
     let register_client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
     let service_info = register_client
         .get_service_info(LOCAL_SERVICE_ID)
@@ -551,14 +551,14 @@ async fn cli_operator_status_reports_json_snapshot() -> Result<()> {
     seed_operator_keystore(&keystore_path)?;
     let network_args = network_cli_args(&harness, &keystore_path);
 
-    let client_args = TangleClientArgs {
-        http_rpc_url: harness.http_endpoint().clone(),
-        ws_rpc_url: harness.ws_endpoint().clone(),
-        keystore_path: keystore_path.clone(),
-        tangle_contract: format!("{:#x}", harness.tangle_contract),
-        restaking_contract: format!("{:#x}", harness.restaking_contract),
-        status_registry_contract: Some(format!("{:#x}", harness.status_registry_contract)),
-    };
+    let client_args = TangleClientArgs::for_testing(
+        harness.http_endpoint().clone(),
+        harness.ws_endpoint().clone(),
+        keystore_path.clone(),
+        format!("{:#x}", harness.tangle_contract),
+        format!("{:#x}", harness.restaking_contract),
+        Some(format!("{:#x}", harness.status_registry_contract)),
+    );
     let client = client_args
         .connect(LOCAL_BLUEPRINT_ID, Some(LOCAL_SERVICE_ID))
         .await?;
@@ -630,14 +630,14 @@ async fn cli_blueprint_register_registers_operator() -> Result<()> {
     seed_specific_operator_key(&keystore_path, OPERATOR2_PRIVATE_KEY)?;
 
     let signer = load_evm_signer(&keystore_path)?;
-    let client_args = TangleClientArgs {
-        http_rpc_url: harness.http_endpoint().clone(),
-        ws_rpc_url: harness.ws_endpoint().clone(),
-        keystore_path: keystore_path.clone(),
-        tangle_contract: format!("{:#x}", harness.tangle_contract),
-        restaking_contract: format!("{:#x}", harness.restaking_contract),
-        status_registry_contract: Some(format!("{:#x}", harness.status_registry_contract)),
-    };
+    let client_args = TangleClientArgs::for_testing(
+        harness.http_endpoint().clone(),
+        harness.ws_endpoint().clone(),
+        keystore_path.clone(),
+        format!("{:#x}", harness.tangle_contract),
+        format!("{:#x}", harness.restaking_contract),
+        Some(format!("{:#x}", harness.status_registry_contract)),
+    );
     let admin_client = client_args
         .connect(LOCAL_BLUEPRINT_ID, Some(LOCAL_SERVICE_ID))
         .await?;
