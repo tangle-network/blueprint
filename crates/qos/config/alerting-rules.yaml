@@ -201,18 +201,4 @@ groups:
             {{ $value | humanizePercentage }} of jobs are failing.
             Blueprint: {{ $labels.blueprint_id }}, job: {{ $labels.job_index }}.
 
-      - alert: JobCostSpike
-        expr: |
-          histogram_quantile(0.95,
-            rate(tangle_job_cost_usd_bucket[30m])
-          ) > 1.0
-        for: 10m
-        labels:
-          severity: warning
-          slo: job_cost
-        annotations:
-          summary: "Job p95 cost exceeds $1.00"
-          description: >
-            p95 job cost is ${{ $value }}.
-            Investigate: model pricing changes, token count inflation,
-            or unexpected GPU time.
+      # Cost metrics tracked for analytics only — not an SLO trigger.

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use alloy_sol_types::sol;
 use async_trait::async_trait;
@@ -105,6 +105,18 @@ fn source_kind_label(source: &BlueprintSource) -> &'static str {
         BlueprintSource::Container(_) => "container",
         BlueprintSource::Testing(_) => "testing",
     }
+}
+
+/// Generate a hex-encoded trace ID from the current system time (nanoseconds).
+/// Used to correlate all log lines within a single service lifecycle operation.
+fn gen_trace_id() -> String {
+    format!(
+        "{:016x}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64
+    )
 }
 
 fn source_priority(source: &BlueprintSource, preferred_source: SourceType) -> u8 {
@@ -258,16 +270,18 @@ impl TangleEventHandler {
                 .tangle()
                 .map_err(|e| Error::Other(e.to_string()))?;
             let blueprint_id = settings.blueprint_id;
+            let trace_id = gen_trace_id();
             if let Some(mut metadata) = self
                 .metadata
                 .resolve_registration(client, blueprint_id)
                 .await?
             {
                 metadata.registration_capture_only = env.registration_capture_only();
-                self.ensure_service_running(metadata, env, ctx, active_blueprints)
+                self.ensure_service_running(&trace_id, metadata, env, ctx, active_blueprints)
                     .await?;
             } else {
                 info!(
+                    trace_id = %trace_id,
                     blueprint_id,
                     "Registration-mode launch skipped; metadata unavailable"
                 );
@@ -326,7 +340,9 @@ impl TangleEventHandler {
                 {
                     Ok(true) => {
                         discovered += 1;
+                        let trace_id = gen_trace_id();
                         info!(
+                            trace_id = %trace_id,
                             service_id,
                             "Found active service for operator via contract state"
                         );
@@ -334,12 +350,19 @@ impl TangleEventHandler {
                             Ok(Some(metadata)) => {
                                 let svc_start = Instant::now();
                                 match self
-                                    .ensure_service_running(metadata, env, ctx, active_blueprints)
+                                    .ensure_service_running(
+                                        &trace_id,
+                                        metadata,
+                                        env,
+                                        ctx,
+                                        active_blueprints,
+                                    )
                                     .await
                                 {
                                     Ok(()) => {
                                         started += 1;
                                         info!(
+                                            trace_id = %trace_id,
                                             service_id,
                                             startup_ms = svc_start.elapsed().as_millis() as u64,
                                             "Service started"
@@ -348,6 +371,7 @@ impl TangleEventHandler {
                                     Err(e) => {
                                         failed += 1;
                                         info!(
+                                            trace_id = %trace_id,
                                             service_id,
                                             startup_ms = svc_start.elapsed().as_millis() as u64,
                                             error = %e,
@@ -357,11 +381,20 @@ impl TangleEventHandler {
                                 }
                             }
                             Ok(None) => {
-                                info!(service_id, "Service metadata unavailable");
+                                info!(
+                                    trace_id = %trace_id,
+                                    service_id,
+                                    "Service metadata unavailable"
+                                );
                             }
                             Err(e) => {
                                 failed += 1;
-                                info!(service_id, error = %e, "Failed to resolve service metadata");
+                                info!(
+                                    trace_id = %trace_id,
+                                    service_id,
+                                    error = %e,
+                                    "Failed to resolve service metadata"
+                                );
                             }
                         }
                     }
@@ -434,7 +467,9 @@ impl TangleEventHandler {
         for log in &tangle_evt.logs {
             if let Ok(evt) = log.log_decode::<ITangle::ServiceActivated>() {
                 let service_id = evt.inner.serviceId;
+                let trace_id = gen_trace_id();
                 info!(
+                    trace_id = %trace_id,
                     service_id,
                     block_number = tangle_evt.block_number,
                     "Decoded ServiceActivated event"
@@ -443,10 +478,11 @@ impl TangleEventHandler {
                     let blueprint_id = metadata.blueprint_id;
                     let gpu_requirements = metadata.gpu_requirements;
                     if let Err(e) = self
-                        .ensure_service_running(metadata, env, ctx, active_blueprints)
+                        .ensure_service_running(&trace_id, metadata, env, ctx, active_blueprints)
                         .await
                     {
                         warn!(
+                            trace_id = %trace_id,
                             service_id,
                             blueprint_id,
                             error = %e,
@@ -463,12 +499,20 @@ impl TangleEventHandler {
                     .await;
                 } else {
                     info!(
+                        trace_id = %trace_id,
                         service_id,
                         "ServiceActivated observed but metadata unavailable"
                     );
                 }
             } else if let Ok(evt) = log.log_decode::<ITangle::ServiceTerminated>() {
                 let service_id = evt.inner.serviceId;
+                let trace_id = gen_trace_id();
+                info!(
+                    trace_id = %trace_id,
+                    service_id,
+                    block_number = tangle_evt.block_number,
+                    "Decoded ServiceTerminated event"
+                );
                 if let Ok(service) = client.client().get_service(service_id).await {
                     self.stop_service(service.blueprintId, service_id, active_blueprints)
                         .await?;
@@ -478,15 +522,23 @@ impl TangleEventHandler {
                 }
             } else if let Ok(evt) = log.log_decode::<OperatorPreRegistered>() {
                 let blueprint_id = evt.inner.data.blueprintId;
+                let trace_id = gen_trace_id();
+                info!(
+                    trace_id = %trace_id,
+                    blueprint_id,
+                    block_number = tangle_evt.block_number,
+                    "Decoded OperatorPreRegistered event"
+                );
                 if let Some(metadata) = self
                     .metadata
                     .resolve_registration(client, blueprint_id)
                     .await?
                 {
-                    self.ensure_service_running(metadata, env, ctx, active_blueprints)
+                    self.ensure_service_running(&trace_id, metadata, env, ctx, active_blueprints)
                         .await?;
                 } else {
                     info!(
+                        trace_id = %trace_id,
                         blueprint_id,
                         "OperatorPreRegistered observed but blueprint metadata unavailable"
                     );
@@ -508,6 +560,7 @@ impl TangleEventHandler {
 
     async fn ensure_service_running(
         &self,
+        trace_id: &str,
         metadata: BlueprintMetadata,
         env: &BlueprintEnvironment,
         ctx: &BlueprintManagerContext,
@@ -518,6 +571,12 @@ impl TangleEventHandler {
             .and_then(|services| services.get(&metadata.service_id))
             .is_some()
         {
+            info!(
+                trace_id = %trace_id,
+                blueprint_id = metadata.blueprint_id,
+                service_id = metadata.service_id,
+                "Service already running — skipping"
+            );
             return Ok(());
         }
 
@@ -545,6 +604,7 @@ impl TangleEventHandler {
 
         if ctx.preferred_source == SourceType::Wasm {
             warn!(
+                trace_id = %trace_id,
                 preferred_source = %ctx.preferred_source,
                 "WASM source preference is not yet supported; using native/container/testing fallback ordering"
             );
@@ -567,6 +627,7 @@ impl TangleEventHandler {
         }
         if matches!(metadata.gpu_requirements.policy, GpuPolicy::Required) {
             info!(
+                trace_id = %trace_id,
                 blueprint_id = metadata.blueprint_id,
                 service_id = metadata.service_id,
                 min_count = metadata.gpu_requirements.min_count,
@@ -579,6 +640,7 @@ impl TangleEventHandler {
             .map(|idx| source_kind_label(&metadata.sources[*idx]))
             .collect();
         info!(
+            trace_id = %trace_id,
             blueprint_id = metadata.blueprint_id,
             service_id = metadata.service_id,
             confidentiality_policy = ?metadata.confidentiality_policy,
@@ -594,6 +656,7 @@ impl TangleEventHandler {
             let source_kind = source_kind_label(source);
             let runtime_path = planned_runtime_path_for_source(source, ctx);
             info!(
+                trace_id = %trace_id,
                 blueprint_id = metadata.blueprint_id,
                 service_id = metadata.service_id,
                 attempt = attempt + 1,
@@ -647,6 +710,7 @@ impl TangleEventHandler {
                                 .with_label_values(&[source_kind, "failed_health"])
                                 .inc();
                             info!(
+                                trace_id = %trace_id,
                                 blueprint_id = metadata.blueprint_id,
                                 service_id = metadata.service_id,
                                 source_kind,
@@ -674,6 +738,7 @@ impl TangleEventHandler {
                         .or_default()
                         .insert(metadata.service_id, service);
                     info!(
+                        trace_id = %trace_id,
                         blueprint_id = metadata.blueprint_id,
                         service_id = metadata.service_id,
                         source_kind,
@@ -692,6 +757,7 @@ impl TangleEventHandler {
                         .with_label_values(&[source_kind, "failed_spawn"])
                         .inc();
                     info!(
+                        trace_id = %trace_id,
                         blueprint_id = metadata.blueprint_id,
                         service_id = metadata.service_id,
                         source_kind,
@@ -724,6 +790,7 @@ impl TangleEventHandler {
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|_| ".".to_string());
                 info!(
+                    trace_id = %trace_id,
                     cargo_bin = %cargo_bin,
                     base_path = %base_path,
                     blueprint_id = metadata.blueprint_id,
@@ -779,8 +846,10 @@ impl TangleEventHandler {
                                     .or_default()
                                     .insert(metadata.service_id, service);
                                 info!(
-                                    "Started Tangle blueprint {} service {} via local cargo fallback",
-                                    metadata.blueprint_id, metadata.service_id
+                                    trace_id = %trace_id,
+                                    blueprint_id = metadata.blueprint_id,
+                                    service_id = metadata.service_id,
+                                    "Started Tangle blueprint service via local cargo fallback"
                                 );
                                 return Ok(());
                             }
@@ -790,8 +859,10 @@ impl TangleEventHandler {
                                 .or_default()
                                 .insert(metadata.service_id, service);
                             info!(
-                                "Started Tangle blueprint {} service {} via local cargo fallback",
-                                metadata.blueprint_id, metadata.service_id
+                                trace_id = %trace_id,
+                                blueprint_id = metadata.blueprint_id,
+                                service_id = metadata.service_id,
+                                "Started Tangle blueprint service via local cargo fallback"
                             );
                             return Ok(());
                         }
