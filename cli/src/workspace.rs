@@ -87,10 +87,10 @@ struct Raw {
 impl TangleWorkspace {
     /// Load an explicit workspace file.
     pub fn load(path: &Path) -> Result<Self> {
-        let content = fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
-        let raw: Raw = toml::from_str(&content)
-            .with_context(|| format!("parsing {}", path.display()))?;
+        let content =
+            fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let raw: Raw =
+            toml::from_str(&content).with_context(|| format!("parsing {}", path.display()))?;
 
         let active = raw.network.unwrap_or_else(|| "local".to_string());
         if !raw.networks.contains_key(&active) {
@@ -274,10 +274,7 @@ service_id   = 0
         ws2.write().unwrap();
         let reloaded = TangleWorkspace::load(&out).unwrap();
         assert_eq!(reloaded.active, ws.active);
-        assert_eq!(
-            reloaded.active_network().unwrap().chain_id,
-            Some(31337)
-        );
+        assert_eq!(reloaded.active_network().unwrap().chain_id, Some(31337));
     }
 
     #[test]
@@ -298,7 +295,8 @@ service_id   = 0
         let out = dir.path().join("header.toml");
         let mut ws2 = ws.clone();
         ws2.source = out.clone();
-        ws2.write_with_header(Some("# managed-by = \"test\"")).unwrap();
+        ws2.write_with_header(Some("# managed-by = \"test\""))
+            .unwrap();
         let body = fs::read_to_string(&out).unwrap();
         assert!(body.starts_with("# managed-by = \"test\""), "{body}");
         // Marker doesn't break parsing.

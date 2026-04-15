@@ -70,7 +70,9 @@ impl HetznerAdapter {
                 }
                 Ok(response) => {
                     let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!("Hetzner GET {url} failed: {body}")));
+                    return Err(Error::HttpError(format!(
+                        "Hetzner GET {url} failed: {body}"
+                    )));
                 }
                 Err(e) => {
                     last_err = Some(Error::HttpError(format!("Hetzner GET {url}: {e}")));
@@ -112,11 +114,7 @@ impl HetznerAdapter {
             .and_then(|n| n.get("ip"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
-        let status = match value
-            .get("status")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-        {
+        let status = match value.get("status").and_then(|v| v.as_str()).unwrap_or("") {
             "running" => InstanceStatus::Running,
             "initializing" | "starting" | "rebuilding" => InstanceStatus::Starting,
             "stopping" => InstanceStatus::Stopping,
@@ -334,7 +332,8 @@ impl CloudProviderAdapter for HetznerAdapter {
         use crate::core::deployment_target::DeploymentTarget;
         match target {
             DeploymentTarget::VirtualMachine { runtime: _ } => {
-                let selection = crate::providers::hetzner::HetznerInstanceMapper::map(resource_spec);
+                let selection =
+                    crate::providers::hetzner::HetznerInstanceMapper::map(resource_spec);
                 let instance = self
                     .provision_instance(&selection.instance_type, "", false)
                     .await?;

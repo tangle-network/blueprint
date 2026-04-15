@@ -15,10 +15,10 @@ use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
 use blueprint_runner::error::ConfigError;
 use cargo_tangle::command::create::{BlueprintType, TemplateVariables, new_blueprint};
 use cargo_tangle::command::debug::{self, DebugCommands};
-use cargo_tangle::command::dev::{self, DevCommands};
 use cargo_tangle::command::delegator;
 use cargo_tangle::command::deploy::eigenlayer::deploy_eigenlayer;
 use cargo_tangle::command::deploy::tangle as deploy_tangle;
+use cargo_tangle::command::dev::{self, DevCommands};
 use cargo_tangle::command::jobs::{
     check::wait_for_job_result,
     helpers::{
@@ -2874,8 +2874,13 @@ async fn register_operator(
         None
     };
 
-    let rpc_endpoint =
-        rpc_endpoint.unwrap_or_else(|| network.http_rpc_url().ok().map(|u| u.to_string()).unwrap_or_default());
+    let rpc_endpoint = rpc_endpoint.unwrap_or_else(|| {
+        network
+            .http_rpc_url()
+            .ok()
+            .map(|u| u.to_string())
+            .unwrap_or_default()
+    });
     let client = network.connect(blueprint_id, None).await?;
     let signer = load_evm_signer(&keystore_path)?;
 

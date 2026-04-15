@@ -49,7 +49,9 @@ pub fn execute() -> Result<()> {
 }
 
 fn read_pid(path: &Path) -> Option<u32> {
-    fs::read_to_string(path).ok().and_then(|s| s.trim().parse().ok())
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
 }
 
 fn pid_alive(pid: u32) -> bool {

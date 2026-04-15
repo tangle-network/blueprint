@@ -398,7 +398,9 @@ async fn configure_hetzner() -> Result<()> {
         return Ok(());
     }
 
-    println!("Get your API token from: https://console.hetzner.cloud/projects/default/security/tokens");
+    println!(
+        "Get your API token from: https://console.hetzner.cloud/projects/default/security/tokens"
+    );
 
     let token = Password::new()
         .with_prompt("Hetzner API Token")
@@ -429,9 +431,7 @@ async fn configure_runpod() -> Result<()> {
 
     println!("Get your API key from: https://www.runpod.io/console/user/settings");
 
-    let api_key = Password::new()
-        .with_prompt("RunPod API Key")
-        .interact()?;
+    let api_key = Password::new().with_prompt("RunPod API Key").interact()?;
 
     let env_file = std::env::current_dir()?.join(".env");
     let mut content = if env_file.exists() {
@@ -516,9 +516,7 @@ async fn configure_vast_ai() -> Result<()> {
 
     println!("Get your API key from: https://cloud.vast.ai/account/");
 
-    let api_key = Password::new()
-        .with_prompt("Vast.ai API Key")
-        .interact()?;
+    let api_key = Password::new().with_prompt("Vast.ai API Key").interact()?;
 
     let env_file = std::env::current_dir()?.join(".env");
     let mut content = if env_file.exists() {
@@ -610,11 +608,7 @@ fn prompt_region(provider: CloudProvider) -> Result<String> {
             ("ash", "Ashburn (US)"),
             ("hil", "Hillsboro (US)"),
         ],
-        CloudProvider::RunPod => vec![
-            ("US", "United States"),
-            ("EU", "Europe"),
-            ("CA", "Canada"),
-        ],
+        CloudProvider::RunPod => vec![("US", "United States"), ("EU", "Europe"), ("CA", "Canada")],
         CloudProvider::LambdaLabs => vec![
             ("us-west-1", "US West"),
             ("us-east-1", "US East"),

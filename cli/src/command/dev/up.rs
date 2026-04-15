@@ -150,8 +150,8 @@ pub async fn execute(args: UpArgs) -> Result<()> {
     // just a handle). setsid above ensures it survives this process exiting.
     drop(anvil);
 
-    let http_rpc_url = Url::parse(&format!("http://127.0.0.1:{}", args.port))
-        .expect("literal URL is valid");
+    let http_rpc_url =
+        Url::parse(&format!("http://127.0.0.1:{}", args.port)).expect("literal URL is valid");
     let ws_rpc_url =
         Url::parse(&format!("ws://127.0.0.1:{}", args.port)).expect("literal URL is valid");
 
@@ -182,9 +182,14 @@ pub async fn execute(args: UpArgs) -> Result<()> {
 
     // 4. Grant addPermittedCaller so the operator can submit its own jobs.
     if !args.no_grant_caller {
-        grant_permitted_caller(&http_rpc_url, tangle_contract, DEFAULT_SERVICE_ID, operator1)
-            .await
-            .with_context(|| "granting addPermittedCaller")?;
+        grant_permitted_caller(
+            &http_rpc_url,
+            tangle_contract,
+            DEFAULT_SERVICE_ID,
+            operator1,
+        )
+        .await
+        .with_context(|| "granting addPermittedCaller")?;
         println!("✓ Permitted caller granted for service {DEFAULT_SERVICE_ID} -> {operator1}");
     } else {
         println!("  Skipped addPermittedCaller (--no-grant-caller).");
@@ -219,14 +224,19 @@ pub async fn execute(args: UpArgs) -> Result<()> {
 
     println!();
     println!("Devnet is up.");
-    println!("  anvil PID        {anvil_pid}  (log: {})", anvil_log_path.display());
+    println!(
+        "  anvil PID        {anvil_pid}  (log: {})",
+        anvil_log_path.display()
+    );
     println!("  http_rpc_url     {http_rpc_url}");
     println!("  ws_rpc_url       {ws_rpc_url}");
     println!("  chain_id         {CHAIN_ID}");
     println!("  tangle_contract  {tangle_contract}");
     println!("  keystore         {}", keystore_dir.display());
     println!();
-    println!("Try: cargo-tangle blueprint jobs submit --job 0 --payload-hex 000000000000000000000000000000000000000000000000000000000000002a --watch");
+    println!(
+        "Try: cargo-tangle blueprint jobs submit --job 0 --payload-hex 000000000000000000000000000000000000000000000000000000000000002a --watch"
+    );
     println!("Stop with: cargo-tangle dev down");
     Ok(())
 }
@@ -254,9 +264,7 @@ fn ensure_anvil_on_path() -> Result<()> {
             }
             Ok(None) if Instant::now() >= deadline => {
                 let _ = child.kill();
-                bail!(
-                    "`anvil --version` did not return within 3s — PATH shim or hung binary?"
-                );
+                bail!("`anvil --version` did not return within 3s — PATH shim or hung binary?");
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(50)),
             Err(e) => return Err(eyre!("waiting on `anvil --version`: {e}")),
@@ -345,7 +353,9 @@ async fn grant_permitted_caller(
 }
 
 fn read_pid(path: &Path) -> Option<u32> {
-    fs::read_to_string(path).ok().and_then(|s| s.trim().parse().ok())
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
 }
 
 /// Own the `dev up` critical section via a non-blocking exclusive `flock`.

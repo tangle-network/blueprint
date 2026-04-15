@@ -160,7 +160,11 @@ impl Default for RemoteDeploymentPolicy {
                     CloudProvider::DigitalOcean,
                     CloudProvider::AWS,
                 ],
-                memory_intensive: vec![CloudProvider::AWS, CloudProvider::GCP, CloudProvider::Hetzner],
+                memory_intensive: vec![
+                    CloudProvider::AWS,
+                    CloudProvider::GCP,
+                    CloudProvider::Hetzner,
+                ],
                 cost_optimized: vec![
                     CloudProvider::VastAi,
                     CloudProvider::Hetzner,

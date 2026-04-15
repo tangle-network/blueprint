@@ -50,10 +50,7 @@ impl CrusoeAdapter {
     }
 
     async fn fetch_vm(&self, vm_id: &str) -> Result<serde_json::Value> {
-        let url = format!(
-            "{BASE_URL}/projects/{}/vms/{vm_id}",
-            self.project_id
-        );
+        let url = format!("{BASE_URL}/projects/{}/vms/{vm_id}", self.project_id);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -130,19 +127,14 @@ impl CrusoeAdapter {
             .and_then(|iface| iface.get("ips"))
             .and_then(|v| v.as_array())
             .and_then(|arr| {
-                arr.iter()
-                    .find_map(|ip| {
-                        ip.get("private_ipv4")
-                            .and_then(|v| v.get("address"))
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string())
-                    })
+                arr.iter().find_map(|ip| {
+                    ip.get("private_ipv4")
+                        .and_then(|v| v.get("address"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                })
             });
-        let status = match value
-            .get("state")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-        {
+        let status = match value.get("state").and_then(|v| v.as_str()).unwrap_or("") {
             "STATE_RUNNING" => InstanceStatus::Running,
             "STATE_CREATING" | "STATE_STARTING" => InstanceStatus::Starting,
             "STATE_STOPPING" => InstanceStatus::Stopping,
@@ -162,22 +154,17 @@ impl CrusoeAdapter {
     }
 
     async fn wait_for_running(&self, vm_id: &str) -> Result<ProvisionedInstance> {
-        poll_until(
-            "Crusoe VM",
-            VM_POLL_INTERVAL,
-            VM_READY_TIMEOUT,
-            || async {
-                let raw = self.fetch_vm(vm_id).await?;
-                let instance = Self::parse_vm(&raw)?;
-                match instance.status {
-                    InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
-                    InstanceStatus::Terminated => Err(Error::HttpError(
-                        "Crusoe VM terminated before running".into(),
-                    )),
-                    _ => Ok(None),
-                }
-            },
-        )
+        poll_until("Crusoe VM", VM_POLL_INTERVAL, VM_READY_TIMEOUT, || async {
+            let raw = self.fetch_vm(vm_id).await?;
+            let instance = Self::parse_vm(&raw)?;
+            match instance.status {
+                InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
+                InstanceStatus::Terminated => Err(Error::HttpError(
+                    "Crusoe VM terminated before running".into(),
+                )),
+                _ => Ok(None),
+            }
+        })
         .await
     }
 }
@@ -211,10 +198,7 @@ impl CloudProviderAdapter for CrusoeAdapter {
             payload["ssh_public_key"] = serde_json::Value::String(ssh_key.clone());
         }
 
-        let create_url = format!(
-            "{BASE_URL}/projects/{}/vms",
-            self.project_id
-        );
+        let create_url = format!("{BASE_URL}/projects/{}/vms", self.project_id);
         let json: serde_json::Value = {
             let mut last_err = None;
             let mut result = None;
@@ -249,9 +233,7 @@ impl CloudProviderAdapter for CrusoeAdapter {
                     }
                     Ok(response) => {
                         let body = response.text().await.unwrap_or_default();
-                        return Err(Error::HttpError(format!(
-                            "Crusoe create VM failed: {body}"
-                        )));
+                        return Err(Error::HttpError(format!("Crusoe create VM failed: {body}")));
                     }
                     Err(e) => {
                         last_err = Some(Error::HttpError(format!("Crusoe create VM: {e}")));
@@ -277,10 +259,7 @@ impl CloudProviderAdapter for CrusoeAdapter {
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        let url = format!(
-            "{BASE_URL}/projects/{}/vms/{instance_id}",
-            self.project_id
-        );
+        let url = format!("{BASE_URL}/projects/{}/vms/{instance_id}", self.project_id);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -304,9 +283,7 @@ impl CloudProviderAdapter for CrusoeAdapter {
                 }
                 Ok(response) => {
                     let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!(
-                        "Crusoe delete VM failed: {body}"
-                    )));
+                    return Err(Error::HttpError(format!("Crusoe delete VM failed: {body}")));
                 }
                 Err(e) => {
                     last_err = Some(Error::HttpError(format!("Crusoe delete VM: {e}")));

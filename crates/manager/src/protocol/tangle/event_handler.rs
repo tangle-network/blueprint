@@ -620,13 +620,11 @@ impl TangleEventHandler {
                 ConfidentialityPolicy::TeeRequired
             )
         {
-            let per_blueprint_key =
-                format!("BLUEPRINT_CARGO_BIN_{}", metadata.blueprint_id);
-            let (cargo_bin_var, resolved_from) =
-                match std::env::var(&per_blueprint_key) {
-                    Ok(val) => (Ok(val), per_blueprint_key.as_str()),
-                    Err(_) => (std::env::var("BLUEPRINT_CARGO_BIN"), "BLUEPRINT_CARGO_BIN"),
-                };
+            let per_blueprint_key = format!("BLUEPRINT_CARGO_BIN_{}", metadata.blueprint_id);
+            let (cargo_bin_var, resolved_from) = match std::env::var(&per_blueprint_key) {
+                Ok(val) => (Ok(val), per_blueprint_key.as_str()),
+                Err(_) => (std::env::var("BLUEPRINT_CARGO_BIN"), "BLUEPRINT_CARGO_BIN"),
+            };
             if let Ok(cargo_bin) = cargo_bin_var {
                 let base_path = std::env::current_dir()
                     .map(|p| p.display().to_string())

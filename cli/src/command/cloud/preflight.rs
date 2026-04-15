@@ -189,8 +189,7 @@ fn credentials_present(provider: CloudProvider) -> bool {
         CloudProvider::PrimeIntellect => std::env::var("PRIME_INTELLECT_API_KEY").is_ok(),
         CloudProvider::VastAi => std::env::var("VAST_AI_API_KEY").is_ok(),
         CloudProvider::Crusoe => {
-            std::env::var("CRUSOE_API_KEY").is_ok()
-                && std::env::var("CRUSOE_API_SECRET").is_ok()
+            std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok()
         }
     }
 }

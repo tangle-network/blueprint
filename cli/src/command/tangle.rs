@@ -109,10 +109,7 @@ impl TangleClientArgs {
         let keystore_path = self
             .keystore_path
             .clone()
-            .or_else(|| {
-                ws.as_ref()
-                    .and_then(|w| w.defaults.keystore_path.clone())
-            })
+            .or_else(|| ws.as_ref().and_then(|w| w.defaults.keystore_path.clone()))
             .unwrap_or_else(|| PathBuf::from("./keystore"));
 
         let tangle = match (&self.tangle_contract, net) {
@@ -126,10 +123,7 @@ impl TangleClientArgs {
             (Some(s), _) => parse_address(s, "RESTAKING_CONTRACT")?,
             (None, Some(n)) => n.restaking_contract,
             (None, None) => {
-                return Err(missing_addr_err(
-                    "restaking_contract",
-                    "RESTAKING_CONTRACT",
-                ));
+                return Err(missing_addr_err("restaking_contract", "RESTAKING_CONTRACT"));
             }
         };
         let status = match (&self.status_registry_contract, net) {
