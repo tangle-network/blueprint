@@ -295,17 +295,20 @@ impl TangleEventHandler {
             }
         }
 
-        // Fallback: if no services were discovered via events (e.g. Anvil
-        // state-only snapshot with no log/receipt data), enumerate services
-        // directly from on-chain contract state.
-        if active_blueprints.is_empty() {
+        // Enumerate ALL active services for this operator from on-chain state.
+        // Historical event replay may miss services (e.g. Anvil state-only
+        // snapshot, or services activated before the manager's start block).
+        // This scan is always run — it's idempotent because
+        // `ensure_service_running` skips services that are already tracked
+        // in `active_blueprints`.
+        {
             let operator = client.client().account();
             let service_count = client.client().service_count().await.unwrap_or(0);
             if service_count > 0 {
                 info!(
                     service_count,
                     %operator,
-                    "No services found via events; scanning contract state"
+                    "Scanning contract state for active services"
                 );
             }
             for service_id in 0..service_count {
@@ -365,9 +368,19 @@ impl TangleEventHandler {
             .as_tangle()
             .ok_or_else(|| Error::Other("Expected Tangle event in handler".to_string()))?;
 
+        info!(
+            block_number = tangle_evt.block_number,
+            log_count = tangle_evt.logs.len(),
+            "Processing block events"
+        );
         for log in &tangle_evt.logs {
             if let Ok(evt) = log.log_decode::<ITangle::ServiceActivated>() {
                 let service_id = evt.inner.serviceId;
+                info!(
+                    service_id,
+                    block_number = tangle_evt.block_number,
+                    "Decoded ServiceActivated event"
+                );
                 if let Some(metadata) = self.metadata.resolve_service(client, service_id).await? {
                     let blueprint_id = metadata.blueprint_id;
                     let gpu_requirements = metadata.gpu_requirements;
@@ -599,20 +612,30 @@ impl TangleEventHandler {
         }
 
         // Fallback: when preferred_source is Native and all on-chain sources failed,
-        // try building from local cargo workspace if BLUEPRINT_CARGO_BIN is set.
+        // try building from local cargo workspace.
+        // Checks BLUEPRINT_CARGO_BIN_{blueprint_id} first, then BLUEPRINT_CARGO_BIN.
         if ctx.preferred_source == SourceType::Native
             && !matches!(
                 metadata.confidentiality_policy,
                 ConfidentialityPolicy::TeeRequired
             )
         {
-            if let Ok(cargo_bin) = std::env::var("BLUEPRINT_CARGO_BIN") {
+            let per_blueprint_key =
+                format!("BLUEPRINT_CARGO_BIN_{}", metadata.blueprint_id);
+            let (cargo_bin_var, resolved_from) =
+                match std::env::var(&per_blueprint_key) {
+                    Ok(val) => (Ok(val), per_blueprint_key.as_str()),
+                    Err(_) => (std::env::var("BLUEPRINT_CARGO_BIN"), "BLUEPRINT_CARGO_BIN"),
+                };
+            if let Ok(cargo_bin) = cargo_bin_var {
                 let base_path = std::env::current_dir()
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|_| ".".to_string());
                 info!(
                     cargo_bin = %cargo_bin,
                     base_path = %base_path,
+                    blueprint_id = metadata.blueprint_id,
+                    env_var = resolved_from,
                     "On-chain sources failed; trying local cargo binary fallback"
                 );
                 let test_source = BlueprintSource::Testing(crate::sources::types::TestFetcher {
