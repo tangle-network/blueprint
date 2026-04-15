@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use alloy_sol_types::sol;
 use async_trait::async_trait;
@@ -249,6 +250,7 @@ impl TangleEventHandler {
         ctx: &BlueprintManagerContext,
         active_blueprints: &mut ActiveBlueprints,
     ) -> Result<()> {
+        let init_start = Instant::now();
         if env.registration_mode() {
             let settings = env
                 .protocol_settings
@@ -302,8 +304,12 @@ impl TangleEventHandler {
         // `ensure_service_running` skips services that are already tracked
         // in `active_blueprints`.
         {
+            let scan_start = Instant::now();
             let operator = client.client().account();
             let service_count = client.client().service_count().await.unwrap_or(0);
+            let mut discovered = 0u64;
+            let mut started = 0u64;
+            let mut failed = 0u64;
             if service_count > 0 {
                 info!(
                     service_count,
@@ -318,23 +324,42 @@ impl TangleEventHandler {
                     .await
                 {
                     Ok(true) => {
+                        discovered += 1;
                         info!(
                             service_id,
                             "Found active service for operator via contract state"
                         );
                         match self.metadata.resolve_service(client, service_id).await {
                             Ok(Some(metadata)) => {
-                                if let Err(e) = self
+                                let svc_start = Instant::now();
+                                match self
                                     .ensure_service_running(metadata, env, ctx, active_blueprints)
                                     .await
                                 {
-                                    info!(service_id, error = %e, "Failed to start service from contract state");
+                                    Ok(()) => {
+                                        started += 1;
+                                        info!(
+                                            service_id,
+                                            startup_ms = svc_start.elapsed().as_millis() as u64,
+                                            "Service started"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        failed += 1;
+                                        info!(
+                                            service_id,
+                                            startup_ms = svc_start.elapsed().as_millis() as u64,
+                                            error = %e,
+                                            "Failed to start service from contract state"
+                                        );
+                                    }
                                 }
                             }
                             Ok(None) => {
                                 info!(service_id, "Service metadata unavailable");
                             }
                             Err(e) => {
+                                failed += 1;
                                 info!(service_id, error = %e, "Failed to resolve service metadata");
                             }
                         }
@@ -345,8 +370,20 @@ impl TangleEventHandler {
                     }
                 }
             }
+            let scan_ms = scan_start.elapsed().as_millis() as u64;
+            info!(
+                service_count,
+                discovered, started, failed, scan_ms, "Contract state scan complete"
+            );
         }
 
+        let init_ms = init_start.elapsed().as_millis() as u64;
+        let active_count = active_blueprints.values().map(|s| s.len()).sum::<usize>();
+        info!(
+            init_ms,
+            active_services = active_count,
+            "Manager initialization complete"
+        );
         Ok(())
     }
 
@@ -368,6 +405,7 @@ impl TangleEventHandler {
             .as_tangle()
             .ok_or_else(|| Error::Other("Expected Tangle event in handler".to_string()))?;
 
+        let event_start = Instant::now();
         info!(
             block_number = tangle_evt.block_number,
             log_count = tangle_evt.logs.len(),
@@ -436,6 +474,11 @@ impl TangleEventHandler {
             }
         }
 
+        info!(
+            block_number = tangle_evt.block_number,
+            event_ms = event_start.elapsed().as_millis() as u64,
+            "Block event processing complete"
+        );
         Ok(())
     }
 
@@ -522,6 +565,7 @@ impl TangleEventHandler {
         );
 
         for (attempt, source_idx) in ordered_source_idxs.iter().enumerate() {
+            let attempt_start = Instant::now();
             let source = &metadata.sources[*source_idx];
             let source_kind = source_kind_label(source);
             let runtime_path = planned_runtime_path_for_source(source, ctx);
@@ -576,6 +620,7 @@ impl TangleEventHandler {
                                 service_id = metadata.service_id,
                                 source_kind,
                                 runtime_path,
+                                attempt_ms = attempt_start.elapsed().as_millis() as u64,
                                 error = %e,
                                 "Source launch failed health check; trying next fallback"
                             );
@@ -593,6 +638,7 @@ impl TangleEventHandler {
                         service_id = metadata.service_id,
                         source_kind,
                         runtime_path,
+                        attempt_ms = attempt_start.elapsed().as_millis() as u64,
                         "Started Tangle blueprint service"
                     );
                     return Ok(());
@@ -603,6 +649,7 @@ impl TangleEventHandler {
                         service_id = metadata.service_id,
                         source_kind,
                         runtime_path,
+                        attempt_ms = attempt_start.elapsed().as_millis() as u64,
                         error = %e,
                         "Source launch attempt failed; trying next fallback"
                     );
