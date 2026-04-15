@@ -35,6 +35,25 @@ fn supports_tee(provider: &CloudProvider) -> bool {
     )
 }
 
+/// What to deploy onto a provisioned VM.
+///
+/// Container images go through `docker pull` + `docker run`.
+/// GitHub-release binaries go through `wget` + sha256 verify + systemd.
+#[derive(Debug, Clone, Copy)]
+pub enum DeployArtifact<'a> {
+    /// A container image reference like `ghcr.io/tangle-network/llm-operator:v0.1.0`.
+    ContainerImage(&'a str),
+    /// A platform-specific binary archive from a GitHub release (or any URL).
+    ///
+    /// The archive is downloaded on the VM, its sha256 is verified, and the
+    /// named binary is extracted + started as a systemd service.
+    GithubBinary {
+        archive_url: &'a str,
+        sha256_hex: &'a str,
+        binary_name: &'a str,
+    },
+}
+
 /// Remote provider manager that handles cloud deployments
 pub struct RemoteProviderManager {
     provisioner: Arc<CloudProvisioner>,
@@ -79,25 +98,36 @@ impl RemoteProviderManager {
         }))
     }
 
-    /// Handle service initiated event. When `container_image` is Some, the
-    /// blueprint container is pulled and started on the provisioned VM. When
-    /// None, the VM is provisioned idle (legacy behavior — useful for
-    /// operators who stand up VMs separately).
+    /// Handle service initiated event. The artifact controls what gets
+    /// deployed onto the provisioned VM:
+    ///
+    /// - `None` → VM is provisioned idle (operator deploys separately)
+    /// - `Some(ContainerImage{..})` → `docker pull` + `docker run` via SSH
+    /// - `Some(GithubBinary{..})` → `wget` + sha256 verify + systemd service
+    ///
+    /// Both artifact forms are first-class. Blueprint authors choose which
+    /// to ship based on runtime needs (CUDA-heavy workloads ship containers;
+    /// lighter workloads can ship plain binaries).
     pub async fn on_service_initiated(
         &self,
         blueprint_id: u64,
         service_id: u64,
         resource_requirements: Option<ResourceSpec>,
-        container_image: Option<&str>,
+        artifact: Option<DeployArtifact<'_>>,
         extra_env: HashMap<String, String>,
     ) -> Result<()> {
         if !self.enabled {
             return Ok(());
         }
 
+        let artifact_kind = match &artifact {
+            Some(DeployArtifact::ContainerImage(_)) => "container",
+            Some(DeployArtifact::GithubBinary { .. }) => "github_binary",
+            None => "none",
+        };
         info!(
-            "Remote provider handling service initiation: blueprint={}, service={}, image={:?}",
-            blueprint_id, service_id, container_image
+            "Remote provider handling service initiation: blueprint={}, service={}, artifact={}",
+            blueprint_id, service_id, artifact_kind
         );
 
         // Use provided resources or default
@@ -162,37 +192,82 @@ impl RemoteProviderManager {
             provider, instance.id
         );
 
-        // If the caller supplied a container image, pull + run it on the VM.
-        // Without an image, the VM is left idle ("provisioned-only mode").
-        if let Some(image) = container_image {
-            let mut env_vars = extra_env;
-            env_vars
-                .entry("BLUEPRINT_ID".to_string())
-                .or_insert_with(|| blueprint_id.to_string());
-            env_vars
-                .entry("SERVICE_ID".to_string())
-                .or_insert_with(|| service_id.to_string());
+        // Dispatch deploy based on artifact kind. Both container and native
+        // binary paths are supported; blueprint authors choose at metadata time.
+        match artifact {
+            Some(DeployArtifact::ContainerImage(image)) => {
+                let mut env_vars = extra_env;
+                env_vars
+                    .entry("BLUEPRINT_ID".to_string())
+                    .or_insert_with(|| blueprint_id.to_string());
+                env_vars
+                    .entry("SERVICE_ID".to_string())
+                    .or_insert_with(|| service_id.to_string());
 
-            let deploy_result = self
-                .provisioner
-                .deploy_blueprint_to_instance(&provider, &instance, image, &resource_spec, env_vars)
-                .await
-                .map_err(|e| Error::Other(format!("deploy_blueprint_to_instance: {e}")))?;
-            info!(
-                blueprint_id,
-                service_id,
-                instance_id = %instance.id,
-                image,
-                deployed_id = %deploy_result.blueprint_id,
-                "Container deployed on remote VM"
-            );
-        } else {
-            info!(
-                blueprint_id,
-                service_id,
-                instance_id = %instance.id,
-                "Remote VM provisioned idle (no container image supplied)"
-            );
+                let deploy_result = self
+                    .provisioner
+                    .deploy_blueprint_to_instance(
+                        &provider,
+                        &instance,
+                        image,
+                        &resource_spec,
+                        env_vars,
+                    )
+                    .await
+                    .map_err(|e| Error::Other(format!("deploy_blueprint_to_instance: {e}")))?;
+                info!(
+                    blueprint_id,
+                    service_id,
+                    instance_id = %instance.id,
+                    image,
+                    deployed_id = %deploy_result.blueprint_id,
+                    "Container deployed on remote VM (docker pull + run)"
+                );
+            }
+            Some(DeployArtifact::GithubBinary {
+                archive_url,
+                sha256_hex,
+                binary_name,
+            }) => {
+                let mut env_vars = extra_env;
+                env_vars
+                    .entry("BLUEPRINT_ID".to_string())
+                    .or_insert_with(|| blueprint_id.to_string());
+                env_vars
+                    .entry("SERVICE_ID".to_string())
+                    .or_insert_with(|| service_id.to_string());
+
+                let deploy_result = self
+                    .provisioner
+                    .deploy_github_binary_to_instance(
+                        &provider,
+                        &instance,
+                        archive_url,
+                        sha256_hex,
+                        binary_name,
+                        &resource_spec,
+                        env_vars,
+                    )
+                    .await
+                    .map_err(|e| Error::Other(format!("deploy_github_binary_to_instance: {e}")))?;
+                info!(
+                    blueprint_id,
+                    service_id,
+                    instance_id = %instance.id,
+                    archive_url,
+                    binary_name,
+                    deployed_id = %deploy_result.blueprint_id,
+                    "Native binary deployed on remote VM (wget + sha256 + systemd)"
+                );
+            }
+            None => {
+                info!(
+                    blueprint_id,
+                    service_id,
+                    instance_id = %instance.id,
+                    "Remote VM provisioned idle (no deploy artifact supplied)"
+                );
+            }
         }
 
         self.ttl_manager

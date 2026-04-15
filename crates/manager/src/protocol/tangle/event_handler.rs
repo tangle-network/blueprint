@@ -919,6 +919,41 @@ impl TangleEventHandler {
         })
     }
 
+    /// Extract a GitHub-release artifact triple (archive_url, sha256_hex, binary_name)
+    /// for the target OS/arch that the remote VM will run on.
+    ///
+    /// Convention: remote VMs are linux/amd64 for cloud providers. We pick
+    /// the first binary matching linux+amd64 from the Github source.
+    fn github_binary_for_remote(sources: &[BlueprintSource]) -> Option<(String, String, String)> {
+        for source in sources {
+            if let BlueprintSource::Github(fetcher) = source {
+                let binary = fetcher.binaries.iter().find(|b| {
+                    b.os.eq_ignore_ascii_case("linux") && b.arch.eq_ignore_ascii_case("amd64")
+                })?;
+                // cargo-dist convention: releases publish per-target archives at
+                // https://github.com/<owner>/<repo>/releases/download/<tag>/<pkg>-<target>.tar.xz
+                // The manager mirrors GithubBinaryFetcher's URL construction.
+                let archive_url = format!(
+                    "https://github.com/{owner}/{repo}/releases/download/{tag}/{name}-x86_64-unknown-linux-gnu.tar.xz",
+                    owner = fetcher.owner,
+                    repo = fetcher.repo,
+                    tag = fetcher.tag,
+                    name = binary.name,
+                );
+                let sha256_hex = hex::encode(binary.sha256);
+                return Some((archive_url, sha256_hex, binary.name.clone()));
+            }
+            if let BlueprintSource::Remote(fetcher) = source {
+                let binary = fetcher.binaries.iter().find(|b| {
+                    b.os.eq_ignore_ascii_case("linux") && b.arch.eq_ignore_ascii_case("amd64")
+                })?;
+                let sha256_hex = hex::encode(binary.sha256);
+                return Some((fetcher.archive_url.clone(), sha256_hex, binary.name.clone()));
+            }
+        }
+        None
+    }
+
     async fn notify_remote_service_initiated(
         &self,
         blueprint_id: u64,
@@ -926,14 +961,40 @@ impl TangleEventHandler {
         gpu: &GpuRequirements,
         sources: &[BlueprintSource],
     ) {
+        use crate::executor::remote_provider_integration::DeployArtifact;
+
         let Some(remote) = &self.remote_provider else {
             return;
         };
         let mut limits = ResourceLimits::default();
         apply_gpu_limits(gpu, &mut limits);
         let resource_spec = resource_spec_from_limits(&limits);
+
+        // Decide artifact: prefer container if present, else fall back to github/remote binary.
+        // Blueprint authors can ship either — both are first-class.
         let container_image = Self::container_image_uri(sources);
-        let image_ref = container_image.as_deref();
+        let github_triple = if container_image.is_none() {
+            Self::github_binary_for_remote(sources)
+        } else {
+            None
+        };
+
+        let artifact_kind: &'static str;
+        let artifact: Option<DeployArtifact<'_>> = if let Some(image) = container_image.as_deref() {
+            artifact_kind = "container";
+            Some(DeployArtifact::ContainerImage(image))
+        } else if let Some((url, sha, name)) = github_triple.as_ref() {
+            artifact_kind = "github_binary";
+            Some(DeployArtifact::GithubBinary {
+                archive_url: url,
+                sha256_hex: sha,
+                binary_name: name,
+            })
+        } else {
+            artifact_kind = "none";
+            None
+        };
+
         let deploy_start = Instant::now();
         let mut env_vars = std::collections::HashMap::new();
         env_vars.insert("BLUEPRINT_ID".to_string(), blueprint_id.to_string());
@@ -944,16 +1005,16 @@ impl TangleEventHandler {
                 blueprint_id,
                 service_id,
                 Some(resource_spec),
-                image_ref,
+                artifact,
                 env_vars,
             )
             .await
         {
             Ok(()) => {
-                let result_label = if image_ref.is_some() {
-                    "success"
-                } else {
-                    "provisioned_only"
+                let result_label = match artifact_kind {
+                    "container" => "success_container",
+                    "github_binary" => "success_native",
+                    _ => "provisioned_only",
                 };
                 metrics::REMOTE_DEPLOY_TOTAL
                     .with_label_values(&[result_label])
@@ -964,7 +1025,7 @@ impl TangleEventHandler {
                 info!(
                     blueprint_id,
                     service_id,
-                    image = ?image_ref,
+                    artifact_kind,
                     deploy_ms = (deploy_start.elapsed().as_secs_f64() * 1000.0) as u64,
                     result = result_label,
                     "Remote service initiation complete"
@@ -973,7 +1034,9 @@ impl TangleEventHandler {
             Err(e) => {
                 // Classify: deploy_failed if message mentions deploy_blueprint, else provision_failed.
                 let err_msg = e.to_string();
-                let result_label = if err_msg.contains("deploy_blueprint") {
+                let result_label = if err_msg.contains("deploy_blueprint")
+                    || err_msg.contains("deploy_github_binary")
+                {
                     "deploy_failed"
                 } else {
                     "provision_failed"
@@ -987,7 +1050,7 @@ impl TangleEventHandler {
                 warn!(
                     blueprint_id,
                     service_id,
-                    image = ?image_ref,
+                    artifact_kind,
                     error = %e,
                     result = result_label,
                     "Remote service initiation failed"
