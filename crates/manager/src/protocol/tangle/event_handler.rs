@@ -16,6 +16,7 @@ use crate::config::SourceType;
 use crate::error::{Error, Result};
 #[cfg(feature = "remote-providers")]
 use crate::executor::remote_provider_integration::RemoteProviderManager;
+use crate::metrics;
 use crate::protocol::tangle::client::TangleProtocolClient;
 use crate::protocol::tangle::metadata::OnChainMetadataProvider;
 use crate::protocol::types::ProtocolEvent;
@@ -370,15 +371,34 @@ impl TangleEventHandler {
                     }
                 }
             }
-            let scan_ms = scan_start.elapsed().as_millis() as u64;
+            let scan_secs = scan_start.elapsed().as_secs_f64();
+            let scan_ms = (scan_secs * 1000.0) as u64;
+            metrics::CONTRACT_SCAN_DURATION
+                .with_label_values(&[] as &[&str])
+                .observe(scan_secs);
+            for _ in 0..started {
+                metrics::SERVICE_DISCOVERY
+                    .with_label_values(&["started"])
+                    .inc();
+            }
+            for _ in 0..failed {
+                metrics::SERVICE_DISCOVERY
+                    .with_label_values(&["failed"])
+                    .inc();
+            }
             info!(
                 service_count,
                 discovered, started, failed, scan_ms, "Contract state scan complete"
             );
         }
 
-        let init_ms = init_start.elapsed().as_millis() as u64;
+        let init_secs = init_start.elapsed().as_secs_f64();
+        let init_ms = (init_secs * 1000.0) as u64;
         let active_count = active_blueprints.values().map(|s| s.len()).sum::<usize>();
+        metrics::INIT_DURATION
+            .with_label_values(&["ok"])
+            .observe(init_secs);
+        metrics::ACTIVE_SERVICES.set(active_count as i64);
         info!(
             init_ms,
             active_services = active_count,
@@ -474,9 +494,13 @@ impl TangleEventHandler {
             }
         }
 
+        let event_secs = event_start.elapsed().as_secs_f64();
+        metrics::BLOCK_PROCESSING_DURATION
+            .with_label_values(&[] as &[&str])
+            .observe(event_secs);
         info!(
             block_number = tangle_evt.block_number,
-            event_ms = event_start.elapsed().as_millis() as u64,
+            event_ms = (event_secs * 1000.0) as u64,
             "Block event processing complete"
         );
         Ok(())
@@ -615,12 +639,19 @@ impl TangleEventHandler {
                 Ok(mut service) => {
                     if let Some(health) = service.start().await? {
                         if let Err(e) = health.await {
+                            let attempt_secs = attempt_start.elapsed().as_secs_f64();
+                            metrics::SOURCE_ATTEMPT_DURATION
+                                .with_label_values(&[source_kind, runtime_path, "failed_health"])
+                                .observe(attempt_secs);
+                            metrics::SOURCE_ATTEMPTS
+                                .with_label_values(&[source_kind, "failed_health"])
+                                .inc();
                             info!(
                                 blueprint_id = metadata.blueprint_id,
                                 service_id = metadata.service_id,
                                 source_kind,
                                 runtime_path,
-                                attempt_ms = attempt_start.elapsed().as_millis() as u64,
+                                attempt_ms = (attempt_secs * 1000.0) as u64,
                                 error = %e,
                                 "Source launch failed health check; trying next fallback"
                             );
@@ -628,6 +659,15 @@ impl TangleEventHandler {
                             continue;
                         }
                     }
+
+                    let attempt_secs = attempt_start.elapsed().as_secs_f64();
+                    metrics::SOURCE_ATTEMPT_DURATION
+                        .with_label_values(&[source_kind, runtime_path, "success"])
+                        .observe(attempt_secs);
+                    metrics::SOURCE_ATTEMPTS
+                        .with_label_values(&[source_kind, "success"])
+                        .inc();
+                    metrics::ACTIVE_SERVICES.inc();
 
                     active_blueprints
                         .entry(metadata.blueprint_id)
@@ -638,18 +678,25 @@ impl TangleEventHandler {
                         service_id = metadata.service_id,
                         source_kind,
                         runtime_path,
-                        attempt_ms = attempt_start.elapsed().as_millis() as u64,
+                        attempt_ms = (attempt_secs * 1000.0) as u64,
                         "Started Tangle blueprint service"
                     );
                     return Ok(());
                 }
                 Err(e) => {
+                    let attempt_secs = attempt_start.elapsed().as_secs_f64();
+                    metrics::SOURCE_ATTEMPT_DURATION
+                        .with_label_values(&[source_kind, runtime_path, "failed_spawn"])
+                        .observe(attempt_secs);
+                    metrics::SOURCE_ATTEMPTS
+                        .with_label_values(&[source_kind, "failed_spawn"])
+                        .inc();
                     info!(
                         blueprint_id = metadata.blueprint_id,
                         service_id = metadata.service_id,
                         source_kind,
                         runtime_path,
-                        attempt_ms = attempt_start.elapsed().as_millis() as u64,
+                        attempt_ms = (attempt_secs * 1000.0) as u64,
                         error = %e,
                         "Source launch attempt failed; trying next fallback"
                     );
