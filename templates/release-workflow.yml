@@ -1,0 +1,165 @@
+# Reusable release workflow for Tangle blueprint operators.
+# Copy this to .github/workflows/release.yml in each blueprint repo.
+#
+# Triggers on version tags (v0.1.0, v1.2.3, etc.).
+# Builds for linux/amd64, linux/arm64, macOS/arm64.
+# Uploads binaries + sha256 checksums as GitHub Release assets.
+#
+# Prerequisites:
+#   - Cargo.toml has [[bin]] with the operator binary name
+#   - rust-toolchain.toml pins the Rust version (e.g. 1.91)
+#
+# Usage:
+#   git tag v0.1.0 && git push origin v0.1.0
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # The binary name from [[bin]] in operator/Cargo.toml.
+  # Override per repo if different.
+  BINARY_NAME: ${{ vars.BINARY_NAME || 'operator' }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+          - target: aarch64-apple-darwin
+            os: macos-14
+            use_cross: false
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      # Strip CI-incompatible patches (local paths that only exist on dev machines).
+      # The committed Cargo.lock already pins transitive deps (like yanked core2).
+      - name: Prepare for CI build
+        run: |
+          # Remove [patch.crates-io] and [patch."https://..."] sections that
+          # reference local paths (e.g. /Users/drew/.cargo/...).
+          if grep -q 'patch.crates-io' Cargo.toml; then
+            python3 -c "
+          import re
+          with open('Cargo.toml') as f: text = f.read()
+          # Remove [patch.*] sections with local path = entries
+          text = re.sub(r'\[patch[^\]]*\]\n(?:(?!^\[)[^\n]*\n)*', '', text, flags=re.MULTILINE)
+          with open('Cargo.toml', 'w') as f: f.write(text)
+          "
+            echo 'Stripped local-path patches from Cargo.toml for CI'
+          fi
+
+      - name: Build release binary
+        run: |
+          BUILD_CMD="cargo"
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            BUILD_CMD="cross"
+          fi
+          $BUILD_CMD build --release --target ${{ matrix.target }} --locked
+
+      - name: Package archive
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}"
+          ARCHIVE="${{ env.BINARY_NAME }}-${{ matrix.target }}.tar.xz"
+
+          # Strip debug symbols (saves 50-80% size)
+          if command -v llvm-strip &>/dev/null; then
+            llvm-strip "$BIN" 2>/dev/null || true
+          elif command -v strip &>/dev/null; then
+            strip "$BIN" 2>/dev/null || true
+          fi
+
+          tar -cJf "$ARCHIVE" -C "$(dirname "$BIN")" "${{ env.BINARY_NAME }}"
+
+          # Generate checksums
+          sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          echo "SHA256_FILE=${ARCHIVE}.sha256" >> "$GITHUB_ENV"
+          echo "Binary size: $(du -h "$BIN" | cut -f1)"
+          echo "Archive size: $(du -h "$ARCHIVE" | cut -f1)"
+          cat "${ARCHIVE}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ matrix.target }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.SHA256_FILE }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Collect all archives and checksums
+          FILES=$(find artifacts/ -name "*.tar.xz" -o -name "*.sha256" | sort)
+
+          # Generate release notes from tag message or changelog
+          NOTES="## Binary Downloads
+
+          | Platform | Archive | SHA256 |
+          |----------|---------|--------|"
+
+          for f in $(find artifacts/ -name "*.tar.xz" | sort); do
+            BASENAME=$(basename "$f")
+            SHA=$(cat "${f}.sha256" | awk '{print $1}')
+            TARGET=$(echo "$BASENAME" | sed "s/${BINARY_NAME}-//" | sed 's/\.tar\.xz//')
+            NOTES="$NOTES
+          | \`$TARGET\` | \`$BASENAME\` | \`${SHA:0:16}...\` |"
+          done
+
+          NOTES="$NOTES
+
+          ### Verify checksums
+          \`\`\`bash
+          sha256sum -c *.sha256
+          \`\`\`
+
+          ### Install
+          \`\`\`bash
+          curl -sSL https://github.com/${{ github.repository }}/releases/download/$TAG/${BINARY_NAME}-x86_64-unknown-linux-gnu.tar.xz | tar xJ
+          chmod +x ${BINARY_NAME}
+          \`\`\`
+          "
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "$NOTES" \
+            $FILES
