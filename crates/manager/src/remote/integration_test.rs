@@ -19,8 +19,8 @@ async fn test_provider_selection_integration() -> Result<(), Box<dyn std::error:
     let provider = selector.select_provider(&gpu_spec)?;
     assert_eq!(
         provider,
-        CloudProvider::GCP,
-        "GPU workloads should select GCP first"
+        CloudProvider::RunPod,
+        "GPU workloads should select RunPod first (decentralized marketplace > hyperscaler)"
     );
 
     // Test CPU-intensive workload selection
@@ -36,8 +36,8 @@ async fn test_provider_selection_integration() -> Result<(), Box<dyn std::error:
     let provider = selector.select_provider(&cpu_spec)?;
     assert_eq!(
         provider,
-        CloudProvider::Vultr,
-        "CPU-intensive workloads should select Vultr first"
+        CloudProvider::Hetzner,
+        "CPU-intensive workloads should select Hetzner first (cheapest dedicated cores)"
     );
 
     // Test cost-optimized workload selection
@@ -53,8 +53,8 @@ async fn test_provider_selection_integration() -> Result<(), Box<dyn std::error:
     let provider = selector.select_provider(&cost_spec)?;
     assert_eq!(
         provider,
-        CloudProvider::Vultr,
-        "Cost-optimized workloads should select Vultr first"
+        CloudProvider::VastAi,
+        "Cost-optimized spot workloads should select VastAi first (cheapest spot marketplace)"
     );
 
     Ok(())

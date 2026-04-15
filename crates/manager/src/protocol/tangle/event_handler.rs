@@ -477,6 +477,8 @@ impl TangleEventHandler {
                 if let Some(metadata) = self.metadata.resolve_service(client, service_id).await? {
                     let blueprint_id = metadata.blueprint_id;
                     let gpu_requirements = metadata.gpu_requirements;
+                    #[cfg(feature = "remote-providers")]
+                    let sources_for_remote = metadata.sources.clone();
                     if let Err(e) = self
                         .ensure_service_running(&trace_id, metadata, env, ctx, active_blueprints)
                         .await
@@ -495,6 +497,7 @@ impl TangleEventHandler {
                         blueprint_id,
                         service_id,
                         &gpu_requirements,
+                        &sources_for_remote,
                     )
                     .await;
                 } else {
@@ -900,11 +903,28 @@ impl TangleEventHandler {
 
 #[cfg(feature = "remote-providers")]
 impl TangleEventHandler {
+    /// Extract the first container image URI from blueprint sources.
+    /// Returns `"registry/image:tag"` (the form docker pull accepts).
+    fn container_image_uri(sources: &[BlueprintSource]) -> Option<String> {
+        sources.iter().find_map(|s| {
+            if let BlueprintSource::Container(fetcher) = s {
+                let r = fetcher.registry.trim();
+                let i = fetcher.image.trim();
+                let t = fetcher.tag.trim();
+                if !r.is_empty() && !i.is_empty() && !t.is_empty() {
+                    return Some(format!("{r}/{i}:{t}"));
+                }
+            }
+            None
+        })
+    }
+
     async fn notify_remote_service_initiated(
         &self,
         blueprint_id: u64,
         service_id: u64,
         gpu: &GpuRequirements,
+        sources: &[BlueprintSource],
     ) {
         let Some(remote) = &self.remote_provider else {
             return;
@@ -912,16 +932,67 @@ impl TangleEventHandler {
         let mut limits = ResourceLimits::default();
         apply_gpu_limits(gpu, &mut limits);
         let resource_spec = resource_spec_from_limits(&limits);
-        if let Err(e) = remote
-            .on_service_initiated(blueprint_id, service_id, Some(resource_spec))
-            .await
-        {
-            warn!(
+        let container_image = Self::container_image_uri(sources);
+        let image_ref = container_image.as_deref();
+        let deploy_start = Instant::now();
+        let mut env_vars = std::collections::HashMap::new();
+        env_vars.insert("BLUEPRINT_ID".to_string(), blueprint_id.to_string());
+        env_vars.insert("SERVICE_ID".to_string(), service_id.to_string());
+
+        match remote
+            .on_service_initiated(
                 blueprint_id,
                 service_id,
-                error = %e,
-                "Remote provider failed to handle service initiation"
-            );
+                Some(resource_spec),
+                image_ref,
+                env_vars,
+            )
+            .await
+        {
+            Ok(()) => {
+                let result_label = if image_ref.is_some() {
+                    "success"
+                } else {
+                    "provisioned_only"
+                };
+                metrics::REMOTE_DEPLOY_TOTAL
+                    .with_label_values(&[result_label])
+                    .inc();
+                metrics::REMOTE_DEPLOY_DURATION
+                    .with_label_values(&[result_label])
+                    .observe(deploy_start.elapsed().as_secs_f64());
+                info!(
+                    blueprint_id,
+                    service_id,
+                    image = ?image_ref,
+                    deploy_ms = (deploy_start.elapsed().as_secs_f64() * 1000.0) as u64,
+                    result = result_label,
+                    "Remote service initiation complete"
+                );
+            }
+            Err(e) => {
+                // Classify: deploy_failed if message mentions deploy_blueprint, else provision_failed.
+                let err_msg = e.to_string();
+                let result_label = if err_msg.contains("deploy_blueprint") {
+                    "deploy_failed"
+                } else {
+                    "provision_failed"
+                };
+                metrics::REMOTE_DEPLOY_TOTAL
+                    .with_label_values(&[result_label])
+                    .inc();
+                metrics::REMOTE_DEPLOY_DURATION
+                    .with_label_values(&["failed"])
+                    .observe(deploy_start.elapsed().as_secs_f64());
+                warn!(
+                    blueprint_id,
+                    service_id,
+                    image = ?image_ref,
+                    error = %e,
+                    result = result_label,
+                    "Remote service initiation failed"
+                );
+            }
         }
     }
 
@@ -1112,5 +1183,60 @@ mod tests {
             ConfidentialityPolicy::TeePreferred,
         );
         assert_eq!(ordered[0], 3);
+    }
+
+    #[cfg(feature = "remote-providers")]
+    #[test]
+    fn container_image_uri_extracts_from_container_source() {
+        let sources = vec![container_source(), test_source()];
+        let uri = TangleEventHandler::container_image_uri(&sources);
+        assert_eq!(uri, Some("ghcr.io/tangle/demo:v1".to_string()));
+    }
+
+    #[cfg(feature = "remote-providers")]
+    #[test]
+    fn container_image_uri_returns_none_without_container_source() {
+        let sources = vec![test_source(), github_source(), remote_source()];
+        let uri = TangleEventHandler::container_image_uri(&sources);
+        assert_eq!(uri, None);
+    }
+
+    #[cfg(feature = "remote-providers")]
+    #[test]
+    fn container_image_uri_skips_malformed_container_source() {
+        let empty = BlueprintSource::Container(ImageRegistryFetcher {
+            registry: "".to_string(),
+            image: "x".to_string(),
+            tag: "v1".to_string(),
+        });
+        assert_eq!(TangleEventHandler::container_image_uri(&[empty]), None);
+
+        let trimmed = BlueprintSource::Container(ImageRegistryFetcher {
+            registry: "  ".to_string(),
+            image: "x".to_string(),
+            tag: "v1".to_string(),
+        });
+        assert_eq!(TangleEventHandler::container_image_uri(&[trimmed]), None);
+    }
+
+    #[cfg(feature = "remote-providers")]
+    #[test]
+    fn container_image_uri_picks_first_valid_container() {
+        let good = BlueprintSource::Container(ImageRegistryFetcher {
+            registry: "ghcr.io".to_string(),
+            image: "tangle/demo".to_string(),
+            tag: "v1".to_string(),
+        });
+        let better = BlueprintSource::Container(ImageRegistryFetcher {
+            registry: "docker.io".to_string(),
+            image: "tangle/demo".to_string(),
+            tag: "v2".to_string(),
+        });
+        let sources = vec![test_source(), good, better];
+        // "first valid container" — deterministic on ordered input
+        assert_eq!(
+            TangleEventHandler::container_image_uri(&sources),
+            Some("ghcr.io/tangle/demo:v1".to_string())
+        );
     }
 }

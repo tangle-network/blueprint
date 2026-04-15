@@ -31,3 +31,5 @@ docs/
 # Blueprint metadata
 blueprint.json
 blueprint.lock
+.tangle/
+.tangle.toml

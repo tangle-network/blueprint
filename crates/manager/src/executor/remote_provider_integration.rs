@@ -79,20 +79,25 @@ impl RemoteProviderManager {
         }))
     }
 
-    /// Handle service initiated event
+    /// Handle service initiated event. When `container_image` is Some, the
+    /// blueprint container is pulled and started on the provisioned VM. When
+    /// None, the VM is provisioned idle (legacy behavior — useful for
+    /// operators who stand up VMs separately).
     pub async fn on_service_initiated(
         &self,
         blueprint_id: u64,
         service_id: u64,
         resource_requirements: Option<ResourceSpec>,
+        container_image: Option<&str>,
+        extra_env: HashMap<String, String>,
     ) -> Result<()> {
         if !self.enabled {
             return Ok(());
         }
 
         info!(
-            "Remote provider handling service initiation: blueprint={}, service={}",
-            blueprint_id, service_id
+            "Remote provider handling service initiation: blueprint={}, service={}, image={:?}",
+            blueprint_id, service_id, container_image
         );
 
         // Use provided resources or default
@@ -152,7 +157,44 @@ impl RemoteProviderManager {
             )
             .await;
 
-        info!("Service deployed to {}: instance={}", provider, instance.id);
+        info!(
+            "Remote VM provisioned on {}: instance={}",
+            provider, instance.id
+        );
+
+        // If the caller supplied a container image, pull + run it on the VM.
+        // Without an image, the VM is left idle ("provisioned-only mode").
+        if let Some(image) = container_image {
+            let mut env_vars = extra_env;
+            env_vars
+                .entry("BLUEPRINT_ID".to_string())
+                .or_insert_with(|| blueprint_id.to_string());
+            env_vars
+                .entry("SERVICE_ID".to_string())
+                .or_insert_with(|| service_id.to_string());
+
+            let deploy_result = self
+                .provisioner
+                .deploy_blueprint_to_instance(&provider, &instance, image, &resource_spec, env_vars)
+                .await
+                .map_err(|e| Error::Other(format!("deploy_blueprint_to_instance: {e}")))?;
+            info!(
+                blueprint_id,
+                service_id,
+                instance_id = %instance.id,
+                image,
+                deployed_id = %deploy_result.blueprint_id,
+                "Container deployed on remote VM"
+            );
+        } else {
+            info!(
+                blueprint_id,
+                service_id,
+                instance_id = %instance.id,
+                "Remote VM provisioned idle (no container image supplied)"
+            );
+        }
+
         self.ttl_manager
             .register_ttl(blueprint_id, service_id, 3600)
             .await; // 1 hour default

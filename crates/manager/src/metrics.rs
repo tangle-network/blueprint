@@ -201,6 +201,45 @@ pub static COMPUTE_COST_USD: Lazy<Histogram> = Lazy::new(|| {
     .expect("tangle_compute_cost_usd")
 });
 
+// ── Remote Deploy Metrics ────────────────────────────────────────────
+
+/// Remote container deploy outcomes.
+pub static REMOTE_DEPLOY_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
+        prometheus::opts!(
+            "tangle_remote_deploy_total",
+            "Remote deploy outcomes after VM provisioning"
+        ),
+        &["result"] // success, provision_failed, deploy_failed, provisioned_only
+    )
+    .expect("tangle_remote_deploy_total")
+});
+
+/// Remote container deploy duration (provision start → container running).
+pub static REMOTE_DEPLOY_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec!(
+        prometheus::histogram_opts!(
+            "tangle_remote_deploy_seconds",
+            "Time from provision to container running on remote VM",
+            PROVISION_BUCKETS.to_vec()
+        ),
+        &["result"]
+    )
+    .expect("tangle_remote_deploy_seconds")
+});
+
+/// Service placement outcomes — local vs remote vs failed.
+pub static SERVICE_PLACEMENT: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
+        prometheus::opts!(
+            "tangle_service_placement_total",
+            "How each service was placed"
+        ),
+        &["placement"] // local, remote, local_and_remote, failed
+    )
+    .expect("tangle_service_placement_total")
+});
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,20 +273,50 @@ mod tests {
 
     #[test]
     fn all_metrics_register_on_default_registry() {
-        // Force lazy init of every static.
-        let _ = &*INIT_DURATION;
-        let _ = &*CONTRACT_SCAN_DURATION;
-        let _ = &*SERVICE_STARTUP_DURATION;
-        let _ = &*SOURCE_ATTEMPT_DURATION;
-        let _ = &*BLOCK_PROCESSING_DURATION;
-        let _ = &*SERVICE_DISCOVERY;
-        let _ = &*SOURCE_ATTEMPTS;
-        let _ = &*ACTIVE_SERVICES;
-        let _ = &*REMOTE_PROVISION_DURATION;
-        let _ = &*JOB_EXECUTION_DURATION;
-        let _ = &*JOB_COST_USD;
-        let _ = &*JOBS_TOTAL;
-        let _ = &*COMPUTE_COST_USD;
+        // HistogramVec and IntCounterVec metrics only appear in gather() after
+        // an observation is made with some label set — forcing Lazy init is
+        // not enough. Record a zero-value obs/inc on each to force them into
+        // the registry output.
+        // Observe +infinity for every histogram to land in the last (+Inf)
+        // bucket only, never in any per-bucket assertion's target range. Use
+        // inc_by(0) for counters so no count is actually added.
+        let probe = f64::INFINITY;
+        INIT_DURATION.with_label_values(&["_probe"]).observe(probe);
+        CONTRACT_SCAN_DURATION
+            .with_label_values(&[] as &[&str])
+            .observe(probe);
+        SERVICE_STARTUP_DURATION
+            .with_label_values(&["_probe", "_probe", "_probe"])
+            .observe(probe);
+        SOURCE_ATTEMPT_DURATION
+            .with_label_values(&["_probe", "_probe", "_probe"])
+            .observe(probe);
+        BLOCK_PROCESSING_DURATION
+            .with_label_values(&[] as &[&str])
+            .observe(probe);
+        SERVICE_DISCOVERY.with_label_values(&["_probe"]).inc_by(0);
+        SOURCE_ATTEMPTS
+            .with_label_values(&["_probe", "_probe"])
+            .inc_by(0);
+        ACTIVE_SERVICES.set(ACTIVE_SERVICES.get()); // no-op read-write
+        REMOTE_PROVISION_DURATION
+            .with_label_values(&["_probe", "_probe"])
+            .observe(probe);
+        JOB_EXECUTION_DURATION
+            .with_label_values(&["_probe", "_probe", "_probe"])
+            .observe(probe);
+        JOB_COST_USD
+            .with_label_values(&["_probe", "_probe"])
+            .observe(probe);
+        JOBS_TOTAL
+            .with_label_values(&["_probe", "_probe", "_probe"])
+            .inc_by(0);
+        COMPUTE_COST_USD.observe(probe);
+        REMOTE_DEPLOY_TOTAL.with_label_values(&["_probe"]).inc_by(0);
+        REMOTE_DEPLOY_DURATION
+            .with_label_values(&["_probe"])
+            .observe(probe);
+        SERVICE_PLACEMENT.with_label_values(&["_probe"]).inc_by(0);
 
         let families = prometheus::gather();
         let names: Vec<&str> = families.iter().map(|f| f.name()).collect();
@@ -266,6 +335,9 @@ mod tests {
             "tangle_job_cost_usd",
             "tangle_jobs_total",
             "tangle_compute_cost_usd",
+            "tangle_remote_deploy_total",
+            "tangle_remote_deploy_seconds",
+            "tangle_service_placement_total",
         ];
         for name in &expected {
             assert!(
