@@ -17,8 +17,8 @@
 
 use once_cell::sync::Lazy;
 use prometheus::{
-    HistogramVec, IntCounterVec, IntGauge, register_histogram_vec, register_int_counter_vec,
-    register_int_gauge,
+    Histogram, HistogramVec, IntCounterVec, IntGauge, register_histogram, register_histogram_vec,
+    register_int_counter_vec, register_int_gauge,
 };
 
 // ── Bucket definitions ──────────────────────────────────────────────────
@@ -146,4 +146,57 @@ pub static REMOTE_PROVISION_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
         &["provider", "result"]
     )
     .expect("tangle_remote_provision_seconds")
+});
+
+// ── Job Execution Metrics ───────────────────────────────────────────
+
+/// Job execution buckets: from fast lookups to LLM inference.
+const JOB_BUCKETS: &[f64] = &[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0];
+
+/// Cost buckets in USD: from sub-cent to multi-dollar GPU inference.
+const COST_BUCKETS: &[f64] = &[0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0];
+
+/// Per-job execution time (from call_id submission to result posted).
+pub static JOB_EXECUTION_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec!(
+        prometheus::histogram_opts!(
+            "tangle_job_execution_seconds",
+            "End-to-end job execution time",
+            JOB_BUCKETS.to_vec()
+        ),
+        &["blueprint_id", "job_index", "result"]
+    )
+    .expect("tangle_job_execution_seconds")
+});
+
+/// Per-job cost in USD (tokens × rate or compute × rate).
+pub static JOB_COST_USD: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec!(
+        prometheus::histogram_opts!(
+            "tangle_job_cost_usd",
+            "Estimated cost per job in USD",
+            COST_BUCKETS.to_vec()
+        ),
+        &["blueprint_id", "job_index"]
+    )
+    .expect("tangle_job_cost_usd")
+});
+
+/// Total jobs processed (success + failure).
+pub static JOBS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    register_int_counter_vec!(
+        prometheus::opts!("tangle_jobs_total", "Total jobs processed by outcome"),
+        &["blueprint_id", "job_index", "result"]
+    )
+    .expect("tangle_jobs_total")
+});
+
+/// Cumulative cloud compute cost in USD (running total).
+pub static COMPUTE_COST_USD: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(prometheus::histogram_opts!(
+        "tangle_compute_cost_usd",
+        "Cumulative cloud compute cost per provisioning event",
+        COST_BUCKETS.to_vec()
+    ))
+    .expect("tangle_compute_cost_usd")
 });

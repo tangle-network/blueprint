@@ -1,0 +1,218 @@
+# Tangle Manager SLO Alerting Rules
+#
+# Deploy alongside Prometheus. These rules define Service Level Objectives
+# for the blueprint manager lifecycle and fire alerts when percentiles
+# breach thresholds.
+#
+# SLO targets:
+#   - Manager init p99 < 60s (cold start with binary download)
+#   - Service startup p95 < 30s (source fetch + spawn + health)
+#   - Block processing p99 < 5s (event decode + reconcile)
+#   - Source success rate > 90% (at least 1 source must work)
+#   - Contract scan p99 < 2s (on-chain enumeration)
+
+groups:
+  - name: tangle_manager_slos
+    interval: 30s
+    rules:
+
+      # ── Init SLO ────────────────────────────────────────────────
+
+      - alert: ManagerInitSlow
+        expr: |
+          histogram_quantile(0.99,
+            rate(tangle_manager_init_seconds_bucket[10m])
+          ) > 60
+        for: 5m
+        labels:
+          severity: warning
+          slo: manager_init
+        annotations:
+          summary: "Manager p99 init time exceeds 60s SLO"
+          description: >
+            p99 initialization time is {{ $value | humanizeDuration }}.
+            This includes event replay, contract scan, and all service starts.
+            Investigate: slow RPC, large service count, or binary fetch issues.
+
+      # ── Service Startup SLO ─────────────────────────────────────
+
+      - alert: ServiceStartupSlow
+        expr: |
+          histogram_quantile(0.95,
+            rate(tangle_service_startup_seconds_bucket[10m])
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          slo: service_startup
+        annotations:
+          summary: "Service p95 startup time exceeds 30s SLO"
+          description: >
+            p95 service startup is {{ $value | humanizeDuration }}.
+            Breakdown by source_kind label to identify the bottleneck.
+
+      - alert: ServiceStartupCritical
+        expr: |
+          histogram_quantile(0.99,
+            rate(tangle_service_startup_seconds_bucket[10m])
+          ) > 120
+        for: 5m
+        labels:
+          severity: critical
+          slo: service_startup
+        annotations:
+          summary: "Service p99 startup time exceeds 120s — likely stuck"
+          description: >
+            p99 service startup is {{ $value | humanizeDuration }}.
+            Service may be hanging on health check or binary download.
+
+      # ── Block Processing SLO ────────────────────────────────────
+
+      - alert: BlockProcessingSlow
+        expr: |
+          histogram_quantile(0.99,
+            rate(tangle_block_processing_seconds_bucket[5m])
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          slo: block_processing
+        annotations:
+          summary: "Block processing p99 exceeds 5s SLO"
+          description: >
+            p99 block processing is {{ $value | humanizeDuration }}.
+            Manager may fall behind chain head.
+
+      # ── Source Success Rate SLO ─────────────────────────────────
+
+      - alert: SourceSuccessRateLow
+        expr: |
+          (
+            rate(tangle_source_attempts_total{result="success"}[10m])
+            /
+            rate(tangle_source_attempts_total[10m])
+          ) < 0.9
+        for: 10m
+        labels:
+          severity: warning
+          slo: source_success
+        annotations:
+          summary: "Source attempt success rate below 90%"
+          description: >
+            Only {{ $value | humanizePercentage }} of source attempts succeed.
+            Check: GitHub release availability, container registry auth,
+            network connectivity to binary hosts.
+
+      - alert: AllSourcesFailing
+        expr: |
+          rate(tangle_source_attempts_total{result="success"}[5m]) == 0
+          and
+          rate(tangle_source_attempts_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          slo: source_success
+        annotations:
+          summary: "No source attempts succeeding — all services failing to start"
+          description: >
+            Zero successful source launches in the last 5 minutes while
+            attempts are being made. All blueprints are down.
+
+      # ── Contract Scan SLO ───────────────────────────────────────
+
+      - alert: ContractScanSlow
+        expr: |
+          histogram_quantile(0.99,
+            rate(tangle_contract_scan_seconds_bucket[10m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          slo: contract_scan
+        annotations:
+          summary: "Contract state scan p99 exceeds 2s"
+          description: >
+            p99 contract scan is {{ $value | humanizeDuration }}.
+            Too many services on-chain or slow RPC endpoint.
+
+      # ── Active Services ─────────────────────────────────────────
+
+      - alert: NoActiveServices
+        expr: tangle_active_services == 0
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+        annotations:
+          summary: "No active blueprint services — operator is idle"
+          description: >
+            The manager has zero running services for 5+ minutes.
+            Either no services are assigned or all failed to start.
+
+      # ── Remote Provisioning SLO ─────────────────────────────────
+
+      - alert: RemoteProvisionSlow
+        expr: |
+          histogram_quantile(0.95,
+            rate(tangle_remote_provision_seconds_bucket[30m])
+          ) > 300
+        for: 10m
+        labels:
+          severity: warning
+          slo: remote_provision
+        annotations:
+          summary: "Cloud VM provisioning p95 exceeds 5 minutes"
+          description: >
+            p95 remote provisioning is {{ $value | humanizeDuration }}.
+            Provider: {{ $labels.provider }}. Consider switching providers
+            or pre-warming instances.
+
+      # ── Job Execution SLOs ──────────────────────────────────────
+
+      - alert: JobExecutionSlow
+        expr: |
+          histogram_quantile(0.95,
+            rate(tangle_job_execution_seconds_bucket[10m])
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          slo: job_execution
+        annotations:
+          summary: "Job execution p95 exceeds 30s"
+          description: >
+            p95 job execution is {{ $value | humanizeDuration }}.
+            Blueprint: {{ $labels.blueprint_id }}, job: {{ $labels.job_index }}.
+
+      - alert: JobFailureRateHigh
+        expr: |
+          (
+            rate(tangle_jobs_total{result="failed"}[10m])
+            /
+            rate(tangle_jobs_total[10m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          slo: job_success
+        annotations:
+          summary: "Job failure rate exceeds 10%"
+          description: >
+            {{ $value | humanizePercentage }} of jobs are failing.
+            Blueprint: {{ $labels.blueprint_id }}, job: {{ $labels.job_index }}.
+
+      - alert: JobCostSpike
+        expr: |
+          histogram_quantile(0.95,
+            rate(tangle_job_cost_usd_bucket[30m])
+          ) > 1.0
+        for: 10m
+        labels:
+          severity: warning
+          slo: job_cost
+        annotations:
+          summary: "Job p95 cost exceeds $1.00"
+          description: >
+            p95 job cost is ${{ $value }}.
+            Investigate: model pricing changes, token count inflation,
+            or unexpected GPU time.
