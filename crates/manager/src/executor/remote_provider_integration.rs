@@ -212,9 +212,14 @@ impl RemoteProviderManager {
                 CloudProvider::LambdaLabs,
                 CloudProvider::Paperspace,
                 CloudProvider::CoreWeave,
+                CloudProvider::Crusoe,
+                CloudProvider::PrimeIntellect,
+                // NOTE: Hetzner sells GPU-matrix dedicated servers, but that's
+                // their Robot API / manual ordering flow — not the Cloud API
+                // this adapter uses. Keep Hetzner in the CPU list only until
+                // someone wires up the Robot API.
                 CloudProvider::Akash,
                 CloudProvider::IoNet,
-                CloudProvider::PrimeIntellect,
                 CloudProvider::Render,
                 CloudProvider::BittensorLium,
                 // Hyperscaler fallback (have GPUs but more expensive)
@@ -226,6 +231,7 @@ impl RemoteProviderManager {
             // CPU workloads: cost-optimized first
             vec![
                 preferred,
+                CloudProvider::Hetzner,
                 CloudProvider::Vultr,
                 CloudProvider::DigitalOcean,
                 CloudProvider::GCP,
@@ -267,6 +273,8 @@ fn deployment_type_from_provider(provider: &CloudProvider) -> DeploymentType {
         CloudProvider::PrimeIntellect => DeploymentType::PrimeIntellectPod,
         CloudProvider::Render => DeploymentType::RenderDispersedNode,
         CloudProvider::BittensorLium => DeploymentType::BittensorLiumMiner,
+        CloudProvider::Hetzner => DeploymentType::HetznerServer,
+        CloudProvider::Crusoe => DeploymentType::CrusoeVm,
         _ => DeploymentType::SshRemote,
     }
 }
@@ -359,6 +367,16 @@ fn configured_provider_regions(ctx: &BlueprintManagerContext) -> HashMap<CloudPr
                 regions.insert(CloudProvider::BittensorLium, "global".to_string());
             }
         }
+        if let Some(cfg) = &config.hetzner {
+            if cfg.enabled {
+                regions.insert(CloudProvider::Hetzner, cfg.region.clone());
+            }
+        }
+        if let Some(cfg) = &config.crusoe {
+            if cfg.enabled {
+                regions.insert(CloudProvider::Crusoe, cfg.region.clone());
+            }
+        }
     }
     regions
 }
@@ -382,6 +400,8 @@ fn provider_default_region(provider: &CloudProvider) -> &'static str {
         CloudProvider::PrimeIntellect => "us-east",
         CloudProvider::Render => "oregon",
         CloudProvider::BittensorLium => "global",
+        CloudProvider::Hetzner => "fsn1",
+        CloudProvider::Crusoe => "us-east1",
         _ => "default",
     }
 }

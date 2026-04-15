@@ -23,6 +23,8 @@ pub struct CloudConfig {
     pub prime_intellect: Option<PrimeIntellectConfig>,
     pub render: Option<RenderConfig>,
     pub bittensor_lium: Option<BittensorLiumConfig>,
+    pub hetzner: Option<HetznerConfig>,
+    pub crusoe: Option<CrusoeConfig>,
 }
 
 /// AWS configuration
@@ -187,6 +189,28 @@ pub struct BittensorLiumConfig {
     pub api_key: String,
     pub wallet_hotkey: Option<String>,
     pub wallet_coldkey: Option<String>,
+    pub priority: Option<u8>,
+}
+
+/// Hetzner Cloud configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HetznerConfig {
+    pub enabled: bool,
+    pub region: String,
+    pub api_token: String,
+    pub ssh_key_name: Option<String>,
+    pub priority: Option<u8>,
+}
+
+/// Crusoe Energy configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrusoeConfig {
+    pub enabled: bool,
+    pub region: String,
+    pub api_key: String,
+    pub api_secret: String,
+    pub project_id: String,
+    pub ssh_public_key: Option<String>,
     pub priority: Option<u8>,
 }
 
@@ -420,6 +444,33 @@ impl CloudConfig {
                 priority: Some(2),
             }
         });
+
+        load_provider(&mut c.hetzner, "HETZNER_API_TOKEN", &mut any, |token| {
+            HetznerConfig {
+                enabled: true,
+                region: env_or("HETZNER_REGION", "fsn1"),
+                api_token: token,
+                ssh_key_name: env::var("HETZNER_SSH_KEY_NAME").ok(),
+                priority: Some(3),
+            }
+        });
+
+        if let (Ok(api_key), Ok(api_secret), Ok(project_id)) = (
+            env::var("CRUSOE_API_KEY"),
+            env::var("CRUSOE_API_SECRET"),
+            env::var("CRUSOE_PROJECT_ID"),
+        ) {
+            c.crusoe = Some(CrusoeConfig {
+                enabled: true,
+                region: env_or("CRUSOE_REGION", "us-east1"),
+                api_key,
+                api_secret,
+                project_id,
+                ssh_public_key: env::var("CRUSOE_SSH_PUBLIC_KEY").ok(),
+                priority: Some(5),
+            });
+            any = true;
+        }
 
         if any {
             c.enabled = true;

@@ -193,14 +193,14 @@ async fn cli_jobs_show_reports_call_metadata() -> Result<()> {
         return Ok(());
     }
 
-    let submit_args = TangleClientArgs {
-        http_rpc_url: harness.http_endpoint().clone(),
-        ws_rpc_url: harness.ws_endpoint().clone(),
-        keystore_path: owner_keystore_path.clone(),
-        tangle_contract: format!("{:#x}", harness.tangle_contract),
-        restaking_contract: format!("{:#x}", harness.restaking_contract),
-        status_registry_contract: Some(format!("{:#x}", harness.status_registry_contract)),
-    };
+    let submit_args = TangleClientArgs::for_testing(
+        harness.http_endpoint().clone(),
+        harness.ws_endpoint().clone(),
+        owner_keystore_path.clone(),
+        format!("{:#x}", harness.tangle_contract),
+        format!("{:#x}", harness.restaking_contract),
+        Some(format!("{:#x}", harness.status_registry_contract)),
+    );
 
     let service_id = LOCAL_SERVICE_ID;
     let blueprint_id = LOCAL_BLUEPRINT_ID;
@@ -426,14 +426,14 @@ async fn jobs_submit_and_watch_result_roundtrip() -> Result<()> {
     fs::create_dir_all(&owner_keystore_path)?;
     seed_private_key(&owner_keystore_path, SERVICE_OWNER_PRIVATE_KEY)?;
 
-    let submit_args = TangleClientArgs {
-        http_rpc_url: harness.http_endpoint().clone(),
-        ws_rpc_url: harness.ws_endpoint().clone(),
-        keystore_path: owner_keystore_path.clone(),
-        tangle_contract: format!("{:#x}", harness.tangle_contract),
-        restaking_contract: format!("{:#x}", harness.restaking_contract),
-        status_registry_contract: Some(format!("{:#x}", harness.status_registry_contract)),
-    };
+    let submit_args = TangleClientArgs::for_testing(
+        harness.http_endpoint().clone(),
+        harness.ws_endpoint().clone(),
+        owner_keystore_path.clone(),
+        format!("{:#x}", harness.tangle_contract),
+        format!("{:#x}", harness.restaking_contract),
+        Some(format!("{:#x}", harness.status_registry_contract)),
+    );
 
     let service_id = LOCAL_SERVICE_ID;
     let blueprint_id = LOCAL_BLUEPRINT_ID;

@@ -12,6 +12,12 @@ pub enum CloudProvider {
     Azure,
     DigitalOcean,
     Vultr,
+    Hetzner,
+    RunPod,
+    LambdaLabs,
+    PrimeIntellect,
+    VastAi,
+    Crusoe,
     /// Generic provider (e.g. for Kubernetes)
     Generic,
 }
@@ -31,6 +37,12 @@ impl std::fmt::Display for CloudProvider {
             Self::Azure => write!(f, "Azure"),
             Self::DigitalOcean => write!(f, "DigitalOcean"),
             Self::Vultr => write!(f, "Vultr"),
+            Self::Hetzner => write!(f, "Hetzner"),
+            Self::RunPod => write!(f, "RunPod"),
+            Self::LambdaLabs => write!(f, "Lambda Labs"),
+            Self::PrimeIntellect => write!(f, "Prime Intellect"),
+            Self::VastAi => write!(f, "Vast.ai"),
+            Self::Crusoe => write!(f, "Crusoe"),
             Self::Generic => write!(f, "Generic"),
         }
     }
@@ -80,14 +92,32 @@ pub struct ProviderPreferences {
 impl Default for ProviderPreferences {
     fn default() -> Self {
         Self {
-            gpu_providers: vec![CloudProvider::GCP, CloudProvider::AWS],
+            gpu_providers: vec![
+                CloudProvider::RunPod,
+                CloudProvider::LambdaLabs,
+                CloudProvider::VastAi,
+                CloudProvider::PrimeIntellect,
+                CloudProvider::Crusoe,
+                CloudProvider::GCP,
+                CloudProvider::AWS,
+            ],
             cpu_intensive: vec![
+                CloudProvider::Hetzner,
                 CloudProvider::Vultr,
                 CloudProvider::DigitalOcean,
                 CloudProvider::AWS,
             ],
-            memory_intensive: vec![CloudProvider::AWS, CloudProvider::GCP],
-            cost_optimized: vec![CloudProvider::Vultr, CloudProvider::DigitalOcean],
+            memory_intensive: vec![
+                CloudProvider::AWS,
+                CloudProvider::GCP,
+                CloudProvider::Hetzner,
+            ],
+            cost_optimized: vec![
+                CloudProvider::VastAi,
+                CloudProvider::Hetzner,
+                CloudProvider::Vultr,
+                CloudProvider::DigitalOcean,
+            ],
             tee_capable: vec![CloudProvider::AWS, CloudProvider::GCP, CloudProvider::Azure],
         }
     }

@@ -15,9 +15,11 @@ use crate::providers::akash::AkashAdapter;
 use crate::providers::azure::adapter::AzureAdapter;
 use crate::providers::bittensor_lium::BittensorLiumAdapter;
 use crate::providers::coreweave::CoreWeaveAdapter;
+use crate::providers::crusoe::CrusoeAdapter;
 use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
 use crate::providers::fluidstack::FluidstackAdapter;
 use crate::providers::gcp::GcpAdapter;
+use crate::providers::hetzner::HetznerAdapter;
 use crate::providers::io_net::IoNetAdapter;
 use crate::providers::lambda_labs::LambdaLabsAdapter;
 use crate::providers::paperspace::PaperspaceAdapter;
@@ -174,6 +176,22 @@ impl CloudProvisioner {
             providers.insert(
                 CloudProvider::BittensorLium,
                 Box::new(BittensorLiumAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Hetzner adapter
+        if std::env::var("HETZNER_API_TOKEN").is_ok() {
+            providers.insert(
+                CloudProvider::Hetzner,
+                Box::new(HetznerAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+            );
+        }
+
+        // Crusoe adapter
+        if std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok() {
+            providers.insert(
+                CloudProvider::Crusoe,
+                Box::new(CrusoeAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
             );
         }
 

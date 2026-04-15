@@ -12,6 +12,182 @@
           }
         ],
         "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "title": "Manager Lifecycle",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+        "panels": []
+      },
+      {
+        "title": "Manager Initialization",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(tangle_manager_init_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(tangle_manager_init_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(tangle_manager_init_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 }
+      },
+      {
+        "title": "Service Startup Latency",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(tangle_service_startup_seconds_bucket[$__rate_interval])) by (le, source_kind))",
+            "legendFormat": "p50 — {{source_kind}}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(tangle_service_startup_seconds_bucket[$__rate_interval])) by (le, source_kind))",
+            "legendFormat": "p95 — {{source_kind}}"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(tangle_service_startup_seconds_bucket[$__rate_interval])) by (le, source_kind))",
+            "legendFormat": "p99 — {{source_kind}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 }
+      },
+      {
+        "title": "Source Attempt Success Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(tangle_source_attempts_total{result=\"success\"}[5m]) / rate(tangle_source_attempts_total[5m]) * 100",
+            "legendFormat": "Success %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 }
+      },
+      {
+        "title": "Block Processing Time",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(tangle_block_processing_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(tangle_block_processing_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(tangle_block_processing_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 }
+      },
+      {
+        "title": "Active Services",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "tangle_active_services",
+            "legendFormat": "Active"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 10 },
+                { "color": "red", "value": 50 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 6, "x": 0, "y": 25 }
+      },
+      {
+        "title": "Service Discovery Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(tangle_service_discovery_total[5m])",
+            "legendFormat": "{{result}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "stacking": { "mode": "normal" },
+              "drawStyle": "bars",
+              "fillOpacity": 80
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 6, "x": 6, "y": 25 }
+      },
+      {
+        "title": "Source Attempt Duration by Kind",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "sum(increase(tangle_source_attempt_seconds_bucket[$__rate_interval])) by (le, source_kind)",
+            "legendFormat": "{{source_kind}}",
+            "format": "heatmap"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 25 }
+      },
+      {
+        "title": "Contract Scan Time",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(tangle_contract_scan_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(tangle_contract_scan_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(tangle_contract_scan_seconds_bucket[$__rate_interval])) by (le))",
+            "legendFormat": "p99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 25 }
       }
     ],
     "time": {

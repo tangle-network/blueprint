@@ -21,6 +21,7 @@ pub mod blueprint;
 pub mod config;
 pub mod error;
 pub mod executor;
+pub mod metrics;
 pub mod protocol;
 #[cfg(feature = "remote-providers")]
 pub mod remote;

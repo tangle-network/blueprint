@@ -160,6 +160,8 @@ impl AutoDeploymentManager {
             | DeploymentType::PrimeIntellectPod
             | DeploymentType::RenderDispersedNode
             | DeploymentType::BittensorLiumMiner
+            | DeploymentType::HetznerServer
+            | DeploymentType::CrusoeVm
             | DeploymentType::SshRemote
             | DeploymentType::BareMetal => true,
 
@@ -436,6 +438,8 @@ impl AutoDeploymentManager {
             DeploymentType::PrimeIntellectPod => matches!(provider, CloudProvider::PrimeIntellect),
             DeploymentType::RenderDispersedNode => matches!(provider, CloudProvider::Render),
             DeploymentType::BittensorLiumMiner => matches!(provider, CloudProvider::BittensorLium),
+            DeploymentType::HetznerServer => matches!(provider, CloudProvider::Hetzner),
+            DeploymentType::CrusoeVm => matches!(provider, CloudProvider::Crusoe),
 
             // SSH remote is always available
             DeploymentType::SshRemote => true,
@@ -471,6 +475,8 @@ impl AutoDeploymentManager {
             CloudProvider::PrimeIntellect => DeploymentType::PrimeIntellectPod,
             CloudProvider::Render => DeploymentType::RenderDispersedNode,
             CloudProvider::BittensorLium => DeploymentType::BittensorLiumMiner,
+            CloudProvider::Hetzner => DeploymentType::HetznerServer,
+            CloudProvider::Crusoe => DeploymentType::CrusoeVm,
             _ => DeploymentType::SshRemote,
         }
     }

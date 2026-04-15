@@ -2,7 +2,9 @@
 //!
 //! Fetches blueprint information from Tangle to determine deployment strategy.
 
-use crate::error::{Error, Result};
+#[cfg(feature = "tangle-client")]
+use crate::error::Error;
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 
 /// Blueprint metadata from chain.

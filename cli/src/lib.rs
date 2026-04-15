@@ -2,6 +2,7 @@ pub mod command;
 pub mod foundry;
 pub mod settings;
 pub mod utils;
+pub mod workspace;
 
 #[cfg(test)]
 mod tests;

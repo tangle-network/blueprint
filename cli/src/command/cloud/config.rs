@@ -24,6 +24,18 @@ pub enum CloudProvider {
     DigitalOcean,
     #[value(name = "vultr")]
     Vultr,
+    #[value(name = "hetzner")]
+    Hetzner,
+    #[value(name = "runpod")]
+    RunPod,
+    #[value(name = "lambda", alias = "lambda-labs")]
+    LambdaLabs,
+    #[value(name = "prime-intellect", alias = "pi")]
+    PrimeIntellect,
+    #[value(name = "vast", alias = "vast-ai")]
+    VastAi,
+    #[value(name = "crusoe")]
+    Crusoe,
 }
 
 impl std::fmt::Display for CloudProvider {
@@ -34,6 +46,12 @@ impl std::fmt::Display for CloudProvider {
             Self::Azure => write!(f, "Azure"),
             Self::DigitalOcean => write!(f, "DigitalOcean"),
             Self::Vultr => write!(f, "Vultr"),
+            Self::Hetzner => write!(f, "Hetzner"),
+            Self::RunPod => write!(f, "RunPod"),
+            Self::LambdaLabs => write!(f, "Lambda Labs"),
+            Self::PrimeIntellect => write!(f, "Prime Intellect"),
+            Self::VastAi => write!(f, "Vast.ai"),
+            Self::Crusoe => write!(f, "Crusoe"),
         }
     }
 }
@@ -161,6 +179,12 @@ pub async fn configure(
         CloudProvider::Azure => configure_azure().await?,
         CloudProvider::DigitalOcean => configure_digitalocean().await?,
         CloudProvider::Vultr => configure_vultr().await?,
+        CloudProvider::Hetzner => configure_hetzner().await?,
+        CloudProvider::RunPod => configure_runpod().await?,
+        CloudProvider::LambdaLabs => configure_lambda_labs().await?,
+        CloudProvider::PrimeIntellect => configure_prime_intellect().await?,
+        CloudProvider::VastAi => configure_vast_ai().await?,
+        CloudProvider::Crusoe => configure_crusoe().await?,
     }
 
     // Save settings
@@ -367,6 +391,183 @@ async fn configure_vultr() -> Result<()> {
     Ok(())
 }
 
+/// Configure Hetzner Cloud credentials
+async fn configure_hetzner() -> Result<()> {
+    if std::env::var("HETZNER_API_TOKEN").is_ok() {
+        println!("✓ Found Hetzner API token in environment");
+        return Ok(());
+    }
+
+    println!(
+        "Get your API token from: https://console.hetzner.cloud/projects/default/security/tokens"
+    );
+
+    let token = Password::new()
+        .with_prompt("Hetzner API Token")
+        .interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("HETZNER_API_TOKEN") {
+        content.push_str(&format!("\nHETZNER_API_TOKEN={}\n", token));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure RunPod credentials
+async fn configure_runpod() -> Result<()> {
+    if std::env::var("RUNPOD_API_KEY").is_ok() {
+        println!("✓ Found RunPod API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://www.runpod.io/console/user/settings");
+
+    let api_key = Password::new().with_prompt("RunPod API Key").interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("RUNPOD_API_KEY") {
+        content.push_str(&format!("\nRUNPOD_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Lambda Labs credentials
+async fn configure_lambda_labs() -> Result<()> {
+    if std::env::var("LAMBDA_LABS_API_KEY").is_ok() {
+        println!("✓ Found Lambda Labs API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://cloud.lambdalabs.com/api-keys");
+
+    let api_key = Password::new()
+        .with_prompt("Lambda Labs API Key")
+        .interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("LAMBDA_LABS_API_KEY") {
+        content.push_str(&format!("\nLAMBDA_LABS_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Prime Intellect credentials
+async fn configure_prime_intellect() -> Result<()> {
+    if std::env::var("PRIME_INTELLECT_API_KEY").is_ok() {
+        println!("✓ Found Prime Intellect API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://app.primeintellect.ai/settings/api-keys");
+
+    let api_key = Password::new()
+        .with_prompt("Prime Intellect API Key")
+        .interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("PRIME_INTELLECT_API_KEY") {
+        content.push_str(&format!("\nPRIME_INTELLECT_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Vast.ai credentials
+async fn configure_vast_ai() -> Result<()> {
+    if std::env::var("VAST_AI_API_KEY").is_ok() {
+        println!("✓ Found Vast.ai API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://cloud.vast.ai/account/");
+
+    let api_key = Password::new().with_prompt("Vast.ai API Key").interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("VAST_AI_API_KEY") {
+        content.push_str(&format!("\nVAST_AI_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Crusoe Cloud credentials
+async fn configure_crusoe() -> Result<()> {
+    if std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok() {
+        println!("✓ Found Crusoe credentials in environment");
+        return Ok(());
+    }
+
+    println!("Get your API credentials from: https://console.crusoecloud.com/settings/api-keys");
+
+    let api_key = Input::<String>::new()
+        .with_prompt("Crusoe API Key")
+        .interact()?;
+
+    let api_secret = Password::new()
+        .with_prompt("Crusoe API Secret")
+        .interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("CRUSOE_API_KEY") {
+        content.push_str(&format!("\nCRUSOE_API_KEY={}\n", api_key));
+        content.push_str(&format!("CRUSOE_API_SECRET={}\n", api_secret));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
 /// Prompt for region selection
 fn prompt_region(provider: CloudProvider) -> Result<String> {
     let regions = match provider {
@@ -399,6 +600,35 @@ fn prompt_region(provider: CloudProvider) -> Result<String> {
             ("lax", "Los Angeles"),
             ("ams", "Amsterdam"),
             ("nrt", "Tokyo"),
+        ],
+        CloudProvider::Hetzner => vec![
+            ("fsn1", "Falkenstein (DE)"),
+            ("nbg1", "Nuremberg (DE)"),
+            ("hel1", "Helsinki (FI)"),
+            ("ash", "Ashburn (US)"),
+            ("hil", "Hillsboro (US)"),
+        ],
+        CloudProvider::RunPod => vec![("US", "United States"), ("EU", "Europe"), ("CA", "Canada")],
+        CloudProvider::LambdaLabs => vec![
+            ("us-west-1", "US West"),
+            ("us-east-1", "US East"),
+            ("us-south-1", "US South"),
+            ("europe-central-1", "Europe Central"),
+        ],
+        CloudProvider::PrimeIntellect => vec![
+            ("us-east", "US East"),
+            ("us-west", "US West"),
+            ("eu-west", "EU West"),
+        ],
+        CloudProvider::VastAi => vec![
+            ("any", "Any (cheapest)"),
+            ("US", "United States"),
+            ("EU", "Europe"),
+        ],
+        CloudProvider::Crusoe => vec![
+            ("us-east1", "US East"),
+            ("us-central1", "US Central"),
+            ("us-northwest1", "US Northwest"),
         ],
     };
 
