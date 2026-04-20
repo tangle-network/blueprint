@@ -44,7 +44,7 @@ impl Keystore {
     ///
     /// ```rust
     /// use blueprint_keystore::backends::Backend;
-    /// use blueprint_keystore::crypto::ed25519::Ed25519Zebra;
+    /// use blueprint_keystore::crypto::k256::K256Ecdsa;
     /// use blueprint_keystore::{Keystore, KeystoreConfig};
     ///
     /// # fn main() -> blueprint_keystore::Result<()> {
@@ -53,7 +53,7 @@ impl Keystore {
     /// let keystore = Keystore::new(config)?;
     ///
     /// // Generate a new key pair
-    /// keystore.generate::<Ed25519Zebra>(None)?;
+    /// keystore.generate::<K256Ecdsa>(None)?;
     /// # Ok(()) }
     /// ```
     ///
@@ -349,12 +349,18 @@ impl Backend for Keystore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "bls")]
     use blueprint_crypto::bls::bls377::W3fBls377;
+    #[cfg(feature = "bls")]
     use blueprint_crypto::bls::bls381::W3fBls381;
+    #[cfg(feature = "zebra")]
     use blueprint_crypto::ed25519::Ed25519Zebra;
+    #[cfg(feature = "ecdsa")]
     use blueprint_crypto::k256::K256Ecdsa;
+    #[cfg(feature = "sr25519-schnorrkel")]
     use blueprint_crypto::sr25519::SchnorrkelSr25519;
 
+    #[cfg(feature = "ecdsa")]
     #[test]
     fn test_generate_from_string() -> Result<()> {
         let keystore = Keystore::new(KeystoreConfig::new())?;
@@ -384,11 +390,24 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "ecdsa")]
     local_operations!(
         test_local_k256 => K256Ecdsa,
+    );
+
+    #[cfg(feature = "zebra")]
+    local_operations!(
         test_local_ed25519 => Ed25519Zebra,
+    );
+
+    #[cfg(feature = "bls")]
+    local_operations!(
         test_local_bls377 => W3fBls377,
         test_local_bls381 => W3fBls381,
+    );
+
+    #[cfg(feature = "sr25519-schnorrkel")]
+    local_operations!(
         test_local_schnorrkel => SchnorrkelSr25519,
     );
 

@@ -17,7 +17,7 @@ publish = false
 [dependencies]
 ahash = { version = "0.8", features = ["compile-time-rng"] }
 aho-corasick = { version = "1" }
-alloy = { version = "1", features = ["full", "json-rpc", "signer-aws"] }
+alloy = { version = "1", features = ["full"] }
 alloy-consensus = { version = "1", default-features = false, features = ["k256", "kzg", "serde"] }
 alloy-contract = { version = "1", default-features = false, features = ["pubsub"] }
 alloy-core = { version = "1", features = ["dyn-abi", "json-abi", "k256", "rlp"] }
@@ -39,9 +39,9 @@ alloy-sol-types = { version = "1", features = ["eip712-serde", "json"] }
 alloy-transport-http = { version = "1", default-features = false, features = ["reqwest", "reqwest-default-tls", "reqwest-rustls-tls"] }
 anyhow = { version = "1" }
 argon2 = { version = "0.5", default-features = false, features = ["std"] }
-ark-bn254 = { version = "0.5", features = ["std"] }
-ark-ec = { version = "0.5", features = ["std"] }
-ark-ff = { version = "0.5", features = ["std"] }
+ark-bn254 = { version = "0.5", default-features = false, features = ["curve", "std"] }
+ark-ec = { version = "0.5", default-features = false, features = ["std"] }
+ark-ff = { version = "0.5", default-features = false, features = ["std"] }
 ark-serialize = { version = "0.5", features = ["derive", "std"] }
 ark-std = { version = "0.5", default-features = false, features = ["std"] }
 arrayvec = { version = "0.7" }
@@ -50,10 +50,9 @@ aws-runtime = { version = "1", default-features = false, features = ["event-stre
 aws-sigv4 = { version = "1", features = ["http0-compat", "sign-eventstream"] }
 aws-smithy-async = { version = "1", default-features = false, features = ["rt-tokio"] }
 aws-smithy-http = { version = "0.63", default-features = false, features = ["event-stream"] }
-aws-smithy-http-client = { version = "1", default-features = false, features = ["legacy-rustls-ring", "legacy-test-util", "rustls-aws-lc"] }
-aws-smithy-runtime = { version = "1", default-features = false, features = ["client", "default-https-client", "rt-tokio", "test-util", "tls-rustls"] }
+aws-smithy-http-client = { version = "1", default-features = false, features = ["hyper-014", "legacy-test-util", "rustls-aws-lc"] }
+aws-smithy-runtime = { version = "1", default-features = false, features = ["client", "default-https-client", "rt-tokio", "test-util"] }
 aws-smithy-runtime-api = { version = "1", features = ["client", "http-02x", "http-auth", "test-util"] }
-aws-smithy-types = { version = "1", default-features = false, features = ["byte-stream-poll-next", "http-body-0-4-x", "http-body-1-x", "rt-tokio", "test-util"] }
 axum = { version = "0.8", default-features = false, features = ["form", "http1", "http2", "json", "multipart", "tokio"] }
 base64 = { version = "0.22" }
 base64ct = { version = "1", default-features = false, features = ["std"] }
@@ -70,7 +69,6 @@ cipher = { version = "0.4", default-features = false, features = ["zeroize"] }
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "usage", "wrap_help"] }
 color-eyre = { version = "0.6", features = ["issue-url"] }
-concurrent-queue = { version = "2" }
 const-hex = { version = "1", features = ["core-error", "serde"] }
 constant_time_eq = { version = "0.4", default-features = false, features = ["std"] }
 crc32fast = { version = "1" }
@@ -87,39 +85,35 @@ digest-93f6ce9d446188ac = { package = "digest", version = "0.10", features = ["m
 ecdsa = { version = "0.16", default-features = false, features = ["pem", "serde", "signing", "std", "verifying"] }
 ed25519 = { version = "2", default-features = false, features = ["pem", "serde", "std"] }
 ed25519-zebra = { version = "4", features = ["pem", "pkcs8"] }
-eigensdk = { version = "2", features = ["full"] }
 either = { version = "1", features = ["serde", "use_std"] }
 elliptic-curve = { version = "0.13", default-features = false, features = ["digest", "hazmat", "pem", "serde", "std"] }
-env_filter = { version = "1", default-features = false, features = ["regex"] }
-env_logger = { version = "0.11" }
-foldhash = { version = "0.2" }
+foldhash = { version = "0.2", default-features = false, features = ["std"] }
 form_urlencoded = { version = "1" }
 futures = { version = "0.3", features = ["thread-pool"] }
 futures-channel = { version = "0.3", features = ["sink"] }
 futures-executor = { version = "0.3", features = ["thread-pool"] }
-futures-io = { version = "0.3" }
+futures-io = { version = "0.3", default-features = false, features = ["std"] }
 futures-sink = { version = "0.3" }
 futures-task = { version = "0.3", default-features = false, features = ["std"] }
 futures-util = { version = "0.3", features = ["channel", "io", "sink"] }
 generic-array = { version = "0.14", default-features = false, features = ["more_lengths", "serde", "zeroize"] }
 getrandom-6f8ce4dd05d13bba = { package = "getrandom", version = "0.2", default-features = false, features = ["std"] }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 getrandom_or_panic = { version = "0.0.3", default-features = false, features = ["std"] }
 hashbrown-3575ec1268b04181 = { package = "hashbrown", version = "0.15" }
 hashbrown-582f2526e08bb6a0 = { package = "hashbrown", version = "0.14", features = ["raw"] }
 hashbrown-986da7b5efc2b80e = { package = "hashbrown", version = "0.16", features = ["serde"] }
 hex = { version = "0.4", features = ["serde"] }
 hmac = { version = "0.12", default-features = false, features = ["reset"] }
-hyper-582f2526e08bb6a0 = { package = "hyper", version = "0.14", features = ["client", "http1", "http2", "runtime", "server", "stream"] }
+hyper-582f2526e08bb6a0 = { package = "hyper", version = "0.14", features = ["client", "http1", "http2", "server", "stream", "tcp"] }
 hyper-dff4ba8e3ae991db = { package = "hyper", version = "1", features = ["full"] }
-hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs", "http1", "http2", "logging", "native-tokio", "ring", "tls12"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2", "logging", "native-tokio", "ring", "tls12"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "client-proxy", "server-auto", "service", "tracing"] }
 hyperlocal = { version = "0.9" }
 idna = { version = "1", default-features = false, features = ["compiled_data", "std"] }
 indexmap = { version = "2", features = ["serde"] }
 itertools-582f2526e08bb6a0 = { package = "itertools", version = "0.14" }
 itertools-594e8ee84c453af0 = { package = "itertools", version = "0.13", default-features = false, features = ["use_std"] }
-jiff = { version = "0.2" }
-jsonwebtoken = { version = "9" }
 k256 = { version = "0.13", features = ["pem", "serde"] }
 k8s-openapi = { version = "0.21", default-features = false, features = ["v1_29"] }
 keccak = { version = "0.1", default-features = false, features = ["asm"] }
@@ -156,7 +150,8 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
-reqwest = { version = "0.12", features = ["blocking", "deflate", "gzip", "json", "multipart", "rustls-tls", "rustls-tls-native-roots-no-provider", "stream"] }
+reqwest-594e8ee84c453af0 = { package = "reqwest", version = "0.13", features = ["form", "gzip", "json", "multipart", "query", "stream"] }
+reqwest-5ef9efb8ec2df382 = { package = "reqwest", version = "0.12", features = ["blocking", "deflate", "gzip", "json", "multipart", "rustls-tls"] }
 round-based = { version = "0.4", default-features = false, features = ["derive", "sim-async"] }
 ruint = { version = "1", default-features = false, features = ["alloy-rlp", "serde", "std"] }
 rust_decimal = { version = "1" }
@@ -170,7 +165,7 @@ semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_bytes = { version = "0.11", features = ["alloc"] }
 serde_core = { version = "1", features = ["alloc", "rc"] }
-serde_json = { version = "1", features = ["alloc", "preserve_order", "raw_value"] }
+serde_json = { version = "1", features = ["alloc", "float_roundtrip", "preserve_order", "raw_value"] }
 serde_spanned = { version = "1", default-features = false, features = ["serde", "std"] }
 serde_with = { version = "3", features = ["base64"] }
 serial_test = { version = "3", default-features = false, features = ["async"] }
@@ -186,7 +181,6 @@ subtle = { version = "2", default-features = false, features = ["i128", "std"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 sysinfo = { version = "0.38", default-features = false, features = ["disk", "network", "system"] }
 tempfile = { version = "3" }
-testcontainers = { version = "0.23" }
 thiserror = { version = "2" }
 time = { version = "0.3", features = ["macros", "serde-well-known"] }
 tiny-keccak = { version = "2", features = ["keccak", "shake"] }
@@ -199,7 +193,8 @@ toml = { version = "1" }
 toml_datetime = { version = "1", default-features = false, features = ["serde", "std"] }
 toml_parser = { version = "1", default-features = false, features = ["std"] }
 toml_writer = { version = "1", default-features = false, features = ["std"] }
-tonic = { version = "0.13", features = ["tls-native-roots", "tls-webpki-roots"] }
+tonic-582f2526e08bb6a0 = { package = "tonic", version = "0.14", features = ["tls-webpki-roots"] }
+tonic-594e8ee84c453af0 = { package = "tonic", version = "0.13", default-features = false, features = ["codegen", "prost", "router", "tls-webpki-roots", "transport"] }
 tower = { version = "0.5", default-features = false, features = ["balance", "buffer", "filter", "limit", "load-shed", "steer", "timeout"] }
 tower-http = { version = "0.6", features = ["auth", "cors", "map-response-body", "request-id", "sensitive-headers", "trace"] }
 tracing = { version = "0.1", features = ["log"] }
@@ -216,7 +211,7 @@ zeroize = { version = "1", features = ["derive", "std"] }
 [build-dependencies]
 ahash = { version = "0.8", features = ["compile-time-rng"] }
 aho-corasick = { version = "1" }
-alloy = { version = "1", features = ["full", "json-rpc", "signer-aws"] }
+alloy = { version = "1", features = ["full"] }
 alloy-consensus = { version = "1", default-features = false, features = ["k256", "kzg", "serde"] }
 alloy-contract = { version = "1", default-features = false, features = ["pubsub"] }
 alloy-core = { version = "1", features = ["dyn-abi", "json-abi", "k256", "rlp"] }
@@ -241,9 +236,9 @@ alloy-sol-types = { version = "1", features = ["eip712-serde", "json"] }
 alloy-transport-http = { version = "1", default-features = false, features = ["reqwest", "reqwest-default-tls", "reqwest-rustls-tls"] }
 anyhow = { version = "1" }
 argon2 = { version = "0.5", default-features = false, features = ["std"] }
-ark-bn254 = { version = "0.5", features = ["std"] }
-ark-ec = { version = "0.5", features = ["std"] }
-ark-ff = { version = "0.5", features = ["std"] }
+ark-bn254 = { version = "0.5", default-features = false, features = ["curve", "std"] }
+ark-ec = { version = "0.5", default-features = false, features = ["std"] }
+ark-ff = { version = "0.5", default-features = false, features = ["std"] }
 ark-serialize = { version = "0.5", features = ["derive", "std"] }
 ark-std = { version = "0.5", default-features = false, features = ["std"] }
 arrayvec = { version = "0.7" }
@@ -252,10 +247,9 @@ aws-runtime = { version = "1", default-features = false, features = ["event-stre
 aws-sigv4 = { version = "1", features = ["http0-compat", "sign-eventstream"] }
 aws-smithy-async = { version = "1", default-features = false, features = ["rt-tokio"] }
 aws-smithy-http = { version = "0.63", default-features = false, features = ["event-stream"] }
-aws-smithy-http-client = { version = "1", default-features = false, features = ["legacy-rustls-ring", "legacy-test-util", "rustls-aws-lc"] }
-aws-smithy-runtime = { version = "1", default-features = false, features = ["client", "default-https-client", "rt-tokio", "test-util", "tls-rustls"] }
+aws-smithy-http-client = { version = "1", default-features = false, features = ["hyper-014", "legacy-test-util", "rustls-aws-lc"] }
+aws-smithy-runtime = { version = "1", default-features = false, features = ["client", "default-https-client", "rt-tokio", "test-util"] }
 aws-smithy-runtime-api = { version = "1", features = ["client", "http-02x", "http-auth", "test-util"] }
-aws-smithy-types = { version = "1", default-features = false, features = ["byte-stream-poll-next", "http-body-0-4-x", "http-body-1-x", "rt-tokio", "test-util"] }
 axum = { version = "0.8", default-features = false, features = ["form", "http1", "http2", "json", "multipart", "tokio"] }
 base64 = { version = "0.22" }
 base64ct = { version = "1", default-features = false, features = ["std"] }
@@ -273,7 +267,6 @@ cipher = { version = "0.4", default-features = false, features = ["zeroize"] }
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "usage", "wrap_help"] }
 color-eyre = { version = "0.6", features = ["issue-url"] }
-concurrent-queue = { version = "2" }
 const-hex = { version = "1", features = ["core-error", "serde"] }
 constant_time_eq = { version = "0.4", default-features = false, features = ["std"] }
 crc32fast = { version = "1" }
@@ -291,39 +284,35 @@ displaydoc = { version = "0.2" }
 ecdsa = { version = "0.16", default-features = false, features = ["pem", "serde", "signing", "std", "verifying"] }
 ed25519 = { version = "2", default-features = false, features = ["pem", "serde", "std"] }
 ed25519-zebra = { version = "4", features = ["pem", "pkcs8"] }
-eigensdk = { version = "2", features = ["full"] }
 either = { version = "1", features = ["serde", "use_std"] }
 elliptic-curve = { version = "0.13", default-features = false, features = ["digest", "hazmat", "pem", "serde", "std"] }
-env_filter = { version = "1", default-features = false, features = ["regex"] }
-env_logger = { version = "0.11" }
-foldhash = { version = "0.2" }
+foldhash = { version = "0.2", default-features = false, features = ["std"] }
 form_urlencoded = { version = "1" }
 futures = { version = "0.3", features = ["thread-pool"] }
 futures-channel = { version = "0.3", features = ["sink"] }
 futures-executor = { version = "0.3", features = ["thread-pool"] }
-futures-io = { version = "0.3" }
+futures-io = { version = "0.3", default-features = false, features = ["std"] }
 futures-sink = { version = "0.3" }
 futures-task = { version = "0.3", default-features = false, features = ["std"] }
 futures-util = { version = "0.3", features = ["channel", "io", "sink"] }
 generic-array = { version = "0.14", default-features = false, features = ["more_lengths", "serde", "zeroize"] }
 getrandom-6f8ce4dd05d13bba = { package = "getrandom", version = "0.2", default-features = false, features = ["std"] }
+getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 getrandom_or_panic = { version = "0.0.3", default-features = false, features = ["std"] }
 hashbrown-3575ec1268b04181 = { package = "hashbrown", version = "0.15" }
 hashbrown-582f2526e08bb6a0 = { package = "hashbrown", version = "0.14", features = ["raw"] }
 hashbrown-986da7b5efc2b80e = { package = "hashbrown", version = "0.16", features = ["serde"] }
 hex = { version = "0.4", features = ["serde"] }
 hmac = { version = "0.12", default-features = false, features = ["reset"] }
-hyper-582f2526e08bb6a0 = { package = "hyper", version = "0.14", features = ["client", "http1", "http2", "runtime", "server", "stream"] }
+hyper-582f2526e08bb6a0 = { package = "hyper", version = "0.14", features = ["client", "http1", "http2", "server", "stream", "tcp"] }
 hyper-dff4ba8e3ae991db = { package = "hyper", version = "1", features = ["full"] }
-hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs", "http1", "http2", "logging", "native-tokio", "ring", "tls12"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2", "logging", "native-tokio", "ring", "tls12"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "client-proxy", "server-auto", "service", "tracing"] }
 hyperlocal = { version = "0.9" }
 idna = { version = "1", default-features = false, features = ["compiled_data", "std"] }
 indexmap = { version = "2", features = ["serde"] }
 itertools-582f2526e08bb6a0 = { package = "itertools", version = "0.14" }
 itertools-594e8ee84c453af0 = { package = "itertools", version = "0.13", default-features = false, features = ["use_std"] }
-jiff = { version = "0.2" }
-jsonwebtoken = { version = "9" }
 k256 = { version = "0.13", features = ["pem", "serde"] }
 k8s-openapi = { version = "0.21", default-features = false, features = ["v1_29"] }
 keccak = { version = "0.1", default-features = false, features = ["asm"] }
@@ -361,7 +350,8 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
-reqwest = { version = "0.12", features = ["blocking", "deflate", "gzip", "json", "multipart", "rustls-tls", "rustls-tls-native-roots-no-provider", "stream"] }
+reqwest-594e8ee84c453af0 = { package = "reqwest", version = "0.13", features = ["form", "gzip", "json", "multipart", "query", "stream"] }
+reqwest-5ef9efb8ec2df382 = { package = "reqwest", version = "0.12", features = ["blocking", "deflate", "gzip", "json", "multipart", "rustls-tls"] }
 round-based = { version = "0.4", default-features = false, features = ["derive", "sim-async"] }
 ruint = { version = "1", default-features = false, features = ["alloy-rlp", "serde", "std"] }
 rust_decimal = { version = "1" }
@@ -375,7 +365,7 @@ semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_bytes = { version = "0.11", features = ["alloc"] }
 serde_core = { version = "1", features = ["alloc", "rc"] }
-serde_json = { version = "1", features = ["alloc", "preserve_order", "raw_value"] }
+serde_json = { version = "1", features = ["alloc", "float_roundtrip", "preserve_order", "raw_value"] }
 serde_spanned = { version = "1", default-features = false, features = ["serde", "std"] }
 serde_with = { version = "3", features = ["base64"] }
 serial_test = { version = "3", default-features = false, features = ["async"] }
@@ -389,12 +379,11 @@ smallvec = { version = "1", default-features = false, features = ["const_new", "
 spki = { version = "0.7", default-features = false, features = ["pem", "std"] }
 strum = { version = "0.27", features = ["derive"] }
 subtle = { version = "2", default-features = false, features = ["i128", "std"] }
-syn-dff4ba8e3ae991db = { package = "syn", version = "1", features = ["extra-traits", "full", "visit", "visit-mut"] }
+syn-dff4ba8e3ae991db = { package = "syn", version = "1", features = ["extra-traits", "full", "visit"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
 sysinfo = { version = "0.38", default-features = false, features = ["disk", "network", "system"] }
 tempfile = { version = "3" }
-testcontainers = { version = "0.23" }
 thiserror = { version = "2" }
 time = { version = "0.3", features = ["macros", "serde-well-known"] }
 time-macros = { version = "0.2", default-features = false, features = ["formatting", "parsing", "serde"] }
@@ -408,7 +397,8 @@ toml = { version = "1" }
 toml_datetime = { version = "1", default-features = false, features = ["serde", "std"] }
 toml_parser = { version = "1", default-features = false, features = ["std"] }
 toml_writer = { version = "1", default-features = false, features = ["std"] }
-tonic = { version = "0.13", features = ["tls-native-roots", "tls-webpki-roots"] }
+tonic-582f2526e08bb6a0 = { package = "tonic", version = "0.14", features = ["tls-webpki-roots"] }
+tonic-594e8ee84c453af0 = { package = "tonic", version = "0.13", default-features = false, features = ["codegen", "prost", "router", "tls-webpki-roots", "transport"] }
 tonic-build = { version = "0.13", default-features = false, features = ["prost", "transport"] }
 tower = { version = "0.5", default-features = false, features = ["balance", "buffer", "filter", "limit", "load-shed", "steer", "timeout"] }
 tower-http = { version = "0.6", features = ["auth", "cors", "map-response-body", "request-id", "sensitive-headers", "trace"] }
@@ -427,23 +417,22 @@ zeroize = { version = "1", features = ["derive", "std"] }
 async-compression = { version = "0.4", default-features = false, features = ["gzip", "tokio", "zlib"] }
 bitflags = { version = "2", default-features = false, features = ["std"] }
 compression-codecs = { version = "0.4", default-features = false, features = ["gzip", "zlib"] }
-event-listener = { version = "5" }
+futures-io = { version = "0.3" }
 getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
-hyper-rustls = { version = "0.27", default-features = false, features = ["webpki-tokio"] }
+hyper-582f2526e08bb6a0 = { package = "hyper", version = "0.14", default-features = false, features = ["runtime"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs", "webpki-tokio"] }
 hyper-util = { version = "0.1", default-features = false, features = ["client-proxy-system"] }
 idna = { version = "1" }
 libp2p = { version = "0.54", default-features = false, features = ["serde"] }
 libp2p-core = { version = "0.42", default-features = false, features = ["serde"] }
 libp2p-identity = { version = "0.2", default-features = false, features = ["ed25519", "peerid", "rand", "serde"] }
-linux-raw-sys = { version = "0.12", default-features = false, features = ["auxvec", "elf", "errno", "general", "if_ether", "ioctl", "net", "netlink", "no_std", "prctl", "xdp"] }
 miniz_oxide = { version = "0.8", default-features = false, features = ["simd", "with-alloc"] }
 multihash = { version = "0.19", features = ["serde-codec"] }
 openssl = { version = "0.10", features = ["vendored"] }
 openssl-sys = { version = "0.9", default-features = false, features = ["vendored"] }
-ring-9067fe90e8c1f593 = { package = "ring", version = "0.17", features = ["std"] }
-ring-986da7b5efc2b80e = { package = "ring", version = "0.16", features = ["std"] }
+ring = { version = "0.17", features = ["std"] }
 rustc-hash = { version = "2" }
-rustix = { version = "1", features = ["event", "fs", "net", "pipe", "process", "termios", "time"] }
+rustix = { version = "1", features = ["fs", "termios"] }
 subtle = { version = "2" }
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs", "ring"] }
 tower = { version = "0.5", default-features = false, features = ["retry"] }
@@ -453,23 +442,22 @@ tower-http = { version = "0.6", default-features = false, features = ["decompres
 async-compression = { version = "0.4", default-features = false, features = ["gzip", "tokio", "zlib"] }
 bitflags = { version = "2", default-features = false, features = ["std"] }
 compression-codecs = { version = "0.4", default-features = false, features = ["gzip", "zlib"] }
-event-listener = { version = "5" }
+futures-io = { version = "0.3" }
 getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
-hyper-rustls = { version = "0.27", default-features = false, features = ["webpki-tokio"] }
+hyper-582f2526e08bb6a0 = { package = "hyper", version = "0.14", default-features = false, features = ["runtime"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs", "webpki-tokio"] }
 hyper-util = { version = "0.1", default-features = false, features = ["client-proxy-system"] }
 idna = { version = "1" }
 libp2p = { version = "0.54", default-features = false, features = ["serde"] }
 libp2p-core = { version = "0.42", default-features = false, features = ["serde"] }
 libp2p-identity = { version = "0.2", default-features = false, features = ["ed25519", "peerid", "rand", "serde"] }
-linux-raw-sys = { version = "0.12", default-features = false, features = ["auxvec", "elf", "errno", "general", "if_ether", "ioctl", "net", "netlink", "no_std", "prctl", "xdp"] }
 miniz_oxide = { version = "0.8", default-features = false, features = ["simd", "with-alloc"] }
 multihash = { version = "0.19", features = ["serde-codec"] }
 openssl = { version = "0.10", features = ["vendored"] }
 openssl-sys = { version = "0.9", default-features = false, features = ["vendored"] }
-ring-9067fe90e8c1f593 = { package = "ring", version = "0.17", features = ["std"] }
-ring-986da7b5efc2b80e = { package = "ring", version = "0.16", features = ["std"] }
+ring = { version = "0.17", features = ["std"] }
 rustc-hash = { version = "2" }
-rustix = { version = "1", features = ["event", "fs", "net", "pipe", "process", "termios", "time"] }
+rustix = { version = "1", features = ["fs", "termios"] }
 subtle = { version = "2" }
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs", "ring"] }
 tower = { version = "0.5", default-features = false, features = ["retry"] }
@@ -480,9 +468,10 @@ async-compression = { version = "0.4", default-features = false, features = ["gz
 bitflags = { version = "2", default-features = false, features = ["std"] }
 compression-codecs = { version = "0.4", default-features = false, features = ["gzip", "zlib"] }
 errno = { version = "0.3" }
-event-listener = { version = "5" }
+futures-io = { version = "0.3" }
 getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
-hyper-rustls = { version = "0.27", default-features = false, features = ["webpki-tokio"] }
+hyper-582f2526e08bb6a0 = { package = "hyper", version = "0.14", default-features = false, features = ["runtime"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs", "webpki-tokio"] }
 hyper-util = { version = "0.1", default-features = false, features = ["client-proxy-system"] }
 idna = { version = "1" }
 libp2p = { version = "0.54", default-features = false, features = ["serde"] }
@@ -490,13 +479,12 @@ libp2p-core = { version = "0.42", default-features = false, features = ["serde"]
 libp2p-identity = { version = "0.2", default-features = false, features = ["ed25519", "peerid", "rand", "serde"] }
 miniz_oxide = { version = "0.8", default-features = false, features = ["simd", "with-alloc"] }
 multihash = { version = "0.19", features = ["serde-codec"] }
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["CFArray", "CFBase", "CFData", "CFDictionary", "CFError", "CFNumber", "CFPlugInCOM", "CFRunLoop", "CFString", "CFURL", "CFUUID", "std"] }
+objc2-core-foundation = { version = "0.3", features = ["CFBase"] }
 objc2-io-kit = { version = "0.3", default-features = false, features = ["hidsystem", "libc", "std"] }
 openssl-sys = { version = "0.9", default-features = false, features = ["vendored"] }
-ring-9067fe90e8c1f593 = { package = "ring", version = "0.17", features = ["std"] }
-ring-986da7b5efc2b80e = { package = "ring", version = "0.16", features = ["std"] }
+ring = { version = "0.17", features = ["std"] }
 rustc-hash = { version = "2" }
-rustix = { version = "1", features = ["event", "fs", "net", "pipe", "process", "termios", "time"] }
+rustix = { version = "1", features = ["fs", "termios"] }
 security-framework-sys = { version = "2" }
 subtle = { version = "2" }
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs", "ring"] }
@@ -508,9 +496,10 @@ async-compression = { version = "0.4", default-features = false, features = ["gz
 bitflags = { version = "2", default-features = false, features = ["std"] }
 compression-codecs = { version = "0.4", default-features = false, features = ["gzip", "zlib"] }
 errno = { version = "0.3" }
-event-listener = { version = "5" }
+futures-io = { version = "0.3" }
 getrandom-468e82937335b1c9 = { package = "getrandom", version = "0.3", default-features = false, features = ["std"] }
-hyper-rustls = { version = "0.27", default-features = false, features = ["webpki-tokio"] }
+hyper-582f2526e08bb6a0 = { package = "hyper", version = "0.14", default-features = false, features = ["runtime"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs", "webpki-tokio"] }
 hyper-util = { version = "0.1", default-features = false, features = ["client-proxy-system"] }
 idna = { version = "1" }
 libp2p = { version = "0.54", default-features = false, features = ["serde"] }
@@ -518,13 +507,12 @@ libp2p-core = { version = "0.42", default-features = false, features = ["serde"]
 libp2p-identity = { version = "0.2", default-features = false, features = ["ed25519", "peerid", "rand", "serde"] }
 miniz_oxide = { version = "0.8", default-features = false, features = ["simd", "with-alloc"] }
 multihash = { version = "0.19", features = ["serde-codec"] }
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["CFArray", "CFBase", "CFData", "CFDictionary", "CFError", "CFNumber", "CFPlugInCOM", "CFRunLoop", "CFString", "CFURL", "CFUUID", "std"] }
+objc2-core-foundation = { version = "0.3", features = ["CFBase"] }
 objc2-io-kit = { version = "0.3", default-features = false, features = ["hidsystem", "libc", "std"] }
 openssl-sys = { version = "0.9", default-features = false, features = ["vendored"] }
-ring-9067fe90e8c1f593 = { package = "ring", version = "0.17", features = ["std"] }
-ring-986da7b5efc2b80e = { package = "ring", version = "0.16", features = ["std"] }
+ring = { version = "0.17", features = ["std"] }
 rustc-hash = { version = "2" }
-rustix = { version = "1", features = ["event", "fs", "net", "pipe", "process", "termios", "time"] }
+rustix = { version = "1", features = ["fs", "termios"] }
 security-framework-sys = { version = "2" }
 subtle = { version = "2" }
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs", "ring"] }

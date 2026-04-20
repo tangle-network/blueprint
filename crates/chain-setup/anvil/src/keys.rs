@@ -1,6 +1,6 @@
 use blueprint_core_testing_utils::TestRunnerError;
 use blueprint_keystore::backends::bn254::Bn254Backend;
-use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
+use blueprint_keystore::backends::ecdsa::EcdsaBackend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use blueprint_std::path::Path;
 

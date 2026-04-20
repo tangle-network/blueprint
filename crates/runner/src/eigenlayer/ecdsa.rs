@@ -7,7 +7,7 @@ use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
 use blueprint_evm_extra::util::get_provider_http;
 use blueprint_keystore::backends::Backend;
-use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
+use blueprint_keystore::backends::ecdsa::EcdsaBackend;
 use blueprint_keystore::crypto::k256::K256Ecdsa;
 use eigensdk::client_elcontracts::{reader::ELChainReader, writer::ELChainWriter};
 use eigensdk::types::operator::Operator;

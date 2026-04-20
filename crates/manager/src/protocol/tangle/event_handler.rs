@@ -477,8 +477,6 @@ impl TangleEventHandler {
                 if let Some(metadata) = self.metadata.resolve_service(client, service_id).await? {
                     let blueprint_id = metadata.blueprint_id;
                     let gpu_requirements = metadata.gpu_requirements;
-                    #[cfg(feature = "remote-providers")]
-                    let sources_for_remote = metadata.sources.clone();
                     if let Err(e) = self
                         .ensure_service_running(&trace_id, metadata, env, ctx, active_blueprints)
                         .await
@@ -497,7 +495,6 @@ impl TangleEventHandler {
                         blueprint_id,
                         service_id,
                         &gpu_requirements,
-                        &sources_for_remote,
                     )
                     .await;
                 } else {
@@ -903,159 +900,28 @@ impl TangleEventHandler {
 
 #[cfg(feature = "remote-providers")]
 impl TangleEventHandler {
-    /// Extract the first container image URI from blueprint sources.
-    /// Returns `"registry/image:tag"` (the form docker pull accepts).
-    fn container_image_uri(sources: &[BlueprintSource]) -> Option<String> {
-        sources.iter().find_map(|s| {
-            if let BlueprintSource::Container(fetcher) = s {
-                let r = fetcher.registry.trim();
-                let i = fetcher.image.trim();
-                let t = fetcher.tag.trim();
-                if !r.is_empty() && !i.is_empty() && !t.is_empty() {
-                    return Some(format!("{r}/{i}:{t}"));
-                }
-            }
-            None
-        })
-    }
-
-    /// Extract a GitHub-release artifact triple (archive_url, sha256_hex, binary_name)
-    /// for the target OS/arch that the remote VM will run on.
-    ///
-    /// Convention: remote VMs are linux/amd64 for cloud providers. We pick
-    /// the first binary matching linux+amd64 from the Github source.
-    fn github_binary_for_remote(sources: &[BlueprintSource]) -> Option<(String, String, String)> {
-        for source in sources {
-            if let BlueprintSource::Github(fetcher) = source {
-                let binary = fetcher.binaries.iter().find(|b| {
-                    b.os.eq_ignore_ascii_case("linux") && b.arch.eq_ignore_ascii_case("amd64")
-                })?;
-                // cargo-dist convention: releases publish per-target archives at
-                // https://github.com/<owner>/<repo>/releases/download/<tag>/<pkg>-<target>.tar.xz
-                // The manager mirrors GithubBinaryFetcher's URL construction.
-                let archive_url = format!(
-                    "https://github.com/{owner}/{repo}/releases/download/{tag}/{name}-x86_64-unknown-linux-gnu.tar.xz",
-                    owner = fetcher.owner,
-                    repo = fetcher.repo,
-                    tag = fetcher.tag,
-                    name = binary.name,
-                );
-                let sha256_hex = hex::encode(binary.sha256);
-                return Some((archive_url, sha256_hex, binary.name.clone()));
-            }
-            if let BlueprintSource::Remote(fetcher) = source {
-                let binary = fetcher.binaries.iter().find(|b| {
-                    b.os.eq_ignore_ascii_case("linux") && b.arch.eq_ignore_ascii_case("amd64")
-                })?;
-                let sha256_hex = hex::encode(binary.sha256);
-                return Some((fetcher.archive_url.clone(), sha256_hex, binary.name.clone()));
-            }
-        }
-        None
-    }
-
     async fn notify_remote_service_initiated(
         &self,
         blueprint_id: u64,
         service_id: u64,
         gpu: &GpuRequirements,
-        sources: &[BlueprintSource],
     ) {
-        use crate::executor::remote_provider_integration::DeployArtifact;
-
         let Some(remote) = &self.remote_provider else {
             return;
         };
         let mut limits = ResourceLimits::default();
         apply_gpu_limits(gpu, &mut limits);
         let resource_spec = resource_spec_from_limits(&limits);
-
-        // Decide artifact: prefer container if present, else fall back to github/remote binary.
-        // Blueprint authors can ship either — both are first-class.
-        let container_image = Self::container_image_uri(sources);
-        let github_triple = if container_image.is_none() {
-            Self::github_binary_for_remote(sources)
-        } else {
-            None
-        };
-
-        let artifact_kind: &'static str;
-        let artifact: Option<DeployArtifact<'_>> = if let Some(image) = container_image.as_deref() {
-            artifact_kind = "container";
-            Some(DeployArtifact::ContainerImage(image))
-        } else if let Some((url, sha, name)) = github_triple.as_ref() {
-            artifact_kind = "github_binary";
-            Some(DeployArtifact::GithubBinary {
-                archive_url: url,
-                sha256_hex: sha,
-                binary_name: name,
-            })
-        } else {
-            artifact_kind = "none";
-            None
-        };
-
-        let deploy_start = Instant::now();
-        let mut env_vars = std::collections::HashMap::new();
-        env_vars.insert("BLUEPRINT_ID".to_string(), blueprint_id.to_string());
-        env_vars.insert("SERVICE_ID".to_string(), service_id.to_string());
-
-        match remote
-            .on_service_initiated(
-                blueprint_id,
-                service_id,
-                Some(resource_spec),
-                artifact,
-                env_vars,
-            )
+        if let Err(e) = remote
+            .on_service_initiated(blueprint_id, service_id, Some(resource_spec))
             .await
         {
-            Ok(()) => {
-                let result_label = match artifact_kind {
-                    "container" => "success_container",
-                    "github_binary" => "success_native",
-                    _ => "provisioned_only",
-                };
-                metrics::REMOTE_DEPLOY_TOTAL
-                    .with_label_values(&[result_label])
-                    .inc();
-                metrics::REMOTE_DEPLOY_DURATION
-                    .with_label_values(&[result_label])
-                    .observe(deploy_start.elapsed().as_secs_f64());
-                info!(
-                    blueprint_id,
-                    service_id,
-                    artifact_kind,
-                    deploy_ms = (deploy_start.elapsed().as_secs_f64() * 1000.0) as u64,
-                    result = result_label,
-                    "Remote service initiation complete"
-                );
-            }
-            Err(e) => {
-                // Classify: deploy_failed if message mentions deploy_blueprint, else provision_failed.
-                let err_msg = e.to_string();
-                let result_label = if err_msg.contains("deploy_blueprint")
-                    || err_msg.contains("deploy_github_binary")
-                {
-                    "deploy_failed"
-                } else {
-                    "provision_failed"
-                };
-                metrics::REMOTE_DEPLOY_TOTAL
-                    .with_label_values(&[result_label])
-                    .inc();
-                metrics::REMOTE_DEPLOY_DURATION
-                    .with_label_values(&["failed"])
-                    .observe(deploy_start.elapsed().as_secs_f64());
-                warn!(
-                    blueprint_id,
-                    service_id,
-                    artifact_kind,
-                    error = %e,
-                    result = result_label,
-                    "Remote service initiation failed"
-                );
-            }
+            warn!(
+                blueprint_id,
+                service_id,
+                error = %e,
+                "Remote provider failed to handle service initiation"
+            );
         }
     }
 
@@ -1246,60 +1112,5 @@ mod tests {
             ConfidentialityPolicy::TeePreferred,
         );
         assert_eq!(ordered[0], 3);
-    }
-
-    #[cfg(feature = "remote-providers")]
-    #[test]
-    fn container_image_uri_extracts_from_container_source() {
-        let sources = vec![container_source(), test_source()];
-        let uri = TangleEventHandler::container_image_uri(&sources);
-        assert_eq!(uri, Some("ghcr.io/tangle/demo:v1".to_string()));
-    }
-
-    #[cfg(feature = "remote-providers")]
-    #[test]
-    fn container_image_uri_returns_none_without_container_source() {
-        let sources = vec![test_source(), github_source(), remote_source()];
-        let uri = TangleEventHandler::container_image_uri(&sources);
-        assert_eq!(uri, None);
-    }
-
-    #[cfg(feature = "remote-providers")]
-    #[test]
-    fn container_image_uri_skips_malformed_container_source() {
-        let empty = BlueprintSource::Container(ImageRegistryFetcher {
-            registry: "".to_string(),
-            image: "x".to_string(),
-            tag: "v1".to_string(),
-        });
-        assert_eq!(TangleEventHandler::container_image_uri(&[empty]), None);
-
-        let trimmed = BlueprintSource::Container(ImageRegistryFetcher {
-            registry: "  ".to_string(),
-            image: "x".to_string(),
-            tag: "v1".to_string(),
-        });
-        assert_eq!(TangleEventHandler::container_image_uri(&[trimmed]), None);
-    }
-
-    #[cfg(feature = "remote-providers")]
-    #[test]
-    fn container_image_uri_picks_first_valid_container() {
-        let good = BlueprintSource::Container(ImageRegistryFetcher {
-            registry: "ghcr.io".to_string(),
-            image: "tangle/demo".to_string(),
-            tag: "v1".to_string(),
-        });
-        let better = BlueprintSource::Container(ImageRegistryFetcher {
-            registry: "docker.io".to_string(),
-            image: "tangle/demo".to_string(),
-            tag: "v2".to_string(),
-        });
-        let sources = vec![test_source(), good, better];
-        // "first valid container" — deterministic on ordered input
-        assert_eq!(
-            TangleEventHandler::container_image_uri(&sources),
-            Some("ghcr.io/tangle/demo:v1".to_string())
-        );
     }
 }
