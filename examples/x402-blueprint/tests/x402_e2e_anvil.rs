@@ -137,7 +137,27 @@ mod e2e {
         let fac_settle = facilitator.clone();
         let fac_supported = facilitator.clone();
 
+        // Sanitize facilitator errors: strip RPC URLs and revert calldata
+        // that could leak infrastructure topology to callers.
+        fn sanitize_error(e: &dyn std::fmt::Display) -> String {
+            let msg = format!("{e}");
+            // Strip URLs from error messages (prevents RPC endpoint leakage)
+            let mut sanitized = msg;
+            for prefix in &["http://", "https://", "ws://", "wss://"] {
+                while let Some(start) = sanitized.find(prefix) {
+                    let end = sanitized[start..].find(|c: char| c.is_whitespace() || c == ',' || c == ')' || c == '"')
+                        .map(|e| start + e)
+                        .unwrap_or(sanitized.len());
+                    sanitized.replace_range(start..end, "[REDACTED_URL]");
+                }
+            }
+            // Truncate to prevent massive revert data from being returned
+            if sanitized.len() > 500 { sanitized[..500].to_string() } else { sanitized }
+        }
+
         let app = Router::new()
+            // Body size limit: 64KB max to prevent OOM from deeply nested JSON
+            .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
             .route("/verify", post(move |Json(body): Json<serde_json::Value>| {
                 let fac = fac_verify.clone();
                 async move {
@@ -148,7 +168,7 @@ mod e2e {
                     match fac.verify(&req).await {
                         Ok(r) => (axum::http::StatusCode::OK, Json(r.0)),
                         Err(e) => (axum::http::StatusCode::OK, Json(serde_json::json!({
-                            "isValid": false, "invalidReason": format!("{e}")
+                            "isValid": false, "invalidReason": sanitize_error(&e)
                         }))),
                     }
                 }
@@ -163,7 +183,7 @@ mod e2e {
                     match fac.settle(&req).await {
                         Ok(r) => (axum::http::StatusCode::OK, Json(r.0)),
                         Err(e) => (axum::http::StatusCode::OK, Json(serde_json::json!({
-                            "success": false, "errorReason": format!("{e}")
+                            "success": false, "errorReason": sanitize_error(&e)
                         }))),
                     }
                 }
@@ -173,7 +193,7 @@ mod e2e {
                 async move {
                     match fac.supported().await {
                         Ok(r) => Json(serde_json::to_value(&r).unwrap_or_default()),
-                        Err(e) => Json(serde_json::json!({"error": format!("{e}")})),
+                        Err(e) => Json(serde_json::json!({"error": sanitize_error(&e)})),
                     }
                 }
             }));
