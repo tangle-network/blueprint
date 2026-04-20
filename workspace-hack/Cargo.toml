@@ -29,7 +29,7 @@ alloy-network = { version = "1", default-features = false, features = ["k256"] }
 alloy-primitives = { version = "1", features = ["k256", "rlp", "serde"] }
 alloy-provider = { version = "1", features = ["anvil-api", "debug-api", "ipc", "trace-api", "txpool-api", "ws"] }
 alloy-rlp = { version = "0.3", features = ["arrayvec", "core-error", "core-net", "derive"] }
-alloy-rpc-client = { version = "1", default-features = false, features = ["ipc", "reqwest", "ws"] }
+alloy-rpc-client = { version = "2", default-features = false, features = ["ipc", "reqwest", "ws"] }
 alloy-rpc-types = { version = "1", default-features = false, features = ["anvil", "debug", "eth", "k256", "kzg", "trace", "txpool"] }
 alloy-rpc-types-eth = { version = "1", features = ["k256"] }
 alloy-signer = { version = "1", default-features = false, features = ["eip712"] }
@@ -223,7 +223,7 @@ alloy-network = { version = "1", default-features = false, features = ["k256"] }
 alloy-primitives = { version = "1", features = ["k256", "rlp", "serde"] }
 alloy-provider = { version = "1", features = ["anvil-api", "debug-api", "ipc", "trace-api", "txpool-api", "ws"] }
 alloy-rlp = { version = "0.3", features = ["arrayvec", "core-error", "core-net", "derive"] }
-alloy-rpc-client = { version = "1", default-features = false, features = ["ipc", "reqwest", "ws"] }
+alloy-rpc-client = { version = "2", default-features = false, features = ["ipc", "reqwest", "ws"] }
 alloy-rpc-types = { version = "1", default-features = false, features = ["anvil", "debug", "eth", "k256", "kzg", "trace", "txpool"] }
 alloy-rpc-types-eth = { version = "1", features = ["k256"] }
 alloy-signer = { version = "1", default-features = false, features = ["eip712"] }
