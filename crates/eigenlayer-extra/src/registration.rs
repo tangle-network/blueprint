@@ -4,6 +4,7 @@
 /// It maintains a local state file and provides methods to reconcile with on-chain state.
 use alloy_primitives::Address;
 use blueprint_core::{error, info, warn};
+use blueprint_keystore::backends::ecdsa::EcdsaBackend;
 use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
 use blueprint_runner::config::BlueprintEnvironment;
 use chrono::Utc;
