@@ -34,11 +34,11 @@ async fn deploys_blueprint_to_devnet() -> Result<()> {
     let settings_dir = TempDir::new()?;
     let settings_path = settings_dir.path().join("settings.env");
     let settings_contents = format!(
-        "BLUEPRINT_ID={}\nSERVICE_ID={}\nTANGLE_CONTRACT={:#x}\nRESTAKING_CONTRACT={:#x}\nSTATUS_REGISTRY_CONTRACT={:#x}\n",
+        "BLUEPRINT_ID={}\nSERVICE_ID={}\nTANGLE_CONTRACT={:#x}\nSTAKING_CONTRACT={:#x}\nSTATUS_REGISTRY_CONTRACT={:#x}\n",
         LOCAL_BLUEPRINT_ID,
         LOCAL_SERVICE_ID,
         harness.tangle_contract,
-        harness.restaking_contract,
+        harness.staking_contract,
         harness.status_registry_contract,
     );
     fs::write(&settings_path, settings_contents)?;

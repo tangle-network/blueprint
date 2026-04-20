@@ -382,7 +382,7 @@ async fn setup_client(d: &SeededTangleTestnet, base: &Path) -> Result<Arc<Tangle
             blueprint_id: BLUEPRINT_ID,
             service_id: Some(SERVICE_ID),
             tangle_contract: d.tangle_contract,
-            restaking_contract: d.restaking_contract,
+            staking_contract: d.staking_contract,
             status_registry_contract: d.status_registry_contract,
         },
     )

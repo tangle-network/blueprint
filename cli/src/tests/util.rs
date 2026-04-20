@@ -105,8 +105,8 @@ pub fn network_cli_args(harness: &TangleHarness, keystore_path: &Path) -> Vec<St
         keystore_path.to_string_lossy().to_string(),
         "--tangle-contract".into(),
         format!("{:#x}", harness.tangle_contract),
-        "--restaking-contract".into(),
-        format!("{:#x}", harness.restaking_contract),
+        "--staking-contract".into(),
+        format!("{:#x}", harness.staking_contract),
         "--status-registry-contract".into(),
         format!("{:#x}", harness.status_registry_contract),
     ]

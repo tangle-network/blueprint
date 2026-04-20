@@ -361,7 +361,7 @@ async fn create_client(
             blueprint_id: BLUEPRINT_ID,
             service_id: svc_id,
             tangle_contract: d.tangle_contract,
-            restaking_contract: d.restaking_contract,
+            staking_contract: d.staking_contract,
             status_registry_contract: d.status_registry_contract,
         },
     )

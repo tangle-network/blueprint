@@ -438,7 +438,7 @@ impl TangleClient {
         Ok(Self {
             provider: Arc::new(dyn_provider),
             tangle_address: config.settings.tangle_contract,
-            restaking_address: config.settings.restaking_contract,
+            restaking_address: config.settings.staking_contract,
             status_registry_address: config.settings.status_registry_contract,
             account,
             config,
@@ -454,7 +454,7 @@ impl TangleClient {
     }
 
     /// Get the MultiAssetDelegation contract instance
-    pub fn restaking_contract(&self) -> IMultiAssetDelegationInstance<Arc<TangleProvider>> {
+    pub fn staking_contract(&self) -> IMultiAssetDelegationInstance<Arc<TangleProvider>> {
         IMultiAssetDelegation::new(self.restaking_address, Arc::clone(&self.provider))
     }
 
@@ -957,7 +957,7 @@ impl TangleClient {
             .await
             .map_err(|e| Error::Contract(format!("getOperatorPreferences failed: {e}")))?;
         let restaking_meta = self
-            .restaking_contract()
+            .staking_contract()
             .getOperatorMetadata(operator)
             .call()
             .await
@@ -1369,7 +1369,7 @@ impl TangleClient {
 
     /// Check if address is a registered operator
     pub async fn is_operator(&self, operator: Address) -> Result<bool> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .isOperator(operator)
             .call()
@@ -1379,7 +1379,7 @@ impl TangleClient {
 
     /// Check if operator is active
     pub async fn is_operator_active(&self, operator: Address) -> Result<bool> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .isOperatorActive(operator)
             .call()
@@ -1389,7 +1389,7 @@ impl TangleClient {
 
     /// Get operator's total stake
     pub async fn get_operator_stake(&self, operator: Address) -> Result<U256> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .getOperatorStake(operator)
             .call()
@@ -1399,7 +1399,7 @@ impl TangleClient {
 
     /// Get minimum operator stake requirement
     pub async fn min_operator_stake(&self) -> Result<U256> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .minOperatorStake()
             .call()
@@ -1448,7 +1448,7 @@ impl TangleClient {
     /// Fetch restaking metadata for an operator.
     pub async fn get_restaking_metadata(&self, operator: Address) -> Result<RestakingMetadata> {
         let restaking_meta = self
-            .restaking_contract()
+            .staking_contract()
             .getOperatorMetadata(operator)
             .call()
             .await
@@ -1463,7 +1463,7 @@ impl TangleClient {
 
     /// Get operator self stake from MultiAssetDelegation.
     pub async fn get_operator_self_stake(&self, operator: Address) -> Result<U256> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .getOperatorSelfStake(operator)
             .call()
@@ -1473,7 +1473,7 @@ impl TangleClient {
 
     /// Get operator delegated stake from MultiAssetDelegation.
     pub async fn get_operator_delegated_stake(&self, operator: Address) -> Result<U256> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .getOperatorDelegatedStake(operator)
             .call()
@@ -1483,7 +1483,7 @@ impl TangleClient {
 
     /// Get delegators for the operator.
     pub async fn get_operator_delegators(&self, operator: Address) -> Result<Vec<Address>> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .getOperatorDelegators(operator)
             .call()
@@ -1493,7 +1493,7 @@ impl TangleClient {
 
     /// Get delegator count for the operator.
     pub async fn get_operator_delegator_count(&self, operator: Address) -> Result<u64> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         let count = contract
             .getOperatorDelegatorCount(operator)
             .call()
@@ -1504,7 +1504,7 @@ impl TangleClient {
 
     /// Get current restaking round.
     pub async fn restaking_round(&self) -> Result<u64> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .currentRound()
             .call()
@@ -1514,7 +1514,7 @@ impl TangleClient {
 
     /// Get operator commission (basis points).
     pub async fn operator_commission_bps(&self) -> Result<u16> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .operatorCommissionBps()
             .call()
@@ -1533,7 +1533,7 @@ impl TangleClient {
     /// - Whitelist: Only approved addresses can delegate
     /// - Open: Anyone can delegate
     pub async fn get_delegation_mode(&self, operator: Address) -> Result<DelegationMode> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         let mode = contract
             .getDelegationMode(operator)
             .call()
@@ -1548,7 +1548,7 @@ impl TangleClient {
         operator: Address,
         delegator: Address,
     ) -> Result<bool> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .isWhitelisted(operator, delegator)
             .call()
@@ -1560,7 +1560,7 @@ impl TangleClient {
     ///
     /// This checks the operator's delegation mode and whitelist status.
     pub async fn can_delegate(&self, operator: Address, delegator: Address) -> Result<bool> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .canDelegate(operator, delegator)
             .call()
@@ -1693,7 +1693,7 @@ impl TangleClient {
         delegator: Address,
         token: Address,
     ) -> Result<DepositInfo> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         let deposit = contract
             .getDeposit(delegator, token)
             .call()
@@ -1707,7 +1707,7 @@ impl TangleClient {
 
     /// Fetch lock info for a token.
     pub async fn get_locks(&self, delegator: Address, token: Address) -> Result<Vec<LockInfo>> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         let locks = contract
             .getLocks(delegator, token)
             .call()
@@ -1725,7 +1725,7 @@ impl TangleClient {
 
     /// Fetch delegations for a delegator.
     pub async fn get_delegations(&self, delegator: Address) -> Result<Vec<DelegationInfo>> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         let delegations = contract
             .getDelegations(delegator)
             .call()
@@ -1770,7 +1770,7 @@ impl TangleClient {
         delegator: Address,
         index: u64,
     ) -> Result<Vec<u64>> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         let ids = contract
             .getDelegationBlueprints(delegator, U256::from(index))
             .call()
@@ -1781,7 +1781,7 @@ impl TangleClient {
 
     /// Fetch pending delegator unstakes.
     pub async fn get_pending_unstakes(&self, delegator: Address) -> Result<Vec<PendingUnstake>> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         let unstakes = contract
             .getPendingUnstakes(delegator)
             .call()
@@ -1805,7 +1805,7 @@ impl TangleClient {
         &self,
         delegator: Address,
     ) -> Result<Vec<PendingWithdrawal>> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         let withdrawals = contract
             .getPendingWithdrawals(delegator)
             .call()
@@ -2107,7 +2107,7 @@ impl TangleClient {
     /// Returns `Address::ZERO` if native ETH is used for operator bonds,
     /// otherwise returns the ERC20 token address (e.g., TNT).
     pub async fn operator_bond_token(&self) -> Result<Address> {
-        let contract = self.restaking_contract();
+        let contract = self.staking_contract();
         contract
             .operatorBondToken()
             .call()
@@ -2118,7 +2118,7 @@ impl TangleClient {
     /// Register as an operator on the restaking layer.
     ///
     /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
-    /// For ERC20 tokens, automatically approves the restaking contract first.
+    /// For ERC20 tokens, automatically approves the staking contract first.
     pub async fn register_operator_restaking(
         &self,
         stake_amount: U256,
@@ -2166,7 +2166,7 @@ impl TangleClient {
     /// Increase operator stake.
     ///
     /// Automatically uses the configured bond token (native ETH or ERC20 like TNT).
-    /// For ERC20 tokens, automatically approves the restaking contract first.
+    /// For ERC20 tokens, automatically approves the staking contract first.
     pub async fn increase_stake(&self, amount: U256) -> Result<TransactionResult> {
         let bond_token = self.operator_bond_token().await?;
 

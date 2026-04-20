@@ -56,14 +56,14 @@ pub fn load_protocol_settings(
                 .ok()
                 .and_then(|v| v.parse().ok());
             let tangle_contract = env_var("TANGLE_CONTRACT")?;
-            let restaking_contract = env_var("RESTAKING_CONTRACT")?;
+            let staking_contract = env_var("STAKING_CONTRACT")?;
             let status_registry_contract = env_var("STATUS_REGISTRY_CONTRACT")?;
 
             Ok(ProtocolSettings::Tangle(TangleProtocolSettings {
                 blueprint_id,
                 service_id,
                 tangle_contract,
-                restaking_contract,
+                staking_contract,
                 status_registry_contract,
             }))
         }

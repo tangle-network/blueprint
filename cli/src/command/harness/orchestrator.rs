@@ -48,7 +48,7 @@ impl Orchestrator {
             blueprint_id: 0,
             service_id: None,
             tangle_contract: stack.tangle_contract(),
-            restaking_contract: stack.restaking_contract(),
+            staking_contract: stack.staking_contract(),
             status_registry_contract: stack.status_registry_contract(),
         };
         let client_config = TangleClientConfig::new(
@@ -173,8 +173,8 @@ impl Orchestrator {
                 format!("{:?}", self.stack.tangle_contract()),
             );
             cmd.env(
-                "RESTAKING_CONTRACT",
-                format!("{:?}", self.stack.restaking_contract()),
+                "STAKING_CONTRACT",
+                format!("{:?}", self.stack.staking_contract()),
             );
             cmd.env(
                 "STATUS_REGISTRY_CONTRACT",
@@ -190,7 +190,7 @@ impl Orchestrator {
             const PROTOCOL_VARS: &[&str] = &[
                 "HTTP_RPC_URL", "WS_RPC_URL", "KEYSTORE_URI", "DATA_DIR",
                 "BLUEPRINT_ID", "SERVICE_ID", "TANGLE_CONTRACT",
-                "RESTAKING_CONTRACT", "STATUS_REGISTRY_CONTRACT", "PROTOCOL", "TEST_MODE",
+                "STAKING_CONTRACT", "STATUS_REGISTRY_CONTRACT", "PROTOCOL", "TEST_MODE",
             ];
             for (k, v) in &bp.env {
                 if PROTOCOL_VARS.contains(&k.as_str()) {
@@ -343,7 +343,7 @@ fn write_settings_env(
     writeln!(f, "BLUEPRINT_ID={blueprint_id}")?;
     writeln!(f, "SERVICE_ID={service_id}")?;
     writeln!(f, "TANGLE_CONTRACT={:?}", stack.tangle_contract())?;
-    writeln!(f, "RESTAKING_CONTRACT={:?}", stack.restaking_contract())?;
+    writeln!(f, "STAKING_CONTRACT={:?}", stack.staking_contract())?;
     writeln!(
         f,
         "STATUS_REGISTRY_CONTRACT={:?}",

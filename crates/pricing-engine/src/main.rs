@@ -55,8 +55,8 @@ pub struct Cli {
     #[arg(long, env = "OPERATOR_TANGLE_CONTRACT")]
     pub tangle_contract: String,
 
-    #[arg(long, env = "OPERATOR_RESTAKING_CONTRACT")]
-    pub restaking_contract: String,
+    #[arg(long, env = "OPERATOR_STAKING_CONTRACT")]
+    pub staking_contract: String,
 
     #[arg(long, env = "OPERATOR_STATUS_REGISTRY_CONTRACT")]
     pub status_registry_contract: String,
@@ -74,7 +74,7 @@ pub async fn run_app(cli: Cli) -> Result<()> {
     let config = load_operator_config(&cli.config).await?;
 
     let tangle_contract = parse_address(&cli.tangle_contract)?;
-    let restaking_contract = parse_address(&cli.restaking_contract)?;
+    let staking_contract = parse_address(&cli.staking_contract)?;
     let status_registry_contract = parse_address(&cli.status_registry_contract)?;
     if tangle_contract == Address::ZERO {
         return Err(PricingError::Config(
@@ -86,7 +86,7 @@ pub async fn run_app(cli: Cli) -> Result<()> {
         blueprint_id: cli.blueprint_id,
         service_id: cli.service_id,
         tangle_contract,
-        restaking_contract,
+        staking_contract,
         status_registry_contract,
     };
 

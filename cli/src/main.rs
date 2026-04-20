@@ -667,7 +667,7 @@ enum DelegatorCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Check ERC20 token allowance for the restaking contract.
+    /// Check ERC20 token allowance for the staking contract.
     ///
     /// Shows how many tokens the contract can spend on your behalf.
     Allowance {
@@ -679,7 +679,7 @@ enum DelegatorCommands {
         /// Token owner address (defaults to your address).
         #[arg(long)]
         owner: Option<String>,
-        /// Spender address (defaults to restaking contract).
+        /// Spender address (defaults to staking contract).
         #[arg(long)]
         spender: Option<String>,
         /// Output as JSON instead of formatted table.
@@ -703,7 +703,7 @@ enum DelegatorCommands {
     /// Approve ERC20 tokens for restaking.
     ///
     /// Required before depositing ERC20 tokens. Sets the allowance for
-    /// the restaking contract to transfer tokens on your behalf.
+    /// the staking contract to transfer tokens on your behalf.
     Approve {
         #[command(flatten)]
         network: TangleClientArgs,
@@ -713,14 +713,14 @@ enum DelegatorCommands {
         /// Amount to approve in wei (smallest token unit).
         #[arg(long)]
         amount: u128,
-        /// Spender address (defaults to restaking contract).
+        /// Spender address (defaults to staking contract).
         #[arg(long)]
         spender: Option<String>,
         /// Output transaction details as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Deposit tokens into the restaking contract.
+    /// Deposit tokens into the staking contract.
     ///
     /// Deposits tokens that can later be delegated to operators.
     /// For ERC20 tokens, you must approve() first.
@@ -1008,7 +1008,7 @@ enum OperatorCommands {
     /// Register as a new operator on the restaking layer.
     ///
     /// Stakes the initial bond and enables operator status.
-    /// For ERC20 bond tokens, you must approve() the restaking contract first.
+    /// For ERC20 bond tokens, you must approve() the staking contract first.
     Register {
         #[command(flatten)]
         network: TangleClientArgs,
@@ -1308,7 +1308,7 @@ async fn main() -> Result<()> {
                             blueprint_id: settings.blueprint_id,
                             service_id: settings.service_id,
                             tangle_contract: settings.tangle_contract,
-                            restaking_contract: settings.restaking_contract,
+                            staking_contract: settings.staking_contract,
                             status_registry_contract: settings.status_registry_contract,
                             keystore_path: config.keystore_uri.clone(),
                             data_dir,
@@ -1413,7 +1413,7 @@ async fn main() -> Result<()> {
                     blueprint_id: settings.blueprint_id,
                     service_id: None,
                     tangle_contract: settings.tangle_contract,
-                    restaking_contract: settings.restaking_contract,
+                    staking_contract: settings.staking_contract,
                     status_registry_contract: settings.status_registry_contract,
                     keystore_path: keystore_path.to_string_lossy().to_string(),
                     data_dir: prereg_data_dir,
@@ -1781,7 +1781,7 @@ async fn main() -> Result<()> {
                         blueprint_id,
                         service_id: Some(service_id),
                         tangle_contract: settings.tangle_contract,
-                        restaking_contract: settings.restaking_contract,
+                        staking_contract: settings.staking_contract,
                         status_registry_contract: settings.status_registry_contract,
                         keystore_path: network.keystore_path()?.display().to_string(),
                         data_dir,
@@ -1991,7 +1991,7 @@ async fn main() -> Result<()> {
                 let spender_address = if let Some(value) = spender {
                     parse_address(&value, "SPENDER")?
                 } else {
-                    client.config.settings.restaking_contract
+                    client.config.settings.staking_contract
                 };
                 let allowance = client
                     .erc20_allowance(token_address, owner_address, spender_address)
@@ -2044,7 +2044,7 @@ async fn main() -> Result<()> {
                 let spender_address = if let Some(value) = spender {
                     parse_address(&value, "SPENDER")?
                 } else {
-                    client.config.settings.restaking_contract
+                    client.config.settings.staking_contract
                 };
                 let tx = client
                     .erc20_approve(token_address, spender_address, U256::from(amount))

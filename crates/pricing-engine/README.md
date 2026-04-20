@@ -115,7 +115,7 @@ quote_validity_duration_secs = 300
 OPERATOR_HTTP_RPC=https://rpc.tangle.tools \
 OPERATOR_WS_RPC=wss://rpc.tangle.tools \
 OPERATOR_TANGLE_CONTRACT=0x... \
-OPERATOR_RESTAKING_CONTRACT=0x... \
+OPERATOR_STAKING_CONTRACT=0x... \
 OPERATOR_STATUS_REGISTRY_CONTRACT=0x... \
 cargo run -p blueprint-pricing-engine --bin pricing-engine-server
 ```
@@ -132,7 +132,7 @@ All CLI flags:
 | `--blueprint-id` | `OPERATOR_BLUEPRINT_ID` | Blueprint ID to watch for activations |
 | `--service-id` | `OPERATOR_SERVICE_ID` | Optional: fixed service ID to benchmark |
 | `--tangle-contract` | `OPERATOR_TANGLE_CONTRACT` | ITangle proxy contract address |
-| `--restaking-contract` | `OPERATOR_RESTAKING_CONTRACT` | MultiAssetDelegation contract |
+| `--staking-contract` | `OPERATOR_STAKING_CONTRACT` | MultiAssetDelegation contract |
 | `--status-registry-contract` | `OPERATOR_STATUS_REGISTRY_CONTRACT` | OperatorStatusRegistry contract |
 
 ## How It Works Internally

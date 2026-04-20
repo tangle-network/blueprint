@@ -35,7 +35,7 @@ pub struct ChainConfig {
     pub tangle_contract: Option<String>,
     /// Restaking contract address on the remote chain.
     #[serde(default)]
-    pub restaking_contract: Option<String>,
+    pub staking_contract: Option<String>,
     /// Path to operator keystore (required for remote chains).
     #[serde(default)]
     pub keystore_path: Option<String>,
@@ -50,7 +50,7 @@ impl Default for ChainConfig {
             rpc_url: None,
             ws_url: None,
             tangle_contract: None,
-            restaking_contract: None,
+            staking_contract: None,
             keystore_path: None,
         }
     }

@@ -136,7 +136,7 @@ async fn setup_runner_test(test_name: &str) -> Result<Option<RunnerTestHarness>>
         blueprint_id: BLUEPRINT_ID,
         service_id: Some(SERVICE_ID),
         tangle_contract: deployment.tangle_contract,
-        restaking_contract: deployment.restaking_contract,
+        staking_contract: deployment.staking_contract,
         status_registry_contract: deployment.status_registry_contract,
     });
     env.test_mode = true;
@@ -438,7 +438,7 @@ async fn create_fs_client(
             blueprint_id: BLUEPRINT_ID,
             service_id: Some(SERVICE_ID),
             tangle_contract: deployment.tangle_contract,
-            restaking_contract: deployment.restaking_contract,
+            staking_contract: deployment.staking_contract,
             status_registry_contract: deployment.status_registry_contract,
         },
     )

@@ -987,7 +987,7 @@ fn build_environment(
         blueprint_id,
         service_id: Some(service_id),
         tangle_contract: deployment.tangle_contract,
-        restaking_contract: deployment.restaking_contract,
+        staking_contract: deployment.staking_contract,
         status_registry_contract: deployment.status_registry_contract,
     });
     env.test_mode = true;
@@ -1008,7 +1008,7 @@ async fn create_client(
             blueprint_id,
             service_id: Some(service_id),
             tangle_contract: deployment.tangle_contract,
-            restaking_contract: deployment.restaking_contract,
+            staking_contract: deployment.staking_contract,
             status_registry_contract: deployment.status_registry_contract,
         },
     )
@@ -1048,7 +1048,7 @@ pub(crate) async fn create_ephemeral_operator_client(
             blueprint_id,
             service_id: Some(service_id),
             tangle_contract: deployment.tangle_contract,
-            restaking_contract: deployment.restaking_contract,
+            staking_contract: deployment.staking_contract,
             status_registry_contract: deployment.status_registry_contract,
         },
     )
