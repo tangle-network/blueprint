@@ -25,6 +25,7 @@ pub async fn run(args: UpArgs) -> Result<()> {
         HarnessConfig::load(args.config.as_deref())?
     };
 
+    config.apply_chain_overrides(&args.chain);
     config.filter(args.only.as_deref());
 
     if args.include_anvil_logs {

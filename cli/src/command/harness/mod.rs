@@ -24,6 +24,32 @@ pub enum HarnessCommands {
     List,
 }
 
+/// Chain target flags — shared by `up` and `test`. CLI flags override harness.toml.
+#[derive(Args, Debug, Clone, Default)]
+pub struct ChainArgs {
+    /// Use local Anvil (default). Pass --no-anvil to connect to a remote chain.
+    #[arg(long)]
+    pub no_anvil: bool,
+    /// HTTP RPC URL (overrides harness.toml chain.rpc_url).
+    #[arg(long)]
+    pub rpc_url: Option<String>,
+    /// WebSocket RPC URL (overrides harness.toml chain.ws_url).
+    #[arg(long)]
+    pub ws_url: Option<String>,
+    /// Chain ID (overrides harness.toml chain.chain_id).
+    #[arg(long)]
+    pub chain_id: Option<u64>,
+    /// Tangle contract address on the target chain.
+    #[arg(long)]
+    pub tangle_contract: Option<String>,
+    /// Path to operator keystore.
+    #[arg(long)]
+    pub keystore_path: Option<String>,
+    /// Router URL to register operators with.
+    #[arg(long)]
+    pub router_url: Option<String>,
+}
+
 #[derive(Args, Debug)]
 pub struct UpArgs {
     /// Path to harness config TOML (default: ./harness.toml or ~/.tangle/harness.toml).
@@ -37,9 +63,11 @@ pub struct UpArgs {
     pub include_anvil_logs: bool,
     /// Compose multiple per-repo harnesses onto a shared chain.
     /// Comma-separated paths to blueprint directories, each containing harness.toml.
-    /// Example: --compose ~/webb/llm-inference-blueprint,~/webb/voice-inference-blueprint
     #[arg(long)]
     pub compose: Option<String>,
+    /// Chain target overrides.
+    #[command(flatten)]
+    pub chain: ChainArgs,
 }
 
 #[derive(Args, Debug)]
@@ -53,6 +81,9 @@ pub struct TestArgs {
     /// Compose multiple per-repo harnesses (same as `up --compose`).
     #[arg(long)]
     pub compose: Option<String>,
+    /// Chain target overrides.
+    #[command(flatten)]
+    pub chain: ChainArgs,
 }
 
 #[derive(Args, Debug)]

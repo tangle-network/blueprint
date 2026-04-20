@@ -15,15 +15,30 @@ pub struct HarnessConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChainConfig {
-    /// Spawn local anvil. Default true. Set false to use existing RPC.
+    /// Spawn local anvil. Default true. Set false to connect to an existing chain.
     #[serde(default = "default_true")]
     pub anvil: bool,
-    /// Chain ID for local anvil (default 31337).
+    /// Chain ID (default 31337 for local Anvil).
     #[serde(default = "default_chain_id")]
     pub chain_id: u64,
     /// Stream anvil logs.
     #[serde(default)]
     pub include_anvil_logs: bool,
+    /// HTTP RPC URL for remote chains (required when anvil = false).
+    #[serde(default)]
+    pub rpc_url: Option<String>,
+    /// WebSocket RPC URL for remote chains (required when anvil = false).
+    #[serde(default)]
+    pub ws_url: Option<String>,
+    /// Tangle contract address on the remote chain.
+    #[serde(default)]
+    pub tangle_contract: Option<String>,
+    /// Restaking contract address on the remote chain.
+    #[serde(default)]
+    pub restaking_contract: Option<String>,
+    /// Path to operator keystore (required for remote chains).
+    #[serde(default)]
+    pub keystore_path: Option<String>,
 }
 
 impl Default for ChainConfig {
@@ -32,6 +47,11 @@ impl Default for ChainConfig {
             anvil: true,
             chain_id: default_chain_id(),
             include_anvil_logs: false,
+            rpc_url: None,
+            ws_url: None,
+            tangle_contract: None,
+            restaking_contract: None,
+            keystore_path: None,
         }
     }
 }
@@ -211,6 +231,32 @@ impl HarnessConfig {
             }
         }
         Ok(())
+    }
+
+    /// Apply CLI flag overrides to the chain config.
+    pub fn apply_chain_overrides(&mut self, args: &super::ChainArgs) {
+        if args.no_anvil {
+            self.chain.anvil = false;
+        }
+        if let Some(ref url) = args.rpc_url {
+            self.chain.rpc_url = Some(url.clone());
+            self.chain.anvil = false; // explicit RPC implies no local Anvil
+        }
+        if let Some(ref url) = args.ws_url {
+            self.chain.ws_url = Some(url.clone());
+        }
+        if let Some(id) = args.chain_id {
+            self.chain.chain_id = id;
+        }
+        if let Some(ref addr) = args.tangle_contract {
+            self.chain.tangle_contract = Some(addr.clone());
+        }
+        if let Some(ref path) = args.keystore_path {
+            self.chain.keystore_path = Some(path.clone());
+        }
+        if let Some(ref url) = args.router_url {
+            self.router.url = Some(url.clone());
+        }
     }
 
     pub fn filter(&mut self, only: Option<&str>) {

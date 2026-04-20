@@ -25,6 +25,7 @@ pub async fn run(args: TestArgs) -> Result<()> {
         HarnessConfig::load(args.config.as_deref())?
     };
 
+    config.apply_chain_overrides(&args.chain);
     config.filter(args.only.as_deref());
 
     // Check that at least one blueprint has a test_command
