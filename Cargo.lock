@@ -8106,11 +8106,9 @@ checksum = "5a87cc7a48537badeae96744432de36f4be2b4a34a05a5ef32e9dd8a1c169dde"
 dependencies = [
  "base64 0.22.1",
  "js-sys",
- "pem 3.0.6",
  "ring 0.17.14",
  "serde",
  "serde_json",
- "simple_asn1 0.6.4",
 ]
 
 [[package]]
@@ -11799,7 +11797,6 @@ dependencies = [
  "pin-project-lite",
  "quinn",
  "rustls 0.23.37",
- "rustls-native-certs 0.8.3",
  "rustls-pki-types",
  "serde",
  "serde_json",
@@ -11808,14 +11805,12 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "tokio-rustls 0.26.4",
- "tokio-util 0.7.18",
  "tower 0.5.3",
  "tower-http 0.6.8",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.4.2",
  "web-sys",
  "webpki-roots 1.0.6",
 ]
@@ -11861,7 +11856,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.5.0",
+ "wasm-streams",
  "web-sys",
 ]
 
@@ -13998,7 +13993,6 @@ dependencies = [
  "percent-encoding",
  "pin-project",
  "prost 0.13.5",
- "rustls-native-certs 0.8.3",
  "socket2 0.5.10",
  "tokio",
  "tokio-rustls 0.26.4",
@@ -14818,19 +14812,6 @@ dependencies = [
 
 [[package]]
 name = "wasm-streams"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
-dependencies = [
- "futures-util",
- "js-sys",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
-name = "wasm-streams"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
@@ -15570,7 +15551,6 @@ dependencies = [
  "aws-smithy-http-client",
  "aws-smithy-runtime",
  "aws-smithy-runtime-api",
- "aws-smithy-types",
  "axum",
  "base64 0.22.1",
  "base64ct",
@@ -15590,7 +15570,6 @@ dependencies = [
  "clap_builder",
  "color-eyre",
  "compression-codecs",
- "concurrent-queue",
  "const-hex",
  "constant_time_eq",
  "crc32fast",
@@ -15608,13 +15587,9 @@ dependencies = [
  "ecdsa",
  "ed25519",
  "ed25519-zebra",
- "eigensdk",
  "either",
  "elliptic-curve",
- "env_filter",
- "env_logger",
  "errno",
- "event-listener",
  "foldhash 0.2.0",
  "form_urlencoded",
  "futures",
@@ -15627,6 +15602,7 @@ dependencies = [
  "generic-array",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "getrandom_or_panic",
  "hashbrown 0.14.5",
  "hashbrown 0.15.5",
@@ -15642,8 +15618,6 @@ dependencies = [
  "indexmap 2.13.1",
  "itertools 0.13.0",
  "itertools 0.14.0",
- "jiff",
- "jsonwebtoken 9.3.1",
  "k256",
  "k8s-openapi 0.21.1",
  "keccak",
@@ -15657,7 +15631,6 @@ dependencies = [
  "libp2p-swarm",
  "libsecp256k1",
  "libsecp256k1-core",
- "linux-raw-sys 0.12.1",
  "log",
  "memchr",
  "mime_guess",
@@ -15691,7 +15664,7 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "reqwest 0.12.28",
- "ring 0.16.20",
+ "reqwest 0.13.2",
  "ring 0.17.14",
  "round-based",
  "ruint",
@@ -15727,7 +15700,6 @@ dependencies = [
  "sync_wrapper 1.0.2",
  "sysinfo 0.38.4",
  "tempfile",
- "testcontainers",
  "thiserror 2.0.18",
  "time",
  "time-macros",
@@ -15742,6 +15714,7 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "tonic 0.13.1",
+ "tonic 0.14.5",
  "tonic-build",
  "tower 0.5.3",
  "tower-http 0.6.8",
