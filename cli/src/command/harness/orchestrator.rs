@@ -184,7 +184,19 @@ impl Orchestrator {
             cmd.env("TEST_MODE", "true");
 
             // Inject per-blueprint env (MODEL, API keys, etc.)
+            // Blocklist: prevent user env from overriding protocol-critical vars
+            // that the orchestrator sets above. A malicious harness.toml in compose
+            // mode could redirect an operator to attacker-controlled contracts.
+            const PROTOCOL_VARS: &[&str] = &[
+                "HTTP_RPC_URL", "WS_RPC_URL", "KEYSTORE_URI", "DATA_DIR",
+                "BLUEPRINT_ID", "SERVICE_ID", "TANGLE_CONTRACT",
+                "RESTAKING_CONTRACT", "STATUS_REGISTRY_CONTRACT", "PROTOCOL", "TEST_MODE",
+            ];
             for (k, v) in &bp.env {
+                if PROTOCOL_VARS.contains(&k.as_str()) {
+                    eprintln!("[{}] WARNING: ignoring bp.env override of protocol var {k}", bp.name);
+                    continue;
+                }
                 cmd.env(k, v);
             }
             // Inject port into standard and operator-config env vars
@@ -321,6 +333,13 @@ fn write_settings_env(
 ) -> Result<()> {
     let mut f = std::fs::File::create(path)
         .map_err(|e| eyre!("failed to create settings.env at {}: {e}", path.display()))?;
+    // Restrict permissions: settings.env may contain sensitive data.
+    // Default umask (022) creates world-readable files.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
     writeln!(f, "BLUEPRINT_ID={blueprint_id}")?;
     writeln!(f, "SERVICE_ID={service_id}")?;
     writeln!(f, "TANGLE_CONTRACT={:?}", stack.tangle_contract())?;
@@ -351,7 +370,9 @@ async fn wait_for_health(url: &str, timeout: Duration) -> Result<()> {
     // Parse host:port from url (expects http://127.0.0.1:{port}{path})
     let url = url.trim_start_matches("http://");
     let (addr, path) = url.split_once('/').unwrap_or((url, ""));
-    let path = format!("/{path}");
+    // Sanitize path: strip \r\n to prevent HTTP request smuggling via
+    // crafted health_path in harness.toml (e.g. "/health\r\nHost: evil\r\n\r\nGET /admin")
+    let path = format!("/{}", path.replace(['\r', '\n'], ""));
 
     loop {
         if start.elapsed() > timeout {
@@ -448,23 +469,24 @@ async fn register_with_router(
 
     let blueprint_type = spec.blueprint_type.as_deref().unwrap_or("inference");
 
-    // Build the JSON payload
-    let models_json: Vec<String> = spec
+    // Build JSON payload using serde_json to prevent injection via
+    // name, endpoint_url, or model.id fields (previously used format!).
+    let models_value: Vec<serde_json::Value> = spec
         .models
         .iter()
-        .map(|m| {
-            format!(
-                r#"{{"modelId":"{}","inputPrice":{},"outputPrice":{}}}"#,
-                m.id, m.input_price, m.output_price
-            )
-        })
+        .map(|m| serde_json::json!({
+            "modelId": m.id,
+            "inputPrice": m.input_price,
+            "outputPrice": m.output_price,
+        }))
         .collect();
-    let models_array = format!("[{}]", models_json.join(","));
 
-    let body = format!(
-        r#"{{"name":"{}","endpointUrl":"{}","blueprintType":"{}","models":{}}}"#,
-        name, endpoint_url, blueprint_type, models_array
-    );
+    let body = serde_json::to_string(&serde_json::json!({
+        "name": name,
+        "endpointUrl": endpoint_url,
+        "blueprintType": blueprint_type,
+        "models": models_value,
+    })).unwrap_or_default();
 
     // Parse the router URL to get host:port
     let url = router_url
