@@ -44,7 +44,7 @@ impl Keystore {
     ///
     /// ```rust
     /// use blueprint_keystore::backends::Backend;
-    /// use blueprint_keystore::crypto::ed25519::Ed25519Zebra;
+    /// use blueprint_keystore::crypto::k256::K256Ecdsa;
     /// use blueprint_keystore::{Keystore, KeystoreConfig};
     ///
     /// # fn main() -> blueprint_keystore::Result<()> {
@@ -53,7 +53,7 @@ impl Keystore {
     /// let keystore = Keystore::new(config)?;
     ///
     /// // Generate a new key pair
-    /// keystore.generate::<Ed25519Zebra>(None)?;
+    /// keystore.generate::<K256Ecdsa>(None)?;
     /// # Ok(()) }
     /// ```
     ///

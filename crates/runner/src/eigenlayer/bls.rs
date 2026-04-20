@@ -13,7 +13,7 @@ use crate::error::RunnerError;
 use blueprint_core::info;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::backends::bn254::Bn254Backend;
-use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
+use blueprint_keystore::backends::ecdsa::EcdsaBackend;
 use blueprint_keystore::crypto::k256::K256Ecdsa;
 
 /// Eigenlayer protocol configuration for BLS-based contracts
