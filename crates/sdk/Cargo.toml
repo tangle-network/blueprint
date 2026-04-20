@@ -106,7 +106,7 @@ std = [
     "blueprint-tangle-extra?/std",
     "blueprint-evm-extra?/std",
     "blueprint-eigenlayer-extra?/std",
-    "blueprint-chain-setup/std",
+    "blueprint-chain-setup?/std",
 ]
 
 ## Enable [tracing] support

@@ -124,7 +124,6 @@ tangle = [
     "dep:k256",
     "blueprint-keystore/ecdsa",
     "blueprint-keystore/evm",
-    "blueprint-keystore/eigenlayer",
     "std",
 ]
 

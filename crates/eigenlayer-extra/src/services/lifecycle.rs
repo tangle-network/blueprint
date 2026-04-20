@@ -2,7 +2,7 @@ use crate::error::{EigenlayerExtraError, Result};
 use alloy_primitives::{Address, FixedBytes};
 use blueprint_core::info;
 use blueprint_keystore::backends::Backend;
-use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
+use blueprint_keystore::backends::ecdsa::EcdsaBackend;
 use blueprint_keystore::crypto::k256::K256Ecdsa;
 use blueprint_runner::config::BlueprintEnvironment;
 use eigensdk::client_elcontracts::writer::ELChainWriter;
