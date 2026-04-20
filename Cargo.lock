@@ -15829,8 +15829,11 @@ dependencies = [
  "alloy-network",
  "alloy-primitives",
  "alloy-provider",
+ "alloy-rpc-types",
+ "alloy-signer-local",
  "alloy-sol-types",
  "alloy-transport",
+ "axum",
  "base64 0.22.1",
  "blueprint-core",
  "blueprint-router",
@@ -15848,6 +15851,8 @@ dependencies = [
  "tower 0.5.3",
  "wiremock",
  "workspace-hack",
+ "x402-chain-eip155",
+ "x402-types",
 ]
 
 [[package]]
@@ -15856,8 +15861,13 @@ version = "1.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3497af3e8f41291db4274f16bc86cd69e40e762bdad25439ddea2044ba8948a7"
 dependencies = [
+ "alloy-contract",
  "alloy-primitives",
+ "alloy-signer",
+ "alloy-signer-local",
  "alloy-sol-types",
+ "async-trait",
+ "rand 0.9.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
