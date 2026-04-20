@@ -188,13 +188,24 @@ impl Orchestrator {
             // that the orchestrator sets above. A malicious harness.toml in compose
             // mode could redirect an operator to attacker-controlled contracts.
             const PROTOCOL_VARS: &[&str] = &[
-                "HTTP_RPC_URL", "WS_RPC_URL", "KEYSTORE_URI", "DATA_DIR",
-                "BLUEPRINT_ID", "SERVICE_ID", "TANGLE_CONTRACT",
-                "STAKING_CONTRACT", "STATUS_REGISTRY_CONTRACT", "PROTOCOL", "TEST_MODE",
+                "HTTP_RPC_URL",
+                "WS_RPC_URL",
+                "KEYSTORE_URI",
+                "DATA_DIR",
+                "BLUEPRINT_ID",
+                "SERVICE_ID",
+                "TANGLE_CONTRACT",
+                "STAKING_CONTRACT",
+                "STATUS_REGISTRY_CONTRACT",
+                "PROTOCOL",
+                "TEST_MODE",
             ];
             for (k, v) in &bp.env {
                 if PROTOCOL_VARS.contains(&k.as_str()) {
-                    eprintln!("[{}] WARNING: ignoring bp.env override of protocol var {k}", bp.name);
+                    eprintln!(
+                        "[{}] WARNING: ignoring bp.env override of protocol var {k}",
+                        bp.name
+                    );
                     continue;
                 }
                 cmd.env(k, v);
@@ -474,11 +485,13 @@ async fn register_with_router(
     let models_value: Vec<serde_json::Value> = spec
         .models
         .iter()
-        .map(|m| serde_json::json!({
-            "modelId": m.id,
-            "inputPrice": m.input_price,
-            "outputPrice": m.output_price,
-        }))
+        .map(|m| {
+            serde_json::json!({
+                "modelId": m.id,
+                "inputPrice": m.input_price,
+                "outputPrice": m.output_price,
+            })
+        })
         .collect();
 
     let body = serde_json::to_string(&serde_json::json!({
@@ -486,7 +499,8 @@ async fn register_with_router(
         "endpointUrl": endpoint_url,
         "blueprintType": blueprint_type,
         "models": models_value,
-    })).unwrap_or_default();
+    }))
+    .unwrap_or_default();
 
     // Parse the router URL to get host:port
     let url = router_url

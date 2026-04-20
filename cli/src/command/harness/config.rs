@@ -286,10 +286,7 @@ impl HarnessConfig {
             };
 
             if !config_path.exists() {
-                return Err(eyre!(
-                    "no harness.toml found in {}",
-                    dir.display()
-                ));
+                return Err(eyre!("no harness.toml found in {}", dir.display()));
             }
 
             let mut config = Self::load(Some(&config_path))?;

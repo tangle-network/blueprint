@@ -11,15 +11,15 @@ rust-version = "1.88"
 [workspace.dependencies]
 incredible-squaring-blueprint-lib = { path = "incredible-squaring-lib" }
 
-blueprint-sdk = { version = "0.2.0-alpha.2", path = "../../crates/sdk", default-features = false }
-blueprint-anvil-testing-utils = { version = "0.2.0-alpha.2", path = "../../crates/testing-utils/anvil", default-features = false }
-blueprint-client-tangle = { version = "0.2.0-alpha.2", path = "../../crates/clients/tangle", default-features = false, features = ["std"] }
-blueprint-tangle-extra = { version = "0.2.0-alpha.2", path = "../../crates/tangle-extra", features = ["std"] }
-blueprint-tangle-aggregation-svc = { version = "0.2.0-alpha.2", path = "../../crates/tangle-aggregation-svc", default-features = false }
-blueprint-crypto-bn254 = { version = "0.2.0-alpha.2", path = "../../crates/crypto/bn254", default-features = false }
-blueprint-crypto-core = { version = "0.2.0-alpha.2", path = "../../crates/crypto/core", default-features = false }
-blueprint-faas = { version = "0.2.0-alpha.2", path = "../../crates/blueprint-faas", default-features = false }
-blueprint-profiling = { version = "0.2.0-alpha.2", path = "../../crates/blueprint-profiling", default-features = false }
+blueprint-sdk = { version = "0.2.0-alpha.3", path = "../../crates/sdk", default-features = false }
+blueprint-anvil-testing-utils = { version = "0.2.0-alpha.3", path = "../../crates/testing-utils/anvil", default-features = false }
+blueprint-client-tangle = { version = "0.2.0-alpha.3", path = "../../crates/clients/tangle", default-features = false, features = ["std"] }
+blueprint-tangle-extra = { version = "0.2.0-alpha.3", path = "../../crates/tangle-extra", features = ["std"] }
+blueprint-tangle-aggregation-svc = { version = "0.2.0-alpha.3", path = "../../crates/tangle-aggregation-svc", default-features = false }
+blueprint-crypto-bn254 = { version = "0.2.0-alpha.3", path = "../../crates/crypto/bn254", default-features = false }
+blueprint-crypto-core = { version = "0.2.0-alpha.3", path = "../../crates/crypto/core", default-features = false }
+blueprint-faas = { version = "0.2.0-alpha.3", path = "../../crates/blueprint-faas", default-features = false }
+blueprint-profiling = { version = "0.2.0-alpha.3", path = "../../crates/blueprint-profiling", default-features = false }
 tokio = { version = "^1", default-features = false }
 tower = { version = "0.5.2", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false }
