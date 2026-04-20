@@ -349,10 +349,14 @@ impl Backend for Keystore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "bls")]
     use blueprint_crypto::bls::bls377::W3fBls377;
+    #[cfg(feature = "bls")]
     use blueprint_crypto::bls::bls381::W3fBls381;
+    #[cfg(feature = "zebra")]
     use blueprint_crypto::ed25519::Ed25519Zebra;
     use blueprint_crypto::k256::K256Ecdsa;
+    #[cfg(feature = "sr25519-schnorrkel")]
     use blueprint_crypto::sr25519::SchnorrkelSr25519;
 
     #[test]
@@ -386,9 +390,21 @@ mod tests {
 
     local_operations!(
         test_local_k256 => K256Ecdsa,
+    );
+
+    #[cfg(feature = "zebra")]
+    local_operations!(
         test_local_ed25519 => Ed25519Zebra,
+    );
+
+    #[cfg(feature = "bls")]
+    local_operations!(
         test_local_bls377 => W3fBls377,
         test_local_bls381 => W3fBls381,
+    );
+
+    #[cfg(feature = "sr25519-schnorrkel")]
+    local_operations!(
         test_local_schnorrkel => SchnorrkelSr25519,
     );
 

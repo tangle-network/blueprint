@@ -62,7 +62,7 @@ workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 tempfile = { workspace = true }
 
 [features]
-default = ["std", "tangle", "eigenlayer-full", "all-remote-signers"]
+default = ["std", "tangle", "all-remote-signers"]
 
 # Core features
 std = [

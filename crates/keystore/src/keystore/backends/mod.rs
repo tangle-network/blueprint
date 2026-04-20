@@ -1,5 +1,7 @@
 #[cfg(feature = "bn254")]
 pub mod bn254;
+#[cfg(feature = "ecdsa")]
+pub mod ecdsa;
 #[cfg(feature = "eigenlayer")]
 pub mod eigenlayer;
 #[cfg(feature = "evm")]

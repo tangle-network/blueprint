@@ -224,7 +224,7 @@ async fn register_impl(
     use blueprint_client_tangle::contracts::ITangle;
     use blueprint_crypto::k256::K256Ecdsa;
     use blueprint_keystore::backends::Backend;
-    use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
+    use blueprint_keystore::backends::ecdsa::EcdsaBackend;
 
     let settings = env.protocol_settings.tangle()?;
 
