@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-faas"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 description = "FaaS provider integrations for Blueprint SDK"
 authors.workspace = true
 edition.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "incredible-squaring-blueprint-eigenlayer"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 description = "A Simple Blueprint to demo how blueprints work on Eigenlayer"
 authors.workspace = true
 edition.workspace = true
