@@ -355,10 +355,12 @@ mod tests {
     use blueprint_crypto::bls::bls381::W3fBls381;
     #[cfg(feature = "zebra")]
     use blueprint_crypto::ed25519::Ed25519Zebra;
+    #[cfg(feature = "ecdsa")]
     use blueprint_crypto::k256::K256Ecdsa;
     #[cfg(feature = "sr25519-schnorrkel")]
     use blueprint_crypto::sr25519::SchnorrkelSr25519;
 
+    #[cfg(feature = "ecdsa")]
     #[test]
     fn test_generate_from_string() -> Result<()> {
         let keystore = Keystore::new(KeystoreConfig::new())?;
@@ -388,6 +390,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "ecdsa")]
     local_operations!(
         test_local_k256 => K256Ecdsa,
     );
