@@ -3,7 +3,6 @@ use alloy_primitives::Address;
 use blueprint_core::info;
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::backends::ecdsa::EcdsaBackend;
-use blueprint_keystore::backends::eigenlayer::EigenlayerBackend;
 use blueprint_keystore::crypto::k256::K256Ecdsa;
 use blueprint_runner::config::BlueprintEnvironment;
 use eigensdk::utils::slashing::core::delegation_manager::DelegationManager;
