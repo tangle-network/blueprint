@@ -47,9 +47,10 @@ alloy-sol-types = { workspace = true }
 alloy-contract = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-network = { workspace = true }
-x402-chain-eip155 = { workspace = true, features = ["server", "client"] }
+x402-chain-eip155 = { workspace = true, features = ["server", "client", "facilitator"] }
 x402-types = { workspace = true }
 axum = { workspace = true }
+hex = { workspace = true }
 
 [features]
 default = []
