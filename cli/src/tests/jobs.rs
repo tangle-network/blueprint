@@ -198,7 +198,7 @@ async fn cli_jobs_show_reports_call_metadata() -> Result<()> {
         harness.ws_endpoint().clone(),
         owner_keystore_path.clone(),
         format!("{:#x}", harness.tangle_contract),
-        format!("{:#x}", harness.restaking_contract),
+        format!("{:#x}", harness.staking_contract),
         Some(format!("{:#x}", harness.status_registry_contract)),
     );
 
@@ -431,7 +431,7 @@ async fn jobs_submit_and_watch_result_roundtrip() -> Result<()> {
         harness.ws_endpoint().clone(),
         owner_keystore_path.clone(),
         format!("{:#x}", harness.tangle_contract),
-        format!("{:#x}", harness.restaking_contract),
+        format!("{:#x}", harness.staking_contract),
         Some(format!("{:#x}", harness.status_registry_contract)),
     );
 
@@ -482,7 +482,7 @@ async fn build_operator_client(
         blueprint_id,
         service_id: Some(service_id),
         tangle_contract: harness.tangle_contract,
-        restaking_contract: harness.restaking_contract,
+        staking_contract: harness.staking_contract,
         status_registry_contract: harness.status_registry_contract,
     };
     let config = TangleClientConfig::new(

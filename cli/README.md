@@ -83,7 +83,7 @@ The runner expects RPC URLs, a keystore, and the EVM contract coordinates. You c
 BLUEPRINT_ID=0 \
 SERVICE_ID=0 \
 TANGLE_CONTRACT=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 \
-RESTAKING_CONTRACT=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
+STAKING_CONTRACT=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
 STATUS_REGISTRY_CONTRACT=0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9 \
 cargo tangle blueprint run \
   --protocol tangle \
@@ -98,7 +98,7 @@ cargo tangle blueprint run \
 | `BLUEPRINT_ID` | Blueprint registered on `ITangle`. |
 | `SERVICE_ID` | Optional fixed service (leave unset to process all). |
 | `TANGLE_CONTRACT` | `ITangle` contract address. |
-| `RESTAKING_CONTRACT` | `MultiAssetDelegation` contract. |
+| `STAKING_CONTRACT` | `MultiAssetDelegation` contract. |
 | `STATUS_REGISTRY_CONTRACT` | `OperatorStatusRegistry` heartbeat contract. |
 
 The CLI automatically ensures an ECDSA key exists under `--keystore-path` and derives the operator address from it.
@@ -113,7 +113,7 @@ cargo tangle blueprint register-tangle \
   --ws-rpc-url wss://rpc.tangle.tools \
   --keystore-path ./keystore \
   --tangle-contract 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 \
-  --restaking-contract 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
+  --staking-contract 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 \
   --status-registry-contract 0xdC64a140Aa3E981100a9BecA4E685f962f0CF6C9 \
   --blueprint-id 0 \
   --registration-inputs ./registration.tlv
@@ -256,7 +256,7 @@ cargo tangle blueprint service spawn \
   --ws-rpc-url wss://rpc.tangle.tools \
   --keystore-path ./keystore \
   --tangle-contract 0xCf7E... \
-  --restaking-contract 0xe7f1... \
+  --staking-contract 0xe7f1... \
   --status-registry-contract 0xdC64... \
   --blueprint-id 1 \
   --service-id 2 \
@@ -301,7 +301,7 @@ cargo tangle operator status \
   --ws-rpc-url wss://rpc.tangle.tools \
   --keystore-path ./keystore \
   --tangle-contract 0xCf7E... \
-  --restaking-contract 0xe7f1... \
+  --staking-contract 0xe7f1... \
   --status-registry-contract 0xdC64... \
   --blueprint-id 1 \
   --service-id 2 \

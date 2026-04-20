@@ -15,15 +15,30 @@ pub struct HarnessConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChainConfig {
-    /// Spawn local anvil. Default true. Set false to use existing RPC.
+    /// Spawn local anvil. Default true. Set false to connect to an existing chain.
     #[serde(default = "default_true")]
     pub anvil: bool,
-    /// Chain ID for local anvil (default 31337).
+    /// Chain ID (default 31337 for local Anvil).
     #[serde(default = "default_chain_id")]
     pub chain_id: u64,
     /// Stream anvil logs.
     #[serde(default)]
     pub include_anvil_logs: bool,
+    /// HTTP RPC URL for remote chains (required when anvil = false).
+    #[serde(default)]
+    pub rpc_url: Option<String>,
+    /// WebSocket RPC URL for remote chains (required when anvil = false).
+    #[serde(default)]
+    pub ws_url: Option<String>,
+    /// Tangle contract address on the remote chain.
+    #[serde(default)]
+    pub tangle_contract: Option<String>,
+    /// Restaking contract address on the remote chain.
+    #[serde(default)]
+    pub staking_contract: Option<String>,
+    /// Path to operator keystore (required for remote chains).
+    #[serde(default)]
+    pub keystore_path: Option<String>,
 }
 
 impl Default for ChainConfig {
@@ -32,6 +47,11 @@ impl Default for ChainConfig {
             anvil: true,
             chain_id: default_chain_id(),
             include_anvil_logs: false,
+            rpc_url: None,
+            ws_url: None,
+            tangle_contract: None,
+            staking_contract: None,
+            keystore_path: None,
         }
     }
 }
@@ -73,6 +93,25 @@ pub struct ModelSpec {
     pub output_price: f64,
 }
 
+/// Source for the operator binary.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlueprintSource {
+    /// Use a local pre-built binary path.
+    Binary(PathBuf),
+    /// Build from source via `cargo build --release` in the blueprint repo.
+    Build,
+    /// Download from a GitHub Release.
+    /// Format: repo = "owner/repo", tag = "v0.2.0"
+    GithubRelease {
+        repo: String,
+        tag: String,
+        /// Binary name inside the tarball (default: inferred from repo name).
+        #[serde(default)]
+        binary_name: Option<String>,
+    },
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BlueprintSpec {
     /// Short name for logs and CLI filtering.
@@ -82,7 +121,11 @@ pub struct BlueprintSpec {
     /// Optional port override — if not set, the blueprint picks its own.
     pub port: Option<u16>,
     /// Optional: use a pre-built binary instead of cargo run.
+    /// Deprecated in favor of `source`. Kept for backward compat.
     pub binary: Option<PathBuf>,
+    /// How to get the operator binary. If not set, falls back to `binary` field.
+    #[serde(default)]
+    pub source: Option<BlueprintSource>,
     /// Environment variables to inject.
     #[serde(default)]
     pub env: HashMap<String, String>,
@@ -103,6 +146,10 @@ pub struct BlueprintSpec {
     /// (ngrok, cloudflare) when registering with the production router.
     #[serde(default)]
     pub public_url: Option<String>,
+    /// Command to run as the E2E test after the blueprint is healthy.
+    /// Used by `cargo tangle harness test`. Runs in the blueprint's `path` directory.
+    #[serde(default)]
+    pub test_command: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -186,11 +233,126 @@ impl HarnessConfig {
         Ok(())
     }
 
+    /// Apply CLI flag overrides to the chain config.
+    pub fn apply_chain_overrides(&mut self, args: &super::ChainArgs) {
+        if args.no_anvil {
+            self.chain.anvil = false;
+        }
+        if let Some(ref url) = args.rpc_url {
+            self.chain.rpc_url = Some(url.clone());
+            self.chain.anvil = false; // explicit RPC implies no local Anvil
+        }
+        if let Some(ref url) = args.ws_url {
+            self.chain.ws_url = Some(url.clone());
+        }
+        if let Some(id) = args.chain_id {
+            self.chain.chain_id = id;
+        }
+        if let Some(ref addr) = args.tangle_contract {
+            self.chain.tangle_contract = Some(addr.clone());
+        }
+        if let Some(ref path) = args.keystore_path {
+            self.chain.keystore_path = Some(path.clone());
+        }
+        if let Some(ref url) = args.router_url {
+            self.router.url = Some(url.clone());
+        }
+    }
+
     pub fn filter(&mut self, only: Option<&str>) {
         if let Some(only) = only {
             let names: Vec<&str> = only.split(',').map(str::trim).collect();
             self.blueprints
                 .retain(|bp| names.contains(&bp.name.as_str()));
         }
+    }
+
+    /// Compose multiple per-repo harness configs into one.
+    /// Each path is a directory containing a `harness.toml`.
+    /// Chain config comes from the first one; blueprint specs are merged.
+    pub fn compose(paths: &[PathBuf]) -> Result<Self> {
+        if paths.is_empty() {
+            return Err(eyre!("--compose requires at least one blueprint path"));
+        }
+
+        let mut merged = Self::default();
+        let mut first = true;
+
+        for dir in paths {
+            let config_path = if dir.is_file() && dir.ends_with("harness.toml") {
+                dir.clone()
+            } else {
+                dir.join("harness.toml")
+            };
+
+            if !config_path.exists() {
+                return Err(eyre!(
+                    "no harness.toml found in {}",
+                    dir.display()
+                ));
+            }
+
+            let mut config = Self::load(Some(&config_path))?;
+
+            if first {
+                merged.chain = config.chain;
+                merged.router = config.router;
+                first = false;
+            }
+
+            merged.blueprints.append(&mut config.blueprints);
+        }
+
+        Ok(merged)
+    }
+
+    /// Discover all harness.toml files in known blueprint directories.
+    /// Searches: current directory children, ~/webb/**/harness.toml,
+    /// and ~/.tangle/harnesses/ registry.
+    pub fn discover() -> Vec<(String, PathBuf)> {
+        let mut found = Vec::new();
+
+        // Check ~/webb/ for blueprint repos with harness.toml
+        if let Ok(home) = std::env::var("HOME") {
+            let webb_dir = PathBuf::from(&home).join("webb");
+            if let Ok(entries) = std::fs::read_dir(&webb_dir) {
+                for entry in entries.flatten() {
+                    let harness = entry.path().join("harness.toml");
+                    if harness.exists() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        found.push((name, harness));
+                    }
+                }
+            }
+
+            // Also check ~/code/
+            let code_dir = PathBuf::from(&home).join("code");
+            if let Ok(entries) = std::fs::read_dir(&code_dir) {
+                for entry in entries.flatten() {
+                    let harness = entry.path().join("harness.toml");
+                    if harness.exists() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if !found.iter().any(|(n, _)| n == &name) {
+                            found.push((name, harness));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check current directory
+        let cwd_harness = PathBuf::from("harness.toml");
+        if cwd_harness.exists() {
+            let name = std::env::current_dir()
+                .ok()
+                .and_then(|d| d.file_name().map(|n| n.to_string_lossy().to_string()))
+                .unwrap_or_else(|| ".".to_string());
+            if !found.iter().any(|(_, p)| p == &cwd_harness) {
+                found.insert(0, (name, cwd_harness));
+            }
+        }
+
+        found.sort_by(|a, b| a.0.cmp(&b.0));
+        found
     }
 }

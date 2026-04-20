@@ -46,7 +46,7 @@ pub struct TangleClientArgs {
     pub tangle_contract: Option<String>,
     /// Restaking contract address.
     #[arg(long, value_name = "ADDRESS")]
-    pub restaking_contract: Option<String>,
+    pub staking_contract: Option<String>,
     /// Optional status registry contract address.
     #[arg(long, value_name = "ADDRESS")]
     pub status_registry_contract: Option<String>,
@@ -119,11 +119,11 @@ impl TangleClientArgs {
                 return Err(missing_addr_err("tangle_contract", "TANGLE_CONTRACT"));
             }
         };
-        let restaking = match (&self.restaking_contract, net) {
-            (Some(s), _) => parse_address(s, "RESTAKING_CONTRACT")?,
-            (None, Some(n)) => n.restaking_contract,
+        let restaking = match (&self.staking_contract, net) {
+            (Some(s), _) => parse_address(s, "STAKING_CONTRACT")?,
+            (None, Some(n)) => n.staking_contract,
             (None, None) => {
-                return Err(missing_addr_err("restaking_contract", "RESTAKING_CONTRACT"));
+                return Err(missing_addr_err("staking_contract", "STAKING_CONTRACT"));
             }
         };
         let status = match (&self.status_registry_contract, net) {
@@ -153,7 +153,7 @@ impl TangleClientArgs {
             blueprint_id,
             service_id,
             tangle_contract: r.tangle,
-            restaking_contract: r.restaking,
+            staking_contract: r.restaking,
             status_registry_contract: r.status,
         };
 
@@ -208,7 +208,7 @@ impl TangleClientArgs {
         ws_rpc_url: Url,
         keystore_path: PathBuf,
         tangle_contract: impl Into<String>,
-        restaking_contract: impl Into<String>,
+        staking_contract: impl Into<String>,
         status_registry_contract: Option<String>,
     ) -> Self {
         Self {
@@ -216,7 +216,7 @@ impl TangleClientArgs {
             ws_rpc_url: Some(ws_rpc_url),
             keystore_path: Some(keystore_path),
             tangle_contract: Some(tangle_contract.into()),
-            restaking_contract: Some(restaking_contract.into()),
+            staking_contract: Some(staking_contract.into()),
             status_registry_contract,
             network: None,
             resolved: OnceCell::new(),
@@ -343,8 +343,8 @@ impl DevnetStack {
     }
 
     #[must_use]
-    pub fn restaking_contract(&self) -> Address {
-        self.harness.restaking_contract
+    pub fn staking_contract(&self) -> Address {
+        self.harness.staking_contract
     }
 
     #[must_use]
@@ -372,7 +372,7 @@ pub fn run_opts_from_stack(
         blueprint_id: settings.blueprint_id,
         service_id: settings.service_id.or(Some(stack.default_service_id())),
         tangle_contract: stack.tangle_contract(),
-        restaking_contract: stack.restaking_contract(),
+        staking_contract: stack.staking_contract(),
         status_registry_contract: stack.status_registry_contract(),
         keystore_path: stack.keystore_path(),
         data_dir: Some(stack.data_dir()),

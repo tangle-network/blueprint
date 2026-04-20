@@ -260,8 +260,9 @@ mod tests {
         };
 
         let provider = selector.select_provider(&requirements).unwrap();
-        // Should select first GPU provider (GCP)
-        assert_eq!(provider, CloudProvider::GCP);
+        // GPU workloads prefer decentralized marketplaces (RunPod first) over
+        // hyperscalers — cheaper for inference / training.
+        assert_eq!(provider, CloudProvider::RunPod);
     }
 
     #[test]
@@ -277,8 +278,8 @@ mod tests {
         };
 
         let provider = selector.select_provider(&requirements).unwrap();
-        // Should select first CPU-intensive provider (Vultr)
-        assert_eq!(provider, CloudProvider::Vultr);
+        // CPU-intensive workloads prefer Hetzner (cheapest dedicated cores).
+        assert_eq!(provider, CloudProvider::Hetzner);
     }
 
     #[test]
@@ -294,8 +295,8 @@ mod tests {
         };
 
         let provider = selector.select_provider(&requirements).unwrap();
-        // Should select first cost-optimized provider (Vultr)
-        assert_eq!(provider, CloudProvider::Vultr);
+        // Cost-optimized spot workloads prefer VastAi (cheapest spot marketplace).
+        assert_eq!(provider, CloudProvider::VastAi);
     }
 
     #[test]

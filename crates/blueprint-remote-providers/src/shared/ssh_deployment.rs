@@ -98,6 +98,83 @@ impl SharedSshDeployment {
             metadata,
         })
     }
+
+    /// Deploy a GitHub release binary to any cloud provider instance via SSH.
+    ///
+    /// No Docker, no container registry — SSH into the VM, `wget` the binary
+    /// archive, verify sha256, extract, and start via systemd. This is the
+    /// path blueprint metadata's `BlueprintSource::Github` should use for
+    /// remote deployments when the VM image (AMI) already has the required
+    /// runtime (CUDA drivers, Python, etc.) pre-installed.
+    pub async fn deploy_github_binary_to_instance(
+        instance: &ProvisionedInstance,
+        archive_url: &str,
+        sha256_hex: &str,
+        binary_name: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: HashMap<String, String>,
+        ssh_config: SshDeploymentConfig,
+    ) -> Result<BlueprintDeploymentResult> {
+        let public_ip = instance
+            .public_ip
+            .as_ref()
+            .ok_or_else(|| Error::Other("Instance has no public IP".into()))?;
+
+        let connection = SshConnection {
+            host: public_ip.clone(),
+            user: ssh_config.username,
+            key_path: ssh_config.key_path.map(|p| p.into()),
+            port: 22,
+            password: None,
+            jump_host: None,
+        };
+
+        let deployment_config = DeploymentConfig {
+            name: format!("blueprint-{}", uuid::Uuid::new_v4()),
+            namespace: ssh_config.namespace.clone(),
+            restart_policy: crate::deployment::ssh::RestartPolicy::OnFailure,
+            health_check: None,
+        };
+
+        // Runtime is irrelevant for the native path, but the client requires one.
+        let ssh_client =
+            SshDeploymentClient::new(connection, ContainerRuntime::Docker, deployment_config)
+                .await
+                .map_err(|e| Error::Other(format!("Failed to establish SSH connection: {e}")))?;
+
+        let deployment = ssh_client
+            .deploy_github_binary(
+                archive_url,
+                sha256_hex,
+                binary_name,
+                resource_spec,
+                &env_vars,
+            )
+            .await
+            .map_err(|e| Error::Other(format!("Native binary deployment failed: {e}")))?;
+
+        let mut metadata = HashMap::new();
+        metadata.insert("provider".to_string(), ssh_config.provider_name.clone());
+        metadata.insert("service_name".to_string(), deployment.service_name.clone());
+        metadata.insert("deploy_mode".to_string(), "native_github".to_string());
+        metadata.insert("archive_url".to_string(), archive_url.to_string());
+        metadata.insert("ssh_host".to_string(), deployment.host.clone());
+        for (key, value) in ssh_config.additional_metadata {
+            metadata.insert(key, value);
+        }
+
+        info!(
+            "Successfully deployed native blueprint '{}' to {} instance {}",
+            binary_name, ssh_config.provider_name, instance.id
+        );
+
+        Ok(BlueprintDeploymentResult {
+            instance: instance.clone(),
+            blueprint_id: deployment.service_name,
+            port_mappings: HashMap::new(), // native deploys expose ports via systemd, discovered via health check
+            metadata,
+        })
+    }
 }
 
 /// Configuration for SSH deployment

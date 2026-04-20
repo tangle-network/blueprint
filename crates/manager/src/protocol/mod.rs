@@ -160,7 +160,7 @@ mod tests {
             blueprint_id: 1,
             service_id: Some(0),
             tangle_contract: Address::ZERO,
-            restaking_contract: Address::ZERO,
+            staking_contract: Address::ZERO,
             status_registry_contract: Address::ZERO,
         });
         let protocol_type: ProtocolType = (&tangle_settings).into();

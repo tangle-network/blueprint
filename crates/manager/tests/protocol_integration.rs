@@ -195,7 +195,7 @@ async fn test_protocol_type_conversion() {
             blueprint_id: 1,
             service_id: Some(0),
             tangle_contract: alloy_primitives::Address::ZERO,
-            restaking_contract: alloy_primitives::Address::ZERO,
+            staking_contract: alloy_primitives::Address::ZERO,
             status_registry_contract: alloy_primitives::Address::ZERO,
         });
     let protocol_type: ProtocolType = (&tangle_settings).into();

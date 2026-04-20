@@ -82,7 +82,7 @@ pub struct TangleDeployArgs {
     pub tangle_contract: Option<String>,
     /// Override the MultiAssetDelegation contract address (non-devnet).
     #[arg(long)]
-    pub restaking_contract: Option<String>,
+    pub staking_contract: Option<String>,
     /// Override the OperatorStatusRegistry contract address (non-devnet).
     #[arg(long)]
     pub status_registry_contract: Option<String>,
@@ -489,7 +489,7 @@ struct NetworkDeploymentConfig {
     ws_rpc_url: Url,
     keystore_path: PathBuf,
     tangle_contract: Address,
-    restaking_contract: Address,
+    staking_contract: Address,
     status_registry_contract: Address,
 }
 
@@ -508,11 +508,11 @@ impl NetworkDeploymentConfig {
             "TANGLE_CONTRACT",
             "--tangle-contract",
         )?;
-        let restaking_contract = parse_contract_override(
-            args.restaking_contract.as_deref(),
-            settings.restaking_contract,
-            "RESTAKING_CONTRACT",
-            "--restaking-contract",
+        let staking_contract = parse_contract_override(
+            args.staking_contract.as_deref(),
+            settings.staking_contract,
+            "STAKING_CONTRACT",
+            "--staking-contract",
         )?;
         let status_registry_contract = parse_contract_override(
             args.status_registry_contract.as_deref(),
@@ -526,7 +526,7 @@ impl NetworkDeploymentConfig {
             ws_rpc_url,
             keystore_path,
             tangle_contract,
-            restaking_contract,
+            staking_contract,
             status_registry_contract,
         })
     }
@@ -543,7 +543,7 @@ impl NetworkDeploymentConfig {
             blueprint_id: 0,
             service_id: None,
             tangle_contract: self.tangle_contract,
-            restaking_contract: self.restaking_contract,
+            staking_contract: self.staking_contract,
             status_registry_contract: self.status_registry_contract,
         };
         let config = TangleClientConfig::new(

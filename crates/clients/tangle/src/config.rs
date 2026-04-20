@@ -25,7 +25,7 @@ pub struct TangleSettings {
     /// The Tangle core contract address
     pub tangle_contract: Address,
     /// The MultiAssetDelegation (restaking) contract address
-    pub restaking_contract: Address,
+    pub staking_contract: Address,
     /// Operator status registry contract used for heartbeats
     pub status_registry_contract: Address,
 }
@@ -37,7 +37,7 @@ impl Default for TangleSettings {
             service_id: None,
             // Default to zero address - must be configured
             tangle_contract: Address::ZERO,
-            restaking_contract: Address::ZERO,
+            staking_contract: Address::ZERO,
             status_registry_contract: Address::ZERO,
         }
     }

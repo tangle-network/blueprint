@@ -40,6 +40,17 @@ serde_json = { workspace = true, features = ["std"] }
 wiremock = { workspace = true }
 mpp = { workspace = true, features = ["server", "axum"] }
 base64 = { workspace = true }
+# Anvil E2E: real facilitator + real EIP-3009 payments on forked Base
+alloy-provider = { workspace = true }
+alloy-rpc-types = { workspace = true }
+alloy-sol-types = { workspace = true }
+alloy-contract = { workspace = true }
+alloy-signer-local = { workspace = true }
+alloy-network = { workspace = true }
+x402-chain-eip155 = { workspace = true, features = ["server", "client", "facilitator"] }
+x402-types = { workspace = true }
+axum = { workspace = true }
+hex = { workspace = true }
 
 [features]
 default = []

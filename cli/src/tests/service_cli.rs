@@ -103,7 +103,7 @@ async fn resolve_request_defaults(
         harness.ws_endpoint().clone(),
         keystore_path.to_path_buf(),
         format!("{:#x}", harness.tangle_contract),
-        format!("{:#x}", harness.restaking_contract),
+        format!("{:#x}", harness.staking_contract),
         Some(format!("{:#x}", harness.status_registry_contract)),
     );
     let client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
@@ -344,7 +344,7 @@ async fn cli_service_approve_creates_new_service() -> Result<()> {
         harness.ws_endpoint().clone(),
         keystore_path.clone(),
         format!("{:#x}", harness.tangle_contract),
-        format!("{:#x}", harness.restaking_contract),
+        format!("{:#x}", harness.staking_contract),
         Some(format!("{:#x}", harness.status_registry_contract)),
     );
     let admin_client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
@@ -397,7 +397,7 @@ async fn cli_service_reject_marks_request_rejected() -> Result<()> {
         harness.ws_endpoint().clone(),
         keystore_path.clone(),
         format!("{:#x}", harness.tangle_contract),
-        format!("{:#x}", harness.restaking_contract),
+        format!("{:#x}", harness.staking_contract),
         Some(format!("{:#x}", harness.status_registry_contract)),
     );
     let admin_client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
@@ -449,7 +449,7 @@ async fn cli_service_join_and_leave_dynamic_service() -> Result<()> {
         harness.ws_endpoint().clone(),
         keystore_path.clone(),
         format!("{:#x}", harness.tangle_contract),
-        format!("{:#x}", harness.restaking_contract),
+        format!("{:#x}", harness.staking_contract),
         Some(format!("{:#x}", harness.status_registry_contract)),
     );
     let register_client = client_args.connect(LOCAL_BLUEPRINT_ID, None).await?;
@@ -556,7 +556,7 @@ async fn cli_operator_status_reports_json_snapshot() -> Result<()> {
         harness.ws_endpoint().clone(),
         keystore_path.clone(),
         format!("{:#x}", harness.tangle_contract),
-        format!("{:#x}", harness.restaking_contract),
+        format!("{:#x}", harness.staking_contract),
         Some(format!("{:#x}", harness.status_registry_contract)),
     );
     let client = client_args
@@ -635,7 +635,7 @@ async fn cli_blueprint_register_registers_operator() -> Result<()> {
         harness.ws_endpoint().clone(),
         keystore_path.clone(),
         format!("{:#x}", harness.tangle_contract),
-        format!("{:#x}", harness.restaking_contract),
+        format!("{:#x}", harness.staking_contract),
         Some(format!("{:#x}", harness.status_registry_contract)),
     );
     let admin_client = client_args

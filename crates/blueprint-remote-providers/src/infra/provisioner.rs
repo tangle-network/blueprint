@@ -382,6 +382,58 @@ impl CloudProvisioner {
             .await
     }
 
+    /// Deploy a native GitHub-release binary to a provisioned instance via SSH.
+    ///
+    /// No Docker required — the binary is downloaded on the VM, verified, and
+    /// started as a systemd service. This is the path used when the blueprint
+    /// ships a `BlueprintSource::Github` or `BlueprintSource::Remote` source
+    /// with platform binaries (linux/amd64, linux/arm64) instead of a container
+    /// image.
+    ///
+    /// Caller is responsible for picking the right archive URL for the VM's
+    /// platform (the manager does this before the call).
+    pub async fn deploy_github_binary_to_instance(
+        &self,
+        provider: &CloudProvider,
+        instance: &ProvisionedInstance,
+        archive_url: &str,
+        sha256_hex: &str,
+        binary_name: &str,
+        resource_spec: &ResourceSpec,
+        env_vars: std::collections::HashMap<String, String>,
+    ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
+        use crate::shared::ssh_deployment::{SharedSshDeployment, SshDeploymentConfig};
+
+        // Build provider-specific SSH config (picks the right username + key).
+        let ssh_config = match provider {
+            CloudProvider::AWS => SshDeploymentConfig::aws(),
+            CloudProvider::GCP => SshDeploymentConfig::gcp("blueprint"),
+            CloudProvider::Azure => SshDeploymentConfig::azure(),
+            CloudProvider::DigitalOcean => SshDeploymentConfig::digitalocean(),
+            CloudProvider::Hetzner => SshDeploymentConfig::hetzner(),
+            CloudProvider::RunPod => SshDeploymentConfig::runpod(),
+            CloudProvider::LambdaLabs => SshDeploymentConfig::lambda_labs(),
+            CloudProvider::VastAi => SshDeploymentConfig::vast_ai(),
+            CloudProvider::Vultr => SshDeploymentConfig::vultr(),
+            other => {
+                return Err(Error::Other(format!(
+                    "native binary deploy not yet supported for provider {other:?}"
+                )));
+            }
+        };
+
+        SharedSshDeployment::deploy_github_binary_to_instance(
+            instance,
+            archive_url,
+            sha256_hex,
+            binary_name,
+            resource_spec,
+            env_vars,
+            ssh_config,
+        )
+        .await
+    }
+
     /// Deploy a Blueprint with specific deployment target
     pub async fn deploy_with_target(
         &self,

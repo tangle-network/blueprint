@@ -176,7 +176,7 @@ pub struct BlueprintEnvVars {
     pub bridge_socket_path: Option<PathBuf>,
     /// Tangle EVM contract addresses (only set for Tangle protocol)
     pub tangle_contract: Option<Address>,
-    pub restaking_contract: Option<Address>,
+    pub staking_contract: Option<Address>,
     pub status_registry_contract: Option<Address>,
 }
 
@@ -200,11 +200,11 @@ impl BlueprintEnvVars {
             .fold(String::new(), |acc, bootnode| format!("{acc} {bootnode}"));
 
         // Extract contract addresses from protocol settings if using Tangle
-        let (tangle_contract, restaking_contract, status_registry_contract) =
+        let (tangle_contract, staking_contract, status_registry_contract) =
             if let Ok(settings) = env.protocol_settings.tangle() {
                 (
                     Some(settings.tangle_contract),
-                    Some(settings.restaking_contract),
+                    Some(settings.staking_contract),
                     Some(settings.status_registry_contract),
                 )
             } else {
@@ -227,7 +227,7 @@ impl BlueprintEnvVars {
             registration_capture_only: blueprint.registration_capture_only,
             bridge_socket_path: env.bridge_socket_path.clone(),
             tangle_contract,
-            restaking_contract,
+            staking_contract,
             status_registry_contract,
         }
     }
@@ -250,7 +250,7 @@ impl BlueprintEnvVars {
             registration_capture_only,
             bridge_socket_path,
             tangle_contract,
-            restaking_contract,
+            staking_contract,
             status_registry_contract,
         } = self;
 
@@ -280,8 +280,8 @@ impl BlueprintEnvVars {
         if let Some(addr) = tangle_contract {
             env_vars.push(("TANGLE_CONTRACT".to_string(), format!("{addr}")));
         }
-        if let Some(addr) = restaking_contract {
-            env_vars.push(("RESTAKING_CONTRACT".to_string(), format!("{addr}")));
+        if let Some(addr) = staking_contract {
+            env_vars.push(("STAKING_CONTRACT".to_string(), format!("{addr}")));
         }
         if let Some(addr) = status_registry_contract {
             env_vars.push(("STATUS_REGISTRY_CONTRACT".to_string(), format!("{addr}")));

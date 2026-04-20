@@ -25,7 +25,7 @@ pub struct TangleProtocolSettings {
     /// The Tangle core contract address
     pub tangle_contract: Address,
     /// The MultiAssetDelegation (restaking) contract address
-    pub restaking_contract: Address,
+    pub staking_contract: Address,
     /// The operator status registry contract used for heartbeats
     pub status_registry_contract: Address,
 }
@@ -37,7 +37,7 @@ impl Default for TangleProtocolSettings {
             service_id: None,
             // Default to zero address - must be configured
             tangle_contract: Address::ZERO,
-            restaking_contract: Address::ZERO,
+            staking_contract: Address::ZERO,
             status_registry_contract: Address::ZERO,
         }
     }
@@ -64,7 +64,7 @@ impl ProtocolSettingsT for TangleProtocolSettings {
             .and_then(|s| s.parse().ok())
             .unwrap_or(Address::ZERO);
 
-        let restaking_contract = std::env::var("RESTAKING_CONTRACT")
+        let staking_contract = std::env::var("STAKING_CONTRACT")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(Address::ZERO);
@@ -78,7 +78,7 @@ impl ProtocolSettingsT for TangleProtocolSettings {
             blueprint_id,
             service_id,
             tangle_contract,
-            restaking_contract,
+            staking_contract,
             status_registry_contract,
         })
     }
@@ -188,7 +188,7 @@ async fn requires_registration_impl(env: &BlueprintEnvironment) -> Result<bool, 
             blueprint_id: settings.blueprint_id,
             service_id: settings.service_id,
             tangle_contract: settings.tangle_contract,
-            restaking_contract: settings.restaking_contract,
+            staking_contract: settings.staking_contract,
             status_registry_contract: settings.status_registry_contract,
         },
         keystore_uri: env.keystore_uri.clone(),

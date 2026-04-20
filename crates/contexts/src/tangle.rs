@@ -37,7 +37,7 @@ impl TangleClientContext for BlueprintEnvironment {
                 blueprint_id: settings.blueprint_id,
                 service_id: settings.service_id,
                 tangle_contract: settings.tangle_contract,
-                restaking_contract: settings.restaking_contract,
+                staking_contract: settings.staking_contract,
                 status_registry_contract: settings.status_registry_contract,
             },
             test_mode: self.test_mode,

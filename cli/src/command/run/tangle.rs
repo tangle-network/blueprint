@@ -20,7 +20,7 @@ pub struct RunOpts {
     pub blueprint_id: u64,
     pub service_id: Option<u64>,
     pub tangle_contract: Address,
-    pub restaking_contract: Address,
+    pub staking_contract: Address,
     pub status_registry_contract: Address,
     pub keystore_path: String,
     pub data_dir: Option<PathBuf>,
@@ -46,7 +46,7 @@ pub async fn run_blueprint(opts: RunOpts) -> Result<()> {
         blueprint_id: opts.blueprint_id,
         service_id: opts.service_id,
         tangle_contract: opts.tangle_contract,
-        restaking_contract: opts.restaking_contract,
+        staking_contract: opts.staking_contract,
         status_registry_contract: opts.status_registry_contract,
     });
 

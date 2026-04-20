@@ -14,7 +14,7 @@
 //! http_rpc_url = "http://127.0.0.1:8545"
 //! ws_rpc_url = "ws://127.0.0.1:8545"
 //! tangle_contract = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
-//! restaking_contract = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+//! staking_contract = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
 //! status_registry_contract = "0x8f86403A4DE0bb5791fa46B8e795C547942fE4Cf"
 //! chain_id = 31337
 //!
@@ -55,7 +55,7 @@ pub struct Network {
     pub http_rpc_url: Url,
     pub ws_rpc_url: Url,
     pub tangle_contract: Address,
-    pub restaking_contract: Address,
+    pub staking_contract: Address,
     #[serde(default)]
     pub status_registry_contract: Option<Address>,
     #[serde(default)]
@@ -228,7 +228,7 @@ network = "local"
 http_rpc_url = "http://127.0.0.1:8545"
 ws_rpc_url   = "ws://127.0.0.1:8545"
 tangle_contract          = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
-restaking_contract       = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+staking_contract       = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
 status_registry_contract = "0x8f86403A4DE0bb5791fa46B8e795C547942fE4Cf"
 chain_id = 31337
 
@@ -258,7 +258,7 @@ service_id   = 0
     fn missing_active_network_errors() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join(WORKSPACE_FILE);
-        fs::write(&path, "network = \"ghost\"\n[networks.local]\nhttp_rpc_url=\"http://x\"\nws_rpc_url=\"ws://x\"\ntangle_contract=\"0x0000000000000000000000000000000000000000\"\nrestaking_contract=\"0x0000000000000000000000000000000000000000\"\n").unwrap();
+        fs::write(&path, "network = \"ghost\"\n[networks.local]\nhttp_rpc_url=\"http://x\"\nws_rpc_url=\"ws://x\"\ntangle_contract=\"0x0000000000000000000000000000000000000000\"\nstaking_contract=\"0x0000000000000000000000000000000000000000\"\n").unwrap();
         assert!(TangleWorkspace::load(&path).is_err());
     }
 

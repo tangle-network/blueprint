@@ -498,6 +498,143 @@ impl SshDeploymentClient {
         }
     }
 
+    /// Deploy a blueprint from a GitHub release URL directly via SSH.
+    ///
+    /// Downloads the binary archive from the given URL on the remote host,
+    /// verifies the sha256 digest, extracts it, and starts it as a systemd
+    /// service. No Docker, no container registry — just `wget` + `sha256sum`
+    /// + `systemd`.
+    ///
+    /// `binary_name` is the executable name inside the archive (e.g. "llm-operator").
+    pub async fn deploy_github_binary(
+        &self,
+        archive_url: &str,
+        sha256_hex: &str,
+        binary_name: &str,
+        spec: &ResourceSpec,
+        env_vars: &HashMap<String, String>,
+    ) -> Result<NativeDeployment> {
+        info!(
+            "Deploying native Blueprint from {} to {}",
+            archive_url, self.connection.host
+        );
+
+        // Build the environment-file contents used by the systemd service.
+        // KEY=value pairs, one per line, already bash-safe since we quote values.
+        let env_file = env_vars
+            .iter()
+            .map(|(k, v)| {
+                // Prevent injection: reject keys with =, newline, or whitespace.
+                let k_safe = k
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_')
+                    .then_some(k.as_str())
+                    .unwrap_or("INVALID");
+                // Escape single quotes in value.
+                let v_safe = v.replace('\'', "'\\''");
+                format!("{k_safe}='{v_safe}'")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let sha = sha256_hex.trim_start_matches("0x").to_lowercase();
+        // Ensure the provided hex is exactly 64 hex chars (32 bytes).
+        if sha.len() != 64 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(Error::ConfigurationError(format!(
+                "invalid sha256: expected 64 hex chars, got {}",
+                sha.len()
+            )));
+        }
+
+        let cpu_quota = (spec.cpu * 100.0) as u32;
+        let mem_mb = (spec.memory_gb * 1024.0) as u32;
+
+        let install_script = format!(
+            r#"
+set -eu
+sudo mkdir -p /opt/blueprint/bin /opt/blueprint/config /opt/blueprint/data /opt/blueprint/logs
+
+# Download archive and verify checksum BEFORE extraction.
+cd /tmp
+sudo rm -f blueprint-archive
+curl -sSL -o blueprint-archive '{archive_url}'
+ACTUAL_SHA=$(sha256sum blueprint-archive | awk '{{print $1}}')
+if [ "$ACTUAL_SHA" != "{sha}" ]; then
+    echo "ERROR: sha256 mismatch: got $ACTUAL_SHA expected {sha}" >&2
+    sudo rm -f blueprint-archive
+    exit 1
+fi
+
+# Extract — support tar.xz, tar.gz, zip, or raw binary.
+case "{archive_url}" in
+    *.tar.xz) sudo tar -xJf blueprint-archive -C /tmp ;;
+    *.tar.gz|*.tgz) sudo tar -xzf blueprint-archive -C /tmp ;;
+    *.zip) sudo unzip -o blueprint-archive -d /tmp ;;
+    *) sudo cp blueprint-archive /tmp/{binary_name} ;;
+esac
+
+# Locate the binary within extracted files.
+BINARY_PATH=$(find /tmp -name '{binary_name}' -type f -executable -print -quit 2>/dev/null || find /tmp -name '{binary_name}' -type f -print -quit)
+if [ -z "$BINARY_PATH" ]; then
+    echo "ERROR: binary '{binary_name}' not found after extraction" >&2
+    exit 1
+fi
+
+sudo install -m 0755 "$BINARY_PATH" /opt/blueprint/bin/{binary_name}
+sudo rm -rf /tmp/blueprint-archive
+
+# Write environment file.
+sudo tee /opt/blueprint/config/blueprint.env > /dev/null <<'ENVEOF'
+{env_file}
+ENVEOF
+sudo chmod 0600 /opt/blueprint/config/blueprint.env
+
+# Create blueprint user (idempotent).
+sudo useradd -r -s /bin/false -d /opt/blueprint blueprint 2>/dev/null || true
+sudo chown -R blueprint:blueprint /opt/blueprint
+
+# Write systemd unit.
+sudo tee /etc/systemd/system/blueprint-runtime.service > /dev/null <<'UNITEOF'
+[Unit]
+Description=Tangle Blueprint Runtime ({binary_name})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=blueprint
+WorkingDirectory=/opt/blueprint
+EnvironmentFile=/opt/blueprint/config/blueprint.env
+ExecStart=/opt/blueprint/bin/{binary_name} run
+Restart=always
+RestartSec=5
+CPUQuota={cpu_quota}%
+MemoryMax={mem_mb}M
+StandardOutput=append:/opt/blueprint/logs/stdout.log
+StandardError=append:/opt/blueprint/logs/stderr.log
+
+[Install]
+WantedBy=multi-user.target
+UNITEOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable blueprint-runtime
+sudo systemctl restart blueprint-runtime
+sleep 2
+sudo systemctl is-active blueprint-runtime
+"#
+        );
+
+        self.run_remote_command(&install_script).await?;
+
+        Ok(NativeDeployment {
+            host: self.connection.host.clone(),
+            service_name: "blueprint-runtime".to_string(),
+            config_path: "/opt/blueprint/config/blueprint.env".to_string(),
+            status: "running".to_string(),
+        })
+    }
+
     /// Deploy Blueprint as native process (without container)
     pub async fn deploy_native_blueprint(
         &self,

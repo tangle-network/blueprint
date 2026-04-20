@@ -34,7 +34,7 @@ pub(crate) const MANAGED_MARKER: &str = "# managed-by = \"cargo-tangle-dev\"";
 // crates/testing-utils/anvil/src/tangle.rs; if that crate ever exports them,
 // delete this block and import from there.
 const TANGLE_CONTRACT: &str = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
-const RESTAKING_CONTRACT: &str = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
+const STAKING_CONTRACT: &str = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
 const STATUS_REGISTRY_CONTRACT: &str = "0x8f86403A4DE0bb5791fa46B8e795C547942fE4Cf";
 const OPERATOR1_ADDRESS: &str = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const SERVICE_OWNER_PRIVATE_KEY: &str =
@@ -175,7 +175,7 @@ pub async fn execute(args: UpArgs) -> Result<()> {
     println!("✓ Operator keystore at {}", keystore_dir.display());
 
     let tangle_contract = Address::from_str(TANGLE_CONTRACT).expect("literal address");
-    let restaking_contract = Address::from_str(RESTAKING_CONTRACT).expect("literal address");
+    let staking_contract = Address::from_str(STAKING_CONTRACT).expect("literal address");
     let status_registry_contract =
         Address::from_str(STATUS_REGISTRY_CONTRACT).expect("literal address");
     let operator1 = Address::from_str(OPERATOR1_ADDRESS).expect("literal address");
@@ -203,7 +203,7 @@ pub async fn execute(args: UpArgs) -> Result<()> {
             http_rpc_url: http_rpc_url.clone(),
             ws_rpc_url: ws_rpc_url.clone(),
             tangle_contract,
-            restaking_contract,
+            staking_contract,
             status_registry_contract: Some(status_registry_contract),
             chain_id: Some(CHAIN_ID),
         },

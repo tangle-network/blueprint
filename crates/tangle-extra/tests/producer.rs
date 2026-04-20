@@ -108,7 +108,7 @@ async fn create_client(deployment: &SeededTangleTestnet) -> Result<TangleClient>
         blueprint_id: LOCAL_BLUEPRINT_ID,
         service_id: Some(LOCAL_SERVICE_ID),
         tangle_contract: deployment.tangle_contract,
-        restaking_contract: deployment.restaking_contract,
+        staking_contract: deployment.staking_contract,
         status_registry_contract: deployment.status_registry_contract,
     };
 

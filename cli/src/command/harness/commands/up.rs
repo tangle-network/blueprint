@@ -2,9 +2,30 @@ use crate::command::harness::UpArgs;
 use crate::command::harness::config::HarnessConfig;
 use crate::command::harness::orchestrator::Orchestrator;
 use color_eyre::eyre::{Result, eyre};
+use std::path::PathBuf;
 
 pub async fn run(args: UpArgs) -> Result<()> {
-    let mut config = HarnessConfig::load(args.config.as_deref())?;
+    let mut config = if let Some(compose) = &args.compose {
+        // Compose mode: merge harness.toml from multiple blueprint directories
+        let paths: Vec<PathBuf> = compose
+            .split(',')
+            .map(|s| {
+                let s = s.trim();
+                let expanded = if let Some(rest) = s.strip_prefix("~/") {
+                    let home = std::env::var("HOME").unwrap_or_default();
+                    PathBuf::from(home).join(rest)
+                } else {
+                    PathBuf::from(s)
+                };
+                expanded
+            })
+            .collect();
+        HarnessConfig::compose(&paths)?
+    } else {
+        HarnessConfig::load(args.config.as_deref())?
+    };
+
+    config.apply_chain_overrides(&args.chain);
     config.filter(args.only.as_deref());
 
     if args.include_anvil_logs {

@@ -71,7 +71,7 @@ pub fn missing_tnt_core_artifacts(err: &anyhow::Error) -> bool {
 pub struct TangleHarness {
     pub testnet: AnvilTestnet,
     pub tangle_contract: Address,
-    pub restaking_contract: Address,
+    pub staking_contract: Address,
     pub status_registry_contract: Address,
 }
 
@@ -92,7 +92,7 @@ impl fmt::Debug for TangleHarness {
             .field("http_endpoint", &self.testnet.http_endpoint)
             .field("ws_endpoint", &self.testnet.ws_endpoint)
             .field("tangle_contract", &self.tangle_contract)
-            .field("restaking_contract", &self.restaking_contract)
+            .field("staking_contract", &self.staking_contract)
             .field("status_registry_contract", &self.status_registry_contract)
             .finish()
     }
@@ -130,7 +130,7 @@ impl TangleHarness {
             blueprint_id: LOCAL_BLUEPRINT_ID,
             service_id: Some(LOCAL_SERVICE_ID),
             tangle_contract: self.tangle_contract,
-            restaking_contract: self.restaking_contract,
+            staking_contract: self.staking_contract,
             status_registry_contract: self.status_registry_contract,
         };
 
@@ -228,7 +228,7 @@ impl TangleHarnessBuilder {
         let harness = TangleHarness {
             testnet,
             tangle_contract: Address::from_str(TANGLE_ADDRESS)?,
-            restaking_contract: Address::from_str(RESTAKING_ADDRESS)?,
+            staking_contract: Address::from_str(RESTAKING_ADDRESS)?,
             status_registry_contract: Address::from_str(STATUS_REGISTRY_ADDRESS)?,
         };
 
