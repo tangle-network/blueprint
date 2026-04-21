@@ -24,6 +24,8 @@ use tokio::time::sleep;
 
 use crate::extract;
 
+const MAX_LOG_RANGE_BLOCKS: u64 = 10;
+
 /// Error type for the producer
 #[derive(Debug, thiserror::Error)]
 pub enum ProducerError {
@@ -217,15 +219,24 @@ async fn poll_for_jobs(
             }
         };
 
-        if latest_block < from_block {
+        let effective_from_block = if from_block == 0 {
+            latest_block.saturating_sub(MAX_LOG_RANGE_BLOCKS.saturating_sub(1))
+        } else {
+            from_block
+        };
+
+        if latest_block < effective_from_block {
             sleep(Duration::from_millis(250)).await;
             continue;
         }
 
+        let to_block = latest_block
+            .min(effective_from_block.saturating_add(MAX_LOG_RANGE_BLOCKS.saturating_sub(1)));
+
         let filter = Filter::new()
             .address(client.tangle_address())
-            .from_block(from_block)
-            .to_block(latest_block);
+            .from_block(effective_from_block)
+            .to_block(to_block);
 
         let mut logs = match client.get_logs(&filter).await {
             Ok(logs) => {
@@ -234,8 +245,8 @@ async fn poll_for_jobs(
                         target: "tangle-producer",
                         rpc = "eth_getLogs",
                         attempts = get_logs_failures,
-                        from = from_block,
-                        to = latest_block,
+                        from = effective_from_block,
+                        to = to_block,
                         "RPC recovered after retries"
                     );
                     get_logs_failures = 0;
@@ -250,8 +261,8 @@ async fn poll_for_jobs(
                         target: "tangle-producer",
                         rpc = "eth_getLogs",
                         attempts = get_logs_failures,
-                        from = from_block,
-                        to = latest_block,
+                        from = effective_from_block,
+                        to = to_block,
                         delay_ms = delay.as_millis() as u64,
                         "Failed to fetch logs: {err}"
                     );
@@ -260,8 +271,8 @@ async fn poll_for_jobs(
                         target: "tangle-producer",
                         rpc = "eth_getLogs",
                         attempts = get_logs_failures,
-                        from = from_block,
-                        to = latest_block,
+                        from = effective_from_block,
+                        to = to_block,
                         delay_ms = delay.as_millis() as u64,
                         "Failed to fetch logs: {err}; retrying"
                     );
@@ -282,10 +293,10 @@ async fn poll_for_jobs(
             logs.into_iter()
                 .filter(|log| {
                     let block_number = log.block_number.unwrap_or_default();
-                    if block_number < from_block {
+                    if block_number < effective_from_block {
                         return false;
                     }
-                    if block_number > from_block {
+                    if block_number > effective_from_block {
                         return true;
                     }
                     let log_index = log.log_index.unwrap_or_default();
@@ -297,11 +308,11 @@ async fn poll_for_jobs(
         };
 
         let (last_block, last_log_index) = if let Some(last) = filtered_logs.last() {
-            (last.block_number.unwrap_or(latest_block), last.log_index)
-        } else if latest_block == from_block {
-            (from_block, from_log_index)
+            (last.block_number.unwrap_or(to_block), last.log_index)
+        } else if to_block == effective_from_block {
+            (effective_from_block, from_log_index)
         } else {
-            (latest_block, None)
+            (to_block, None)
         };
 
         let mut jobs = Vec::new();
@@ -412,8 +423,8 @@ async fn poll_for_jobs(
         if jobs.is_empty() {
             blueprint_core::trace!(
                 target: "tangle-producer",
-                from = from_block,
-                to = latest_block,
+                from = effective_from_block,
+                to = to_block,
                 "No jobs discovered during this poll"
             );
         } else {

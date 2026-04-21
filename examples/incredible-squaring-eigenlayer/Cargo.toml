@@ -27,7 +27,7 @@ alloy-provider = { workspace = true }
 alloy-pubsub = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
-alloy-rpc-client = { workspace = true }
+alloy-rpc-client = { workspace = true, features = ["reqwest"] }
 alloy-signer = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-sol-types = { workspace = true, features = ["json"] }
