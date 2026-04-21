@@ -14,7 +14,7 @@ use alloy_rpc_types::{
     Block, BlockNumberOrTag, Filter, Log, TransactionReceipt,
     transaction::{TransactionInput, TransactionRequest},
 };
-use alloy_sol_types::SolType;
+use alloy_sol_types::{SolCall, SolType};
 use blueprint_client_core::{BlueprintServicesClient, OperatorSet};
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::Keystore;
@@ -38,6 +38,18 @@ use IMultiAssetDelegation::IMultiAssetDelegationInstance;
 use IOperatorStatusRegistry::IOperatorStatusRegistryInstance;
 use ITangle::ITangleInstance;
 
+const SUBMIT_RESULT_MIN_GAS_LIMIT: u64 = 8_000_000;
+const SUBMIT_RESULT_GAS_BUFFER_NUMERATOR: u64 = 13;
+const SUBMIT_RESULT_GAS_BUFFER_DENOMINATOR: u64 = 10;
+const CREATE_BLUEPRINT_MIN_GAS_LIMIT: u64 = 5_000_000;
+const REGISTER_BLUEPRINT_OPERATOR_MIN_GAS_LIMIT: u64 = 1_000_000;
+const REQUEST_SERVICE_MIN_GAS_LIMIT: u64 = 2_000_000;
+const APPROVE_SERVICE_MIN_GAS_LIMIT: u64 = 1_000_000;
+const ERC20_APPROVE_MIN_GAS_LIMIT: u64 = 100_000;
+const REGISTER_OPERATOR_RESTAKING_MIN_GAS_LIMIT: u64 = 500_000;
+const INITIAL_LOG_LOOKBACK_BLOCKS: u64 = 9;
+const MAX_LOG_RANGE_BLOCKS: u64 = 10;
+
 #[allow(missing_docs)]
 mod erc20 {
     alloy_sol_types::sol! {
@@ -51,6 +63,76 @@ mod erc20 {
 }
 
 use erc20::IERC20;
+
+/// Compute the gas limit to submit with: buffered estimate if available, else the
+/// caller-provided minimum. Always `>= min_gas_limit`.
+fn buffered_gas_limit(estimated_gas: Option<u64>, min_gas_limit: u64) -> u64 {
+    estimated_gas
+        .map(|gas| {
+            gas.saturating_mul(SUBMIT_RESULT_GAS_BUFFER_NUMERATOR)
+                / SUBMIT_RESULT_GAS_BUFFER_DENOMINATOR
+        })
+        .unwrap_or(min_gas_limit)
+        .max(min_gas_limit)
+}
+
+/// Send a transaction with buffered estimated gas, falling back to a conservative
+/// minimum when estimation fails.
+///
+/// `from` must be the operator/wallet address that will sign the tx. It is applied
+/// before `eth_estimateGas` so operator-gated calls simulate correctly — without
+/// it, alloy's `WalletFiller` only populates `from` on `send_transaction`, so
+/// estimation runs as `0x0` and reverts for any auth-checked entrypoint,
+/// causing the helper to always take the fallback path (and masking real reverts).
+///
+/// An on-chain revert (`receipt.status() == false`) is surfaced as
+/// `Error::Contract` carrying the tx hash, gas used, and — when available —
+/// the estimator's revert reason. Without this, callers that fold the receipt
+/// into `TransactionResult { success, .. }` silently return `Ok(success=false)`,
+/// which looks like a passing path to anything that only checks `Result::is_ok`.
+async fn send_transaction_with_fallback_gas<P>(
+    provider: &P,
+    from: Address,
+    tx_request: TransactionRequest,
+    min_gas_limit: u64,
+) -> Result<TransactionReceipt>
+where
+    P: Provider<Ethereum>,
+{
+    let tx_request = tx_request.from(from);
+    let (estimated_gas, estimate_error) = match provider.estimate_gas(tx_request.clone()).await {
+        Ok(gas) => (Some(gas), None),
+        Err(err) => {
+            let msg = err.to_string();
+            tracing::warn!(
+                "eth_estimateGas failed; falling back to min_gas_limit={min_gas_limit}: {msg}"
+            );
+            (None, Some(msg))
+        }
+    };
+    let gas_limit = buffered_gas_limit(estimated_gas, min_gas_limit);
+    let pending_tx = provider
+        .send_transaction(tx_request.gas_limit(gas_limit))
+        .await
+        .map_err(Error::Transport)?;
+
+    let receipt = pending_tx
+        .get_receipt()
+        .await
+        .map_err(Error::PendingTransaction)?;
+
+    if !receipt.status() {
+        let tail = estimate_error
+            .map(|e| format!(" (estimate_gas reported: {e})"))
+            .unwrap_or_default();
+        return Err(Error::Contract(format!(
+            "transaction {} reverted on-chain (block={:?}, gas_used={}){tail}",
+            receipt.transaction_hash, receipt.block_number, receipt.gas_used,
+        )));
+    }
+
+    Ok(receipt)
+}
 
 /// Type alias for the dynamic provider
 pub type TangleProvider = DynProvider<Ethereum>;
@@ -542,15 +624,26 @@ impl TangleClient {
 
     /// Get the next event (polls for new blocks)
     ///
-    /// On the first call, scans from block 0 to catch up on any historical
-    /// events (e.g. ServiceActivated) that were emitted before the client
-    /// started.  Subsequent calls only scan new blocks.
+    /// On the first call, scans a small recent window to catch up on any
+    /// near-realtime events while staying compatible with hosted RPC plans
+    /// that cap `eth_getLogs` block ranges. Older active services are still
+    /// discovered by the manager's contract-state fallback during initialize.
+    /// Subsequent calls only scan new blocks.
     pub async fn next_event(&self) -> Option<TangleEvent> {
         loop {
-            let current_block = self.block_number().await.ok()?;
+            let current_block = match self.block_number().await {
+                Ok(block) => block,
+                Err(err) => {
+                    tracing::warn!("Failed to fetch current block number: {err}");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
 
             let mut last_block = self.block_subscription.lock().await;
-            let from_block = last_block.map(|b| b + 1).unwrap_or(0);
+            let from_block = last_block
+                .map(|b| b + 1)
+                .unwrap_or_else(|| current_block.saturating_sub(INITIAL_LOG_LOOKBACK_BLOCKS));
 
             if from_block > current_block {
                 drop(last_block);
@@ -558,24 +651,47 @@ impl TangleClient {
                 continue;
             }
 
+            let to_block = current_block
+                .min(from_block.saturating_add(MAX_LOG_RANGE_BLOCKS.saturating_sub(1)));
+
             // Get block info
-            let block = self
-                .get_block(BlockNumberOrTag::Number(current_block))
-                .await
-                .ok()??;
+            let Some(block) = (match self.get_block(BlockNumberOrTag::Number(to_block)).await {
+                Ok(block) => block,
+                Err(err) => {
+                    tracing::warn!("Failed to fetch block data for block {to_block}: {err}");
+                    drop(last_block);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            }) else {
+                tracing::warn!("RPC returned no block data for block {current_block}");
+                drop(last_block);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            };
 
             // Create filter for Tangle contract events
             let filter = Filter::new()
                 .address(self.tangle_address)
                 .from_block(from_block)
-                .to_block(current_block);
+                .to_block(to_block);
 
-            let logs = self.get_logs(&filter).await.ok()?;
+            let logs = match self.get_logs(&filter).await {
+                Ok(logs) => logs,
+                Err(err) => {
+                    tracing::warn!(
+                        "Failed to fetch Tangle logs for blocks {from_block}..={to_block}: {err}"
+                    );
+                    drop(last_block);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
 
-            *last_block = Some(current_block);
+            *last_block = Some(to_block);
 
             let event = TangleEvent {
-                block_number: current_block,
+                block_number: to_block,
                 block_hash: block.header.hash,
                 timestamp: block.header.timestamp,
                 logs,
@@ -675,24 +791,30 @@ impl TangleClient {
         &self,
         encoded_definition: Vec<u8>,
     ) -> Result<(TransactionResult, u64)> {
+        use crate::contracts::ITangle::createBlueprintCall;
+
         let definition = ITangleTypes::BlueprintDefinition::abi_decode(encoded_definition.as_ref())
             .map_err(|err| {
                 Error::Contract(format!("failed to decode blueprint definition: {err}"))
             })?;
 
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
             .await
             .map_err(Error::Transport)?;
-        let contract = ITangle::new(self.tangle_address, &provider);
-        let pending_tx = contract
-            .createBlueprint(definition)
-            .send()
-            .await
-            .map_err(|e| Error::Contract(e.to_string()))?;
-        let receipt = pending_tx.get_receipt().await?;
+        let tx_request = TransactionRequest::default()
+            .to(self.tangle_address)
+            .input(createBlueprintCall { definition }.abi_encode().into());
+        let receipt = send_transaction_with_fallback_gas(
+            &provider,
+            from_address,
+            tx_request,
+            CREATE_BLUEPRINT_MIN_GAS_LIMIT,
+        )
+        .await?;
         let blueprint_id = self.extract_blueprint_id(&receipt)?;
 
         Ok((transaction_result_from_receipt(&receipt), blueprint_id))
@@ -806,13 +928,15 @@ impl TangleClient {
         rpc_endpoint: impl Into<String>,
         registration_inputs: Option<Bytes>,
     ) -> Result<TransactionResult> {
+        use crate::contracts::ITangle::{registerOperator_0Call, registerOperator_1Call};
+
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
             .await
             .map_err(Error::Transport)?;
-        let contract = ITangle::new(self.tangle_address, &provider);
 
         let signing_key = self.ecdsa_signing_key()?;
         let verifying = signing_key.verifying_key();
@@ -823,26 +947,40 @@ impl TangleClient {
         let rpc_endpoint = rpc_endpoint.into();
 
         let receipt = if let Some(inputs) = registration_inputs {
-            contract
-                .registerOperator_0(
-                    blueprint_id,
-                    ecdsa_bytes.clone(),
-                    rpc_endpoint.clone(),
-                    inputs,
-                )
-                .send()
-                .await
-                .map_err(|e| Error::Contract(e.to_string()))?
-                .get_receipt()
-                .await?
+            let tx_request = TransactionRequest::default().to(self.tangle_address).input(
+                registerOperator_0Call {
+                    blueprintId: blueprint_id,
+                    ecdsaPublicKey: ecdsa_bytes.clone(),
+                    rpcAddress: rpc_endpoint.clone(),
+                    registrationInputs: inputs,
+                }
+                .abi_encode()
+                .into(),
+            );
+            send_transaction_with_fallback_gas(
+                &provider,
+                from_address,
+                tx_request,
+                REGISTER_BLUEPRINT_OPERATOR_MIN_GAS_LIMIT,
+            )
+            .await?
         } else {
-            contract
-                .registerOperator_1(blueprint_id, ecdsa_bytes.clone(), rpc_endpoint.clone())
-                .send()
-                .await
-                .map_err(|e| Error::Contract(e.to_string()))?
-                .get_receipt()
-                .await?
+            let tx_request = TransactionRequest::default().to(self.tangle_address).input(
+                registerOperator_1Call {
+                    blueprintId: blueprint_id,
+                    ecdsaPublicKey: ecdsa_bytes.clone(),
+                    rpcAddress: rpc_endpoint.clone(),
+                }
+                .abi_encode()
+                .into(),
+            );
+            send_transaction_with_fallback_gas(
+                &provider,
+                from_address,
+                tx_request,
+                REGISTER_BLUEPRINT_OPERATOR_MIN_GAS_LIMIT,
+            )
+            .await?
         };
 
         Ok(transaction_result_from_receipt(&receipt))
@@ -981,7 +1119,12 @@ impl TangleClient {
         &self,
         params: ServiceRequestParams,
     ) -> Result<(TransactionResult, u64)> {
+        use crate::contracts::ITangle::{
+            requestServiceCall, requestServiceWithExposureCall, requestServiceWithSecurityCall,
+        };
+
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
@@ -1063,57 +1206,85 @@ impl TangleClient {
         };
         let pre_count = self.service_request_count().await.ok();
 
-        let pending_tx = if !security_requirements.is_empty() {
-            let mut call = contract.requestServiceWithSecurity(
-                blueprint_id,
-                operators.clone(),
-                security_requirements.clone(),
-                config.clone(),
-                permitted_callers.clone(),
-                ttl,
-                payment_token,
-                payment_amount,
-                confidentiality,
+        let receipt = if !security_requirements.is_empty() {
+            let mut tx_request = TransactionRequest::default().to(self.tangle_address).input(
+                requestServiceWithSecurityCall {
+                    blueprintId: blueprint_id,
+                    operators: operators.clone(),
+                    securityRequirements: security_requirements.clone(),
+                    config: config.clone(),
+                    permittedCallers: permitted_callers.clone(),
+                    ttl,
+                    paymentToken: payment_token,
+                    paymentAmount: payment_amount,
+                    confidentiality,
+                }
+                .abi_encode()
+                .into(),
             );
             if is_native_payment {
-                call = call.value(payment_amount);
+                tx_request = tx_request.value(payment_amount);
             }
-            call.send().await
+            send_transaction_with_fallback_gas(
+                &provider,
+                from_address,
+                tx_request,
+                REQUEST_SERVICE_MIN_GAS_LIMIT,
+            )
+            .await
         } else if let Some(exposures) = operator_exposures {
-            let mut call = contract.requestServiceWithExposure(
-                blueprint_id,
-                operators.clone(),
-                exposures,
-                config.clone(),
-                permitted_callers.clone(),
-                ttl,
-                payment_token,
-                payment_amount,
-                confidentiality,
+            let mut tx_request = TransactionRequest::default().to(self.tangle_address).input(
+                requestServiceWithExposureCall {
+                    blueprintId: blueprint_id,
+                    operators: operators.clone(),
+                    exposureBps: exposures,
+                    config: config.clone(),
+                    permittedCallers: permitted_callers.clone(),
+                    ttl,
+                    paymentToken: payment_token,
+                    paymentAmount: payment_amount,
+                    confidentiality,
+                }
+                .abi_encode()
+                .into(),
             );
             if is_native_payment {
-                call = call.value(payment_amount);
+                tx_request = tx_request.value(payment_amount);
             }
-            call.send().await
+            send_transaction_with_fallback_gas(
+                &provider,
+                from_address,
+                tx_request,
+                REQUEST_SERVICE_MIN_GAS_LIMIT,
+            )
+            .await
         } else {
-            let mut call = contract.requestService(
-                blueprint_id,
-                operators.clone(),
-                config.clone(),
-                permitted_callers.clone(),
-                ttl,
-                payment_token,
-                payment_amount,
-                confidentiality,
+            let mut tx_request = TransactionRequest::default().to(self.tangle_address).input(
+                requestServiceCall {
+                    blueprintId: blueprint_id,
+                    operators: operators.clone(),
+                    config: config.clone(),
+                    permittedCallers: permitted_callers.clone(),
+                    ttl,
+                    paymentToken: payment_token,
+                    paymentAmount: payment_amount,
+                    confidentiality,
+                }
+                .abi_encode()
+                .into(),
             );
             if is_native_payment {
-                call = call.value(payment_amount);
+                tx_request = tx_request.value(payment_amount);
             }
-            call.send().await
+            send_transaction_with_fallback_gas(
+                &provider,
+                from_address,
+                tx_request,
+                REQUEST_SERVICE_MIN_GAS_LIMIT,
+            )
+            .await
         }
         .map_err(|e| Error::Contract(e.to_string()))?;
-
-        let receipt = pending_tx.get_receipt().await?;
         if !receipt.status() {
             return Err(Error::Contract(
                 "requestService transaction reverted".into(),
@@ -1298,21 +1469,30 @@ impl TangleClient {
         request_id: u64,
         restaking_percent: u8,
     ) -> Result<TransactionResult> {
+        use crate::contracts::ITangle::approveServiceCall;
+
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
             .await
             .map_err(Error::Transport)?;
-        let contract = ITangle::new(self.tangle_address, &provider);
-
-        let receipt = contract
-            .approveService(request_id, restaking_percent)
-            .send()
-            .await
-            .map_err(|e| Error::Contract(e.to_string()))?
-            .get_receipt()
-            .await?;
+        let tx_request = TransactionRequest::default().to(self.tangle_address).input(
+            approveServiceCall {
+                requestId: request_id,
+                stakingPercent: restaking_percent,
+            }
+            .abi_encode()
+            .into(),
+        );
+        let receipt = send_transaction_with_fallback_gas(
+            &provider,
+            from_address,
+            tx_request,
+            APPROVE_SERVICE_MIN_GAS_LIMIT,
+        )
+        .await?;
 
         Ok(transaction_result_from_receipt(&receipt))
     }
@@ -1668,21 +1848,25 @@ impl TangleClient {
         spender: Address,
         amount: U256,
     ) -> Result<TransactionResult> {
+        use crate::client::IERC20::approveCall;
+
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
             .await
             .map_err(Error::Transport)?;
-        let contract = IERC20::new(token, &provider);
-
-        let receipt = contract
-            .approve(spender, amount)
-            .send()
-            .await
-            .map_err(|e| Error::Contract(e.to_string()))?
-            .get_receipt()
-            .await?;
+        let tx_request = TransactionRequest::default()
+            .to(token)
+            .input(approveCall { spender, amount }.abi_encode().into());
+        let receipt = send_transaction_with_fallback_gas(
+            &provider,
+            from_address,
+            tx_request,
+            ERC20_APPROVE_MIN_GAS_LIMIT,
+        )
+        .await?;
 
         Ok(transaction_result_from_receipt(&receipt))
     }
@@ -2123,6 +2307,10 @@ impl TangleClient {
         &self,
         stake_amount: U256,
     ) -> Result<TransactionResult> {
+        use crate::contracts::IMultiAssetDelegation::{
+            registerOperatorCall, registerOperatorWithAssetCall,
+        };
+
         let bond_token = self.operator_bond_token().await?;
 
         // Auto-approve ERC20 bond token if needed
@@ -2132,32 +2320,43 @@ impl TangleClient {
         }
 
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
             .await
             .map_err(Error::Transport)?;
-        let contract = IMultiAssetDelegation::new(self.restaking_address, &provider);
 
         let receipt = if bond_token == Address::ZERO {
-            // Native ETH bond
-            contract
-                .registerOperator()
-                .value(stake_amount)
-                .send()
-                .await
-                .map_err(|e| Error::Contract(e.to_string()))?
-                .get_receipt()
-                .await?
+            let tx_request = TransactionRequest::default()
+                .to(self.restaking_address)
+                .input(registerOperatorCall {}.abi_encode().into())
+                .value(stake_amount);
+            send_transaction_with_fallback_gas(
+                &provider,
+                from_address,
+                tx_request,
+                REGISTER_OPERATOR_RESTAKING_MIN_GAS_LIMIT,
+            )
+            .await?
         } else {
-            // ERC20 bond (e.g., TNT)
-            contract
-                .registerOperatorWithAsset(bond_token, stake_amount)
-                .send()
-                .await
-                .map_err(|e| Error::Contract(e.to_string()))?
-                .get_receipt()
-                .await?
+            let tx_request = TransactionRequest::default()
+                .to(self.restaking_address)
+                .input(
+                    registerOperatorWithAssetCall {
+                        token: bond_token,
+                        amount: stake_amount,
+                    }
+                    .abi_encode()
+                    .into(),
+                );
+            send_transaction_with_fallback_gas(
+                &provider,
+                from_address,
+                tx_request,
+                REGISTER_OPERATOR_RESTAKING_MIN_GAS_LIMIT,
+            )
+            .await?
         };
 
         Ok(transaction_result_from_receipt(&receipt))
@@ -2517,35 +2716,32 @@ impl TangleClient {
         output: Bytes,
     ) -> Result<TransactionResult> {
         use crate::contracts::ITangle::submitResultCall;
-        use alloy_sol_types::SolCall;
 
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
             .await
             .map_err(Error::Transport)?;
 
-        let call = submitResultCall {
-            serviceId: service_id,
-            callId: call_id,
-            result: output,
-        };
-        let calldata = call.abi_encode();
+        let tx_request = TransactionRequest::default().to(self.tangle_address).input(
+            submitResultCall {
+                serviceId: service_id,
+                callId: call_id,
+                result: output,
+            }
+            .abi_encode()
+            .into(),
+        );
 
-        let tx_request = TransactionRequest::default()
-            .to(self.tangle_address)
-            .input(calldata.into());
-
-        let pending_tx = provider
-            .send_transaction(tx_request)
-            .await
-            .map_err(Error::Transport)?;
-
-        let receipt = pending_tx
-            .get_receipt()
-            .await
-            .map_err(Error::PendingTransaction)?;
+        let receipt = send_transaction_with_fallback_gas(
+            &provider,
+            from_address,
+            tx_request,
+            SUBMIT_RESULT_MIN_GAS_LIMIT,
+        )
+        .await?;
 
         Ok(TransactionResult {
             tx_hash: receipt.transaction_hash,
@@ -2912,5 +3108,71 @@ impl BlueprintServicesClient for TangleClient {
     /// Get the current blueprint ID
     async fn blueprint_id(&self) -> core::result::Result<Self::Id, Self::Error> {
         Ok(self.config.settings.blueprint_id)
+    }
+}
+
+#[cfg(test)]
+mod gas_fallback_tests {
+    use super::{
+        APPROVE_SERVICE_MIN_GAS_LIMIT, CREATE_BLUEPRINT_MIN_GAS_LIMIT, ERC20_APPROVE_MIN_GAS_LIMIT,
+        REGISTER_BLUEPRINT_OPERATOR_MIN_GAS_LIMIT, REGISTER_OPERATOR_RESTAKING_MIN_GAS_LIMIT,
+        REQUEST_SERVICE_MIN_GAS_LIMIT, SUBMIT_RESULT_GAS_BUFFER_DENOMINATOR,
+        SUBMIT_RESULT_GAS_BUFFER_NUMERATOR, SUBMIT_RESULT_MIN_GAS_LIMIT, buffered_gas_limit,
+    };
+
+    #[test]
+    fn fallback_to_min_when_estimation_unavailable() {
+        assert_eq!(
+            buffered_gas_limit(None, SUBMIT_RESULT_MIN_GAS_LIMIT),
+            SUBMIT_RESULT_MIN_GAS_LIMIT
+        );
+    }
+
+    #[test]
+    fn buffered_estimate_applied_when_above_min() {
+        let estimate = SUBMIT_RESULT_MIN_GAS_LIMIT * 2;
+        let expected = estimate.saturating_mul(SUBMIT_RESULT_GAS_BUFFER_NUMERATOR)
+            / SUBMIT_RESULT_GAS_BUFFER_DENOMINATOR;
+        assert_eq!(
+            buffered_gas_limit(Some(estimate), SUBMIT_RESULT_MIN_GAS_LIMIT),
+            expected
+        );
+        assert!(expected > estimate, "buffer must increase estimate");
+    }
+
+    #[test]
+    fn min_floor_applied_when_buffered_estimate_is_small() {
+        // Tiny estimate still gets bumped to min_gas_limit.
+        assert_eq!(
+            buffered_gas_limit(Some(1), SUBMIT_RESULT_MIN_GAS_LIMIT),
+            SUBMIT_RESULT_MIN_GAS_LIMIT
+        );
+        assert_eq!(
+            buffered_gas_limit(Some(21_000), ERC20_APPROVE_MIN_GAS_LIMIT),
+            ERC20_APPROVE_MIN_GAS_LIMIT
+        );
+    }
+
+    #[test]
+    fn saturating_math_never_overflows() {
+        // Degenerate estimate near u64::MAX must not wrap.
+        let out = buffered_gas_limit(Some(u64::MAX), SUBMIT_RESULT_MIN_GAS_LIMIT);
+        assert!(out >= SUBMIT_RESULT_MIN_GAS_LIMIT);
+    }
+
+    #[test]
+    fn min_limits_are_nonzero_sanity() {
+        // Fail-open floors must be non-zero for every call-site constant.
+        for min in [
+            SUBMIT_RESULT_MIN_GAS_LIMIT,
+            CREATE_BLUEPRINT_MIN_GAS_LIMIT,
+            REGISTER_BLUEPRINT_OPERATOR_MIN_GAS_LIMIT,
+            REQUEST_SERVICE_MIN_GAS_LIMIT,
+            APPROVE_SERVICE_MIN_GAS_LIMIT,
+            ERC20_APPROVE_MIN_GAS_LIMIT,
+            REGISTER_OPERATOR_RESTAKING_MIN_GAS_LIMIT,
+        ] {
+            assert!(min > 21_000, "gas floor {min} below 21k base tx cost");
+        }
     }
 }
