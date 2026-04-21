@@ -525,11 +525,11 @@ impl SshDeploymentClient {
             .iter()
             .map(|(k, v)| {
                 // Prevent injection: reject keys with =, newline, or whitespace.
-                let k_safe = k
-                    .chars()
-                    .all(|c| c.is_alphanumeric() || c == '_')
-                    .then_some(k.as_str())
-                    .unwrap_or("INVALID");
+                let k_safe = if k.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    k.as_str()
+                } else {
+                    "INVALID"
+                };
                 // Escape single quotes in value.
                 let v_safe = v.replace('\'', "'\\''");
                 format!("{k_safe}='{v_safe}'")

@@ -234,19 +234,44 @@ mod tests {
 
     #[test]
     fn all_metrics_register_on_default_registry() {
-        // Force lazy init of every static.
-        let _ = &*INIT_DURATION;
-        let _ = &*CONTRACT_SCAN_DURATION;
-        let _ = &*SERVICE_STARTUP_DURATION;
-        let _ = &*SOURCE_ATTEMPT_DURATION;
-        let _ = &*BLOCK_PROCESSING_DURATION;
-        let _ = &*SERVICE_DISCOVERY;
-        let _ = &*SOURCE_ATTEMPTS;
+        // Force lazy init AND materialize a child for each Vec metric —
+        // `prometheus::gather()` only emits a MetricFamily for a `*Vec` after
+        // a labeled child has been observed. Scalar types (IntGauge, bare
+        // Histogram) show up on registration alone.
+        INIT_DURATION
+            .with_label_values(&["register_check"])
+            .observe(0.0);
+        CONTRACT_SCAN_DURATION
+            .with_label_values::<&str>(&[])
+            .observe(0.0);
+        SERVICE_STARTUP_DURATION
+            .with_label_values(&["register_check", "github", "ok"])
+            .observe(0.0);
+        SOURCE_ATTEMPT_DURATION
+            .with_label_values(&["github", "/register/check", "ok"])
+            .observe(0.0);
+        BLOCK_PROCESSING_DURATION
+            .with_label_values::<&str>(&[])
+            .observe(0.0);
+        SERVICE_DISCOVERY
+            .with_label_values(&["register_check"])
+            .inc();
+        SOURCE_ATTEMPTS
+            .with_label_values(&["register_check", "success"])
+            .inc();
         let _ = &*ACTIVE_SERVICES;
-        let _ = &*REMOTE_PROVISION_DURATION;
-        let _ = &*JOB_EXECUTION_DURATION;
-        let _ = &*JOB_COST_USD;
-        let _ = &*JOBS_TOTAL;
+        REMOTE_PROVISION_DURATION
+            .with_label_values(&["register_check", "ok"])
+            .observe(0.0);
+        JOB_EXECUTION_DURATION
+            .with_label_values(&["register_check", "0", "ok"])
+            .observe(0.0);
+        JOB_COST_USD
+            .with_label_values(&["register_check", "0"])
+            .observe(0.0);
+        JOBS_TOTAL
+            .with_label_values(&["register_check", "0", "success"])
+            .inc();
         let _ = &*COMPUTE_COST_USD;
 
         let families = prometheus::gather();
