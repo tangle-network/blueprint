@@ -44,8 +44,8 @@ pub struct TangleClientArgs {
     /// Tangle contract address.
     #[arg(long, value_name = "ADDRESS")]
     pub tangle_contract: Option<String>,
-    /// Restaking contract address.
-    #[arg(long, value_name = "ADDRESS")]
+    /// Staking contract address.
+    #[arg(long = "staking-contract", value_name = "ADDRESS")]
     pub staking_contract: Option<String>,
     /// Optional status registry contract address.
     #[arg(long, value_name = "ADDRESS")]
@@ -68,7 +68,7 @@ struct Resolved {
     ws_rpc_url: Url,
     keystore_path: PathBuf,
     tangle: Address,
-    restaking: Address,
+    staking: Address,
     status: Address,
 }
 
@@ -119,7 +119,7 @@ impl TangleClientArgs {
                 return Err(missing_addr_err("tangle_contract", "TANGLE_CONTRACT"));
             }
         };
-        let restaking = match (&self.staking_contract, net) {
+        let staking = match (&self.staking_contract, net) {
             (Some(s), _) => parse_address(s, "STAKING_CONTRACT")?,
             (None, Some(n)) => n.staking_contract,
             (None, None) => {
@@ -137,7 +137,7 @@ impl TangleClientArgs {
             ws_rpc_url,
             keystore_path,
             tangle,
-            restaking,
+            staking,
             status,
         })
     }
@@ -153,7 +153,7 @@ impl TangleClientArgs {
             blueprint_id,
             service_id,
             tangle_contract: r.tangle,
-            staking_contract: r.restaking,
+            staking_contract: r.staking,
             status_registry_contract: r.status,
         };
 
