@@ -189,7 +189,7 @@ async fn approve_service_request_cli(network_args: &[String], request_id: u64) -
     approve_args.extend(network_args.iter().cloned());
     approve_args.push("--request-id".into());
     approve_args.push(request_id.to_string());
-    approve_args.push("--restaking-percent".into());
+    approve_args.push("--staking-percent".into());
     approve_args.push("0".into());
     approve_args.push("--json".into());
     run_cli_command(&approve_args)?;

@@ -16,10 +16,10 @@ pub async fn request_service(
 pub async fn approve_service(
     client: &TangleClient,
     request_id: u64,
-    restaking_percent: u8,
+    staking_percent: u8,
 ) -> Result<TransactionResult> {
     client
-        .approve_service(request_id, restaking_percent)
+        .approve_service(request_id, staking_percent)
         .await
         .map_err(Into::into)
 }

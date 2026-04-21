@@ -481,8 +481,8 @@ enum ServiceCommands {
         #[arg(long)]
         request_id: u64,
         /// Percentage of your stake to commit to this service (0-100).
-        #[arg(long, default_value_t = 50)]
-        restaking_percent: u8,
+        #[arg(long = "staking-percent", default_value_t = 50)]
+        staking_percent: u8,
         /// Explicit security commitment (format: KIND:TOKEN:EXPOSURE, can repeat).
         ///
         /// Overrides automatic allocation. EXPOSURE is in wei.
@@ -700,7 +700,7 @@ enum DelegatorCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Approve ERC20 tokens for restaking.
+    /// Approve ERC20 tokens for staking.
     ///
     /// Required before depositing ERC20 tokens. Sets the allowance for
     /// the staking contract to transfer tokens on your behalf.
@@ -936,10 +936,10 @@ enum OperatorCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Show operator restaking status and stake amounts.
+    /// Show operator staking status and stake amounts.
     ///
     /// Displays total stake, delegated amounts, and operator status.
-    Restaking {
+    Staking {
         #[command(flatten)]
         network: TangleClientArgs,
         /// Operator address to query (defaults to your address).
@@ -1005,7 +1005,7 @@ enum OperatorCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Register as a new operator on the restaking layer.
+    /// Register as a new operator on the staking layer.
     ///
     /// Stakes the initial bond and enables operator status.
     /// For ERC20 bond tokens, you must approve() the staking contract first.
@@ -1660,13 +1660,13 @@ async fn main() -> Result<()> {
                 ServiceCommands::Approve {
                     network,
                     request_id,
-                    restaking_percent,
+                    staking_percent,
                     json,
                     security_commitments,
                 } => {
                     let client = network.connect(0, None).await?;
                     let tx = if security_commitments.is_empty() {
-                        approve_service(&client, request_id, restaking_percent).await?
+                        approve_service(&client, request_id, staking_percent).await?
                     } else {
                         let commitments: Vec<ITangleTypes::AssetSecurityCommitment> =
                             security_commitments
@@ -2280,7 +2280,7 @@ async fn main() -> Result<()> {
                     .map_err(|e| eyre!(e.to_string()))?;
                 log_tx("Operator leave", &tx, json);
             }
-            OperatorCommands::Restaking {
+            OperatorCommands::Staking {
                 network,
                 operator,
                 json,
@@ -2295,7 +2295,7 @@ async fn main() -> Result<()> {
                     .is_operator(operator_address)
                     .await
                     .map_err(|e| eyre!(e.to_string()))?;
-                let restaking = client
+                let staking = client
                     .get_restaking_metadata(operator_address)
                     .await
                     .map_err(|e| eyre!(e.to_string()))?;
@@ -2315,9 +2315,9 @@ async fn main() -> Result<()> {
                     .restaking_round()
                     .await
                     .map_err(|e| eyre!(e.to_string()))?;
-                delegator::print_operator_restaking(
+                delegator::print_operator_staking(
                     operator_address,
-                    &restaking,
+                    &staking,
                     is_registered,
                     self_stake,
                     delegated_stake,

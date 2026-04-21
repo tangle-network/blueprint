@@ -98,7 +98,7 @@ cargo tangle blueprint run \
 | `BLUEPRINT_ID` | Blueprint registered on `ITangle`. |
 | `SERVICE_ID` | Optional fixed service (leave unset to process all). |
 | `TANGLE_CONTRACT` | `ITangle` contract address. |
-| `STAKING_CONTRACT` | `MultiAssetDelegation` contract. |
+| `STAKING_CONTRACT` | `MultiAssetDelegation` staking contract. |
 | `STATUS_REGISTRY_CONTRACT` | `OperatorStatusRegistry` heartbeat contract. |
 
 The CLI automatically ensures an ECDSA key exists under `--keystore-path` and derives the operator address from it.
@@ -152,10 +152,10 @@ cargo tangle blueprint service request \
 ### Approving or Rejecting
 
 ```bash
-# Simple restaking approval
+# Simple staking approval
 cargo tangle blueprint service approve \
   --request-id 42 \
-  --restaking-percent 50
+  --staking-percent 50
 
 # Approval that matches request-level security requirements
 cargo tangle blueprint service approve \

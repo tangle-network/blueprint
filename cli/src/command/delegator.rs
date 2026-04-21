@@ -335,9 +335,9 @@ pub fn print_positions(
     }
 }
 
-pub fn print_operator_restaking(
+pub fn print_operator_staking(
     operator: Address,
-    restaking: &RestakingMetadata,
+    staking: &RestakingMetadata,
     is_registered: bool,
     self_stake: U256,
     delegated_stake: U256,
@@ -345,41 +345,41 @@ pub fn print_operator_restaking(
     current_round: u64,
     json_output: bool,
 ) {
-    let status_str = format_status(restaking, is_registered);
+    let status_str = format_status(staking, is_registered);
 
     if json_output {
         println!(
             "{}",
             serde_json::to_string_pretty(&json!({
                 "operator": format!("{:#x}", operator),
-                "stake": restaking.stake.to_string(),
+                "stake": staking.stake.to_string(),
                 "self_stake": self_stake.to_string(),
                 "delegated_stake": delegated_stake.to_string(),
-                "delegation_count": restaking.delegation_count,
+                "delegation_count": staking.delegation_count,
                 "status": status_str,
-                "leaving_round": restaking.leaving_round,
+                "leaving_round": staking.leaving_round,
                 "commission_bps": commission_bps,
                 "current_round": current_round,
             }))
-            .expect("serialize operator restaking")
+            .expect("serialize operator staking")
         );
         return;
     }
 
     println!("{}: {:#x}", style("Operator").green(), operator);
     println!("{}: {}", style("Status").green(), status_str);
-    println!("{}: {}", style("Stake").green(), restaking.stake);
+    println!("{}: {}", style("Stake").green(), staking.stake);
     println!("{}: {}", style("Self Stake").green(), self_stake);
     println!("{}: {}", style("Delegated Stake").green(), delegated_stake);
     println!(
         "{}: {}",
         style("Delegation Count").green(),
-        restaking.delegation_count
+        staking.delegation_count
     );
     println!(
         "{}: {}",
         style("Leaving Round").green(),
-        restaking.leaving_round
+        staking.leaving_round
     );
     println!("{}: {}", style("Commission BPS").green(), commission_bps);
     println!("{}: {}", style("Current Round").green(), current_round);
@@ -474,9 +474,9 @@ fn format_deposit(deposit: &DepositInfo) -> String {
     )
 }
 
-fn format_status(restaking: &RestakingMetadata, is_registered: bool) -> String {
+fn format_status(staking: &RestakingMetadata, is_registered: bool) -> String {
     if !is_registered {
         return "Not Registered".to_string();
     }
-    format!("{:?}", restaking.status)
+    format!("{:?}", staking.status)
 }

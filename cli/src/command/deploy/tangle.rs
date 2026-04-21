@@ -80,8 +80,8 @@ pub struct TangleDeployArgs {
     /// Override the Tangle contract address (non-devnet).
     #[arg(long)]
     pub tangle_contract: Option<String>,
-    /// Override the MultiAssetDelegation contract address (non-devnet).
-    #[arg(long)]
+    /// Override the MultiAssetDelegation staking contract address (non-devnet).
+    #[arg(long = "staking-contract")]
     pub staking_contract: Option<String>,
     /// Override the OperatorStatusRegistry contract address (non-devnet).
     #[arg(long)]

@@ -127,15 +127,15 @@ async fn test_operator_increase_stake() -> Result<()> {
     Ok(())
 }
 
-/// Test: Query restaking status for pre-registered operator.
+/// Test: Query staking status for pre-registered operator.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_operator_restaking_status() -> Result<()> {
+async fn test_operator_staking_status() -> Result<()> {
     if !is_e2e_enabled() {
-        eprintln!("Skipping test_operator_restaking_status (set {RUN_TNT_E2E_ENV}=1)");
+        eprintln!("Skipping test_operator_staking_status (set {RUN_TNT_E2E_ENV}=1)");
         return Ok(());
     }
 
-    let harness = match spawn_harness("test_operator_restaking_status").await? {
+    let harness = match spawn_harness("test_operator_staking_status").await? {
         Some(harness) => harness,
         None => return Ok(()),
     };
@@ -145,7 +145,7 @@ async fn test_operator_restaking_status() -> Result<()> {
     fs::create_dir_all(&keystore_path)?;
     seed_operator1_keystore(&keystore_path)?;
 
-    let mut args = vec!["operator".to_string(), "restaking".to_string()];
+    let mut args = vec!["operator".to_string(), "staking".to_string()];
     args.extend(network_cli_args(&harness, &keystore_path));
     args.push("--operator".into());
     args.push(OPERATOR1_ADDRESS.into());
