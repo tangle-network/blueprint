@@ -15,11 +15,11 @@
 //! Counters use label cardinality bounded by known enum values (source_kind,
 //! result) — never user-supplied strings.
 
-use once_cell::sync::Lazy;
 use prometheus::{
     Histogram, HistogramVec, IntCounterVec, IntGauge, register_histogram, register_histogram_vec,
     register_int_counter_vec, register_int_gauge,
 };
+use std::sync::LazyLock;
 
 // ── Bucket definitions ──────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ const BLOCK_BUCKETS: &[f64] = &[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 // ── Metrics ─────────────────────────────────────────────────────────────
 
 /// Total manager initialization time (event replay + contract scan + all service starts).
-pub static INIT_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+pub static INIT_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         prometheus::histogram_opts!(
             "tangle_manager_init_seconds",
@@ -51,7 +51,7 @@ pub static INIT_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 /// Contract state scan time (enumerating all services for this operator).
-pub static CONTRACT_SCAN_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+pub static CONTRACT_SCAN_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         prometheus::histogram_opts!(
             "tangle_contract_scan_seconds",
@@ -64,7 +64,7 @@ pub static CONTRACT_SCAN_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 /// Per-service startup time (from discovery to healthy).
-pub static SERVICE_STARTUP_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+pub static SERVICE_STARTUP_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         prometheus::histogram_opts!(
             "tangle_service_startup_seconds",
@@ -77,7 +77,7 @@ pub static SERVICE_STARTUP_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 /// Per-source-attempt time (fetch + build/pull + spawn + health check).
-pub static SOURCE_ATTEMPT_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+pub static SOURCE_ATTEMPT_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         prometheus::histogram_opts!(
             "tangle_source_attempt_seconds",
@@ -90,7 +90,7 @@ pub static SOURCE_ATTEMPT_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 /// Block event processing time.
-pub static BLOCK_PROCESSING_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+pub static BLOCK_PROCESSING_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         prometheus::histogram_opts!(
             "tangle_block_processing_seconds",
@@ -103,7 +103,7 @@ pub static BLOCK_PROCESSING_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 /// Service discovery outcomes.
-pub static SERVICE_DISCOVERY: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static SERVICE_DISCOVERY: LazyLock<IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
         prometheus::opts!(
             "tangle_service_discovery_total",
@@ -115,7 +115,7 @@ pub static SERVICE_DISCOVERY: Lazy<IntCounterVec> = Lazy::new(|| {
 });
 
 /// Source fallback attempts.
-pub static SOURCE_ATTEMPTS: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static SOURCE_ATTEMPTS: LazyLock<IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
         prometheus::opts!(
             "tangle_source_attempts_total",
@@ -127,7 +127,7 @@ pub static SOURCE_ATTEMPTS: Lazy<IntCounterVec> = Lazy::new(|| {
 });
 
 /// Number of currently active services managed by this operator.
-pub static ACTIVE_SERVICES: Lazy<IntGauge> = Lazy::new(|| {
+pub static ACTIVE_SERVICES: LazyLock<IntGauge> = LazyLock::new(|| {
     register_int_gauge!(
         "tangle_active_services",
         "Number of currently running blueprint services"
@@ -136,7 +136,7 @@ pub static ACTIVE_SERVICES: Lazy<IntGauge> = Lazy::new(|| {
 });
 
 /// Remote cloud provisioning time (GPU/CPU VM spin-up).
-pub static REMOTE_PROVISION_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+pub static REMOTE_PROVISION_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         prometheus::histogram_opts!(
             "tangle_remote_provision_seconds",
@@ -157,7 +157,7 @@ const JOB_BUCKETS: &[f64] = &[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 3
 const COST_BUCKETS: &[f64] = &[0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0];
 
 /// Per-job execution time (from call_id submission to result posted).
-pub static JOB_EXECUTION_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
+pub static JOB_EXECUTION_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         prometheus::histogram_opts!(
             "tangle_job_execution_seconds",
@@ -170,7 +170,7 @@ pub static JOB_EXECUTION_DURATION: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 /// Per-job cost in USD (tokens × rate or compute × rate).
-pub static JOB_COST_USD: Lazy<HistogramVec> = Lazy::new(|| {
+pub static JOB_COST_USD: LazyLock<HistogramVec> = LazyLock::new(|| {
     register_histogram_vec!(
         prometheus::histogram_opts!(
             "tangle_job_cost_usd",
@@ -183,7 +183,7 @@ pub static JOB_COST_USD: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 /// Total jobs processed (success + failure).
-pub static JOBS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+pub static JOBS_TOTAL: LazyLock<IntCounterVec> = LazyLock::new(|| {
     register_int_counter_vec!(
         prometheus::opts!("tangle_jobs_total", "Total jobs processed by outcome"),
         &["blueprint_id", "job_index", "result"]
@@ -192,7 +192,7 @@ pub static JOBS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
 });
 
 /// Cumulative cloud compute cost in USD (running total).
-pub static COMPUTE_COST_USD: Lazy<Histogram> = Lazy::new(|| {
+pub static COMPUTE_COST_USD: LazyLock<Histogram> = LazyLock::new(|| {
     register_histogram!(prometheus::histogram_opts!(
         "tangle_compute_cost_usd",
         "Cumulative cloud compute cost per provisioning event",
@@ -238,21 +238,29 @@ mod tests {
         // `prometheus::gather()` only emits a MetricFamily for a `*Vec` after
         // a labeled child has been observed. Scalar types (IntGauge, bare
         // Histogram) show up on registration alone.
+        //
+        // Tests share the default Prometheus registry, so observed values
+        // must land above every configured bucket upper-bound to avoid
+        // polluting cumulative_count assertions in the bucket-placement
+        // tests. `OVERFLOW` is larger than every bucket in this file
+        // (max = 600.0 in `PROVISION_BUCKETS`), so observations only
+        // increment sample_count — never an explicit bucket's cumulative count.
+        const OVERFLOW: f64 = 1_000_000.0;
         INIT_DURATION
             .with_label_values(&["register_check"])
-            .observe(0.0);
+            .observe(OVERFLOW);
         CONTRACT_SCAN_DURATION
             .with_label_values::<&str>(&[])
-            .observe(0.0);
+            .observe(OVERFLOW);
         SERVICE_STARTUP_DURATION
             .with_label_values(&["register_check", "github", "ok"])
-            .observe(0.0);
+            .observe(OVERFLOW);
         SOURCE_ATTEMPT_DURATION
             .with_label_values(&["github", "/register/check", "ok"])
-            .observe(0.0);
+            .observe(OVERFLOW);
         BLOCK_PROCESSING_DURATION
             .with_label_values::<&str>(&[])
-            .observe(0.0);
+            .observe(OVERFLOW);
         SERVICE_DISCOVERY
             .with_label_values(&["register_check"])
             .inc();
@@ -262,13 +270,13 @@ mod tests {
         let _ = &*ACTIVE_SERVICES;
         REMOTE_PROVISION_DURATION
             .with_label_values(&["register_check", "ok"])
-            .observe(0.0);
+            .observe(OVERFLOW);
         JOB_EXECUTION_DURATION
             .with_label_values(&["register_check", "0", "ok"])
-            .observe(0.0);
+            .observe(OVERFLOW);
         JOB_COST_USD
             .with_label_values(&["register_check", "0"])
-            .observe(0.0);
+            .observe(OVERFLOW);
         JOBS_TOTAL
             .with_label_values(&["register_check", "0", "success"])
             .inc();
@@ -617,15 +625,28 @@ mod tests {
     #[test]
     fn label_names_are_exact_for_every_metric() {
         // Observe with unique tags to create metric entries.
+        // Zero-label HistogramVec metrics (CONTRACT_SCAN_DURATION,
+        // BLOCK_PROCESSING_DURATION) also need a child observation — otherwise
+        // prometheus::gather() does not emit their MetricFamily.
+        // Values beyond every bucket's max — only increment sample_count,
+        // avoid polluting cumulative_count for shared zero-label metrics
+        // (CONTRACT_SCAN_DURATION, BLOCK_PROCESSING_DURATION).
+        const OVERFLOW: f64 = 1_000_000.0;
         INIT_DURATION
             .with_label_values(&["label_names_test"])
-            .observe(0.1);
+            .observe(OVERFLOW);
+        CONTRACT_SCAN_DURATION
+            .with_label_values::<&str>(&[])
+            .observe(OVERFLOW);
         SERVICE_STARTUP_DURATION
             .with_label_values(&["label_names_bp", "docker", "ok"])
-            .observe(0.1);
+            .observe(OVERFLOW);
         SOURCE_ATTEMPT_DURATION
             .with_label_values(&["docker", "/label/test", "ok"])
-            .observe(0.1);
+            .observe(OVERFLOW);
+        BLOCK_PROCESSING_DURATION
+            .with_label_values::<&str>(&[])
+            .observe(OVERFLOW);
         SERVICE_DISCOVERY
             .with_label_values(&["label_names_started"])
             .inc();
@@ -666,9 +687,9 @@ mod tests {
                     .find(|m| !m.get_label().is_empty())
                     .unwrap_or_else(|| panic!("{metric_name}: no labeled metrics found"));
                 let mut names: Vec<&str> = m.get_label().iter().map(|l| l.name()).collect();
-                names.sort();
+                names.sort_unstable();
                 let mut sorted_expected: Vec<&str> = expected.to_vec();
-                sorted_expected.sort();
+                sorted_expected.sort_unstable();
                 assert_eq!(
                     names, sorted_expected,
                     "label names mismatch for {metric_name}"

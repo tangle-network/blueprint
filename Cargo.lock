@@ -3567,7 +3567,6 @@ dependencies = [
  "netdev",
  "nftables",
  "nix 0.31.2",
- "once_cell",
  "prometheus",
  "rand 0.8.6",
  "reqwest 0.12.28",
