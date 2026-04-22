@@ -47,9 +47,6 @@ const REQUEST_SERVICE_MIN_GAS_LIMIT: u64 = 2_000_000;
 const APPROVE_SERVICE_MIN_GAS_LIMIT: u64 = 1_000_000;
 const ERC20_APPROVE_MIN_GAS_LIMIT: u64 = 100_000;
 const REGISTER_OPERATOR_RESTAKING_MIN_GAS_LIMIT: u64 = 500_000;
-const INITIAL_LOG_LOOKBACK_BLOCKS: u64 = 9;
-const MAX_LOG_RANGE_BLOCKS: u64 = 10;
-
 #[allow(missing_docs)]
 mod erc20 {
     alloy_sol_types::sol! {
@@ -624,8 +621,8 @@ impl TangleClient {
 
     /// Get the next event (polls for new blocks)
     ///
-    /// On the first call, scans a small recent window to catch up on any
-    /// near-realtime events while staying compatible with hosted RPC plans
+    /// On the first call, scans a recent bounded window to catch up on
+    /// historical events while staying compatible with hosted RPC plans
     /// that cap `eth_getLogs` block ranges. Older active services are still
     /// discovered by the manager's contract-state fallback during initialize.
     /// Subsequent calls only scan new blocks.
@@ -634,7 +631,7 @@ impl TangleClient {
             let current_block = match self.block_number().await {
                 Ok(block) => block,
                 Err(err) => {
-                    tracing::warn!("Failed to fetch current block number: {err}");
+                    tracing::warn!(error = %err, "Failed to fetch current block number");
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
@@ -642,8 +639,8 @@ impl TangleClient {
 
             let mut last_block = self.block_subscription.lock().await;
             let from_block = last_block
-                .map(|b| b + 1)
-                .unwrap_or_else(|| current_block.saturating_sub(INITIAL_LOG_LOOKBACK_BLOCKS));
+                .map(|block| block.saturating_add(1))
+                .unwrap_or_else(|| current_block.saturating_sub(9_999));
 
             if from_block > current_block {
                 drop(last_block);
@@ -651,20 +648,20 @@ impl TangleClient {
                 continue;
             }
 
-            let to_block = current_block
-                .min(from_block.saturating_add(MAX_LOG_RANGE_BLOCKS.saturating_sub(1)));
-
             // Get block info
-            let Some(block) = (match self.get_block(BlockNumberOrTag::Number(to_block)).await {
+            let Some(block) = (match self
+                .get_block(BlockNumberOrTag::Number(current_block))
+                .await
+            {
                 Ok(block) => block,
                 Err(err) => {
-                    tracing::warn!("Failed to fetch block data for block {to_block}: {err}");
+                    tracing::warn!(error = %err, block = current_block, "Failed to fetch block");
                     drop(last_block);
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             }) else {
-                tracing::warn!("RPC returned no block data for block {current_block}");
+                tracing::warn!(block = current_block, "Latest block was unavailable");
                 drop(last_block);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
@@ -674,13 +671,16 @@ impl TangleClient {
             let filter = Filter::new()
                 .address(self.tangle_address)
                 .from_block(from_block)
-                .to_block(to_block);
+                .to_block(current_block);
 
             let logs = match self.get_logs(&filter).await {
                 Ok(logs) => logs,
                 Err(err) => {
                     tracing::warn!(
-                        "Failed to fetch Tangle logs for blocks {from_block}..={to_block}: {err}"
+                        error = %err,
+                        from_block,
+                        to_block = current_block,
+                        "Failed to fetch Tangle logs"
                     );
                     drop(last_block);
                     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -688,10 +688,10 @@ impl TangleClient {
                 }
             };
 
-            *last_block = Some(to_block);
+            *last_block = Some(current_block);
 
             let event = TangleEvent {
-                block_number: to_block,
+                block_number: current_block,
                 block_hash: block.header.hash,
                 timestamp: block.header.timestamp,
                 logs,
