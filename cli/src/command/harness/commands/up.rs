@@ -11,13 +11,12 @@ pub async fn run(args: UpArgs) -> Result<()> {
             .split(',')
             .map(|s| {
                 let s = s.trim();
-                let expanded = if let Some(rest) = s.strip_prefix("~/") {
+                if let Some(rest) = s.strip_prefix("~/") {
                     let home = std::env::var("HOME").unwrap_or_default();
                     PathBuf::from(home).join(rest)
                 } else {
                     PathBuf::from(s)
-                };
-                expanded
+                }
             })
             .collect();
         HarnessConfig::compose(&paths)?

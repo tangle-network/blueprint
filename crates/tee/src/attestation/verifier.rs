@@ -22,6 +22,7 @@ impl VerifiedAttestation {
     /// This should only be called by [`AttestationVerifier`] implementations
     /// after successful verification. Restricted to `pub(crate)` to prevent
     /// external callers from bypassing verification.
+    #[allow(dead_code)]
     pub(crate) fn new(report: AttestationReport, verified_by: TeeProvider) -> Self {
         Self {
             report,

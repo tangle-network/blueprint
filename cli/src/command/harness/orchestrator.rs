@@ -14,6 +14,7 @@ use tokio::task::JoinHandle;
 /// A spawned blueprint-manager subprocess with isolated env.
 struct SpawnedBlueprint {
     name: String,
+    #[allow(dead_code)]
     service_id: u64,
     port: u16,
     child: Child,
