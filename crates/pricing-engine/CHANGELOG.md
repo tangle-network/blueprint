@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.3](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.2...blueprint-pricing-engine-v0.3.0-alpha.3) - 2026-04-22
+
+### Added
+
+- harness system + x402 E2E + chain target flags (#1379)
+- *(cargo-tangle)* dev up/down workspace + fix silent Hetzner/Crusoe provider bug (#1376)
+- one-click local Tangle stack script
+
 ## [0.2.5](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.2.4...blueprint-pricing-engine-v0.2.5) - 2025-10-02
 
 ### Other

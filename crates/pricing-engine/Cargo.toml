@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-pricing-engine"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true

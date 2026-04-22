@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.4](https://github.com/tangle-network/blueprint/compare/blueprint-keystore-v0.2.0-alpha.3...blueprint-keystore-v0.2.0-alpha.4) - 2026-04-22
+
+### Other
+
+- update Cargo.toml dependencies
+
 ### Removed
 
 - drop Substrate keystore backend and legacy `tangle` feature flag in favor of the new `tangle` stack (EVM-only)
