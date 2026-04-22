@@ -665,6 +665,11 @@ mod tests {
         JOBS_TOTAL
             .with_label_values(&["label_names_bp4", "0", "success"])
             .inc();
+        // Scalar metrics must also be touched so their Lazy is forced within
+        // this nextest process; otherwise prometheus::gather() omits them.
+        // set(0)/observe(0.0) instead of a deref so the optimiser can't skip.
+        ACTIVE_SERVICES.set(0);
+        COMPUTE_COST_USD.observe(OVERFLOW);
 
         let families = prometheus::gather();
 
