@@ -111,6 +111,7 @@ impl TangleWorkspace {
     /// Try to find a workspace. Order:
     ///   1. `$TANGLE_CONFIG` env var if set
     ///   2. walk up from CWD looking for `.tangle.toml`
+    ///
     /// Returns `Ok(None)` when none is found (not an error).
     pub fn discover() -> Result<Option<Self>> {
         if let Ok(path) = env::var(WORKSPACE_ENV) {

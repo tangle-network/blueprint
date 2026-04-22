@@ -15,11 +15,11 @@
 //! Counters use label cardinality bounded by known enum values (source_kind,
 //! result) — never user-supplied strings.
 
+use blueprint_std::sync::LazyLock;
 use prometheus::{
     Histogram, HistogramVec, IntCounterVec, IntGauge, register_histogram, register_histogram_vec,
     register_int_counter_vec, register_int_gauge,
 };
-use std::sync::LazyLock;
 
 // ── Bucket definitions ──────────────────────────────────────────────────
 
