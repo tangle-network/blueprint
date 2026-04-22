@@ -156,24 +156,52 @@ for ((i=0; i<total_packages; i++)); do
     echo "[$((i+1))/$total_packages] Publishing $package"
     echo "========================================="
 
-    # Run cargo publish — treat "already exists" as success
-    output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1 || true)
-    if echo "$output" | grep -q "Uploading\|Published"; then
-        echo "✓ Successfully published $package"
-    elif echo "$output" | grep -q "already exists"; then
-        echo "✓ $package already published (skipped)"
+    # Read the target version from the package's manifest so we can verify
+    # crates.io actually stored it — cargo prints "Uploading" before the upload
+    # completes, so grepping its output was lying on silent server-side
+    # rejections (it reported success when crates.io never persisted the crate).
+    target_version=$(cargo metadata --format-version 1 --no-deps 2>/dev/null \
+        | python3 -c "import json,sys; m=json.load(sys.stdin); print(next(p['version'] for p in m['packages'] if p['name']=='$package'))" 2>/dev/null || true)
+    if [[ -z "$target_version" ]]; then
+        echo "✗ Could not resolve target version for $package from cargo metadata"
+        failed_packages+=("$package")
+        continue
+    fi
+
+    version_is_live() {
+        local name="$1" version="$2"
+        local body
+        body=$(curl -fsSL --max-time 10 "https://crates.io/api/v1/crates/$name/$version" 2>/dev/null || echo "")
+        [[ -n "$body" ]] && echo "$body" | grep -q "\"num\":\"$version\""
+    }
+
+    run_publish() {
+        # Always echo the real output so silent rejections are auditable.
+        cargo publish --package "$package" --allow-dirty --no-verify 2>&1
+    }
+
+    if version_is_live "$package" "$target_version"; then
+        echo "✓ $package $target_version already on crates.io (skipped)"
     else
-        echo "⚠ First attempt failed for $package, waiting 30s and retrying..."
-        echo "$output" | tail -3
-        sleep 30
-        output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1 || true)
-        if echo "$output" | grep -q "Uploading\|Published\|already exists"; then
-            echo "✓ Successfully published $package (retry)"
+        output=$(run_publish || true)
+        echo "$output" | tail -8
+        # Registry needs a moment to index a just-uploaded version.
+        sleep 15
+        if version_is_live "$package" "$target_version"; then
+            echo "✓ $package $target_version now live on crates.io"
         else
-            echo "✗ Failed to publish $package after retry"
-            echo "$output" | tail -5
-            failed_packages+=("$package")
-            echo "Continuing with remaining packages..."
+            echo "⚠ First attempt did not land $package $target_version; waiting 30s and retrying..."
+            sleep 30
+            output=$(run_publish || true)
+            echo "$output" | tail -8
+            sleep 15
+            if version_is_live "$package" "$target_version"; then
+                echo "✓ $package $target_version live after retry"
+            else
+                echo "✗ $package $target_version still missing from crates.io after retry"
+                failed_packages+=("$package")
+                echo "Continuing with remaining packages..."
+            fi
         fi
     fi
 
@@ -213,14 +241,26 @@ if ((${#failed_packages[@]} > 0)); then
         for ((i=0; i<${#failed_packages[@]}; i++)); do
             package="${failed_packages[$i]}"
             echo "[Pass $pass: $((i+1))/${#failed_packages[@]}] Publishing $package"
-            output=$(cargo publish --package "$package" --allow-dirty --no-verify 2>&1 || true)
-            if echo "$output" | grep -q "Uploading\|Published"; then
-                echo "✓ Successfully published $package"
-            elif echo "$output" | grep -q "already exists"; then
-                echo "✓ $package already published (skipped)"
-            else
-                echo "✗ Failed: $(echo "$output" | grep "required by\|version for\|prerelease\|error" | head -2)"
+            target_version=$(cargo metadata --format-version 1 --no-deps 2>/dev/null \
+                | python3 -c "import json,sys; m=json.load(sys.stdin); print(next(p['version'] for p in m['packages'] if p['name']=='$package'))" 2>/dev/null || true)
+            if [[ -z "$target_version" ]]; then
+                echo "✗ Could not resolve target version for $package"
                 next_failed+=("$package")
+                sleep 10
+                continue
+            fi
+            if version_is_live "$package" "$target_version"; then
+                echo "✓ $package $target_version already on crates.io"
+            else
+                output=$(run_publish || true)
+                echo "$output" | tail -8
+                sleep 15
+                if version_is_live "$package" "$target_version"; then
+                    echo "✓ $package $target_version now live"
+                else
+                    echo "✗ $package $target_version still missing after publish attempt"
+                    next_failed+=("$package")
+                fi
             fi
             sleep 10
         done
