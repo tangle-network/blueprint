@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.3](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.2...blueprint-manager-v0.4.0-alpha.3) - 2026-04-22
+
+### Added
+
+- security hardening + staking_contract rename + alpha.3 (#1380)
+- harness system + x402 E2E + chain target flags (#1379)
+- *(cargo-tangle)* dev up/down workspace + fix silent Hetzner/Crusoe provider bug (#1376)
+- one-click local Tangle stack script
+
+### Fixed
+
+- *(tangle)* cap log queries and add gas fallbacks (#1382)
+
 ## [0.3.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.3.0-alpha.22...blueprint-manager-v0.3.0-alpha.23) - 2025-11-03
 
 ### Other

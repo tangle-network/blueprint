@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.4](https://github.com/tangle-network/blueprint/compare/blueprint-clients-v0.2.0-alpha.3...blueprint-clients-v0.2.0-alpha.4) - 2026-04-22
+
+### Fixed
+
+- *(tangle)* cap log queries and add gas fallbacks (#1382)
+
 ## [0.1.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-clients-v0.1.0-alpha.20...blueprint-clients-v0.1.0-alpha.21) - 2025-10-30
 
 ### Other

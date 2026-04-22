@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.4](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.2.0-alpha.3...blueprint-sdk-v0.2.0-alpha.4) - 2026-04-22
+
+### Other
+
+- updated the following local packages: blueprint-evm-extra, blueprint-keystore, blueprint-tangle-extra, blueprint-remote-providers, blueprint-clients, blueprint-qos, blueprint-runner, blueprint-chain-setup, blueprint-contexts, blueprint-eigenlayer-extra, blueprint-testing-utils, blueprint-webhooks, blueprint-x402
+
 ## [0.1.0-alpha.22](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.1.0-alpha.21...blueprint-sdk-v0.1.0-alpha.22) - 2025-11-03
 
 ### Other
