@@ -35,7 +35,7 @@ mod e2e {
 
     // x402 EIP-3009 client + facilitator
     use x402_chain_eip155::chain::{
-        Eip155ChainProvider, Eip155ChainReference,
+        Eip155ChainReference,
         config::{Eip155ChainConfig, Eip155ChainConfigInner, RpcConfig},
     };
     use x402_chain_eip155::v1_eip155_exact::{
@@ -466,7 +466,7 @@ mod e2e {
         let (fac_h, fac_port) = start_real_facilitator(&fork.rpc_url()).await;
 
         // 3. Start gateway pointing at real facilitator
-        let (gw_h, gw_port, mut producer) = start_gateway(fac_port).await;
+        let (gw_h, gw_port, _producer) = start_gateway(fac_port).await;
 
         // 4. Record balances BEFORE
         let payer_before = usdc_balance(&fork.rpc_url(), PAYER).await;
