@@ -9,10 +9,22 @@
     echo "Forge version check completed"
 
 - name: Install Solidity Dependencies
+  # This fragment is consumed ONLY by cargo-dist's release.yml (see
+  # dist-workspace.toml's `github-build-setup`), which builds the cli/
+  # crate (cargo-tangle). cargo-tangle has no build.rs and no dependency
+  # on solidity contracts, so soldeer is vestigial for this workflow.
+  #
+  # The soldeer registry intermittently refuses GitHub Actions runner
+  # IPs ("error during IO operation: not connected" in <10ms) — a
+  # network-level block, not a transient flake. We retry 5× with
+  # backoff in case it was transient, then exit 0 with a loud warning
+  # so the release build continues. Any downstream step that genuinely
+  # needs the contracts will fail on its own cargo build with a clear
+  # missing-dep error; cargo-tangle itself compiles fine without them.
+  #
+  # cargo-dist strips `continue-on-error` from inlined fragments, so we
+  # express this tolerance inside the `run` script instead.
   run: |
-    # Soldeer registry flakes frequently from GitHub Actions IPs —
-    # retry with exponential backoff before failing the whole build.
-    # No sleep after the final attempt so we exit as soon as we give up.
     attempts=5
     delay=10
     for attempt in $(seq 1 $attempts); do
@@ -26,8 +38,8 @@
         delay=$((delay * 2))
       fi
     done
-    echo "soldeer failed after $attempts attempts" >&2
-    exit 1
+    echo "::warning::soldeer failed after $attempts attempts; continuing without solidity deps (release build does not require them)" >&2
+    exit 0
 
 - name: install protobuf and gmp (Linux)
   if: runner.os == 'Linux'
