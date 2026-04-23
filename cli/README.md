@@ -75,6 +75,18 @@ cargo tangle blueprint create --name my_blueprint
 
 The scaffold asks for a source template, optional variables, and whether to skip prompts. The generated workspace already depends on `blueprint-sdk` with the `tangle` feature.
 
+For Tangle blueprints, the scaffold also includes a
+`metadata/blueprint-metadata.json` file. Publish that JSON to IPFS or HTTPS,
+then set the resulting URI as `metadata_uri` in your deploy definition. Add
+either `metadata_hash` or `metadata_file` as well so the deploy manifest pins
+the expected payload digest onchain. The URI is what lands onchain; the full
+JSON stays offchain and is what
+`tangle-cloud` ingests to render tier-2 hosted blueprint surfaces.
+
+For production tier-2 hosting, publish to `ipfs://` and include an owner-signed
+metadata attestation. If the shared host cannot verify provenance, it falls
+back to the protocol-controlled generic blueprint UI.
+
 ## Running a Blueprint on Tangle
 
 The runner expects RPC URLs, a keystore, and the EVM contract coordinates. You can provide them via CLI flags or a `settings.env` file that the command loads before boot.

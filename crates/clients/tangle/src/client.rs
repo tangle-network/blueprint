@@ -14,7 +14,7 @@ use alloy_rpc_types::{
     Block, BlockNumberOrTag, Filter, Log, TransactionReceipt,
     transaction::{TransactionInput, TransactionRequest},
 };
-use alloy_sol_types::{SolCall, SolType};
+use alloy_sol_types::SolCall;
 use blueprint_client_core::{BlueprintServicesClient, OperatorSet};
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::Keystore;
@@ -786,18 +786,8 @@ impl TangleClient {
         Ok(result)
     }
 
-    /// Create a new blueprint from an encoded definition.
-    pub async fn create_blueprint(
-        &self,
-        encoded_definition: Vec<u8>,
-    ) -> Result<(TransactionResult, u64)> {
-        use crate::contracts::ITangle::createBlueprintCall;
-
-        let definition = ITangleTypes::BlueprintDefinition::abi_decode(encoded_definition.as_ref())
-            .map_err(|err| {
-                Error::Contract(format!("failed to decode blueprint definition: {err}"))
-            })?;
-
+    /// Create a new blueprint from ABI-encoded calldata.
+    pub async fn create_blueprint(&self, calldata: Vec<u8>) -> Result<(TransactionResult, u64)> {
         let wallet = self.wallet()?;
         let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
@@ -807,7 +797,7 @@ impl TangleClient {
             .map_err(Error::Transport)?;
         let tx_request = TransactionRequest::default()
             .to(self.tangle_address)
-            .input(createBlueprintCall { definition }.abi_encode().into());
+            .input(Bytes::from(calldata).into());
         let receipt = send_transaction_with_fallback_gas(
             &provider,
             from_address,

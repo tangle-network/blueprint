@@ -1,31 +1,116 @@
 use crate::command::tangle::parse_address;
 use alloy_json_abi::Param;
-use alloy_primitives::{Address, Bytes, FixedBytes, U256};
-use alloy_sol_types::{SolType, SolValue};
-use blueprint_client_tangle::contracts::ITangleTypes;
+use alloy_primitives::{Address, Bytes, FixedBytes, U256, keccak256};
+use alloy_sol_types::{SolCall, SolType, SolValue, sol};
 use blueprint_client_tangle::{ExecutionProfile, inject_execution_profile};
 use color_eyre::eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
-use serde_json;
+use serde_json::{self, Value};
 use std::collections::HashSet;
 use std::fmt;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use url::Url;
 
-pub use ITangleTypes::BlueprintDefinition;
-use ITangleTypes::{
-    BlueprintArchitecture, BlueprintBinary as OnChainBlueprintBinary, BlueprintConfig,
-    BlueprintFetcherKind, BlueprintMetadata, BlueprintOperatingSystem, BlueprintSource,
-    BlueprintSourceKind, ImageRegistrySource, JobDefinition, MembershipModel, NativeSource,
-    PricingModel, TestingSource, WasmRuntime, WasmSource,
-};
+sol! {
+    struct BlueprintConfig {
+        uint8 membership;
+        uint8 pricing;
+        uint32 minOperators;
+        uint32 maxOperators;
+        uint256 subscriptionRate;
+        uint64 subscriptionInterval;
+        uint256 eventRate;
+    }
+
+    struct BlueprintMetadata {
+        string name;
+        string description;
+        string author;
+        string category;
+        string codeRepository;
+        string logo;
+        string website;
+        string license;
+        string profilingData;
+    }
+
+    struct JobDefinition {
+        string name;
+        string description;
+        string metadataUri;
+        bytes paramsSchema;
+        bytes resultSchema;
+    }
+
+    struct BlueprintBinary {
+        uint8 arch;
+        uint8 os;
+        string name;
+        bytes32 sha256;
+    }
+
+    struct ImageRegistrySource {
+        string registry;
+        string image;
+        string tag;
+    }
+
+    struct WasmSource {
+        uint8 runtime;
+        uint8 fetcher;
+        string artifactUri;
+        string entrypoint;
+    }
+
+    struct NativeSource {
+        uint8 fetcher;
+        string artifactUri;
+        string entrypoint;
+    }
+
+    struct TestingSource {
+        string cargoPackage;
+        string cargoBin;
+        string basePath;
+    }
+
+    struct BlueprintSource {
+        uint8 kind;
+        ImageRegistrySource container;
+        WasmSource wasm;
+        NativeSource native;
+        TestingSource testing;
+        BlueprintBinary[] binaries;
+    }
+
+    struct BlueprintDefinition {
+        string metadataUri;
+        bytes32 metadataHash;
+        address manager;
+        uint32 masterManagerRevision;
+        bool hasConfig;
+        BlueprintConfig config;
+        BlueprintMetadata metadata;
+        JobDefinition[] jobs;
+        bytes registrationSchema;
+        bytes requestSchema;
+        BlueprintSource[] sources;
+        uint8[] supportedMemberships;
+    }
+
+    function createBlueprint(BlueprintDefinition definition) external returns (uint64 blueprintId);
+}
+
+type OnChainBlueprintBinary = BlueprintBinary;
 
 /// Blueprint definition payload ready to send to the contract.
 #[derive(Debug, Clone)]
 pub struct BlueprintDefinitionInput {
     pub encoded: Bytes,
+    pub call_data: Bytes,
     pub metadata_uri: String,
+    pub metadata_hash: FixedBytes<32>,
     pub manager: Address,
 }
 
@@ -40,11 +125,16 @@ impl BlueprintDefinitionInput {
     pub fn encoded_bytes(&self) -> Bytes {
         self.encoded.clone()
     }
+
+    #[must_use]
+    pub fn call_data_bytes(&self) -> Bytes {
+        self.call_data.clone()
+    }
 }
 
 /// Decode a blueprint definition payload returned by the Tangle contract.
 pub fn decode_blueprint_definition(bytes: &[u8]) -> Result<BlueprintDefinition> {
-    <ITangleTypes::BlueprintDefinition as SolType>::abi_decode(bytes).map_err(|err| {
+    <BlueprintDefinition as SolType>::abi_decode(bytes).map_err(|err| {
         eyre!(
             "failed to decode blueprint definition ({} bytes): {err}",
             bytes.len()
@@ -68,18 +158,23 @@ pub fn load_blueprint_definition(
     if let Some(extra) = overrides {
         spec.apply_overrides(extra)?;
     }
+    let metadata_hash = spec.resolve_metadata_hash(path)?;
     let summary = DefinitionSummary {
         metadata_uri: spec.metadata_uri.clone(),
+        metadata_hash,
         manager: parse_address(&spec.manager, "manager")?,
     };
     let summaries = spec.source_summaries();
-    let definition = spec.into_blueprint_definition()?;
+    let definition = spec.into_blueprint_definition(metadata_hash)?;
     let encoded = Bytes::from(definition.abi_encode());
+    let call_data = Bytes::from(createBlueprintCall { definition }.abi_encode());
 
     Ok(BlueprintDefinitionLoadResult {
         definition: BlueprintDefinitionInput {
             encoded,
+            call_data,
             metadata_uri: summary.metadata_uri,
+            metadata_hash: summary.metadata_hash,
             manager: summary.manager,
         },
         summaries,
@@ -111,9 +206,51 @@ fn parse_definition_spec(bytes: &[u8], path: &Path) -> Result<BlueprintDefinitio
     }
 }
 
+fn compute_metadata_hash_from_file(path: &Path) -> Result<FixedBytes<32>> {
+    let bytes = fs::read(path)
+        .with_context(|| format!("failed to read metadata file {}", path.display()))?;
+    let value: Value = serde_json::from_slice(&bytes)
+        .with_context(|| format!("failed to parse metadata JSON from {}", path.display()))?;
+    compute_metadata_hash_from_value(value)
+}
+
+fn compute_metadata_hash_from_value(value: Value) -> Result<FixedBytes<32>> {
+    let mut object = value
+        .as_object()
+        .cloned()
+        .ok_or_else(|| eyre!("metadata_file must contain a top-level JSON object"))?;
+    object.remove("integrity");
+    let canonical = canonicalize_json_value(Value::Object(object));
+    Ok(FixedBytes::from(
+        keccak256(canonical.to_string().as_bytes()).0,
+    ))
+}
+
+fn canonicalize_json_value(value: Value) -> Value {
+    match value {
+        Value::Array(values) => {
+            Value::Array(values.into_iter().map(canonicalize_json_value).collect())
+        }
+        Value::Object(map) => {
+            let mut entries = map.into_iter().collect::<Vec<_>>();
+            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            let mut sorted = serde_json::Map::new();
+            for (key, nested) in entries {
+                sorted.insert(key, canonicalize_json_value(nested));
+            }
+            Value::Object(sorted)
+        }
+        other => other,
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 struct BlueprintDefinitionSpec {
     metadata_uri: String,
+    #[serde(default)]
+    metadata_hash: Option<String>,
+    #[serde(default)]
+    metadata_file: Option<PathBuf>,
     manager: String,
     #[serde(default)]
     master_manager_revision: u32,
@@ -132,7 +269,10 @@ struct BlueprintDefinitionSpec {
 }
 
 impl BlueprintDefinitionSpec {
-    fn into_blueprint_definition(self) -> Result<BlueprintDefinition> {
+    fn into_blueprint_definition(
+        self,
+        metadata_hash: FixedBytes<32>,
+    ) -> Result<BlueprintDefinition> {
         if self.metadata_uri.trim().is_empty() {
             return Err(eyre!("metadata_uri must not be empty"));
         }
@@ -172,6 +312,7 @@ impl BlueprintDefinitionSpec {
 
         Ok(BlueprintDefinition {
             metadataUri: self.metadata_uri,
+            metadataHash: metadata_hash,
             manager: parse_address(&self.manager, "manager")?,
             masterManagerRevision: self.master_manager_revision,
             hasConfig: has_config,
@@ -195,6 +336,31 @@ impl BlueprintDefinitionSpec {
                 .map(MembershipModelSpec::into_membership)
                 .collect(),
         })
+    }
+
+    fn resolve_metadata_hash(&self, definition_path: &Path) -> Result<FixedBytes<32>> {
+        self.resolve_metadata_hash_inner(definition_path.parent())
+    }
+
+    fn resolve_metadata_hash_inner(&self, definition_dir: Option<&Path>) -> Result<FixedBytes<32>> {
+        if let Some(metadata_hash) = &self.metadata_hash {
+            return BinaryArtifactSpec::parse_digest(metadata_hash, "metadata_hash");
+        }
+
+        let metadata_file = self.metadata_file.as_ref().ok_or_else(|| {
+            eyre!(
+                "metadata_hash is required unless metadata_file is provided for canonical hash computation"
+            )
+        })?;
+        let resolved_path = if metadata_file.is_absolute() {
+            metadata_file.clone()
+        } else if let Some(base_dir) = definition_dir {
+            base_dir.join(metadata_file)
+        } else {
+            metadata_file.clone()
+        };
+
+        compute_metadata_hash_from_file(&resolved_path)
     }
 
     fn apply_overrides(&mut self, overrides: &DefinitionOverrides) -> Result<()> {
@@ -454,7 +620,31 @@ enum SourceSpec {
 
 impl SourceSpec {
     fn into_blueprint_source(self) -> Result<BlueprintSource> {
-        let mut source = BlueprintSource::default();
+        let mut source = BlueprintSource {
+            kind: 0,
+            container: ImageRegistrySource {
+                registry: String::new(),
+                image: String::new(),
+                tag: String::new(),
+            },
+            wasm: WasmSource {
+                runtime: 0,
+                fetcher: 0,
+                artifactUri: String::new(),
+                entrypoint: String::new(),
+            },
+            native: NativeSource {
+                fetcher: 0,
+                artifactUri: String::new(),
+                entrypoint: String::new(),
+            },
+            testing: TestingSource {
+                cargoPackage: String::new(),
+                cargoBin: String::new(),
+                basePath: String::new(),
+            },
+            binaries: Vec::new(),
+        };
         match self {
             SourceSpec::Container(spec) => {
                 let (container, binaries, testing) = spec.into_parts()?;
@@ -832,44 +1022,44 @@ fn convert_binary_specs(
     Ok(converted)
 }
 
-fn parse_architecture(value: &str) -> Result<<BlueprintArchitecture as SolType>::RustType> {
+fn parse_architecture(value: &str) -> Result<u8> {
     let normalized = value.trim().to_lowercase();
     let variant = match normalized.as_str() {
-        "wasm32" | "wasm-32" => BlueprintArchitecture::from_underlying(0),
-        "wasm64" | "wasm-64" => BlueprintArchitecture::from_underlying(1),
-        "wasi32" | "wasi-32" => BlueprintArchitecture::from_underlying(2),
-        "wasi64" | "wasi-64" => BlueprintArchitecture::from_underlying(3),
-        "amd32" | "x86" | "i386" | "ia32" | "x86_32" => BlueprintArchitecture::from_underlying(4),
-        "amd64" | "x86_64" | "x64" => BlueprintArchitecture::from_underlying(5),
-        "arm32" | "armv7" | "armv6" | "arm" => BlueprintArchitecture::from_underlying(6),
-        "arm64" | "aarch64" | "armv8" => BlueprintArchitecture::from_underlying(7),
-        "riscv32" | "risc-v32" | "riscv-32" => BlueprintArchitecture::from_underlying(8),
-        "riscv64" | "risc-v64" | "riscv-64" => BlueprintArchitecture::from_underlying(9),
+        "wasm32" | "wasm-32" => 0,
+        "wasm64" | "wasm-64" => 1,
+        "wasi32" | "wasi-32" => 2,
+        "wasi64" | "wasi-64" => 3,
+        "amd32" | "x86" | "i386" | "ia32" | "x86_32" => 4,
+        "amd64" | "x86_64" | "x64" => 5,
+        "arm32" | "armv7" | "armv6" | "arm" => 6,
+        "arm64" | "aarch64" | "armv8" => 7,
+        "riscv32" | "risc-v32" | "riscv-32" => 8,
+        "riscv64" | "risc-v64" | "riscv-64" => 9,
         other => {
             return Err(eyre!(
                 "unsupported binary architecture `{other}`, expected wasm32/64, wasi32/64, amd32/64, arm32/64, or riscv32/64"
             ));
         }
     };
-    Ok(variant.into_underlying())
+    Ok(variant)
 }
 
-fn parse_operating_system(value: &str) -> Result<<BlueprintOperatingSystem as SolType>::RustType> {
+fn parse_operating_system(value: &str) -> Result<u8> {
     let normalized = value.trim().to_lowercase();
     let variant = match normalized.as_str() {
         "" => return Err(eyre!("binary os must not be empty")),
-        "unknown" => BlueprintOperatingSystem::from_underlying(0),
-        "linux" => BlueprintOperatingSystem::from_underlying(1),
-        "windows" | "win32" | "win64" => BlueprintOperatingSystem::from_underlying(2),
-        "macos" | "mac" | "osx" | "darwin" => BlueprintOperatingSystem::from_underlying(3),
-        "bsd" | "freebsd" | "openbsd" | "netbsd" => BlueprintOperatingSystem::from_underlying(4),
+        "unknown" => 0,
+        "linux" => 1,
+        "windows" | "win32" | "win64" => 2,
+        "macos" | "mac" | "osx" | "darwin" => 3,
+        "bsd" | "freebsd" | "openbsd" | "netbsd" => 4,
         other => {
             return Err(eyre!(
                 "unsupported binary operating system `{other}`, expected linux/windows/macos/bsd/unknown"
             ));
         }
     };
-    Ok(variant.into_underlying())
+    Ok(variant)
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -880,12 +1070,11 @@ enum MembershipModelSpec {
 }
 
 impl MembershipModelSpec {
-    fn into_membership(self) -> <MembershipModel as SolType>::RustType {
-        let value = match self {
-            MembershipModelSpec::Fixed => MembershipModel::from_underlying(0),
-            MembershipModelSpec::Dynamic => MembershipModel::from_underlying(1),
-        };
-        value.into_underlying()
+    fn into_membership(self) -> u8 {
+        match self {
+            MembershipModelSpec::Fixed => 0,
+            MembershipModelSpec::Dynamic => 1,
+        }
     }
 }
 
@@ -904,13 +1093,12 @@ impl Default for PricingModelSpec {
 }
 
 impl PricingModelSpec {
-    fn into_pricing(self) -> <PricingModel as SolType>::RustType {
-        let value = match self {
-            PricingModelSpec::PayOnce => PricingModel::from_underlying(0),
-            PricingModelSpec::Subscription => PricingModel::from_underlying(1),
-            PricingModelSpec::EventDriven => PricingModel::from_underlying(2),
-        };
-        value.into_underlying()
+    fn into_pricing(self) -> u8 {
+        match self {
+            PricingModelSpec::PayOnce => 0,
+            PricingModelSpec::Subscription => 1,
+            PricingModelSpec::EventDriven => 2,
+        }
     }
 }
 
@@ -930,14 +1118,13 @@ impl Default for FetcherKind {
 }
 
 impl FetcherKind {
-    fn into_fetcher(self) -> <BlueprintFetcherKind as SolType>::RustType {
-        let value = match self {
-            FetcherKind::None => BlueprintFetcherKind::from_underlying(0),
-            FetcherKind::Ipfs => BlueprintFetcherKind::from_underlying(1),
-            FetcherKind::Http => BlueprintFetcherKind::from_underlying(2),
-            FetcherKind::Github => BlueprintFetcherKind::from_underlying(3),
-        };
-        value.into_underlying()
+    fn into_fetcher(self) -> u8 {
+        match self {
+            FetcherKind::None => 0,
+            FetcherKind::Ipfs => 1,
+            FetcherKind::Http => 2,
+            FetcherKind::Github => 3,
+        }
     }
 }
 
@@ -977,23 +1164,21 @@ impl Default for WasmRuntimeKind {
 }
 
 impl WasmRuntimeKind {
-    fn into_runtime(self) -> <WasmRuntime as SolType>::RustType {
-        let value = match self {
-            WasmRuntimeKind::Unknown => WasmRuntime::from_underlying(0),
-            WasmRuntimeKind::Wasmtime => WasmRuntime::from_underlying(1),
-            WasmRuntimeKind::Wasmer => WasmRuntime::from_underlying(2),
-        };
-        value.into_underlying()
+    fn into_runtime(self) -> u8 {
+        match self {
+            WasmRuntimeKind::Unknown => 0,
+            WasmRuntimeKind::Wasmtime => 1,
+            WasmRuntimeKind::Wasmer => 2,
+        }
     }
 }
 
-fn blueprint_source_kind(kind: SourceKind) -> <BlueprintSourceKind as SolType>::RustType {
-    let value = match kind {
-        SourceKind::Container => BlueprintSourceKind::from_underlying(0),
-        SourceKind::Wasm => BlueprintSourceKind::from_underlying(1),
-        SourceKind::Native => BlueprintSourceKind::from_underlying(2),
-    };
-    value.into_underlying()
+fn blueprint_source_kind(kind: SourceKind) -> u8 {
+    match kind {
+        SourceKind::Container => 0,
+        SourceKind::Wasm => 1,
+        SourceKind::Native => 2,
+    }
 }
 
 fn hex_to_bytes(value: Option<&str>) -> Result<Bytes> {
@@ -1370,6 +1555,7 @@ fn default_license() -> String {
 
 struct DefinitionSummary {
     metadata_uri: String,
+    metadata_hash: FixedBytes<32>,
     manager: Address,
 }
 
@@ -1378,12 +1564,16 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
+    const TEST_METADATA_HASH: &str =
+        "0x1111111111111111111111111111111111111111111111111111111111111111";
+
     #[test]
     fn parses_minimal_definition() {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "jobs": [
                 { "name": "square" }
@@ -1419,11 +1609,69 @@ mod tests {
     }
 
     #[test]
+    fn computes_metadata_hash_from_metadata_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let metadata_dir = temp_dir.path().join("metadata");
+        fs::create_dir_all(&metadata_dir).unwrap();
+
+        let metadata_path = metadata_dir.join("blueprint-metadata.json");
+        let metadata = serde_json::json!({
+            "name": "Hosted Blueprint",
+            "description": "Canonical hash test",
+            "integrity": {
+                "schema": "tangle-blueprint-metadata/v1",
+                "payloadHash": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            },
+            "blueprintUi": {
+                "tier": "hosted"
+            }
+        });
+        fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata).unwrap()).unwrap();
+
+        let definition_path = temp_dir.path().join("definition.json");
+        let manifest = serde_json::json!({
+            "metadata_uri": "ipfs://cid",
+            "metadata_file": "metadata/blueprint-metadata.json",
+            "manager": "0x0000000000000000000000000000000000000001",
+            "jobs": [
+                { "name": "square" }
+            ],
+            "sources": [
+                {
+                    "kind": "container",
+                    "registry": "ghcr.io",
+                    "image": "org/blueprint",
+                    "tag": "v0.1.0",
+                    "binaries": [
+                        {
+                            "name": "blueprint",
+                            "arch": "x86_64",
+                            "os": "linux",
+                            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        }
+                    ]
+                }
+            ]
+        });
+        fs::write(
+            &definition_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let loaded = load_blueprint_definition(&definition_path, None).unwrap();
+        let expected = compute_metadata_hash_from_file(&metadata_path).unwrap();
+
+        assert_eq!(loaded.definition.metadata_hash, expected);
+    }
+
+    #[test]
     fn round_trip_github_source_matches_metadata() {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "jobs": [
                 {"name": "square"}
@@ -1493,6 +1741,7 @@ mod tests {
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
                 "name": "TEE Blueprint",
@@ -1540,6 +1789,7 @@ mod tests {
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
                 "execution_profile": { "confidentiality": "standard_required" }
@@ -1585,6 +1835,7 @@ mod tests {
         let legacy_blob = "H4sIAAAAAAAA/2NgYGBgBGIOAwA6rY+4BQAAAA==";
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "metadata": {
                 "profiling_data": legacy_blob,
@@ -1631,6 +1882,7 @@ mod tests {
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "jobs": [
                 {"name": "square"}
@@ -1712,6 +1964,7 @@ mod tests {
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "jobs": [
                 {"name": "square"}
@@ -1751,6 +2004,7 @@ mod tests {
         let path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "jobs": [
                 {"name": "square"}
@@ -1799,6 +2053,7 @@ mod tests {
         // Test that empty top-level binaries array is rejected
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "jobs": [
                 {"name": "square"}
@@ -1834,6 +2089,7 @@ mod tests {
         // Test that invalid hash at the native source level is rejected
         let manifest = serde_json::json!({
             "metadata_uri": "ipfs://cid",
+            "metadata_hash": TEST_METADATA_HASH,
             "manager": "0x0000000000000000000000000000000000000001",
             "jobs": [
                 {"name": "square"}
