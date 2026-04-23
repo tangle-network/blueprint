@@ -116,29 +116,54 @@ fn workspace_or_manifest_dir() -> PathBuf {
     PathBuf::from(dir)
 }
 
+/// Run a `forge soldeer <subcommand>` with exponential-backoff retries.
+///
+/// The soldeer registry intermittently rejects GitHub Actions runner IPs and
+/// other high-rate clients, so a single dropped connection used to fail the
+/// whole build. Retries 5 times (10s, 20s, 40s, 80s backoff between attempts)
+/// and only panics when every attempt fails.
+fn run_soldeer_with_retry(args: &[&str], label: &str) {
+    let root = workspace_or_manifest_dir();
+    let forge_executable = find_forge_executable();
+    let attempts = 5u32;
+    let mut delay = std::time::Duration::from_secs(10);
+    for attempt in 1..=attempts {
+        let status = Command::new(&forge_executable)
+            .current_dir(&root)
+            .args(args)
+            .status()
+            .unwrap_or_else(|e| panic!("Failed to execute 'forge {label}': {e}"));
+        if status.success() {
+            if attempt > 1 {
+                println!("'forge {label}' succeeded on attempt {attempt}/{attempts}");
+            }
+            return;
+        }
+        if attempt < attempts {
+            println!(
+                "'forge {label}' attempt {attempt}/{attempts} failed; sleeping {}s",
+                delay.as_secs()
+            );
+            std::thread::sleep(delay);
+            delay *= 2;
+        }
+    }
+    panic!("'forge {label}' failed after {attempts} attempts");
+}
+
 /// Run soldeer's 'install' command if the dependencies directory exists and is not empty.
 ///
 /// # Panics
 /// - If the Cargo Manifest directory is not found.
 /// - If the `forge` executable is not found.
-/// - If forge's `soldeer` is not installed.
+/// - If forge's `soldeer` is not installed or fails every retry attempt.
 pub fn soldeer_install() {
-    // Get the project root directory
-    let root = workspace_or_manifest_dir();
-
     // Check if the dependencies directory exists and is not empty
+    let root = workspace_or_manifest_dir();
     let dependencies_dir = root.join("dependencies");
     if !dependencies_dir.exists() || is_directory_empty(&dependencies_dir) {
-        let forge_executable = find_forge_executable();
-
         println!("Populating dependencies directory");
-        let status = Command::new(&forge_executable)
-            .current_dir(&root)
-            .args(["soldeer", "install"])
-            .status()
-            .expect("Failed to execute 'forge soldeer install'");
-
-        assert!(status.success(), "'forge soldeer install' failed");
+        run_soldeer_with_retry(&["soldeer", "install"], "soldeer install");
     } else {
         println!("Dependencies directory exists or is not empty. Skipping soldeer install.");
     }
@@ -149,21 +174,9 @@ pub fn soldeer_install() {
 /// # Panics
 /// - If the Cargo Manifest directory is not found.
 /// - If the `forge` executable is not found.
-/// - If forge's `soldeer` is not installed.
+/// - If forge's `soldeer` is not installed or fails every retry attempt.
 pub fn soldeer_update() {
-    // Get the project root directory
-    let root = workspace_or_manifest_dir();
-
-    // Try to find the `forge` executable dynamically
-    let forge_executable = find_forge_executable();
-
-    let status = Command::new(&forge_executable)
-        .current_dir(&root)
-        .args(["soldeer", "update", "-d"])
-        .status()
-        .expect("Failed to execute 'forge soldeer update'");
-
-    assert!(status.success(), "'forge soldeer update' failed");
+    run_soldeer_with_retry(&["soldeer", "update", "-d"], "soldeer update");
 }
 
 /// Returns a string with the path to the `forge` executable.

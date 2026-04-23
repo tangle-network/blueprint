@@ -12,6 +12,7 @@
   run: |
     # Soldeer registry flakes frequently from GitHub Actions IPs —
     # retry with exponential backoff before failing the whole build.
+    # No sleep after the final attempt so we exit as soon as we give up.
     attempts=5
     delay=10
     for attempt in $(seq 1 $attempts); do
@@ -19,9 +20,11 @@
         echo "Solidity dependencies installed on attempt $attempt"
         exit 0
       fi
-      echo "soldeer attempt $attempt/$attempts failed; sleeping ${delay}s"
-      sleep "$delay"
-      delay=$((delay * 2))
+      if [ "$attempt" -lt "$attempts" ]; then
+        echo "soldeer attempt $attempt/$attempts failed; sleeping ${delay}s"
+        sleep "$delay"
+        delay=$((delay * 2))
+      fi
     done
     echo "soldeer failed after $attempts attempts" >&2
     exit 1
