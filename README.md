@@ -250,6 +250,13 @@ confirmations in logs or CI pipelines.
 
 And your blueprint is ready to go!
 
+The generated workspace includes `metadata/blueprint-metadata.json` for your
+public blueprint metadata and `blueprintUi` hosted app contract. Publish that
+file to IPFS or HTTPS, then point `metadata_uri` at it during deployment.
+Production Tangle Cloud hosting should use `ipfs://` plus an owner-signed
+metadata attestation so advanced tier-2 sections can be verified before
+rendering.
+
 ### Deploying to Testnet/Mainnet
 
 When targeting real [Tangle] networks, provide a blueprint definition manifest that mirrors the on-chain schema. The file can be JSON, YAML, or TOML and must describe the blueprint metadata, jobs, and artifact sources (container images or native binaries). Once authored, pass it via `--definition`:
@@ -260,7 +267,26 @@ cargo tangle blueprint deploy tangle \
   --definition ./definition.json
 ```
 
-At minimum the manifest requires `metadata_uri`, `manager`, at least one job, and one source. Fields such as schemas or blueprint-specific config are optional and default to empty values. See `MIGRATION_EVM_ONLY.md` for a detailed example.
+At minimum the manifest requires `metadata_uri`, `manager`, at least one job,
+one source, and either:
+- `metadata_hash`: a pinned `0x...` keccak256 digest of the canonical metadata JSON payload
+- `metadata_file`: a local path that `cargo tangle` will hash for you before deploy
+
+Fields such as schemas or blueprint-specific config are optional and default to
+empty values. See `MIGRATION_EVM_ONLY.md` for a detailed example.
+
+For Tangle-hosted blueprint apps, keep the JSON payload itself offchain in
+`metadata/blueprint-metadata.json` and only put its URI in `metadata_uri`.
+That keeps the onchain footprint small while letting `tangle-cloud` ingest the
+full declarative host contract for cards, actions, resource views, theme
+tokens, and approved host modules. If provenance checks fail, the host falls
+back to the default protocol blueprint experience.
+
+When `metadata_file` is used, the CLI computes the same canonical payload hash
+that Tangle Cloud verifies:
+- the file must be a top-level JSON object
+- the top-level `integrity` envelope is excluded from hashing
+- object keys are sorted recursively before hashing
 
 ### 🧪 Testing Locally
 

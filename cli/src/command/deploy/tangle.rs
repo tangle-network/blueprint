@@ -465,13 +465,13 @@ impl NetworkDeployment {
         } = self;
 
         println!(
-            "Deploying blueprint definition (metadata {}) to {}",
-            definition.metadata_uri, network
+            "Deploying blueprint definition (metadata {} @ {}) to {}",
+            definition.metadata_uri, definition.metadata_hash, network
         );
 
         let client = rpc.connect_client().await?;
         let (tx, blueprint_id) = client
-            .create_blueprint(definition.encoded_bytes().to_vec())
+            .create_blueprint(definition.call_data_bytes().to_vec())
             .await?;
 
         Ok(DeploymentOutcome::new(
