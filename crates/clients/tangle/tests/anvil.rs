@@ -43,6 +43,20 @@ async fn client_reads_blueprint_state() -> Result<()> {
             "LocalTestnet uses no manager"
         );
 
+        let definition = client.get_blueprint_definition(BLUEPRINT_ID).await?;
+        assert!(
+            !definition.metadataUri.is_empty(),
+            "blueprint definition should include metadata URI"
+        );
+        assert!(
+            definition
+                .metadataHash
+                .as_slice()
+                .iter()
+                .any(|byte| *byte != 0),
+            "blueprint definition should pin metadata hash"
+        );
+
         let service = client.get_service_info(SERVICE_ID).await?;
         assert_eq!(service.status, ServiceStatus::Active);
         assert_eq!(service.operator_count, 2);
