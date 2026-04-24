@@ -1,7 +1,7 @@
 {
   "name": "oauth-blueprint",
   "description": "OAuth-protected document storage blueprint",
-  "version": "0.2.0-alpha.2",
+  "version": "0.2.0-alpha.3",
   "master_revision": "Latest",
   "manager": {
     "Evm": "OauthBlueprintBSM"
