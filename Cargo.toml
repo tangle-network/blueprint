@@ -126,7 +126,7 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.4", path = "./crates/sdk", default-features = false }
-tnt-core-bindings = { version = "0.10.7", git = "https://github.com/tangle-network/tnt-core.git", tag = "v0.10.7" }
+tnt-core-bindings = { version = "0.10.8", git = "https://github.com/tangle-network/tnt-core.git", rev = "3c6a17ac24bfc1cb3c757bd6c327aee690f4ddde" }
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.3", path = "crates/core", default-features = false }
