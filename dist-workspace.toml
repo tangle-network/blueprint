@@ -10,8 +10,13 @@ create-release = false
 github-build-setup = "build-setup.yml"
 # The installers to generate for each app
 installers = ["shell"]
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# Target platforms to build apps for (Rust target-triple syntax).
+# x86_64-apple-darwin is intentionally omitted: GitHub's macos-13 runner
+# pool is scarce (jobs routinely queue for 30+ min), Apple stopped
+# shipping Intel Macs in 2023, and Rosetta 2 runs the aarch64 binary
+# transparently on the remaining Intel users. Add back only if a real
+# user reports an aarch64-on-Intel regression.
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Whether to install an updater program
@@ -27,5 +32,4 @@ cargo-dist-version = "0.28.7-prerelease.1"
 global = "ubuntu-latest"
 # Custom runners to use for each target platform
 aarch64-apple-darwin = "macos-15"
-x86_64-apple-darwin = "macos-13"
 x86_64-unknown-linux-gnu = "ubuntu-latest"
