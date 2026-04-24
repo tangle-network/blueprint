@@ -1626,7 +1626,11 @@ mod tests {
                 "tier": "hosted"
             }
         });
-        fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata).unwrap()).unwrap();
+        fs::write(
+            &metadata_path,
+            serde_json::to_vec_pretty(&metadata).unwrap(),
+        )
+        .unwrap();
 
         let definition_path = temp_dir.path().join("definition.json");
         let manifest = serde_json::json!({
