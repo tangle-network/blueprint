@@ -321,7 +321,7 @@ tokio-rustls = { version = "0.26.2", default-features = false, features = ["tls1
 rustls-pemfile = { version = "2.2.0", default-features = false }
 rcgen = { version = "0.14.7", default-features = false, features = ["pem"] }
 hyper-rustls = { version = "0.27.7", default-features = false, features = ["http2", "ring"] }
-local-ip-address = "0.6.5"
+local-ip-address = "0.6.12"
 
 # System & OS
 parking_lot = { version = "0.12.4", default-features = false }
