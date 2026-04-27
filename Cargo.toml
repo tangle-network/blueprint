@@ -411,7 +411,7 @@ libsecp256k1 = { version = "0.7.2", default-features = false }
 
 # Remote signing
 alloy-signer-aws = { version = "2.0", default-features = false }
-alloy-signer-gcp = { version = "1.8", default-features = false }
+alloy-signer-gcp = { version = "2.0", default-features = false }
 alloy-signer-ledger = { version = "1.8", default-features = false, features = ["eip712"] }
 aws-config = { version = "1", default-features = false }
 aws-sdk-ec2 = { version = "1", default-features = false }
