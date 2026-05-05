@@ -1464,21 +1464,30 @@ impl TangleClient {
         &self,
         params: ITangleTypes::ApprovalParams,
     ) -> Result<TransactionResult> {
+        use ITangle::approveServiceCall;
+
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
             .await
             .map_err(Error::Transport)?;
-        let contract = ITangle::new(self.tangle_address, &provider);
 
-        let receipt = contract
-            .approveService(params)
-            .send()
-            .await
-            .map_err(|e| Error::Contract(e.to_string()))?
-            .get_receipt()
-            .await?;
+        let calldata = approveServiceCall { params }.abi_encode();
+        let tx_request = TransactionRequest::default()
+            .to(self.tangle_address)
+            .input(Bytes::from(calldata).into());
+
+        // Approval gas is operator-linear under the v0.11+ root storage; the floor
+        // covers the no-estimate fallback (e.g. node returning estimateGas error).
+        let receipt = send_transaction_with_fallback_gas(
+            &provider,
+            from_address,
+            tx_request,
+            APPROVE_SERVICE_MIN_GAS_LIMIT,
+        )
+        .await?;
 
         Ok(transaction_result_from_receipt(&receipt))
     }

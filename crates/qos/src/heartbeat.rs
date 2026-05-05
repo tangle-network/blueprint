@@ -1,9 +1,9 @@
 use crate::error::{Error, Result};
 use alloy_network::EthereumWallet;
-use alloy_primitives::{Address, keccak256};
+use alloy_primitives::{Address, B256, U256, keccak256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::TransactionRequest;
-use alloy_sol_types::SolCall;
+use alloy_sol_types::{Eip712Domain, SolCall, SolStruct, sol};
 use blueprint_core::{info, warn};
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
 use blueprint_keystore::backends::Backend;
@@ -19,7 +19,22 @@ use std::{
 use tnt_core_bindings::bindings::r#i_operator_status_registry::IOperatorStatusRegistry::submitHeartbeatCall;
 use tokio::{sync::Mutex, task::JoinHandle};
 
-const ETH_MESSAGE_PREFIX: &[u8] = b"\x19Ethereum Signed Message:\n32";
+// EIP-712 typed struct mirroring `OperatorStatusRegistry.HEARTBEAT_TYPEHASH` in
+// tnt-core. Signed digest:
+//   keccak256(0x19 0x01 || domainSeparator || keccak256(abi.encode(typehash, ...)))
+// where domainSeparator binds chainId + verifyingContract to defeat cross-fork
+// and cross-deployment replay.
+sol! {
+    #[allow(missing_docs)]
+    struct Heartbeat {
+        address operator;
+        uint64 serviceId;
+        uint64 blueprintId;
+        uint8 statusCode;
+        bytes32 metricsHash;
+        uint64 timestamp;
+    }
+}
 
 /// Configuration for the heartbeat service that sends periodic liveness signals to the chain.
 ///
@@ -217,17 +232,11 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
             crate::metrics::abi::encode_metric_pairs(&custom_metrics)
         };
         let status_code = u8::try_from(status.status_code).unwrap_or(u8::MAX);
-        let signature = sign_heartbeat_payload(
-            &mut signing_key,
-            status.service_id,
-            status.blueprint_id,
-            status_code,
-            &metrics_bytes,
-        )?;
 
         let local_signer = operator_ecdsa_secret
             .alloy_key()
             .map_err(|e| Error::Other(format!("Failed to prepare wallet signer: {e}")))?;
+        let operator_address = local_signer.address();
         let wallet = EthereumWallet::from(local_signer);
 
         let provider = ProviderBuilder::new()
@@ -236,11 +245,37 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
             .await
             .map_err(|e| Error::Other(format!("Failed to connect to RPC endpoint: {e}")))?;
 
+        let chain_id = provider
+            .get_chain_id()
+            .await
+            .map_err(|e| Error::Other(format!("Failed to query chain id: {e}")))?;
+
+        // EIP-712 `timestamp` field — must be within `HEARTBEAT_MAX_AGE` (5 min)
+        // of `block.timestamp` on-chain. Sign at submission time, not at status
+        // capture time, so the contract's freshness check has the maximum slack.
+        let signing_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| Error::Other(format!("System clock before UNIX epoch: {e}")))?
+            .as_secs();
+
+        let (signature, _digest) = sign_heartbeat_eip712(
+            &mut signing_key,
+            chain_id,
+            runtime.status_registry_address,
+            operator_address,
+            status.service_id,
+            status.blueprint_id,
+            status_code,
+            &metrics_bytes,
+            signing_timestamp,
+        )?;
+
         let heartbeat_call = submitHeartbeatCall {
             serviceId: status.service_id,
             blueprintId: status.blueprint_id,
             statusCode: status_code,
             metrics: metrics_bytes.into(),
+            timestamp: signing_timestamp,
             signature: signature.into(),
         };
 
@@ -454,38 +489,48 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> Drop for HeartbeatService<C> 
     }
 }
 
-/// Sign heartbeat payload: keccak256(abi.encodePacked(serviceId, blueprintId, statusCode, metrics))
-/// with Ethereum signed message prefix. Must match OperatorStatusRegistry.sol verification.
-fn sign_heartbeat_payload(
+/// Build an EIP-712 typed-data signature for `OperatorStatusRegistry.submitHeartbeat`.
+///
+/// The contract recovers `signer == msg.sender` from the EIP-712 digest using the
+/// `Heartbeat` typed struct above. The domain separator binds chainId + verifying
+/// contract so signatures cannot replay across forks or deployments, and the
+/// `timestamp` field gives the contract a 5-minute freshness window.
+#[allow(clippy::too_many_arguments)]
+fn sign_heartbeat_eip712(
     signing_key: &mut K256SigningKey,
+    chain_id: u64,
+    verifying_contract: Address,
+    operator: Address,
     service_id: u64,
     blueprint_id: u64,
     status_code: u8,
     metrics: &[u8],
-) -> Result<Vec<u8>> {
-    let mut payload = Vec::with_capacity(17 + metrics.len());
-    payload.extend_from_slice(&service_id.to_be_bytes());
-    payload.extend_from_slice(&blueprint_id.to_be_bytes());
-    payload.push(status_code);
-    payload.extend_from_slice(metrics);
-
-    let message_hash = keccak256(&payload);
-
-    let mut prefixed = Vec::with_capacity(ETH_MESSAGE_PREFIX.len() + message_hash.len());
-    prefixed.extend_from_slice(ETH_MESSAGE_PREFIX);
-    prefixed.extend_from_slice(message_hash.as_slice());
-
-    let prefixed_hash = keccak256(&prefixed);
-    let mut digest = [0u8; 32];
-    digest.copy_from_slice(prefixed_hash.as_slice());
+    timestamp: u64,
+) -> Result<(Vec<u8>, B256)> {
+    let domain = Eip712Domain {
+        name: Some("OperatorStatusRegistry".into()),
+        version: Some("1".into()),
+        chain_id: Some(U256::from(chain_id)),
+        verifying_contract: Some(verifying_contract),
+        salt: None,
+    };
+    let heartbeat = Heartbeat {
+        operator,
+        serviceId: service_id,
+        blueprintId: blueprint_id,
+        statusCode: status_code,
+        metricsHash: keccak256(metrics),
+        timestamp,
+    };
+    let digest = heartbeat.eip712_signing_hash(&domain);
 
     let (signature, recovery_id) = signing_key
         .0
-        .sign_prehash_recoverable(&digest)
+        .sign_prehash_recoverable(digest.as_slice())
         .map_err(|e| Error::Other(format!("Failed to sign heartbeat payload: {e}")))?;
 
     let mut signature_bytes = Vec::with_capacity(65);
     signature_bytes.extend_from_slice(&signature.to_bytes());
     signature_bytes.push(recovery_id.to_byte() + 27);
-    Ok(signature_bytes)
+    Ok((signature_bytes, digest))
 }

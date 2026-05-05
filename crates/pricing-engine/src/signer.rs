@@ -292,6 +292,11 @@ fn build_abi_quote_details(
         .collect::<Result<Vec<_>>>()?;
 
     Ok(ITangleTypes::QuoteDetails {
+        // `requester == address(0)` is the contract's "open quote" mode (any
+        // address may redeem). Until the proto + RPC surface threads the
+        // requester from `GetPriceRequest` through to here (PR #118 added the
+        // binding on-chain), open-quote is the only safe default.
+        requester: alloy_primitives::Address::ZERO,
         blueprintId: details.blueprint_id,
         ttlBlocks: details.ttl_blocks,
         totalCost: decimal_to_scaled_amount(total_cost)?,
