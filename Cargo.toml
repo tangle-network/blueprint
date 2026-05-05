@@ -126,10 +126,7 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.4", path = "./crates/sdk", default-features = false }
-tnt-core-bindings = { version = "0.11.0", git = "https://github.com/tangle-network/tnt-core.git", branch = "drew/bindings-v0.11.0-unified-approval" }
-# NOTE: switch back to `tag = "bindings-v0.11.0"` once tnt-core PR #120 merges and the
-# release tag is published. The branch pin keeps the workspace buildable while the
-# binding regen + dapp + this PR land as a coordinated set.
+tnt-core-bindings = "0.11.1"
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.3", path = "crates/core", default-features = false }
