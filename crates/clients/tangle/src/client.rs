@@ -1453,45 +1453,16 @@ impl TangleClient {
         Ok(transaction_result_from_receipt(&receipt))
     }
 
-    /// Approve a pending service request with a simple restaking percentage.
-    pub async fn approve_service(
+    /// Approve a pending service request via the unified `approveService(ApprovalParams)`
+    /// entrypoint. Pass empty `commitments`, zero `bls_pubkey`, zero `bls_pop_signature`,
+    /// and empty `tee_commitments` to opt out of those capabilities.
+    ///
+    /// Convenience wrappers `approve_service` and `approve_service_with_commitments` build
+    /// the `ApprovalParams` for the common shapes; use this method directly when you also
+    /// need to register a BLS pubkey or pin TEE attestation profiles.
+    pub async fn approve_service_with_params(
         &self,
-        request_id: u64,
-        restaking_percent: u8,
-    ) -> Result<TransactionResult> {
-        use crate::contracts::ITangle::approveServiceCall;
-
-        let wallet = self.wallet()?;
-        let from_address = wallet.default_signer().address();
-        let provider = ProviderBuilder::new()
-            .wallet(wallet)
-            .connect(self.config.http_rpc_endpoint.as_str())
-            .await
-            .map_err(Error::Transport)?;
-        let tx_request = TransactionRequest::default().to(self.tangle_address).input(
-            approveServiceCall {
-                requestId: request_id,
-                stakingPercent: restaking_percent,
-            }
-            .abi_encode()
-            .into(),
-        );
-        let receipt = send_transaction_with_fallback_gas(
-            &provider,
-            from_address,
-            tx_request,
-            APPROVE_SERVICE_MIN_GAS_LIMIT,
-        )
-        .await?;
-
-        Ok(transaction_result_from_receipt(&receipt))
-    }
-
-    /// Approve a service request with explicit security commitments.
-    pub async fn approve_service_with_commitments(
-        &self,
-        request_id: u64,
-        commitments: Vec<ITangleTypes::AssetSecurityCommitment>,
+        params: ITangleTypes::ApprovalParams,
     ) -> Result<TransactionResult> {
         let wallet = self.wallet()?;
         let provider = ProviderBuilder::new()
@@ -1502,7 +1473,7 @@ impl TangleClient {
         let contract = ITangle::new(self.tangle_address, &provider);
 
         let receipt = contract
-            .approveServiceWithCommitments(request_id, commitments)
+            .approveService(params)
             .send()
             .await
             .map_err(|e| Error::Contract(e.to_string()))?
@@ -1510,6 +1481,36 @@ impl TangleClient {
             .await?;
 
         Ok(transaction_result_from_receipt(&receipt))
+    }
+
+    /// Approve a pending service request without any optional capabilities (no per-asset
+    /// commitments, no BLS, no TEE binding). Acceptable when the request has no security
+    /// requirements, or only the protocol-default TNT requirement (auto-filled on-chain).
+    pub async fn approve_service(&self, request_id: u64) -> Result<TransactionResult> {
+        self.approve_service_with_params(ITangleTypes::ApprovalParams {
+            requestId: request_id,
+            securityCommitments: Vec::new(),
+            blsPubkey: [U256::ZERO; 4],
+            blsPopSignature: [U256::ZERO; 2],
+            teeCommitments: Vec::new(),
+        })
+        .await
+    }
+
+    /// Approve a pending service request with explicit per-asset security commitments.
+    pub async fn approve_service_with_commitments(
+        &self,
+        request_id: u64,
+        commitments: Vec<ITangleTypes::AssetSecurityCommitment>,
+    ) -> Result<TransactionResult> {
+        self.approve_service_with_params(ITangleTypes::ApprovalParams {
+            requestId: request_id,
+            securityCommitments: commitments,
+            blsPubkey: [U256::ZERO; 4],
+            blsPopSignature: [U256::ZERO; 2],
+            teeCommitments: Vec::new(),
+        })
+        .await
     }
 
     /// Reject a pending service request.

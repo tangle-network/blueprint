@@ -12,16 +12,18 @@ pub async fn request_service(
     client.request_service(params).await.map_err(Into::into)
 }
 
-/// Approve a pending service request.
+/// Approve a pending service request without optional capabilities.
+///
+/// `_staking_percent` is accepted for CLI back-compat but is now derived on-chain
+/// from `securityCommitments[0].exposureBps` (or defaults to 100% when commitments
+/// are empty). Callers that need to pin a specific exposure should go through
+/// `approve_service_with_commitments`.
 pub async fn approve_service(
     client: &TangleClient,
     request_id: u64,
-    staking_percent: u8,
+    _staking_percent: u8,
 ) -> Result<TransactionResult> {
-    client
-        .approve_service(request_id, staking_percent)
-        .await
-        .map_err(Into::into)
+    client.approve_service(request_id).await.map_err(Into::into)
 }
 
 /// Approve a pending request with explicit security commitments.
