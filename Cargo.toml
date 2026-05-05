@@ -321,7 +321,7 @@ tokio-rustls = { version = "0.26.2", default-features = false, features = ["tls1
 rustls-pemfile = { version = "2.2.0", default-features = false }
 rcgen = { version = "0.14.7", default-features = false, features = ["pem"] }
 hyper-rustls = { version = "0.27.7", default-features = false, features = ["http2", "ring"] }
-local-ip-address = "0.6.5"
+local-ip-address = "0.6.12"
 
 # System & OS
 parking_lot = { version = "0.12.4", default-features = false }
@@ -335,7 +335,7 @@ fatfs = { version = "0.3.6", default-features = false }
 tokio-vsock = { version = "0.7.1", default-features = false }
 nix = { version = "0.31.1", default-features = false }
 capctl = { version = "0.2.4", default-features = false }
-netdev = { version = "0.41", default-features = false }
+netdev = { version = "0.42", default-features = false }
 nftables = { version = "0.6.3", default-features = false }
 
 # Development & Testing
@@ -411,7 +411,7 @@ libsecp256k1 = { version = "0.7.2", default-features = false }
 
 # Remote signing
 alloy-signer-aws = { version = "2.0", default-features = false }
-alloy-signer-gcp = { version = "1.8", default-features = false }
+alloy-signer-gcp = { version = "2.0", default-features = false }
 alloy-signer-ledger = { version = "1.8", default-features = false, features = ["eip712"] }
 aws-config = { version = "1", default-features = false }
 aws-sdk-ec2 = { version = "1", default-features = false }
