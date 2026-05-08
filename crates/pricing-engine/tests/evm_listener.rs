@@ -70,17 +70,15 @@ mod evm_listener_tests {
     /// Address derived from `SERVICE_OWNER_PRIVATE_KEY` (anvil account #0).
     /// This is the buyer/requester for tests that submit quotes on-chain — every
     /// quote in v0.13.0+ binds to a non-zero requester via EIP-712.
-    const SERVICE_OWNER_ADDRESS: alloy_primitives::Address = alloy_primitives::address!(
-        "f39Fd6e51aad88F6F4ce6aB8827279cfFFb92266"
-    );
+    const SERVICE_OWNER_ADDRESS: alloy_primitives::Address =
+        alloy_primitives::address!("f39Fd6e51aad88F6F4ce6aB8827279cfFFb92266");
     /// Non-zero throwaway requester for fixtures that exercise revert paths
     /// (invalid signature, expired quote, mismatched blueprint, etc.). Any
     /// non-zero address works because the on-chain check fires before the
     /// requester binding for these failures, but using a deterministic value
     /// makes the fixtures self-documenting.
-    const REJECTION_PATH_REQUESTER: alloy_primitives::Address = alloy_primitives::address!(
-        "000000000000000000000000000000000000bEEF"
-    );
+    const REJECTION_PATH_REQUESTER: alloy_primitives::Address =
+        alloy_primitives::address!("000000000000000000000000000000000000bEEF");
     const BLUEPRINT_ID: u64 = 0;
     const SERVICE_ID: u64 = 0;
 
