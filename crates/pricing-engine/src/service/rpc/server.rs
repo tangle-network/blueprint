@@ -220,6 +220,11 @@ impl PricingEngine for PricingEngineService {
         let proof_of_work = req.proof_of_work;
         let pricing_model = req.pricing_model; // 0=PayOnce, 1=Subscription, 2=EventDriven
 
+        // Validate the requester address up-front: tnt-core v0.13.0+ rejects
+        // wildcard (`address(0)`) quotes on-chain, so emitting one would just
+        // produce an unredeemable quote. Reject at the gRPC boundary.
+        let requester = parse_requester(&req.requester)?;
+
         info!(
             "Received GetPrice request for blueprint ID: {} (pricing_model={})",
             blueprint_id, pricing_model
@@ -409,6 +414,7 @@ impl PricingEngine for PricingEngineService {
             expiry: expiry_time,
             resources: proto_resources,
             security_commitments: vec![security_commitment],
+            requester: requester.0.to_vec(),
         };
 
         let confidentiality = if require_tee {
@@ -416,15 +422,19 @@ impl PricingEngine for PricingEngineService {
         } else {
             crate::signer::Confidentiality::Any
         };
-        let signable_quote =
-            SignableQuote::with_confidentiality(quote_details, total_cost, confidentiality)
-                .map_err(|e| {
-                    error!(
-                        "Failed to prepare signable quote for blueprint ID {}: {}",
-                        blueprint_id, e
-                    );
-                    Status::internal("Failed to build signable quote")
-                })?;
+        let signable_quote = SignableQuote::with_confidentiality(
+            quote_details,
+            total_cost,
+            confidentiality,
+            requester,
+        )
+        .map_err(|e| {
+            error!(
+                "Failed to prepare signable quote for blueprint ID {}: {}",
+                blueprint_id, e
+            );
+            Status::internal("Failed to build signable quote")
+        })?;
 
         // Generate proof of work for the response
         let response_pow = generate_proof(&challenge, self.pow_difficulty)
@@ -471,6 +481,11 @@ impl PricingEngine for PricingEngineService {
         let req = request.into_inner();
         let service_id = req.service_id;
         let job_index = req.job_index;
+
+        // Validate the requester address up-front: tnt-core v0.13.0+ rejects
+        // wildcard (`address(0)`) quotes on-chain. Reject at the gRPC boundary
+        // so downstream signing code can rely on a non-zero `requester`.
+        let requester = parse_requester(&req.requester)?;
 
         info!(
             "Received GetJobPrice request for service {} job index {}",
@@ -560,6 +575,7 @@ impl PricingEngine for PricingEngineService {
             timestamp,
             expiry,
             confidentiality,
+            requester: requester.0.to_vec(),
         };
 
         // Generate proof of work for response
@@ -622,6 +638,36 @@ impl PricingEngine for PricingEngineService {
         );
         Ok(Response::new(response))
     }
+}
+
+/// Parse and validate the proto `requester` bytes into an `Address`.
+///
+/// Rejects with `Status::invalid_argument` if the field is empty, the wrong
+/// length, or the zero address. tnt-core v0.13.0+ refuses to verify quotes
+/// signed for `address(0)` (audit Round 2 economic F1, PRs #124/#125), so
+/// emitting one would just produce an unredeemable quote — fail fast at the
+/// gRPC boundary so downstream signing code can rely on a non-zero requester.
+fn parse_requester(bytes: &[u8]) -> std::result::Result<alloy_primitives::Address, Status> {
+    if bytes.is_empty() {
+        return Err(Status::invalid_argument(
+            "requester required and must be non-zero",
+        ));
+    }
+    if bytes.len() != 20 {
+        return Err(Status::invalid_argument(format!(
+            "requester must be a 20-byte address, got {} bytes",
+            bytes.len()
+        )));
+    }
+    let mut buf = [0u8; 20];
+    buf.copy_from_slice(bytes);
+    let addr = alloy_primitives::Address::from(buf);
+    if addr.is_zero() {
+        return Err(Status::invalid_argument(
+            "requester required and must be non-zero",
+        ));
+    }
+    Ok(addr)
 }
 
 /// Internal settlement option (pre-proto conversion).
@@ -798,6 +844,17 @@ mod tests {
     /// Trivial difficulty for test PoW — avoids 30s+ proof generation on slow CI.
     const TEST_POW_DIFFICULTY: u32 = 1;
 
+    /// Non-zero placeholder requester address for tests.
+    /// Production callers MUST send the real buyer address; the gRPC layer
+    /// rejects `address(0)` (tnt-core v0.13.0+ reject wildcard quotes).
+    fn test_requester_bytes() -> Vec<u8> {
+        // 0x000000000000000000000000000000000000bEEF
+        let mut bytes = vec![0u8; 20];
+        bytes[18] = 0xbe;
+        bytes[19] = 0xef;
+        bytes
+    }
+
     fn make_service(job_entries: Vec<((u64, u32), U256)>) -> PricingEngineService {
         let mut svc = PricingEngineService::new_with_configs(
             test_config(),
@@ -835,6 +892,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -864,6 +922,7 @@ mod tests {
                 proof_of_work: pow,
                 challenge_timestamp: ts,
                 require_tee: false,
+                requester: test_requester_bytes(),
             });
             let resp = svc.get_job_price(req).await.unwrap().into_inner();
             let details = resp.quote_details.unwrap();
@@ -888,6 +947,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -908,6 +968,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -927,6 +988,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -944,6 +1006,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -962,6 +1025,7 @@ mod tests {
             proof_of_work: vec![],
             challenge_timestamp: 0, // 0 = missing
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -980,6 +1044,7 @@ mod tests {
             proof_of_work: vec![],
             challenge_timestamp: old_ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -998,6 +1063,7 @@ mod tests {
             proof_of_work: vec![],
             challenge_timestamp: future_ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1018,6 +1084,7 @@ mod tests {
             proof_of_work: vec![0u8; 32], // garbage PoW
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1036,6 +1103,7 @@ mod tests {
             proof_of_work: vec![], // empty PoW
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1066,6 +1134,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1098,6 +1167,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1181,6 +1251,7 @@ mod tests {
             }),
             pricing_model: 1, // SUBSCRIPTION
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_price(req).await.unwrap().into_inner();
@@ -1220,6 +1291,7 @@ mod tests {
             }),
             pricing_model: 1, // SUBSCRIPTION
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         // Should succeed despite no benchmark profile
@@ -1263,6 +1335,7 @@ mod tests {
             }),
             pricing_model: 1, // SUBSCRIPTION
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_price(req).await.unwrap_err();
@@ -1294,6 +1367,7 @@ mod tests {
             }),
             pricing_model: 0, // PAY_ONCE (default)
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         // Should fail because no benchmark profile exists
@@ -1325,6 +1399,7 @@ mod tests {
             }),
             pricing_model: 2, // EVENT_DRIVEN
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_price(req).await.unwrap().into_inner();
@@ -1360,6 +1435,7 @@ mod tests {
             }),
             pricing_model: 99, // Unknown
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_price(req).await.unwrap_err();
@@ -1399,6 +1475,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: true,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1424,6 +1501,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: true,
+            requester: test_requester_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1446,6 +1524,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: true,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1467,6 +1546,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: true,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1488,6 +1568,7 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
+            requester: test_requester_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();

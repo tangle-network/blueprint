@@ -44,7 +44,29 @@ pub fn create_test_quote_details() -> pricing_engine::QuoteDetails {
         expiry: 1_650_001_000,
         resources: vec![resource],
         security_commitments: vec![security_commitment],
+        // Non-zero placeholder; tnt-core v0.13.0+ rejects wildcard quotes.
+        requester: test_requester_bytes(),
     }
+}
+
+/// Non-zero placeholder requester for tests that don't care about the
+/// specific buyer address. Production callers MUST pass the real buyer.
+#[allow(dead_code)]
+pub fn test_requester_bytes() -> Vec<u8> {
+    // 0x000000000000000000000000000000000000bEEF
+    let mut bytes = vec![0u8; 20];
+    bytes[18] = 0xbe;
+    bytes[19] = 0xef;
+    bytes
+}
+
+/// Same address as `test_requester_bytes` but as `alloy_primitives::Address`.
+#[allow(dead_code)]
+pub fn test_requester_address() -> alloy_primitives::Address {
+    let mut bytes = [0u8; 20];
+    bytes[18] = 0xbe;
+    bytes[19] = 0xef;
+    alloy_primitives::Address::from(bytes)
 }
 
 #[allow(dead_code)]
