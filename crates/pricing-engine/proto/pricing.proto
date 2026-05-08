@@ -77,6 +77,10 @@ message GetPriceRequest {
   PricingModelHint pricing_model = 7;
   // Whether the customer requires TEE-attested service execution.
   bool require_tee = 8;
+  // Requester address (20 bytes). Must be non-zero — wildcard quotes are
+  // rejected by the on-chain verifier in tnt-core v0.13.0+. Bound into the
+  // EIP-712 signature so a quote can only be redeemed by this address.
+  bytes requester = 9;
 }
 
 // Resource requirement for a specific resource type
@@ -119,6 +123,10 @@ message QuoteDetails {
   repeated ResourcePricing resources = 6;
   // Security commitments for assets
   repeated AssetSecurityCommitment security_commitments = 7;
+  // Requester address (20 bytes). Must be non-zero — wildcard quotes are
+  // rejected by the on-chain verifier in tnt-core v0.13.0+. Bound into the
+  // EIP-712 signature so a quote can only be redeemed by this address.
+  bytes requester = 8;
 }
 
 // Pricing for a specific resource type
@@ -147,6 +155,10 @@ message GetJobPriceRequest {
   uint64 challenge_timestamp = 4;
   // Whether the customer requires TEE-attested service execution.
   bool require_tee = 5;
+  // Requester address (20 bytes). Must be non-zero — wildcard quotes are
+  // rejected by the on-chain verifier in tnt-core v0.13.0+. Bound into the
+  // EIP-712 signature so a quote can only be redeemed by this address.
+  bytes requester = 6;
 }
 
 // Response message for GetJobPrice RPC
@@ -189,7 +201,7 @@ message SettlementOption {
   string scheme = 6;
 }
 
-// Per-job quote details matching tnt-core Types.JobQuoteDetails
+// Per-job quote details matching tnt-core Types.JobQuoteDetails (v0.13.0+)
 message JobQuoteDetails {
   // The service instance ID
   uint64 service_id = 1;
@@ -205,4 +217,8 @@ message JobQuoteDetails {
   // Bound into the EIP-712 signature to prevent replay of
   // a non-TEE quote for a TEE-required service.
   uint32 confidentiality = 6;
+  // Requester address (20 bytes). Must be non-zero — wildcard quotes are
+  // rejected by the on-chain verifier in tnt-core v0.13.0+. Bound into the
+  // EIP-712 signature so a quote can only be redeemed by this address.
+  bytes requester = 7;
 }

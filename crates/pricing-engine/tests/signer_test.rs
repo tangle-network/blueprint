@@ -31,6 +31,7 @@ async fn test_sign_and_verify_quote() -> Result<()> {
         quote_details.clone(),
         rust_decimal::Decimal::from_f64(quote_details.total_cost_rate)
             .ok_or_else(|| PricingError::Other("invalid decimal".to_string()))?,
+        utils::test_requester_address(),
     )?;
 
     // Create proof of work
@@ -91,6 +92,7 @@ async fn test_service_quote_digest_changes_with_resource_commitments() -> Result
         quote_details,
         rust_decimal::Decimal::from_f64(0.0001)
             .ok_or_else(|| PricingError::Other("invalid decimal".to_string()))?,
+        utils::test_requester_address(),
     )?;
     let signed_quote = signer.sign_quote(signable_quote, vec![1, 2, 3, 4])?;
 

@@ -52,17 +52,30 @@ pub enum Confidentiality {
 
 impl SignableQuote {
     /// Create a new signable quote with default confidentiality (Any = 0).
-    pub fn new(details: pricing_engine::QuoteDetails, total_cost: Decimal) -> Result<Self> {
-        Self::with_confidentiality(details, total_cost, Confidentiality::Any)
+    ///
+    /// `requester` MUST be non-zero — wildcard quotes are rejected by the on-chain
+    /// verifier in tnt-core v0.13.0+. The gRPC layer enforces this; downstream
+    /// callers may rely on the invariant.
+    pub fn new(
+        details: pricing_engine::QuoteDetails,
+        total_cost: Decimal,
+        requester: Address,
+    ) -> Result<Self> {
+        Self::with_confidentiality(details, total_cost, Confidentiality::Any, requester)
     }
 
     /// Create a new signable quote with explicit confidentiality level.
+    ///
+    /// `requester` MUST be non-zero — wildcard quotes are rejected by the on-chain
+    /// verifier in tnt-core v0.13.0+.
     pub fn with_confidentiality(
         details: pricing_engine::QuoteDetails,
         total_cost: Decimal,
         confidentiality: Confidentiality,
+        requester: Address,
     ) -> Result<Self> {
-        let abi_details = build_abi_quote_details(&details, total_cost, confidentiality as u8)?;
+        let abi_details =
+            build_abi_quote_details(&details, total_cost, confidentiality as u8, requester)?;
         Ok(Self {
             proto_details: details,
             abi_details,
@@ -225,6 +238,9 @@ impl OperatorSigner {
 }
 
 /// Convert proto `JobQuoteDetails` (bytes price) → native `job_quote::JobQuoteDetails` (U256 price).
+///
+/// The proto's `requester` field is parsed as a 20-byte address; the gRPC entry
+/// point validates non-zero before reaching this path.
 fn proto_to_native_job_quote(
     details: &crate::pricing_engine::JobQuoteDetails,
 ) -> Result<jq::JobQuoteDetails> {
@@ -241,7 +257,23 @@ fn proto_to_native_job_quote(
         ))
     })?;
 
+    if details.requester.len() != 20 {
+        return Err(PricingError::Signing(format!(
+            "requester must be 20 bytes, got {}",
+            details.requester.len()
+        )));
+    }
+    let mut requester_bytes = [0u8; 20];
+    requester_bytes.copy_from_slice(&details.requester);
+    let requester = Address::from(requester_bytes);
+    if requester.is_zero() {
+        return Err(PricingError::Signing(
+            "requester must be non-zero (tnt-core v0.13.0 rejects wildcard quotes)".to_string(),
+        ));
+    }
+
     Ok(jq::JobQuoteDetails {
+        requester,
         service_id: details.service_id,
         job_index,
         price,
@@ -275,11 +307,21 @@ pub fn job_quote_digest_eip712(
     Ok(jq::job_quote_digest_eip712(&native, to_jq_domain(domain)))
 }
 
+/// Build the on-chain ABI `QuoteDetails` from the proto details and a validated requester.
+///
+/// `requester` MUST be non-zero — the gRPC entry point validates this before
+/// reaching here, since tnt-core v0.13.0+ rejects wildcard quotes on-chain.
 fn build_abi_quote_details(
     details: &pricing_engine::QuoteDetails,
     total_cost: Decimal,
     confidentiality: u8,
+    requester: Address,
 ) -> Result<ITangleTypes::QuoteDetails> {
+    debug_assert!(
+        !requester.is_zero(),
+        "build_abi_quote_details called with zero requester (gRPC layer should have rejected)"
+    );
+
     let security_commitments = details
         .security_commitments
         .iter()
@@ -292,11 +334,10 @@ fn build_abi_quote_details(
         .collect::<Result<Vec<_>>>()?;
 
     Ok(ITangleTypes::QuoteDetails {
-        // `requester == address(0)` is the contract's "open quote" mode (any
-        // address may redeem). Until the proto + RPC surface threads the
-        // requester from `GetPriceRequest` through to here (PR #118 added the
-        // binding on-chain), open-quote is the only safe default.
-        requester: alloy_primitives::Address::ZERO,
+        // Bound to a specific buyer per tnt-core v0.13.0 (audit Round 2
+        // economic F1, PRs #124/#125). `requester == address(0)` is rejected
+        // by the on-chain verifier; the gRPC layer enforces non-zero.
+        requester,
         blueprintId: details.blueprint_id,
         ttlBlocks: details.ttl_blocks,
         totalCost: decimal_to_scaled_amount(total_cost)?,

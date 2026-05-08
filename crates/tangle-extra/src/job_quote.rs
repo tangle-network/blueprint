@@ -4,6 +4,13 @@
 //! via `submitJobFromQuote`. The EIP-712 structured data matches
 //! `tnt-core/src/libraries/SignatureLib.sol`'s `JOB_QUOTE_TYPEHASH`.
 //!
+//! # v0.13.0 binding to `requester`
+//!
+//! Since tnt-core v0.13.0 (audit Round 2 economic F1, tnt-core PRs #124/#125),
+//! every quote is bound to a specific `requester` address. The on-chain verifier
+//! rejects `requester == address(0)` (wildcard quotes are no longer permitted),
+//! and the `address requester` field is the first member of the EIP-712 struct.
+//!
 //! # Usage
 //!
 //! ```rust,ignore
@@ -14,6 +21,7 @@
 //! let mut signer = JobQuoteSigner::new(keypair, domain)?;
 //!
 //! let details = JobQuoteDetails {
+//!     requester: buyer_addr, // MUST be non-zero — wildcard quotes are rejected on-chain
 //!     service_id: 1,
 //!     job_index: 0,
 //!     price: U256::from(1_000_000_000_000_000_000u128), // 1 ETH
@@ -76,9 +84,10 @@ impl TryFrom<u8> for Confidentiality {
 
 /// Per-job quote details that get EIP-712 signed
 ///
-/// Matches `Types.JobQuoteDetails` in tnt-core:
+/// Matches `Types.JobQuoteDetails` in tnt-core (v0.13.0+):
 /// ```solidity
 /// struct JobQuoteDetails {
+///     address requester;
 ///     uint64 serviceId;
 ///     uint8 jobIndex;
 ///     uint256 price;
@@ -89,6 +98,9 @@ impl TryFrom<u8> for Confidentiality {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobQuoteDetails {
+    /// Address allowed to redeem this quote on-chain. MUST be non-zero —
+    /// the contract rejects wildcard (`address(0)`) quotes since v0.13.0.
+    pub requester: Address,
     pub service_id: u64,
     pub job_index: u8,
     pub price: U256,
@@ -249,18 +261,20 @@ fn compute_domain_separator(domain: QuoteSigningDomain) -> B256 {
 
 /// Hash job quote details per the JOB_QUOTE_TYPEHASH
 ///
-/// Matches `SignatureLib.hashJobQuote()`:
+/// Matches `SignatureLib.hashJobQuote()` in tnt-core v0.13.0+:
 /// ```text
-/// keccak256(abi.encode(JOB_QUOTE_TYPEHASH, serviceId, jobIndex, price, timestamp, expiry, confidentiality))
+/// keccak256(abi.encode(JOB_QUOTE_TYPEHASH, requester, serviceId, jobIndex, price, timestamp, expiry, confidentiality))
 /// ```
 fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
-    const JOB_QUOTE_TYPEHASH_STR: &str = "JobQuoteDetails(uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry,uint8 confidentiality)";
+    const JOB_QUOTE_TYPEHASH_STR: &str = "JobQuoteDetails(address requester,uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry,uint8 confidentiality)";
 
     let typehash = keccak256(JOB_QUOTE_TYPEHASH_STR.as_bytes());
 
-    // abi.encode pads each field to 32 bytes, matching Solidity's abi.encode behavior
+    // abi.encode pads each field to 32 bytes, matching Solidity's abi.encode behavior.
+    // `requester` is the first field after the typehash (v0.13.0 binding).
     let encoded = (
         typehash,
+        details.requester,
         U256::from(details.service_id),
         U256::from(details.job_index),
         details.price,
@@ -286,6 +300,7 @@ impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::
         sig_bytes.push(27 + quote.recovery_id);
         Self {
             details: blueprint_client_tangle::contracts::ITangleTypes::JobQuoteDetails {
+                requester: quote.details.requester,
                 serviceId: quote.details.service_id,
                 jobIndex: quote.details.job_index,
                 price: quote.details.price,
@@ -320,9 +335,15 @@ mod tests {
         assert_eq!(sep1, sep2);
     }
 
+    /// Non-zero placeholder for tests that don't assert against cross-repo vectors.
+    fn placeholder_requester() -> Address {
+        address!("000000000000000000000000000000000000bEEF")
+    }
+
     #[test]
     fn test_hash_job_quote_deterministic() {
         let details = JobQuoteDetails {
+            requester: placeholder_requester(),
             service_id: 1,
             job_index: 0,
             price: U256::from(1_000_000_000_000_000_000u128),
@@ -338,6 +359,7 @@ mod tests {
     #[test]
     fn test_different_quotes_produce_different_hashes() {
         let details1 = JobQuoteDetails {
+            requester: placeholder_requester(),
             service_id: 1,
             job_index: 0,
             price: U256::from(100u64),
@@ -346,6 +368,7 @@ mod tests {
             confidentiality: 0,
         };
         let details2 = JobQuoteDetails {
+            requester: placeholder_requester(),
             service_id: 1,
             job_index: 1, // different job
             price: U256::from(100u64),
@@ -360,8 +383,32 @@ mod tests {
     }
 
     #[test]
+    fn test_requester_changes_hash() {
+        // A quote bound to one requester must NOT verify as a quote for another.
+        let base = JobQuoteDetails {
+            requester: placeholder_requester(),
+            service_id: 1,
+            job_index: 0,
+            price: U256::from(100u64),
+            timestamp: 1700000000,
+            expiry: 1700003600,
+            confidentiality: 0,
+        };
+        let other = JobQuoteDetails {
+            requester: address!("00000000000000000000000000000000DeadBeef"),
+            ..base.clone()
+        };
+        assert_ne!(
+            hash_job_quote_details(&base),
+            hash_job_quote_details(&other),
+            "different requester must yield different struct hash"
+        );
+    }
+
+    #[test]
     fn test_confidentiality_changes_hash() {
         let base = JobQuoteDetails {
+            requester: placeholder_requester(),
             service_id: 1,
             job_index: 0,
             price: U256::from(100u64),
@@ -383,6 +430,7 @@ mod tests {
     #[test]
     fn test_digest_differs_across_domains() {
         let details = JobQuoteDetails {
+            requester: placeholder_requester(),
             service_id: 1,
             job_index: 0,
             price: U256::from(100u64),
@@ -412,6 +460,7 @@ mod tests {
         let mut signer = JobQuoteSigner::new(keypair, domain).unwrap();
 
         let details = JobQuoteDetails {
+            requester: placeholder_requester(),
             service_id: 42,
             job_index: 3,
             price: U256::from(500_000_000_000_000_000u128), // 0.5 ETH
@@ -436,6 +485,7 @@ mod tests {
 
         let mut signer = JobQuoteSigner::new(keypair, domain).unwrap();
         let details = JobQuoteDetails {
+            requester: placeholder_requester(),
             service_id: 1,
             job_index: 0,
             price: U256::from(100u64),
@@ -457,6 +507,7 @@ mod tests {
 
         let mut signer = JobQuoteSigner::new(keypair, domain).unwrap();
         let details = JobQuoteDetails {
+            requester: placeholder_requester(),
             service_id: 1,
             job_index: 0,
             price: U256::from(100u64),
@@ -507,6 +558,7 @@ mod tests {
     fn test_eip712_compat_vector1_basic() {
         let domain = compat_domain();
         let details = JobQuoteDetails {
+            requester: address!("000000000000000000000000000000000000bEEF"),
             service_id: 42,
             job_index: 3,
             price: U256::from(1_000_000_000_000_000_000u128), // 1 ether
@@ -519,16 +571,16 @@ mod tests {
         assert_eq!(
             struct_hash,
             B256::from(hex_literal::hex!(
-                "b5ad63b2aafeb693bc7fb591fb0cba712fff4cfafaccfb4bf97de29f069da660"
+                "81efa1579f66bc16802d9c482eb23561fa1a86e1288cb65902b4619005a04a87"
             )),
-            "struct hash must match Solidity Vector 1 (with confidentiality field)"
+            "struct hash must match Solidity Vector 1 (v0.13.0 typehash with requester)"
         );
 
         let digest = job_quote_digest_eip712(&details, domain);
         assert_eq!(
             digest,
-            hex_literal::hex!("e13955facb4fcba51dce076d019e9509fc5d3c028a269e17e5ea1b78ca41fd26"),
-            "EIP-712 digest must match Solidity Vector 1 (with confidentiality field)"
+            hex_literal::hex!("fd2339fda45c2e7e30f8d5dbcc062f82af12757ad80175cbdd6972627fb3c54c"),
+            "EIP-712 digest must match Solidity Vector 1 (v0.13.0 typehash with requester)"
         );
     }
 
@@ -536,6 +588,7 @@ mod tests {
     fn test_eip712_compat_vector2_zero_price() {
         let domain = compat_domain();
         let details = JobQuoteDetails {
+            requester: address!("0000000000000000000000000000000000C0FFEE"),
             service_id: 1,
             job_index: 0,
             price: U256::ZERO,
@@ -547,8 +600,8 @@ mod tests {
         let digest = job_quote_digest_eip712(&details, domain);
         assert_eq!(
             digest,
-            hex_literal::hex!("681b55c8c7602d2069ba2d5503cbec4f25e6067270e5e57bc310a0bb2f4ed7ff"),
-            "zero-price digest must match Solidity Vector 2 (with confidentiality field)"
+            hex_literal::hex!("c21c630f71383acd4d8f5465a13264f9e376dfb323acfe97d5202bc9a5baa221"),
+            "zero-price digest must match Solidity Vector 2 (v0.13.0 typehash with requester)"
         );
     }
 
@@ -556,6 +609,7 @@ mod tests {
     fn test_eip712_compat_vector3_large_price() {
         let domain = compat_domain();
         let details = JobQuoteDetails {
+            requester: address!("000000000000000000000000000000000000bEEF"),
             service_id: 999,
             job_index: 7,
             price: U256::from(u128::MAX), // type(uint128).max
@@ -567,8 +621,8 @@ mod tests {
         let digest = job_quote_digest_eip712(&details, domain);
         assert_eq!(
             digest,
-            hex_literal::hex!("bdb556510beb8c8e04fac3e8f2edcaa98ef9d8a6afe0048554919af68cc2e603"),
-            "large-price digest must match Solidity Vector 3 (with confidentiality field)"
+            hex_literal::hex!("ebd98b504cfdbe392ddf9813148e2f7808bb6f7ef85c376315fe0446c2ffc9ee"),
+            "large-price digest must match Solidity Vector 3 (v0.13.0 typehash with requester)"
         );
     }
 
@@ -581,6 +635,7 @@ mod tests {
         let domain = compat_domain();
 
         let details = JobQuoteDetails {
+            requester: address!("000000000000000000000000000000000000bEEF"),
             service_id: 42,
             job_index: 3,
             price: U256::from(1_000_000_000_000_000_000u128),
@@ -588,8 +643,6 @@ mod tests {
             expiry: 1700003600,
             confidentiality: 0,
         };
-
-        let _digest = job_quote_digest_eip712(&details, domain);
 
         // Sign and verify the digest recovers to the expected address
         let mut signer = JobQuoteSigner::new(keypair, domain).unwrap();
@@ -600,6 +653,19 @@ mod tests {
             signed.operator,
             address!("7E5F4552091A69125d5DfCb7b8C2659029395Bdf"),
             "signer address must match Solidity Vector 4"
+        );
+
+        // The first 32 bytes of the signature must match Solidity Vector 4's `r`
+        // (load-bearing cross-repo digest pin: same private key + same digest =>
+        // identical canonical (r, s) under deterministic ECDSA).
+        use blueprint_crypto::BytesEncoding;
+        let sig_bytes = signed.signature.to_bytes();
+        let mut r = [0u8; 32];
+        r.copy_from_slice(&sig_bytes[..32]);
+        assert_eq!(
+            r,
+            hex_literal::hex!("9d22c9909f6ebbcadc4ec85467c487e3d29afa8409f058371894af17f176db4c"),
+            "signature `r` must match Solidity Vector 4 (v0.13.0 with requester)"
         );
 
         let valid = verify_job_quote(&signed, &signer.verifying_key(), domain).unwrap();

@@ -21,10 +21,16 @@ Price is computed from the operator's resource pricing config (`default_pricing.
 Used with `submitJobFromQuote()` on the Tangle contract. The operator quotes a specific price for a single job execution.
 
 ```
-Consumer → GetJobPrice(service_id, job_index) → Operator
-Operator → signs JobQuoteDetails{serviceId, jobIndex, price, timestamp, expiry}
+Consumer → GetJobPrice(service_id, job_index, requester) → Operator
+Operator → signs JobQuoteDetails{requester, serviceId, jobIndex, price, timestamp, expiry, confidentiality}
 Consumer → submitJobFromQuote(serviceId, jobIndex, inputs, [signedQuotes])
 ```
+
+Since tnt-core v0.13.0, every quote is bound to a specific `requester`
+address (audit Round 2 economic F1, PRs #124 and #125). The on-chain
+verifier rejects `requester == address(0)` and rejects any submitter
+whose `msg.sender` doesn't match. The gRPC layer enforces non-zero
+`requester` at the boundary.
 
 Price is looked up from the operator's per-job pricing config: a `(service_id, job_index) → price_in_wei` map.
 
@@ -154,15 +160,19 @@ chainId:           <chain_id>
 verifyingContract: <tangle_proxy_address>
 ```
 
-**Service quotes** use `QUOTE_TYPEHASH`:
+**Service quotes** use `QUOTE_TYPEHASH` (tnt-core v0.13.0+):
 ```
-QuoteDetails(uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,AssetSecurityCommitment[] securityCommitments,ResourceCommitment[] resourceCommitments)
+QuoteDetails(address requester,uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,uint8 confidentiality,AssetSecurityCommitment[] securityCommitments,ResourceCommitment[] resourceCommitments)
 ```
 
-**Job quotes** use `JOB_QUOTE_TYPEHASH`:
+**Job quotes** use `JOB_QUOTE_TYPEHASH` (tnt-core v0.13.0+):
 ```
-JobQuoteDetails(uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry)
+JobQuoteDetails(address requester,uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry,uint8 confidentiality)
 ```
+
+`requester` MUST be non-zero — wildcard quotes are rejected by the
+on-chain verifier. The address is bound into the EIP-712 signature so a
+quote can only be redeemed by the buyer it was issued to.
 
 For standalone signing without the full pricing engine, use `JobQuoteSigner` from `blueprint-tangle-extra`:
 
@@ -171,11 +181,13 @@ use blueprint_tangle_extra::job_quote::{JobQuoteSigner, JobQuoteDetails, QuoteSi
 
 let signer = JobQuoteSigner::new(keypair, QuoteSigningDomain { chain_id, verifying_contract });
 let signed = signer.sign(&JobQuoteDetails {
+    requester: buyer_address, // MUST be non-zero
     service_id: 1,
     job_index: 7,
     price: U256::from(250_000_000_000_000_000u64),
     timestamp: now,
     expiry: now + 3600,
+    confidentiality: 0,
 });
 ```
 

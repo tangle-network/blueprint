@@ -67,6 +67,18 @@ mod evm_listener_tests {
         "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
     const SERVICE_OWNER_PRIVATE_KEY: &str =
         "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+    /// Address derived from `SERVICE_OWNER_PRIVATE_KEY` (anvil account #0).
+    /// This is the buyer/requester for tests that submit quotes on-chain — every
+    /// quote in v0.13.0+ binds to a non-zero requester via EIP-712.
+    const SERVICE_OWNER_ADDRESS: alloy_primitives::Address =
+        alloy_primitives::address!("f39Fd6e51aad88F6F4ce6aB8827279cfFFb92266");
+    /// Non-zero throwaway requester for fixtures that exercise revert paths
+    /// (invalid signature, expired quote, mismatched blueprint, etc.). Any
+    /// non-zero address works because the on-chain check fires before the
+    /// requester binding for these failures, but using a deterministic value
+    /// makes the fixtures self-documenting.
+    const REJECTION_PATH_REQUESTER: alloy_primitives::Address =
+        alloy_primitives::address!("000000000000000000000000000000000000bEEF");
     const BLUEPRINT_ID: u64 = 0;
     const SERVICE_ID: u64 = 0;
 
@@ -219,6 +231,7 @@ mod evm_listener_tests {
             challenge_timestamp,
             pricing_model: 0,
             require_tee: false,
+            requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
         };
 
         let response = client.get_price(request).await?.into_inner();
@@ -234,7 +247,8 @@ mod evm_listener_tests {
 
         let total_cost = rust_decimal::Decimal::from_f64(quote_details.total_cost_rate)
             .ok_or_else(|| anyhow::anyhow!("invalid total cost"))?;
-        let signable = SignableQuote::new(quote_details.clone(), total_cost)?;
+        let signable =
+            SignableQuote::new(quote_details.clone(), total_cost, SERVICE_OWNER_ADDRESS)?;
         assert_eq!(
             response.signature.len(),
             65,
@@ -442,6 +456,7 @@ mod evm_listener_tests {
                 challenge_timestamp,
                 pricing_model: 0,
                 require_tee: false,
+                requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
             };
 
             let response = grpc_client.get_price(request).await?.into_inner();
@@ -476,7 +491,8 @@ mod evm_listener_tests {
             let verifier = signer.lock().await.verifying_key();
             let total_cost = rust_decimal::Decimal::from_f64(quote_details.total_cost_rate)
                 .ok_or_else(|| anyhow::anyhow!("invalid total cost"))?;
-            let signable = SignableQuote::new(quote_details.clone(), total_cost)?;
+            let signable =
+                SignableQuote::new(quote_details.clone(), total_cost, SERVICE_OWNER_ADDRESS)?;
             assert_eq!(
                 response.signature.len(),
                 65,
@@ -576,6 +592,7 @@ mod evm_listener_tests {
             challenge_timestamp: expired_timestamp,
             pricing_model: 0,
             require_tee: false,
+            requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
         };
 
         let result = client.get_price(request).await;
@@ -660,6 +677,7 @@ mod evm_listener_tests {
             challenge_timestamp,
             pricing_model: 0,
             require_tee: false,
+            requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
         };
 
         let result = client.get_price(request).await;
@@ -742,6 +760,7 @@ mod evm_listener_tests {
             challenge_timestamp,
             pricing_model: 0,
             require_tee: false,
+            requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
         };
 
         let result = client.get_price(request).await;
@@ -816,6 +835,7 @@ mod evm_listener_tests {
                 challenge_timestamp,
                 pricing_model: 0,
                 require_tee: false,
+                requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
             };
 
             let response = grpc_client.get_price(request).await?.into_inner();
@@ -826,8 +846,11 @@ mod evm_listener_tests {
 
             println!("✓ Received signed quote from pricing engine");
 
-            // Convert to on-chain format
-            let on_chain_quote = convert_to_onchain_quote(&response, &signer).await?;
+            // Convert to on-chain format. The buyer (`SERVICE_OWNER_ADDRESS`)
+            // is the requester bound into the quote — tnt-core v0.13.0+ rejects
+            // any submitter whose `msg.sender` doesn't match.
+            let on_chain_quote =
+                convert_to_onchain_quote(&response, &signer, SERVICE_OWNER_ADDRESS).await?;
 
             println!("✓ Converted quote to on-chain format");
 
@@ -895,9 +918,12 @@ mod evm_listener_tests {
             };
             log_testnet_endpoints(&deployment);
 
-            // Create a quote with an invalid signature (random bytes)
+            // Create a quote with an invalid signature (random bytes).
+            // Use a non-zero requester so we exercise the signature-rejection
+            // path rather than the wildcard-quote rejection path.
             let invalid_quote = ITangleServicesTypes::SignedQuote {
                 details: ITangleServicesTypes::QuoteDetails {
+                    requester: REJECTION_PATH_REQUESTER,
                     blueprintId: BLUEPRINT_ID,
                     ttlBlocks: 100,
                     totalCost: U256::from(1000000u64),
@@ -963,10 +989,12 @@ mod evm_listener_tests {
             };
             log_testnet_endpoints(&deployment);
 
-            // Create a quote that's already expired
+            // Create a quote that's already expired. Non-zero requester so
+            // the expiry check fires before the wildcard-quote check.
             let now = chrono::Utc::now().timestamp() as u64;
             let expired_quote = ITangleServicesTypes::SignedQuote {
                 details: ITangleServicesTypes::QuoteDetails {
+                    requester: REJECTION_PATH_REQUESTER,
                     blueprintId: BLUEPRINT_ID,
                     ttlBlocks: 100,
                     totalCost: U256::from(1000000u64),
@@ -1057,8 +1085,12 @@ mod evm_listener_tests {
             );
 
             // Convert both to on-chain format
-            let on_chain_quote1 = convert_to_onchain_quote(&quote1, &signer1).await?;
-            let on_chain_quote2 = convert_to_onchain_quote(&quote2, &signer2).await?;
+            // Both quotes are submitted by the same SERVICE_OWNER buyer, so
+            // they must both bind to that address as the requester.
+            let on_chain_quote1 =
+                convert_to_onchain_quote(&quote1, &signer1, SERVICE_OWNER_ADDRESS).await?;
+            let on_chain_quote2 =
+                convert_to_onchain_quote(&quote2, &signer2, SERVICE_OWNER_ADDRESS).await?;
 
             println!("✓ Converted both quotes to on-chain format");
 
@@ -1123,9 +1155,12 @@ mod evm_listener_tests {
             };
             log_testnet_endpoints(&deployment);
 
-            // Create a quote for blueprint ID 999 but submit it for blueprint ID 0
+            // Create a quote for blueprint ID 999 but submit it for blueprint ID 0.
+            // Non-zero requester so the blueprint-mismatch check fires before
+            // the wildcard-quote check.
             let mismatched_quote = ITangleServicesTypes::SignedQuote {
                 details: ITangleServicesTypes::QuoteDetails {
+                    requester: REJECTION_PATH_REQUESTER,
                     blueprintId: 999, // Different from submission
                     ttlBlocks: 100,
                     totalCost: U256::from(1000000u64),
@@ -1234,6 +1269,7 @@ mod evm_listener_tests {
             challenge_timestamp,
             pricing_model: 0,
             require_tee: false,
+            requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
         };
 
         let result = client.get_price(request).await;
@@ -1320,6 +1356,7 @@ mod evm_listener_tests {
             challenge_timestamp,
             pricing_model: 0,
             require_tee: false,
+            requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
         };
 
         // Zero TTL should still be handled (quote can have zero TTL)
@@ -1423,15 +1460,22 @@ mod evm_listener_tests {
             challenge_timestamp,
             pricing_model: 0,
             require_tee: false,
+            requester: SERVICE_OWNER_ADDRESS.0.to_vec(),
         };
 
         Ok(client.get_price(request).await?.into_inner())
     }
 
-    /// Convert a gRPC quote response to on-chain format
+    /// Convert a gRPC quote response to on-chain format.
+    ///
+    /// `requester` MUST match the address bound into the EIP-712 quote when it
+    /// was signed (typically the buyer's `tx.origin` / `msg.sender`). Since
+    /// tnt-core v0.13.0+, the on-chain verifier rejects `requester == address(0)`
+    /// and rejects any submitter whose `msg.sender` doesn't match.
     async fn convert_to_onchain_quote(
         response: &blueprint_pricing_engine_lib::pricing_engine::GetPriceResponse,
         _signer: &Arc<Mutex<OperatorSigner>>,
+        requester: Address,
     ) -> Result<ITangleServicesTypes::SignedQuote> {
         let quote_details = response
             .quote_details
@@ -1475,6 +1519,7 @@ mod evm_listener_tests {
             .collect::<Vec<_>>();
 
         let details = ITangleServicesTypes::QuoteDetails {
+            requester,
             blueprintId: quote_details.blueprint_id,
             ttlBlocks: quote_details.ttl_blocks,
             totalCost: U256::from(total_cost_scaled),
