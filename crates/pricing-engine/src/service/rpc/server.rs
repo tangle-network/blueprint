@@ -1578,4 +1578,129 @@ mod tests {
             "confidentiality should be 0 when require_tee=false"
         );
     }
+
+    // ── Requester validation (audit Round 2 economic F1) ───────────────
+
+    #[tokio::test]
+    async fn test_get_job_price_rejects_zero_requester() {
+        // tnt-core v0.13.0+ rejects wildcard quotes; the gRPC layer must
+        // reject `requester == address(0)` before signing anything.
+        let svc = make_service(vec![((1, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: false,
+            requester: vec![0u8; 20], // zero address
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(
+            err.message().contains("non-zero"),
+            "error must mention non-zero requirement: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_rejects_empty_requester() {
+        let svc = make_service(vec![((1, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: false,
+            requester: vec![], // missing
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_rejects_short_requester() {
+        let svc = make_service(vec![((1, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: false,
+            requester: vec![0xbe; 19], // 19 bytes, not 20
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(
+            err.message().contains("20-byte"),
+            "error must mention length: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_price_rejects_zero_requester() {
+        let svc = make_service(vec![]);
+        let (ts, pow) = valid_price_pow(1).await;
+        let req = Request::new(GetPriceRequest {
+            blueprint_id: 1,
+            ttl_blocks: 100,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            resource_requirements: vec![],
+            security_requirements: Some(crate::pricing_engine::AssetSecurityRequirements {
+                asset: Some(crate::pricing_engine::Asset {
+                    asset_type: Some(crate::pricing_engine::asset::AssetType::Erc20(vec![
+                        0u8;
+                        20
+                    ])),
+                }),
+                minimum_exposure_percent: 10,
+                maximum_exposure_percent: 100,
+            }),
+            pricing_model: 0,
+            require_tee: false,
+            requester: vec![0u8; 20], // zero address
+        });
+
+        let err = svc.get_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(
+            err.message().contains("non-zero"),
+            "error must mention non-zero requirement: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_echoes_requester_in_response() {
+        let svc = make_service(vec![((1, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: false,
+            requester: test_requester_bytes(),
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        assert_eq!(
+            details.requester,
+            test_requester_bytes(),
+            "response must echo the requester so the client can verify the binding"
+        );
+    }
 }
