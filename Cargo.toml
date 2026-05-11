@@ -126,11 +126,13 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.4", path = "./crates/sdk", default-features = false }
-# tnt-core v0.13.0 binds quotes to the requester address (audit Round 2 economic F1).
-# Upstream tnt-core PRs #124 and #125 land the change. Bindings 0.13.0 is not yet on
-# crates.io, so we pin to the `main` branch in git until the publish lands. Flip this
-# back to a versioned crates.io dep (`"0.13.0"`) once published.
-tnt-core-bindings = { git = "https://github.com/tangle-network/tnt-core", branch = "main" }
+# tnt-core v0.15.0 ships the audit Round 4 hardening pass: TWAP subscription billing,
+# UUPS-upgradeable L2 receivers, ValidatorPodManager share-pool accounting, dispute-bond
+# pull pattern, and disabled TangleToken.burn. Upstream tnt-core PR #126 (merge commit
+# d3db884) lands the change. Bindings 0.15.0 is not yet on crates.io, so we pin to that
+# revision in git until the publish lands.
+# TODO: flip back to a versioned crates.io dep (`"0.15.0"`) once published.
+tnt-core-bindings = { git = "https://github.com/tangle-network/tnt-core", rev = "d3db884" }
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.3", path = "crates/core", default-features = false }
