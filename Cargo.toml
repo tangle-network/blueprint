@@ -250,7 +250,7 @@ async-stream = { version = "0.3.6", default-features = false }
 # CLI & Configuration
 cargo-generate = { version = "0.23.7", default-features = false }
 clap = { version = "4.5.60", features = ["derive", "env"] }
-clap-cargo = { version = "0.14", default-features = false }
+clap-cargo = { version = "0.18", default-features = false }
 toml = { version = "1.0", default-features = false, features = ["parse", "display", "serde"] }
 dialoguer = { version = "0.11.0", default-features = false }
 dotenv = { version = "0.15", default-features = false }
