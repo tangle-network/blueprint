@@ -424,7 +424,7 @@ gcloud-sdk = { version = "0.29", default-features = false }
 gcp_auth = { version = "0.12" }
 
 # Arkworks
-ark-bn254 = { version = "0.5.0", default-features = false }
+ark-bn254 = { version = "0.6.0", default-features = false }
 ark-ec = { version = "0.5.0", default-features = false }
 ark-ff = { version = "0.5.0", default-features = false }
 ark-serialize = { version = "0.5.0", default-features = false, features = ["derive"] }

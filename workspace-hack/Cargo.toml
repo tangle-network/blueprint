@@ -39,7 +39,7 @@ alloy-sol-types = { version = "1", features = ["eip712-serde", "json"] }
 alloy-transport-http = { version = "2", default-features = false, features = ["reqwest", "reqwest-default-tls", "reqwest-rustls-tls"] }
 anyhow = { version = "1" }
 argon2 = { version = "0.5", default-features = false, features = ["std"] }
-ark-bn254 = { version = "0.5", default-features = false, features = ["curve", "std"] }
+ark-bn254 = { version = "0.6", default-features = false, features = ["curve", "std"] }
 ark-ec = { version = "0.5", default-features = false, features = ["std"] }
 ark-ff = { version = "0.5", default-features = false, features = ["std"] }
 ark-serialize = { version = "0.5", features = ["derive", "std"] }
@@ -236,7 +236,7 @@ alloy-sol-types = { version = "1", features = ["eip712-serde", "json"] }
 alloy-transport-http = { version = "2", default-features = false, features = ["reqwest", "reqwest-default-tls", "reqwest-rustls-tls"] }
 anyhow = { version = "1" }
 argon2 = { version = "0.5", default-features = false, features = ["std"] }
-ark-bn254 = { version = "0.5", default-features = false, features = ["curve", "std"] }
+ark-bn254 = { version = "0.6", default-features = false, features = ["curve", "std"] }
 ark-ec = { version = "0.5", default-features = false, features = ["std"] }
 ark-ff = { version = "0.5", default-features = false, features = ["std"] }
 ark-serialize = { version = "0.5", features = ["derive", "std"] }
