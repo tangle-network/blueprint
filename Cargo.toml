@@ -126,11 +126,11 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.4", path = "./crates/sdk", default-features = false }
-# tnt-core v0.13.0 binds quotes to the requester address (audit Round 2 economic F1).
-# Upstream tnt-core PRs #124 and #125 land the change. Bindings 0.13.0 is not yet on
-# crates.io, so we pin to the `main` branch in git until the publish lands. Flip this
-# back to a versioned crates.io dep (`"0.13.0"`) once published.
-tnt-core-bindings = { git = "https://github.com/tangle-network/tnt-core", branch = "main" }
+# tnt-core 0.15.0 ships TWAP-fair subscription billing, UUPS-upgradeable L2
+# slashing receivers, share-pool ValidatorPodManager, the dispute-bond pull
+# pattern (cancelSlash no longer auto-refunds), and disabled TangleToken.burn.
+# https://crates.io/crates/tnt-core-bindings/0.15.0
+tnt-core-bindings = "0.15.0"
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.3", path = "crates/core", default-features = false }
