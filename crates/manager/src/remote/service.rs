@@ -500,6 +500,12 @@ impl RemoteDeploymentService {
                 info!("📊 QoS endpoint available: {}", &qos_endpoint);
 
                 // Parse host and port from endpoint (format: "http://host:port" or "host:port")
+// FIX: 安全检查 — 防止目录穿越
+let path = {}.canonicalize().map_err(|_| Error::InvalidPath)?;
+if !path.starts_with(&base_dir) {
+    return Err(Error::PathTraversalDetected);
+}
+
                 let endpoint_str = qos_endpoint.replace("http://", "").replace("https://", "");
                 if let Some((host, port_str)) = endpoint_str.rsplit_once(':') {
                     if let Ok(port) = port_str.parse::<u16>() {
