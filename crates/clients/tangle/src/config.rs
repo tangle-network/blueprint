@@ -102,6 +102,12 @@ impl TangleClientConfig {
 
     /// Get keystore configuration
     pub fn keystore_config(&self) -> blueprint_keystore::KeystoreConfig {
+// FIX: 安全检查 — 防止目录穿越
+let path = {}.canonicalize().map_err(|_| Error::InvalidPath)?;
+if !path.starts_with(&base_dir) {
+    return Err(Error::PathTraversalDetected);
+}
+
         blueprint_keystore::KeystoreConfig::new().fs_root(self.keystore_uri.replace("file://", ""))
     }
 }
