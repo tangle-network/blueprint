@@ -126,11 +126,14 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.4", path = "./crates/sdk", default-features = false }
-# tnt-core 0.15.0 ships TWAP-fair subscription billing, UUPS-upgradeable L2
-# slashing receivers, share-pool ValidatorPodManager, the dispute-bond pull
-# pattern (cancelSlash no longer auto-refunds), and disabled TangleToken.burn.
-# https://crates.io/crates/tnt-core-bindings/0.15.0
-tnt-core-bindings = "0.15.0"
+# tnt-core 0.17.0 introduces the subscription billing rearchitecture
+# (requestService + fundService flow), the payments facet split with
+# self-only distributePayment, RFQ replay / freshness / cumulative TTL
+# hardening, the collapsed approveService(ApprovalParams) entry point,
+# claimRewards / claimRewardsAll griefing isolation, and O(1) operator
+# stake aggregation with VPM share-pool slashing.
+# Pinned to the git branch until 0.17.0 is published to crates.io.
+tnt-core-bindings = { git = "https://github.com/tangle-network/tnt-core", branch = "chore/bindings-v0.17.0", package = "tnt-core-bindings" }
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.3", path = "crates/core", default-features = false }
