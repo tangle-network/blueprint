@@ -19,7 +19,7 @@ ahash = { version = "0.8", features = ["compile-time-rng"] }
 aho-corasick = { version = "1" }
 alloy = { version = "1", features = ["full"] }
 alloy-consensus = { version = "1", default-features = false, features = ["k256", "kzg", "serde"] }
-alloy-contract = { version = "1", default-features = false, features = ["pubsub"] }
+alloy-contract = { version = "2", default-features = false, features = ["pubsub"] }
 alloy-core = { version = "1", features = ["dyn-abi", "json-abi", "k256", "rlp"] }
 alloy-dyn-abi = { version = "1", features = ["eip712"] }
 alloy-eip7702 = { version = "0.6", default-features = false, features = ["k256", "serde", "std"] }
@@ -213,7 +213,7 @@ ahash = { version = "0.8", features = ["compile-time-rng"] }
 aho-corasick = { version = "1" }
 alloy = { version = "1", features = ["full"] }
 alloy-consensus = { version = "1", default-features = false, features = ["k256", "kzg", "serde"] }
-alloy-contract = { version = "1", default-features = false, features = ["pubsub"] }
+alloy-contract = { version = "2", default-features = false, features = ["pubsub"] }
 alloy-core = { version = "1", features = ["dyn-abi", "json-abi", "k256", "rlp"] }
 alloy-dyn-abi = { version = "1", features = ["eip712"] }
 alloy-eip7702 = { version = "0.6", default-features = false, features = ["k256", "serde", "std"] }

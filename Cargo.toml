@@ -408,7 +408,7 @@ alloy-pubsub = { version = "1.8", default-features = false }
 alloy-signer = { version = "1.8", default-features = false }
 alloy-signer-local = { version = "1.8", default-features = false }
 alloy-network = { version = "1.8", default-features = false }
-alloy-contract = { version = "1.8", default-features = false }
+alloy-contract = { version = "2.0", default-features = false }
 alloy-consensus = { version = "1.8", default-features = false }
 alloy-eips = { version = "2.0", default-features = false }
 alloy-transport = { version = "1.8", default-features = false }
