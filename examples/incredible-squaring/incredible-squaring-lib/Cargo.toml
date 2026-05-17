@@ -1,7 +1,12 @@
 [package]
 name = "incredible-squaring-blueprint-lib"
 version = "0.2.0-alpha.4"
+description = "Reference example: an incredible-squaring blueprint built on the Tangle SDK"
+authors.workspace = true
 edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
