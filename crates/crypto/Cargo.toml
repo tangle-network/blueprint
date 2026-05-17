@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 description = "Crypto metapackage for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -18,7 +18,6 @@ blueprint-crypto-hashing = { workspace = true, optional = true }
 blueprint-crypto-bls = { workspace = true, optional = true }
 blueprint-crypto-bn254 = { workspace = true, optional = true }
 thiserror = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = [

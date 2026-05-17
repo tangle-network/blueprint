@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-extra"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 description = "Producer/Consumer extras for Tangle blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -42,7 +42,6 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 tower.workspace = true
 tracing.workspace = true
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

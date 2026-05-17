@@ -1,6 +1,6 @@
 [package]
 name = "incredible-squaring-blueprint-lib"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 edition.workspace = true
 rust-version.workspace = true
 
@@ -10,7 +10,6 @@ tokio = { workspace = true, features = ["sync"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_bytes = "0.11"
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 anyhow = { workspace = true }

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.4...blueprint-manager-v0.4.0-alpha.5) - 2026-05-17
+
+### Other
+
+- updated the following local packages: blueprint-crypto, blueprint-auth, blueprint-keystore, blueprint-client-tangle, blueprint-manager-bridge, blueprint-pricing-engine, blueprint-remote-providers, blueprint-qos, blueprint-runner, blueprint-clients, blueprint-chain-setup, blueprint-eigenlayer-extra, blueprint-testing-utils
+
 ## [0.4.0-alpha.3](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.2...blueprint-manager-v0.4.0-alpha.3) - 2026-04-22
 
 ### Added

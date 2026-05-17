@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tee"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 description = "First-class TEE (Trusted Execution Environment) support for the Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
@@ -52,7 +52,6 @@ gcp_auth = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["json"], optional = true }
 base64 = { workspace = true, features = ["std"], optional = true }
 uuid = { workspace = true, features = ["v4"], optional = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

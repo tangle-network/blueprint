@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.5](https://github.com/tangle-network/blueprint/compare/incredible-squaring-blueprint-lib-v0.2.0-alpha.4...incredible-squaring-blueprint-lib-v0.2.0-alpha.5) - 2026-05-17
+
+### Other
+
+- updated the following local packages: blueprint-crypto-bn254, blueprint-client-tangle, blueprint-tangle-aggregation-svc, blueprint-tangle-extra, blueprint-anvil-testing-utils, blueprint-sdk, blueprint-sdk
+
 ## [0.2.0-alpha.3](https://github.com/tangle-network/blueprint/releases/tag/incredible-squaring-blueprint-lib-v0.2.0-alpha.3) - 2026-04-22
 
 ### Added

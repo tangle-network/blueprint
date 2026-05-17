@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-keystore"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 description = "Keystore for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -56,7 +56,6 @@ aws-config = { workspace = true, optional = true }
 aws-sdk-kms = { workspace = true, optional = true }
 gcloud-sdk = { workspace = true, features = ["google-cloud-kms-v1"], optional = true }
 ripemd = { workspace = true, optional = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 tempfile = { workspace = true }

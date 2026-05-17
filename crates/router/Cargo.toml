@@ -20,7 +20,6 @@ pin-project-lite.workspace = true
 tower.workspace = true
 hashbrown = { workspace = true, default-features = false, features = ["default-hasher", "inline-more"] }
 futures = { workspace = true, features = ["alloc"] }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 # Path-only — see crates/core/Cargo.toml for the rationale. The doctest
