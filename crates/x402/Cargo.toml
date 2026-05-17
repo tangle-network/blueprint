@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-x402"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 description = "x402 payment gateway for Blueprint SDK — cross-chain EVM settlement for job execution"
 authors.workspace = true
 edition.workspace = true
@@ -64,7 +64,6 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 bytes = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

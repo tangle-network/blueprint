@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-gossip-primitives"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 description = "Reusable gossip protocol primitives for Blueprint SDK networking"
 authors.workspace = true
 edition.workspace = true
@@ -35,7 +35,6 @@ blueprint-networking = { workspace = true, optional = true }
 
 # Hashing
 blake3 = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

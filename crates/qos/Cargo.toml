@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-qos"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 description = "Quality of Service (QoS) module for Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
@@ -55,7 +55,6 @@ alloy-sol-types = { workspace = true }
 tnt-core-bindings = { workspace = true }
 k256 = { workspace = true }
 alloy-signer-local = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 anyhow = { workspace = true }

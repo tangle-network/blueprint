@@ -38,7 +38,6 @@ tokio = { workspace = true }
 
 # Metrics
 blueprint-metrics-rpc-calls = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 # Path-only dev-deps to break publish cycles via testing-utils -> runner -> client-evm.

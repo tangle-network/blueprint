@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-tangle-aggregation-svc"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 edition = "2021"
 description = "BLS signature aggregation service for Tangle v2"
 license = "MIT OR Apache-2.0"
@@ -44,7 +44,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
 hex = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [features]
 default = []

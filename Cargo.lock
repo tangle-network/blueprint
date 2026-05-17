@@ -115,7 +115,7 @@ dependencies = [
  "alloy-json-rpc 1.8.3",
  "alloy-network 1.8.3",
  "alloy-provider",
- "alloy-pubsub 1.8.3",
+ "alloy-pubsub",
  "alloy-rpc-client 1.8.3",
  "alloy-rpc-types",
  "alloy-serde 1.8.3",
@@ -124,8 +124,8 @@ dependencies = [
  "alloy-signer-local",
  "alloy-transport 1.8.3",
  "alloy-transport-http 1.8.3",
- "alloy-transport-ipc 1.8.3",
- "alloy-transport-ws 1.8.3",
+ "alloy-transport-ipc",
+ "alloy-transport-ws",
  "alloy-trie",
 ]
 
@@ -235,7 +235,7 @@ dependencies = [
  "alloy-network-primitives 1.8.3",
  "alloy-primitives",
  "alloy-provider",
- "alloy-pubsub 1.8.3",
+ "alloy-pubsub",
  "alloy-rpc-types-eth 1.8.3",
  "alloy-sol-types",
  "alloy-transport 1.8.3",
@@ -548,7 +548,7 @@ dependencies = [
  "alloy-network 1.8.3",
  "alloy-network-primitives 1.8.3",
  "alloy-primitives",
- "alloy-pubsub 1.8.3",
+ "alloy-pubsub",
  "alloy-rpc-client 1.8.3",
  "alloy-rpc-types-anvil",
  "alloy-rpc-types-debug",
@@ -559,8 +559,8 @@ dependencies = [
  "alloy-sol-types",
  "alloy-transport 1.8.3",
  "alloy-transport-http 1.8.3",
- "alloy-transport-ipc 1.8.3",
- "alloy-transport-ws 1.8.3",
+ "alloy-transport-ipc",
+ "alloy-transport-ws",
  "async-stream",
  "async-trait",
  "auto_impl",
@@ -604,28 +604,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alloy-pubsub"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffcefb5d3391a320eadb95d398e4135f8cc35c7bf29a6bdb357eadcfc5ee5638"
-dependencies = [
- "alloy-json-rpc 2.0.4",
- "alloy-primitives",
- "alloy-transport 2.0.0",
- "auto_impl",
- "bimap",
- "futures",
- "parking_lot 0.12.5",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tower 0.5.3",
- "tracing",
- "wasmtimer",
-]
-
-[[package]]
 name = "alloy-rlp"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -655,11 +633,11 @@ checksum = "94fcc9604042ca80bd37aa5e232ea1cd851f337e31e2babbbb345bc0b1c30de3"
 dependencies = [
  "alloy-json-rpc 1.8.3",
  "alloy-primitives",
- "alloy-pubsub 1.8.3",
+ "alloy-pubsub",
  "alloy-transport 1.8.3",
  "alloy-transport-http 1.8.3",
- "alloy-transport-ipc 1.8.3",
- "alloy-transport-ws 1.8.3",
+ "alloy-transport-ipc",
+ "alloy-transport-ws",
  "futures",
  "pin-project",
  "reqwest 0.13.2",
@@ -681,11 +659,8 @@ checksum = "222fd4efff0fb9a25184684742c44fe9fa9a16c4ab5bf97583e71c86598ef8f0"
 dependencies = [
  "alloy-json-rpc 2.0.4",
  "alloy-primitives",
- "alloy-pubsub 2.0.0",
  "alloy-transport 2.0.0",
  "alloy-transport-http 2.0.0",
- "alloy-transport-ipc 2.0.0",
- "alloy-transport-ws 2.0.0",
  "futures",
  "pin-project",
  "reqwest 0.13.2",
@@ -1162,28 +1137,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1bd98c3870b8a44b79091dde5216a81d58ffbc1fd8ed61b776f9fee0f3bdf20"
 dependencies = [
  "alloy-json-rpc 1.8.3",
- "alloy-pubsub 1.8.3",
+ "alloy-pubsub",
  "alloy-transport 1.8.3",
- "bytes",
- "futures",
- "interprocess",
- "pin-project",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util 0.7.18",
- "tracing",
-]
-
-[[package]]
-name = "alloy-transport-ipc"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b27802653330740c88c28394cdaf1d55190b15b48ef9b99a946f37c9cdb19fa"
-dependencies = [
- "alloy-json-rpc 2.0.4",
- "alloy-pubsub 2.0.0",
- "alloy-transport 2.0.0",
  "bytes",
  "futures",
  "interprocess",
@@ -1201,27 +1156,8 @@ version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec3ab7a72b180992881acc112628b7668337a19ce15293ee974600ea7b693691"
 dependencies = [
- "alloy-pubsub 1.8.3",
+ "alloy-pubsub",
  "alloy-transport 1.8.3",
- "futures",
- "http 1.4.0",
- "rustls 0.23.38",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "url",
- "ws_stream_wasm",
-]
-
-[[package]]
-name = "alloy-transport-ws"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4b71dc951db66795cfb52eef835f64cf15163bc93b656e061b457ce5ebff370"
-dependencies = [
- "alloy-pubsub 2.0.0",
- "alloy-transport 2.0.0",
  "futures",
  "http 1.4.0",
  "rustls 0.23.38",
@@ -1353,7 +1289,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing-subscriber 0.3.23",
- "workspace-hack",
 ]
 
 [[package]]
@@ -1380,7 +1315,6 @@ dependencies = [
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
  "uuid 1.23.1",
- "workspace-hack",
 ]
 
 [[package]]
@@ -2855,7 +2789,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-anvil-testing-utils"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-consensus 1.8.3",
  "alloy-eips 2.0.1",
@@ -2888,12 +2822,11 @@ dependencies = [
  "tokio-stream",
  "tonic 0.13.1",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-auth"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2941,7 +2874,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.23",
  "uuid 1.23.1",
- "workspace-hack",
  "x509-parser 0.18.1",
 ]
 
@@ -2952,7 +2884,6 @@ dependencies = [
  "blueprint-std",
  "sysinfo 0.38.4",
  "tokio",
- "workspace-hack",
 ]
 
 [[package]]
@@ -2960,20 +2891,18 @@ name = "blueprint-build-utils"
 version = "0.2.0-alpha.4"
 dependencies = [
  "blueprint-std",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-chain-setup"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-chain-setup-anvil",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-chain-setup-anvil"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-contract",
  "alloy-provider",
@@ -2990,7 +2919,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3000,12 +2928,11 @@ dependencies = [
  "auto_impl",
  "blueprint-std",
  "thiserror 2.0.18",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-client-eigenlayer"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
@@ -3029,7 +2956,6 @@ dependencies = [
  "tokio-util 0.7.18",
  "tracing-subscriber 0.3.23",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3041,7 +2967,7 @@ dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
  "alloy-provider",
- "alloy-pubsub 1.8.3",
+ "alloy-pubsub",
  "alloy-rlp",
  "alloy-rpc-types",
  "alloy-rpc-types-eth 1.8.3",
@@ -3061,12 +2987,11 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-client-tangle"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
@@ -3096,12 +3021,11 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-clients"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-client-core",
  "blueprint-client-eigenlayer",
@@ -3109,7 +3033,6 @@ dependencies = [
  "blueprint-client-tangle",
  "blueprint-std",
  "thiserror 2.0.18",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3127,12 +3050,11 @@ dependencies = [
  "serde",
  "syn 2.0.117",
  "trybuild",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-contexts"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-client-tangle",
  "blueprint-clients",
@@ -3141,7 +3063,6 @@ dependencies = [
  "blueprint-runner",
  "blueprint-std",
  "proc-macro2",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3158,12 +3079,11 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "tracing",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-core-testing-utils"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-auth",
  "blueprint-clients",
@@ -3178,12 +3098,11 @@ dependencies = [
  "tokio",
  "tracing-subscriber 0.3.23",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-crypto"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "blueprint-crypto-bls",
  "blueprint-crypto-bn254",
@@ -3193,12 +3112,11 @@ dependencies = [
  "blueprint-crypto-k256",
  "blueprint-crypto-sr25519",
  "thiserror 2.0.18",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-crypto-bls"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "ark-serialize 0.5.0",
  "blueprint-crypto-core",
@@ -3212,13 +3130,12 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "tnt-bls",
- "workspace-hack",
  "zeroize",
 ]
 
 [[package]]
 name = "blueprint-crypto-bn254"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -3235,7 +3152,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.18",
- "workspace-hack",
  "zeroize",
 ]
 
@@ -3247,7 +3163,6 @@ dependencies = [
  "clap",
  "serde",
  "thiserror 2.0.18",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3262,7 +3177,6 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
- "workspace-hack",
  "zeroize",
 ]
 
@@ -3276,7 +3190,6 @@ dependencies = [
  "hkdf",
  "sha2 0.10.9",
  "sha3",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3293,7 +3206,6 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
- "workspace-hack",
  "zeroize",
 ]
 
@@ -3309,13 +3221,12 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "thiserror 2.0.18",
- "workspace-hack",
  "zeroize",
 ]
 
 [[package]]
 name = "blueprint-eigenlayer-extra"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy",
  "alloy-contract",
@@ -3345,12 +3256,11 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-eigenlayer-testing-utils"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-primitives",
  "alloy-provider",
@@ -3368,7 +3278,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3400,7 +3309,6 @@ dependencies = [
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3428,13 +3336,12 @@ dependencies = [
  "tokio",
  "tracing",
  "warp",
- "workspace-hack",
  "zip",
 ]
 
 [[package]]
 name = "blueprint-gossip-primitives"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "async-trait",
  "bincode",
@@ -3452,12 +3359,11 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-keystore"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
@@ -3491,7 +3397,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tnt-bls",
  "tokio",
- "workspace-hack",
  "zeroize",
 ]
 
@@ -3508,12 +3413,11 @@ dependencies = [
  "syn 2.0.117",
  "tokio",
  "trybuild",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-manager"
-version = "0.4.0-alpha.4"
+version = "0.4.0-alpha.5"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
@@ -3596,14 +3500,13 @@ dependencies = [
  "url",
  "uuid 1.23.1",
  "walkdir",
- "workspace-hack",
  "xz",
  "xz2",
 ]
 
 [[package]]
 name = "blueprint-manager-bridge"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "blueprint-auth",
  "blueprint-core",
@@ -3616,7 +3519,6 @@ dependencies = [
  "tonic 0.13.1",
  "tonic-build",
  "tower 0.5.3",
- "workspace-hack",
  "zerocopy",
 ]
 
@@ -3625,7 +3527,6 @@ name = "blueprint-metrics"
 version = "0.2.0-alpha.4"
 dependencies = [
  "blueprint-metrics-rpc-calls",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3633,12 +3534,11 @@ name = "blueprint-metrics-rpc-calls"
 version = "0.2.0-alpha.4"
 dependencies = [
  "metrics",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-networking"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "alloy-primitives",
  "bincode",
@@ -3660,12 +3560,11 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing-subscriber 0.3.23",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-networking-agg-sig-gossip-extension"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "bincode",
  "bitvec",
@@ -3690,12 +3589,11 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing-subscriber 0.3.23",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-networking-round-based-extension"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "blueprint-core",
  "blueprint-crypto",
@@ -3719,12 +3617,11 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.23",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-pricing-engine"
-version = "0.3.0-alpha.4"
+version = "0.3.0-alpha.5"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
@@ -3780,7 +3677,6 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid 1.23.1",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3793,7 +3689,6 @@ dependencies = [
  "futures",
  "tokio",
  "tokio-cron-scheduler",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3810,12 +3705,11 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-qos"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
@@ -3861,12 +3755,11 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber 0.3.23",
  "uuid 1.23.1",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-remote-providers"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3921,7 +3814,6 @@ dependencies = [
  "urlencoding",
  "uuid 1.23.1",
  "wiremock",
- "workspace-hack",
  "zeroize",
 ]
 
@@ -3939,12 +3831,11 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-runner"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-contract",
  "alloy-primitives",
@@ -3984,12 +3875,11 @@ dependencies = [
  "tower 0.5.3",
  "tracing",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-sdk"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy",
  "alloy-json-abi",
@@ -4028,7 +3918,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "workspace-hack",
 ]
 
 [[package]]
@@ -4040,7 +3929,6 @@ dependencies = [
  "rand 0.8.6",
  "rayon",
  "thiserror 2.0.18",
- "workspace-hack",
 ]
 
 [[package]]
@@ -4052,7 +3940,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
- "workspace-hack",
 ]
 
 [[package]]
@@ -4062,12 +3949,11 @@ dependencies = [
  "blueprint-store-local-database",
  "document-features",
  "thiserror 2.0.18",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-tangle-aggregation-svc"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
@@ -4094,12 +3980,11 @@ dependencies = [
  "tower 0.5.3",
  "tower-http 0.6.8",
  "tracing",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-tangle-extra"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy",
  "alloy-network 1.8.3",
@@ -4137,12 +4022,11 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.23",
  "url",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-tee"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "aws-config",
  "aws-sdk-ec2",
@@ -4167,24 +4051,22 @@ dependencies = [
  "tower 0.5.3",
  "tracing",
  "uuid 1.23.1",
- "workspace-hack",
  "x25519-dalek",
  "zeroize",
 ]
 
 [[package]]
 name = "blueprint-testing-utils"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-anvil-testing-utils",
  "blueprint-core-testing-utils",
  "blueprint-eigenlayer-testing-utils",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-webhooks"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "axum",
  "blueprint-core",
@@ -4207,12 +4089,11 @@ dependencies = [
  "toml 1.1.2+spec-1.1.0",
  "tower 0.5.3",
  "tracing",
- "workspace-hack",
 ]
 
 [[package]]
 name = "blueprint-x402"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-primitives",
  "alloy-provider",
@@ -4240,7 +4121,6 @@ dependencies = [
  "tower-http 0.6.8",
  "tracing",
  "url",
- "workspace-hack",
  "x402-axum",
  "x402-chain-eip155",
  "x402-types",
@@ -4503,7 +4383,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.5.0-alpha.4"
+version = "0.5.0-alpha.5"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
@@ -4562,7 +4442,6 @@ dependencies = [
  "url",
  "uuid 1.23.1",
  "walkdir",
- "workspace-hack",
 ]
 
 [[package]]
@@ -7417,7 +7296,6 @@ dependencies = [
  "blueprint-tangle-extra",
  "once_cell",
  "tokio",
- "workspace-hack",
 ]
 
 [[package]]
@@ -8052,7 +7930,6 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
- "workspace-hack",
 ]
 
 [[package]]
@@ -8065,7 +7942,7 @@ dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
  "alloy-provider",
- "alloy-pubsub 1.8.3",
+ "alloy-pubsub",
  "alloy-rpc-client 2.0.0",
  "alloy-rpc-types",
  "alloy-rpc-types-eth 1.8.3",
@@ -8102,12 +7979,11 @@ dependencies = [
  "tokio-util 0.7.18",
  "tracing-subscriber 0.3.23",
  "uuid 1.23.1",
- "workspace-hack",
 ]
 
 [[package]]
 name = "incredible-squaring-blueprint-lib"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -8137,7 +8013,6 @@ dependencies = [
  "serial_test",
  "tokio",
  "tracing-subscriber 0.3.23",
- "workspace-hack",
 ]
 
 [[package]]
@@ -10644,7 +10519,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing-subscriber 0.3.23",
- "workspace-hack",
 ]
 
 [[package]]
@@ -10670,7 +10544,6 @@ dependencies = [
  "tower 0.5.3",
  "tracing-subscriber 0.3.23",
  "uuid 1.23.1",
- "workspace-hack",
 ]
 
 [[package]]
@@ -15982,227 +15855,6 @@ dependencies = [
 [[package]]
 name = "workspace-hack"
 version = "0.1.0"
-dependencies = [
- "ahash 0.8.12",
- "aho-corasick",
- "alloy",
- "alloy-consensus 1.8.3",
- "alloy-contract",
- "alloy-core",
- "alloy-dyn-abi",
- "alloy-eip7702",
- "alloy-eips 2.0.1",
- "alloy-json-abi",
- "alloy-network 1.8.3",
- "alloy-primitives",
- "alloy-provider",
- "alloy-rlp",
- "alloy-rpc-client 2.0.0",
- "alloy-rpc-types",
- "alloy-rpc-types-eth 1.8.3",
- "alloy-signer 1.8.3",
- "alloy-signer-local",
- "alloy-sol-macro",
- "alloy-sol-macro-expander",
- "alloy-sol-macro-input",
- "alloy-sol-type-parser",
- "alloy-sol-types",
- "alloy-transport-http 2.0.0",
- "anyhow",
- "argon2",
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
- "arrayvec",
- "async-compression",
- "aws-config",
- "aws-runtime",
- "aws-sigv4",
- "aws-smithy-async",
- "aws-smithy-http",
- "aws-smithy-http-client",
- "aws-smithy-runtime",
- "aws-smithy-runtime-api",
- "axum",
- "base64 0.22.1",
- "base64ct",
- "bip39",
- "bitflags 2.11.1",
- "bitvec",
- "blake3",
- "bs58",
- "bstr",
- "byteorder",
- "bytes",
- "cc",
- "chacha20poly1305",
- "chrono",
- "cipher",
- "clap",
- "clap_builder",
- "color-eyre",
- "compression-codecs",
- "const-hex",
- "constant_time_eq",
- "crc32fast",
- "crossbeam-utils",
- "crunchy",
- "crypto-common 0.1.7",
- "curve25519-dalek",
- "data-encoding",
- "der",
- "deranged",
- "derive_more",
- "digest 0.10.7",
- "digest 0.9.0",
- "displaydoc",
- "ecdsa",
- "ed25519",
- "ed25519-zebra",
- "either",
- "elliptic-curve",
- "errno",
- "foldhash 0.2.0",
- "form_urlencoded",
- "futures",
- "futures-channel",
- "futures-executor",
- "futures-io",
- "futures-sink",
- "futures-task",
- "futures-util",
- "generic-array",
- "getrandom 0.2.17",
- "getrandom 0.3.4",
- "getrandom 0.4.2",
- "getrandom_or_panic",
- "hashbrown 0.14.5",
- "hashbrown 0.15.5",
- "hashbrown 0.16.1",
- "hex",
- "hmac",
- "hyper 0.14.32",
- "hyper 1.9.0",
- "hyper-rustls 0.27.9",
- "hyper-util",
- "hyperlocal",
- "idna",
- "indexmap 2.14.0",
- "itertools 0.13.0",
- "itertools 0.14.0",
- "k256",
- "k8s-openapi 0.21.1",
- "keccak",
- "kube 0.90.0",
- "kube-client 0.90.0",
- "kube-core 0.90.0",
- "libc",
- "libp2p",
- "libp2p-core",
- "libp2p-identity",
- "libp2p-swarm",
- "libsecp256k1",
- "libsecp256k1-core",
- "log",
- "memchr",
- "mime_guess",
- "miniz_oxide",
- "multihash",
- "nix 0.31.2",
- "nom",
- "num-bigint 0.4.6",
- "num-integer",
- "num-traits",
- "objc2-core-foundation",
- "objc2-io-kit",
- "once_cell",
- "openssl",
- "openssl-sys",
- "parking_lot 0.12.5",
- "password-hash",
- "percent-encoding",
- "pkcs8",
- "portable-atomic",
- "ppv-lite86",
- "predicates",
- "proc-macro2",
- "prost 0.13.5",
- "quote",
- "rand 0.8.6",
- "rand 0.9.4",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
- "regex",
- "regex-automata",
- "regex-syntax",
- "reqwest 0.12.28",
- "reqwest 0.13.2",
- "ring 0.17.14",
- "round-based",
- "ruint",
- "rust_decimal",
- "rustc-hash 2.1.2",
- "rustix 1.1.4",
- "rustls 0.23.38",
- "rustls-pemfile 2.2.0",
- "rustls-webpki 0.103.12",
- "schnorrkel",
- "sec1",
- "security-framework-sys",
- "semver 1.0.28",
- "serde",
- "serde_bytes",
- "serde_core",
- "serde_json",
- "serde_spanned 1.1.1",
- "serde_with",
- "serial_test",
- "serial_test_derive",
- "sha1",
- "sha2 0.10.9",
- "sha3",
- "signature",
- "slab",
- "smallvec",
- "spki",
- "strum",
- "subtle",
- "syn 1.0.109",
- "syn 2.0.117",
- "sync_wrapper 1.0.2",
- "sysinfo 0.38.4",
- "tempfile",
- "thiserror 2.0.18",
- "time",
- "time-macros",
- "tiny-keccak",
- "tnt-bls",
- "tokio",
- "tokio-rustls 0.26.4",
- "tokio-stream",
- "tokio-util 0.7.18",
- "toml 1.1.2+spec-1.1.0",
- "toml_datetime 1.1.1+spec-1.1.0",
- "toml_parser",
- "toml_writer",
- "tonic 0.13.1",
- "tonic 0.14.5",
- "tonic-build",
- "tower 0.5.3",
- "tower-http 0.6.8",
- "tracing",
- "tracing-core",
- "tracing-log",
- "tracing-subscriber 0.3.23",
- "url",
- "uuid 1.23.1",
- "winnow 0.7.15",
- "x25519-dalek",
- "zerocopy",
- "zeroize",
-]
 
 [[package]]
 name = "writeable"
@@ -16298,7 +15950,6 @@ dependencies = [
  "toml 1.1.2+spec-1.1.0",
  "tower 0.5.3",
  "wiremock",
- "workspace-hack",
  "x402-chain-eip155",
  "x402-types",
 ]

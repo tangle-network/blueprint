@@ -30,7 +30,6 @@ syn = { workspace = true, features = [
 
 # EVM
 serde_json = { workspace = true, features = ["alloc"], optional = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 [dev-dependencies]
 # Path-only — see crates/core/Cargo.toml for the rationale. trybuild tests

@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-auth"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 description = "Blueprint HTTP/WS Authentication"
 authors.workspace = true
 edition.workspace = true
@@ -54,7 +54,6 @@ prost = { workspace = true, features = ["derive"] }
 
 # Standalone Binary
 tempfile = { workspace = true, optional = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 
 [dev-dependencies]

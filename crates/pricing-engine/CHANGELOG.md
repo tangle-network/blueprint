@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.4...blueprint-pricing-engine-v0.3.0-alpha.5) - 2026-05-17
+
+### Other
+
+- updated the following local packages: blueprint-networking, blueprint-crypto, blueprint-keystore, blueprint-client-tangle, blueprint-tangle-extra
+
 ## [0.3.0-alpha.3](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.2...blueprint-pricing-engine-v0.3.0-alpha.3) - 2026-04-22
 
 ### Added

@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-bls"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 description = "tnt-bls crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
@@ -22,7 +22,6 @@ thiserror = { workspace = true }
 zeroize = { workspace = true }
 
 sha2 = { workspace = true, optional = true }
-workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 blueprint-crypto-hashing = { workspace = true, features = ["sha2"] }

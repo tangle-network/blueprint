@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-webhooks"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 description = "Webhook producer for Blueprint SDK — trigger jobs from external HTTP events"
 authors.workspace = true
 edition.workspace = true
@@ -42,7 +42,6 @@ tracing = { workspace = true }
 
 # Misc
 bytes = { workspace = true }
-workspace-hack = { version = "0.1", path = "../../workspace-hack" }
 
 # Notifier feature deps (outbound webhooks + SSE)
 rand = { workspace = true, optional = true }
