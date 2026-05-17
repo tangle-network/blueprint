@@ -4,6 +4,7 @@ members = ["incredible-squaring-lib", "incredible-squaring-bin"]
 
 [workspace.package]
 version = "0.1.1"
+publish = false
 description = "An experimental blueprint"
 edition = "2024"
 rust-version = "1.88"
