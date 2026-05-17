@@ -35,7 +35,6 @@ std = [
 	"blueprint-crypto-core/std",
 	"blueprint-std/std",
 	"serde/std",
-	"serde_json/std",
 	"serde_bytes/std",
 	"tnt-bls/std",
 ]
