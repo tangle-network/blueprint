@@ -14145,8 +14145,9 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bindings"
-version = "0.17.0"
-source = "git+https://github.com/tangle-network/tnt-core?branch=chore%2Fbindings-v0.17.0#705b4c08fee9b4ed2f9a39184f6699648c18a528"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9638c85526f68b60d95bbe660f6f09ab116dfd06a4793f747374646278b82256"
 dependencies = [
  "alloy",
  "alloy-contract",

@@ -131,9 +131,7 @@ blueprint-sdk = { version = "0.2.0-alpha.4", path = "./crates/sdk", default-feat
 # self-only distributePayment, RFQ replay / freshness / cumulative TTL
 # hardening, the collapsed approveService(ApprovalParams) entry point,
 # claimRewards / claimRewardsAll griefing isolation, and O(1) operator
-# stake aggregation with VPM share-pool slashing.
-# Pinned to the git branch until 0.17.0 is published to crates.io.
-tnt-core-bindings = { git = "https://github.com/tangle-network/tnt-core", branch = "chore/bindings-v0.17.0", package = "tnt-core-bindings" }
+tnt-core-bindings = "0.17.1"
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.3", path = "crates/core", default-features = false }
