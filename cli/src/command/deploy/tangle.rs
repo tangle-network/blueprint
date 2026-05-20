@@ -495,30 +495,40 @@ struct NetworkDeploymentConfig {
 
 impl NetworkDeploymentConfig {
     fn from_args(args: &TangleDeployArgs, settings: &TangleProtocolSettings) -> Result<Self> {
+        let defaults = network_defaults(args.network);
         let http_rpc_url = infer_url(
             args.http_rpc_url.clone(),
             HTTP_RPC_URL_ENV,
             "--http-rpc-url",
+            defaults.http_rpc_url,
         )?;
-        let ws_rpc_url = infer_url(args.ws_rpc_url.clone(), WS_RPC_URL_ENV, "--ws-rpc-url")?;
+        let ws_rpc_url = infer_url(
+            args.ws_rpc_url.clone(),
+            WS_RPC_URL_ENV,
+            "--ws-rpc-url",
+            defaults.ws_rpc_url,
+        )?;
         let keystore_path = resolve_keystore_path(args.keystore_path.clone());
         let tangle_contract = parse_contract_override(
             args.tangle_contract.as_deref(),
             settings.tangle_contract,
             "TANGLE_CONTRACT",
             "--tangle-contract",
+            defaults.tangle_contract,
         )?;
         let staking_contract = parse_contract_override(
             args.staking_contract.as_deref(),
             settings.staking_contract,
             "STAKING_CONTRACT",
             "--staking-contract",
+            defaults.staking_contract,
         )?;
         let status_registry_contract = parse_contract_override(
             args.status_registry_contract.as_deref(),
             settings.status_registry_contract,
             "STATUS_REGISTRY_CONTRACT",
             "--status-registry-contract",
+            defaults.status_registry_contract,
         )?;
 
         Ok(Self {
@@ -558,17 +568,28 @@ impl NetworkDeploymentConfig {
     }
 }
 
-fn infer_url(value: Option<Url>, env_key: &str, flag: &str) -> Result<Url> {
+fn infer_url(
+    value: Option<Url>,
+    env_key: &str,
+    flag: &str,
+    default: Option<&'static str>,
+) -> Result<Url> {
     if let Some(url) = value {
         return Ok(url);
     }
 
-    match env::var(env_key) {
-        Ok(raw) => Url::parse(&raw).map_err(|err| eyre!("Invalid {env_key} URL: {err}")),
-        Err(_) => Err(eyre!(
-            "Missing RPC endpoint. Set {env_key} in settings.env or pass {flag}."
-        )),
+    if let Ok(raw) = env::var(env_key) {
+        return Url::parse(&raw).map_err(|err| eyre!("Invalid {env_key} URL: {err}"));
     }
+
+    if let Some(raw) = default {
+        return Url::parse(raw)
+            .map_err(|err| eyre!("Built-in default URL for {env_key} failed to parse: {err}"));
+    }
+
+    Err(eyre!(
+        "Missing RPC endpoint. Set {env_key} in settings.env or pass {flag}."
+    ))
 }
 
 fn resolve_keystore_path(explicit: Option<PathBuf>) -> PathBuf {
@@ -592,6 +613,7 @@ fn parse_contract_override(
     fallback: Address,
     env_key: &str,
     flag: &str,
+    default: Option<&'static str>,
 ) -> Result<Address> {
     if let Some(raw) = value {
         return parse_address(raw, env_key);
@@ -599,6 +621,10 @@ fn parse_contract_override(
 
     if fallback != Address::ZERO {
         return Ok(fallback);
+    }
+
+    if let Some(raw) = default {
+        return parse_address(raw, env_key);
     }
 
     Err(eyre!(
@@ -632,3 +658,59 @@ fn log_deployment_summary(outcome: &DeploymentOutcome) {
 
 const HTTP_RPC_URL_ENV: &str = "HTTP_RPC_URL";
 const WS_RPC_URL_ENV: &str = "WS_RPC_URL";
+
+/// Built-in endpoints + protocol addresses per network.
+///
+/// Order of precedence inside [`NetworkDeploymentConfig::from_args`] is
+/// explicit CLI flag → `settings.env` value → these built-in defaults
+/// → error. The defaults exist so the common case (`cargo tangle
+/// blueprint deploy tangle --network testnet --definition …`) Just
+/// Works without every blueprint repo carrying its own copy of the
+/// same RPC URL + contract address.
+///
+/// Mainnet entries stay `None` until a real production deployment
+/// exists; until then the script will continue to require explicit
+/// configuration on `--network mainnet`.
+struct NetworkDefaults {
+    http_rpc_url: Option<&'static str>,
+    ws_rpc_url: Option<&'static str>,
+    tangle_contract: Option<&'static str>,
+    staking_contract: Option<&'static str>,
+    status_registry_contract: Option<&'static str>,
+}
+
+const NETWORK_DEFAULTS_TESTNET: NetworkDefaults = NetworkDefaults {
+    // Base Sepolia (chainId 84532). Addresses match the first published
+    // testnet deployment of tnt-core.
+    http_rpc_url: Some("https://sepolia.base.org"),
+    ws_rpc_url: Some("wss://base-sepolia-rpc.publicnode.com"),
+    tangle_contract: Some("0xC9b0716a187072be0f38A5D972392C6479b9Cfe3"),
+    staking_contract: Some("0xfEB417fc6d343e0fc88EC9fDb8294BF84d69F0Ca"),
+    status_registry_contract: Some("0x81443688Fce1e4eDb822c1D5794C3DAc608e9a23"),
+};
+
+const NETWORK_DEFAULTS_MAINNET: NetworkDefaults = NetworkDefaults {
+    http_rpc_url: None,
+    ws_rpc_url: None,
+    tangle_contract: None,
+    staking_contract: None,
+    status_registry_contract: None,
+};
+
+const NETWORK_DEFAULTS_DEVNET: NetworkDefaults = NetworkDefaults {
+    // Devnet uses an in-process anvil spawn (see `DeploymentNetwork::Devnet`
+    // arm in `run`), so these built-ins are unused — present for symmetry.
+    http_rpc_url: None,
+    ws_rpc_url: None,
+    tangle_contract: None,
+    staking_contract: None,
+    status_registry_contract: None,
+};
+
+fn network_defaults(network: DeploymentNetwork) -> &'static NetworkDefaults {
+    match network {
+        DeploymentNetwork::Devnet => &NETWORK_DEFAULTS_DEVNET,
+        DeploymentNetwork::Testnet => &NETWORK_DEFAULTS_TESTNET,
+        DeploymentNetwork::Mainnet => &NETWORK_DEFAULTS_MAINNET,
+    }
+}
