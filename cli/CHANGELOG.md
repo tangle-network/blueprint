@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.6](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.5...cargo-tangle-v0.5.0-alpha.6) - 2026-05-20
+
+### Added
+
+- *(cargo-tangle)* per-network built-in defaults for testnet/mainnet deploy (#1429)
+
 ## [0.5.0-alpha.5](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.4...cargo-tangle-v0.5.0-alpha.5) - 2026-05-17
 
 ### Other
