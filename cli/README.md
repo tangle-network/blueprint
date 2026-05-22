@@ -332,14 +332,14 @@ PINATA_JWT=eyJhbGciOi...
 Pin endpoints must return JSON containing one of `cid`, `Hash`, or
 `IpfsHash`; the resulting `ipfs://<cid>` URI is what lands on-chain.
 
-## One-command shipping (`cargo tangle ship`)
+## One-command shipping (`cargo tangle blueprint ship`)
 
 For the common case — "I just landed a feature, build the binary, pin it,
-publish the new version, and promote it" — there is `cargo tangle ship`.
+publish the new version, and promote it" — there is `cargo tangle blueprint ship`.
 It composes all the above steps into a single interactive flow:
 
 ```text
-$ cargo tangle ship
+$ cargo tangle blueprint ship
 🚀 Shipping blueprint:  blueprintId=7  (/home/me/my-blueprint)
   RPC     https://sepolia.base.org
   Wallet  0xAbC...123 ✓ blueprint owner
@@ -373,7 +373,7 @@ It picks the first non-zero value.
 Skip all prompts with `--yes`:
 
 ```bash
-cargo tangle ship --yes --pin-ipfs --promote \
+cargo tangle blueprint ship --yes --pin-ipfs --promote \
   --blueprint-id 7 \
   --binary ./target/release/my-blueprint \
   --attestation-bundle ./dist/sigstore-bundle.json \

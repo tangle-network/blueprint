@@ -1,6 +1,6 @@
 # `tangle-network/blueprint/.github/actions/ship-release`
 
-Composite action that drives `cargo tangle ship` from a GitHub Actions
+Composite action that drives `cargo tangle blueprint ship` from a GitHub Actions
 workflow. The same wizard that an operator runs locally is the one CI calls
 — there is no parallel codepath to drift.
 
@@ -11,7 +11,7 @@ workflow. The same wizard that an operator runs locally is the one CI calls
    `--pin-ipfs` (which uses the credentials below). Errors out if neither.
 3. Resolves the attestation flag: either `--attestation-bundle <path>` or
    `--attestation-hash <hex>`. Errors out if both.
-4. Runs `cargo tangle ship --yes --no-build --json` against the supplied
+4. Runs `cargo tangle blueprint ship --yes --no-build --json` against the supplied
    binary and parses the `ship_complete` event for outputs.
 
 The action **never** runs `cargo build` — it expects a previous step to

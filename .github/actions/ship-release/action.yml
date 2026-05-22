@@ -1,6 +1,6 @@
 name: Ship Tangle Blueprint Release
 description: >
-  Publish a new blueprint binary version on-chain via `cargo tangle ship`.
+  Publish a new blueprint binary version on-chain via `cargo tangle blueprint ship`.
   Hashes the artifact locally, optionally pins it to IPFS, optionally pulls
   a sigstore/SLSA attestation bundle, and submits `publishBinaryVersion`
   (plus `setActiveBinaryVersion` when `promote: true`).
@@ -155,7 +155,7 @@ runs:
         export BLUEPRINT_KEYSTORE_URI="${{ inputs.keystore-path }}"
 
         OUTFILE=$(mktemp)
-        cargo tangle ship \
+        cargo tangle blueprint ship \
           --yes \
           --no-build \
           --json \

@@ -146,7 +146,7 @@ fn help_for_ship_advertises_ci_flags() -> Result<()> {
     // --help MUST surface every flag the GitHub Actions composite passes,
     // otherwise the action breaks at runtime with "unrecognized argument".
     let output = cargo_tangle_cmd()?
-        .args(["ship", "--help"])
+        .args(["blueprint", "ship", "--help"])
         .output()
         .map_err(|e| eyre!("running ship help: {e}"))?;
     assert!(
@@ -188,6 +188,7 @@ fn ship_rejects_mutually_exclusive_attestation_flags() -> Result<()> {
     fs::write(&bundle, b"x").unwrap();
     let output = cargo_tangle_cmd()?
         .args([
+            "blueprint",
             "ship",
             "--yes",
             "--blueprint-id",
@@ -217,7 +218,7 @@ fn ship_rejects_promote_with_no_promote() -> Result<()> {
     // Belt-and-suspenders against operator footgun: the wizard treats these
     // as conflicting flags so we never land in an ambiguous state.
     let output = cargo_tangle_cmd()?
-        .args(["ship", "--yes", "--promote", "--no-promote"])
+        .args(["blueprint", "ship", "--yes", "--promote", "--no-promote"])
         .output()
         .map_err(|e| eyre!("running ship with both promote flags: {e}"))?;
     assert!(!output.status.success());

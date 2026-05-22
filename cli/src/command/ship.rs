@@ -1,4 +1,4 @@
-//! `cargo tangle ship` — one-command blueprint release.
+//! `cargo tangle blueprint ship` — one-command blueprint release.
 //!
 //! Wraps the existing `publish-version` + `set-active-version` + `set-policy`
 //! paths into a single interactive flow:

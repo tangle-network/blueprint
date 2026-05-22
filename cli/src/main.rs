@@ -145,56 +145,6 @@ enum Commands {
         #[command(subcommand)]
         command: AttestCommands,
     },
-
-    /// One-command blueprint release: build, hash, pin, publish, (optionally)
-    /// promote, and bulk-flip service policies. Designed for both interactive
-    /// developer use and CI (`--yes --pin-ipfs --promote`).
-    Ship {
-        #[command(flatten)]
-        network: TangleClientArgs,
-        /// Accept all prompts. Implies `--json` for CI-friendly output.
-        #[arg(long)]
-        yes: bool,
-        /// Don't run `cargo build --release` — caller supplies `--binary`.
-        #[arg(long)]
-        no_build: bool,
-        /// Cargo package to build (`-p <pkg>`).
-        #[arg(long, short = 'p', value_name = "NAME")]
-        package: Option<String>,
-        /// Path to a pre-built release binary.
-        #[arg(long, value_name = "PATH")]
-        binary: Option<PathBuf>,
-        /// Pre-existing artifact URI (`ipfs://...`, `https://...`). Skips pinning.
-        #[arg(long, value_name = "URI", conflicts_with = "pin_ipfs")]
-        binary_uri: Option<String>,
-        /// Pin the binary to IPFS using `IPFS_API_URL` + `IPFS_API_TOKEN`, or `PINATA_JWT`.
-        #[arg(long)]
-        pin_ipfs: bool,
-        /// sigstore/SLSA bundle whose sha256 lands on-chain as `attestationHash`.
-        #[arg(long, value_name = "PATH")]
-        attestation_bundle: Option<PathBuf>,
-        /// Explicit `attestationHash` (32-byte hex). Conflicts with `--attestation-bundle`.
-        #[arg(long, value_name = "HEX", conflicts_with = "attestation_bundle")]
-        attestation_hash: Option<String>,
-        /// Promote the new version to active (`setActiveBinaryVersion`).
-        #[arg(long, conflicts_with = "no_promote")]
-        promote: bool,
-        /// Explicitly skip promotion even if interactive default is yes.
-        #[arg(long)]
-        no_promote: bool,
-        /// Comma-separated service IDs to bulk-flip into AUTO policy.
-        #[arg(long, value_name = "LIST")]
-        policy_services: Option<String>,
-        /// Validate everything end-to-end without submitting transactions.
-        #[arg(long)]
-        dry_run: bool,
-        /// Override blueprint id (skips auto-detection from settings.env / metadata).
-        #[arg(long)]
-        blueprint_id: Option<u64>,
-        /// JSON output for machine readers (also implied by `--yes`).
-        #[arg(long)]
-        json: bool,
-    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -236,7 +186,9 @@ enum BlueprintCommands {
 
     /// Deploy a blueprint to a protocol (Tangle or Eigenlayer).
     ///
-    /// Compiles and publishes your blueprint to the on-chain registry.
+    /// One-time per blueprint: compiles and registers your blueprint on-chain,
+    /// returning a new `blueprintId`. For shipping subsequent binary versions
+    /// of an already-deployed blueprint, use `cargo tangle blueprint ship`.
     #[command(visible_alias = "d")]
     Deploy {
         #[command(subcommand)]
@@ -387,11 +339,65 @@ enum BlueprintCommands {
         command: ServiceCommands,
     },
 
-    /// Publish a new binary version for a blueprint.
+    /// One-command release: build → hash → pin → publish → (optionally) promote
+    /// and bulk-flip service policies. Wraps `publish-version` +
+    /// `set-active-version` + optional IPFS pin in a single interactive flow.
+    /// Designed for both developer use (interactive prompts) and CI
+    /// (`--yes --pin-ipfs --promote`). Publishes the next monotonic version —
+    /// v0 on first run, vN otherwise.
+    Ship {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Accept all prompts. Implies `--json` for CI-friendly output.
+        #[arg(long)]
+        yes: bool,
+        /// Don't run `cargo build --release` — caller supplies `--binary`.
+        #[arg(long)]
+        no_build: bool,
+        /// Cargo package to build (`-p <pkg>`).
+        #[arg(long, short = 'p', value_name = "NAME")]
+        package: Option<String>,
+        /// Path to a pre-built release binary.
+        #[arg(long, value_name = "PATH")]
+        binary: Option<PathBuf>,
+        /// Pre-existing artifact URI (`ipfs://...`, `https://...`). Skips pinning.
+        #[arg(long, value_name = "URI", conflicts_with = "pin_ipfs")]
+        binary_uri: Option<String>,
+        /// Pin the binary to IPFS using `IPFS_API_URL` + `IPFS_API_TOKEN`, or `PINATA_JWT`.
+        #[arg(long)]
+        pin_ipfs: bool,
+        /// sigstore/SLSA bundle whose sha256 lands on-chain as `attestationHash`.
+        #[arg(long, value_name = "PATH")]
+        attestation_bundle: Option<PathBuf>,
+        /// Explicit `attestationHash` (32-byte hex). Conflicts with `--attestation-bundle`.
+        #[arg(long, value_name = "HEX", conflicts_with = "attestation_bundle")]
+        attestation_hash: Option<String>,
+        /// Promote the new version to active (`setActiveBinaryVersion`).
+        #[arg(long, conflicts_with = "no_promote")]
+        promote: bool,
+        /// Explicitly skip promotion even if interactive default is yes.
+        #[arg(long)]
+        no_promote: bool,
+        /// Comma-separated service IDs to bulk-flip into AUTO policy.
+        #[arg(long, value_name = "LIST")]
+        policy_services: Option<String>,
+        /// Validate everything end-to-end without submitting transactions.
+        #[arg(long)]
+        dry_run: bool,
+        /// Override blueprint id (skips auto-detection from settings.env / metadata).
+        #[arg(long)]
+        blueprint_id: Option<u64>,
+        /// JSON output for machine readers (also implied by `--yes`).
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Publish a new binary version for a blueprint (primitive).
     ///
     /// Computes the artifact sha256 locally, optionally pins it to IPFS,
     /// and submits `publishBinaryVersion` against the Tangle diamond. Caller
-    /// must be the blueprint owner.
+    /// must be the blueprint owner. For the high-level "build + pin + publish
+    /// + promote" path, see `cargo tangle blueprint ship`.
     PublishVersion {
         #[command(flatten)]
         network: TangleClientArgs,
@@ -2350,6 +2356,45 @@ async fn main() -> Result<()> {
                     cargo_tangle::command::upgrade_local::print_authz(&view, json);
                 }
             },
+            BlueprintCommands::Ship {
+                network,
+                yes,
+                no_build,
+                package,
+                binary,
+                binary_uri,
+                pin_ipfs,
+                attestation_bundle,
+                attestation_hash,
+                promote,
+                no_promote,
+                policy_services,
+                dry_run,
+                blueprint_id,
+                json,
+            } => {
+                // CI mode (--yes) defaults to JSON output so action logs stay
+                // grep-able. Explicit --json (or its absence) still wins.
+                let json_out = json || yes;
+                let args = cargo_tangle::command::ship::ShipArgs {
+                    network,
+                    yes,
+                    no_build,
+                    package,
+                    binary,
+                    binary_uri,
+                    pin_ipfs,
+                    attestation_bundle,
+                    attestation_hash,
+                    promote,
+                    no_promote,
+                    policy_services,
+                    dry_run,
+                    blueprint_id,
+                    json: json_out,
+                };
+                cargo_tangle::command::ship::run(args).await?;
+            }
             BlueprintCommands::PublishVersion {
                 network,
                 blueprint_id,
@@ -3286,45 +3331,6 @@ async fn main() -> Result<()> {
                 );
             }
         },
-        Commands::Ship {
-            network,
-            yes,
-            no_build,
-            package,
-            binary,
-            binary_uri,
-            pin_ipfs,
-            attestation_bundle,
-            attestation_hash,
-            promote,
-            no_promote,
-            policy_services,
-            dry_run,
-            blueprint_id,
-            json,
-        } => {
-            // CI mode (--yes) defaults to JSON output so action logs stay
-            // grep-able. Explicit --json (or its absence) still wins.
-            let json_out = json || yes;
-            let args = cargo_tangle::command::ship::ShipArgs {
-                network,
-                yes,
-                no_build,
-                package,
-                binary,
-                binary_uri,
-                pin_ipfs,
-                attestation_bundle,
-                attestation_hash,
-                promote,
-                no_promote,
-                policy_services,
-                dry_run,
-                blueprint_id,
-                json: json_out,
-            };
-            cargo_tangle::command::ship::run(args).await?;
-        }
     }
 
     Ok(())
