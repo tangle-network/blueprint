@@ -13,5 +13,8 @@ pub mod list;
 pub mod operator;
 pub mod run;
 pub mod service;
+pub mod ship;
 pub mod signer;
 pub mod tangle;
+pub mod upgrade;
+pub mod upgrade_local;

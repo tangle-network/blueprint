@@ -48,7 +48,7 @@ use cargo_tangle::settings::{
 };
 use cargo_tangle::utils::find_registration_inputs;
 use clap::{Parser, Subcommand};
-use color_eyre::eyre::{Context, Result, ensure, eyre};
+use color_eyre::eyre::{Context, Result, bail, ensure, eyre};
 use serde_json::json;
 use url::Url;
 
@@ -135,6 +135,16 @@ enum Commands {
         #[command(subcommand)]
         command: cargo_tangle::command::harness::HarnessCommands,
     },
+
+    /// Auditor flow: attest, revoke, list attestations against blueprint binary versions.
+    ///
+    /// Auditors register their report against a published `(blueprintId, versionId)`.
+    /// Trust weighting is delegated to the `BlueprintAuditors` registry; weights
+    /// are applied off-chain when computing `cargo tangle blueprint trust-score`.
+    Attest {
+        #[command(subcommand)]
+        command: AttestCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -176,7 +186,9 @@ enum BlueprintCommands {
 
     /// Deploy a blueprint to a protocol (Tangle or Eigenlayer).
     ///
-    /// Compiles and publishes your blueprint to the on-chain registry.
+    /// One-time per blueprint: compiles and registers your blueprint on-chain,
+    /// returning a new `blueprintId`. For shipping subsequent binary versions
+    /// of an already-deployed blueprint, use `cargo tangle blueprint ship`.
     #[command(visible_alias = "d")]
     Deploy {
         #[command(subcommand)]
@@ -325,6 +337,161 @@ enum BlueprintCommands {
     Service {
         #[command(subcommand)]
         command: ServiceCommands,
+    },
+
+    /// One-command release: build → hash → pin → publish → (optionally) promote
+    /// and bulk-flip service policies. Wraps `publish-version` +
+    /// `set-active-version` + optional IPFS pin in a single interactive flow.
+    /// Designed for both developer use (interactive prompts) and CI
+    /// (`--yes --pin-ipfs --promote`). Publishes the next monotonic version —
+    /// v0 on first run, vN otherwise.
+    Ship {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Accept all prompts. Implies `--json` for CI-friendly output.
+        #[arg(long)]
+        yes: bool,
+        /// Don't run `cargo build --release` — caller supplies `--binary`.
+        #[arg(long)]
+        no_build: bool,
+        /// Cargo package to build (`-p <pkg>`).
+        #[arg(long, short = 'p', value_name = "NAME")]
+        package: Option<String>,
+        /// Path to a pre-built release binary.
+        #[arg(long, value_name = "PATH")]
+        binary: Option<PathBuf>,
+        /// Pre-existing artifact URI (`ipfs://...`, `https://...`). Skips pinning.
+        #[arg(long, value_name = "URI", conflicts_with = "pin_ipfs")]
+        binary_uri: Option<String>,
+        /// Pin the binary to IPFS using `IPFS_API_URL` + `IPFS_API_TOKEN`, or `PINATA_JWT`.
+        #[arg(long)]
+        pin_ipfs: bool,
+        /// sigstore/SLSA bundle whose sha256 lands on-chain as `attestationHash`.
+        #[arg(long, value_name = "PATH")]
+        attestation_bundle: Option<PathBuf>,
+        /// Explicit `attestationHash` (32-byte hex). Conflicts with `--attestation-bundle`.
+        #[arg(long, value_name = "HEX", conflicts_with = "attestation_bundle")]
+        attestation_hash: Option<String>,
+        /// Promote the new version to active (`setActiveBinaryVersion`).
+        #[arg(long, conflicts_with = "no_promote")]
+        promote: bool,
+        /// Explicitly skip promotion even if interactive default is yes.
+        #[arg(long)]
+        no_promote: bool,
+        /// Comma-separated service IDs to bulk-flip into AUTO policy.
+        #[arg(long, value_name = "LIST")]
+        policy_services: Option<String>,
+        /// Validate everything end-to-end without submitting transactions.
+        #[arg(long)]
+        dry_run: bool,
+        /// Override blueprint id (skips auto-detection from settings.env / metadata).
+        #[arg(long)]
+        blueprint_id: Option<u64>,
+        /// JSON output for machine readers (also implied by `--yes`).
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Publish a new binary version for a blueprint (primitive).
+    ///
+    /// Computes the artifact sha256 locally, optionally pins it to IPFS,
+    /// and submits `publishBinaryVersion` against the Tangle diamond. Caller
+    /// must be the blueprint owner. For the high-level "build + pin + publish
+    /// + promote" path, see `cargo tangle blueprint ship`.
+    PublishVersion {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Blueprint ID to publish under.
+        #[arg(long)]
+        blueprint_id: u64,
+        /// Path to the binary artifact to publish.
+        #[arg(long, value_name = "PATH")]
+        binary: PathBuf,
+        /// Explicit URI for the binary (e.g. `ipfs://...`). Overrides `--pin-to-ipfs`.
+        #[arg(long, value_name = "URI")]
+        binary_uri: Option<String>,
+        /// Pin the binary to IPFS via `IPFS_API_URL`+`IPFS_API_TOKEN` or `PINATA_JWT`.
+        #[arg(long, conflicts_with = "binary_uri")]
+        pin_to_ipfs: bool,
+        /// Optional sigstore/SLSA bundle file. Its sha256 lands on-chain as `attestationHash`.
+        #[arg(long, value_name = "PATH")]
+        attestation_bundle: Option<PathBuf>,
+        /// Explicit `attestationHash` override (32-byte hex). Conflicts with `--attestation-bundle`.
+        #[arg(long, value_name = "HEX", conflicts_with = "attestation_bundle")]
+        attestation_hash: Option<String>,
+        /// Output JSON instead of human-readable text.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Set the active binary version for a blueprint (affects services on AUTO).
+    SetActiveVersion {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Mark a binary version as deprecated (one-way).
+    DeprecateVersion {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List all published binary versions for a blueprint.
+    ListVersions {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show a single binary version.
+    ShowVersion {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Compute the trust score for a (blueprint, version) pair.
+    ///
+    /// Walks all non-revoked, non-expired attestations and weights them by the
+    /// `BlueprintAuditors` registry. Use in CI gates: e.g. only deploy if
+    /// `score >= 80`.
+    TrustScore {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        /// `BlueprintAuditors` registry address. If unset, all attesters are
+        /// treated as anonymous (weight 0) and the score collapses to zero.
+        #[arg(long, value_name = "ADDRESS")]
+        auditors_contract: Option<String>,
+        /// Fail the process with a non-zero exit code if `score < min_score`.
+        /// Use for CI gating (e.g. `--min-score 80`).
+        #[arg(long, value_name = "N")]
+        min_score: Option<u32>,
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -605,6 +772,214 @@ enum ServiceCommands {
         /// Request ID to display.
         #[arg(long)]
         request_id: u64,
+    },
+
+    /// Set this service's upgrade policy: AUTO follows the blueprint owner's
+    /// active version, APPROVE requires opt-in via `ack-version`, MANUAL pins
+    /// to genesis.
+    SetPolicy {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        service_id: u64,
+        /// Policy to apply.
+        #[arg(long, value_enum)]
+        policy: cargo_tangle::command::upgrade::UpgradePolicyArg,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Acknowledge a binary version for this service (under APPROVE policy).
+    AckVersion {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        service_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the binary version a service is currently effectively running.
+    EffectiveVersion {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        service_id: u64,
+        /// Blueprint ID hosting this service. Required to resolve the
+        /// effective version's blueprint context.
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the service's upgrade policy + acked vs. available versions.
+    UpgradeStatus {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        service_id: u64,
+        /// Blueprint ID hosting this service.
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List the binary versions available for this service.
+    ///
+    /// Talks to the local blueprint-manager (not the chain) and asks it to
+    /// enumerate the published versions for the underlying blueprint, with
+    /// the currently-running one flagged. Useful as the entrypoint for
+    /// MANUAL-with-assist workflows (`upgrade-local`, `upgrade-whitelist`).
+    Upgrades {
+        #[arg(long)]
+        service_id: u64,
+        /// blueprint-manager local RPC base URL. Falls back to
+        /// `BLUEPRINT_MANAGER_URL` env, then `http://127.0.0.1:9000`.
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Pre-authorize the manager to swap this service to `--version-id`.
+    ///
+    /// MANUAL-with-assist: stores a one-shot pin in the manager's local
+    /// authz store. The manager will run its full verify-then-swap pipeline
+    /// the next time it reconciles this service, then clear the pin. No
+    /// on-chain ack tx is written; the service's upgrade policy must be
+    /// MANUAL for this to take effect.
+    UpgradeLocal {
+        #[arg(long)]
+        service_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        /// Don't actually pin — just report what the manager would do.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Replace this service's MANUAL-with-assist whitelist of acceptable
+    /// versions. Persisted across manager restarts. Pass `--versions ""` to
+    /// clear.
+    UpgradeWhitelist {
+        #[arg(long)]
+        service_id: u64,
+        /// Comma-separated version IDs (e.g. `2,4,5`). Empty = clear.
+        #[arg(long, value_name = "LIST")]
+        versions: String,
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Record an explicit skip on a published version for this service.
+    /// The manager will suppress alerts about it and never auto-swap into
+    /// it even if it lands in `effectiveBinaryVersion`. Persists across
+    /// manager restarts.
+    UpgradeSkip {
+        #[arg(long)]
+        service_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        /// Required free-form reason. Lands in the manager's audit log.
+        #[arg(long, value_name = "TEXT")]
+        reason: String,
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the local-authz state (pinned, whitelisted, skipped) for this
+    /// service along with the on-chain policy and currently-running binary.
+    UpgradeAuthz {
+        #[arg(long)]
+        service_id: u64,
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AttestCommands {
+    /// Submit a new attestation against `(blueprint_id, version_id)`.
+    ///
+    /// Hashes the report file (or accepts an explicit `--report-hash`), maps
+    /// the severity string to its uint8 ladder entry, and submits
+    /// `attestBinaryVersion`. Auditor identity = `msg.sender`.
+    Submit {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        /// Path to report artifact (PDF, JSON, etc.) OR an off-chain URL.
+        ///
+        /// If the value resolves to an existing file, the sha256 is computed
+        /// locally and the file may also be pinned to IPFS via `--pin-report-to-ipfs`.
+        /// If it's a URL (e.g. `https://...`, `ipfs://...`), it's treated as
+        /// `reportUri` with `reportHash = 0x0` unless `--report-hash` is provided.
+        #[arg(long, value_name = "PATH_OR_URL")]
+        report: String,
+        /// Attestation kind.
+        #[arg(long, value_enum)]
+        kind: cargo_tangle::command::upgrade::AttestationKindArg,
+        /// Severity discovered.
+        #[arg(long, value_enum)]
+        severity: cargo_tangle::command::upgrade::SeverityArg,
+        /// Optional expiry as a duration from now (e.g. `6m`, `30d`, `1y`).
+        #[arg(long, value_name = "DURATION")]
+        expires_in: Option<String>,
+        /// Pin a local report file to IPFS and use that as `reportUri`.
+        #[arg(long)]
+        pin_report_to_ipfs: bool,
+        /// Override report hash (32-byte hex). Use when `--report` is a URL
+        /// and you've computed the hash off-line.
+        #[arg(long, value_name = "HEX")]
+        report_hash: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Revoke an attestation you previously submitted.
+    Revoke {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        #[arg(long)]
+        attestation_id: u64,
+        /// Off-chain pointer describing why the attestation was withdrawn.
+        #[arg(long, value_name = "URI")]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List all attestations for a binary version.
+    List {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        #[arg(long)]
+        blueprint_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -1816,7 +2191,349 @@ async fn main() -> Result<()> {
                         .map_err(|e| eyre!(e.to_string()))?;
                     list::requests::print_request(&request);
                 }
+                ServiceCommands::SetPolicy {
+                    network,
+                    service_id,
+                    policy,
+                    json,
+                } => {
+                    let ctx = upgrade_tx_ctx(&network)?;
+                    let tx = cargo_tangle::command::upgrade::set_service_policy(
+                        &ctx, service_id, policy,
+                    )
+                    .await?;
+                    cargo_tangle::command::upgrade::print_simple_tx(
+                        &format!("set-policy({} -> {})", service_id, policy.as_str()),
+                        &tx,
+                        json,
+                    );
+                }
+                ServiceCommands::AckVersion {
+                    network,
+                    service_id,
+                    version_id,
+                    json,
+                } => {
+                    let ctx = upgrade_tx_ctx(&network)?;
+                    let tx =
+                        cargo_tangle::command::upgrade::ack_version(&ctx, service_id, version_id)
+                            .await?;
+                    cargo_tangle::command::upgrade::print_simple_tx(
+                        &format!("ack-version(service={service_id}, version={version_id})"),
+                        &tx,
+                        json,
+                    );
+                }
+                ServiceCommands::EffectiveVersion {
+                    network,
+                    service_id,
+                    blueprint_id: _,
+                    json,
+                } => {
+                    let view = upgrade_view_ctx(&network, None)?;
+                    let v =
+                        cargo_tangle::command::upgrade::get_effective_version(&view, service_id)
+                            .await?;
+                    cargo_tangle::command::upgrade::print_effective_version(service_id, &v, json);
+                }
+                ServiceCommands::UpgradeStatus {
+                    network,
+                    service_id,
+                    blueprint_id,
+                    json,
+                } => {
+                    let view = upgrade_view_ctx(&network, None)?;
+                    let policy =
+                        cargo_tangle::command::upgrade::get_service_policy(&view, service_id)
+                            .await?;
+                    let acked = cargo_tangle::command::upgrade::get_service_acked_version_id(
+                        &view, service_id,
+                    )
+                    .await?;
+                    let active =
+                        cargo_tangle::command::upgrade::get_active_version_id(&view, blueprint_id)
+                            .await?;
+                    let effective =
+                        cargo_tangle::command::upgrade::get_effective_version(&view, service_id)
+                            .await?;
+                    let versions =
+                        cargo_tangle::command::upgrade::list_versions(&view, blueprint_id).await?;
+                    let latest = versions
+                        .last()
+                        .map(|v| v.versionId)
+                        .unwrap_or(effective.versionId);
+                    let up_to_date = effective.versionId == latest;
+                    let status = cargo_tangle::command::upgrade::UpgradeStatus {
+                        service_id,
+                        policy,
+                        acked_version_id: acked,
+                        active_version_id: active,
+                        effective_version_id: effective.versionId,
+                        latest_version_id: latest,
+                        up_to_date,
+                    };
+                    cargo_tangle::command::upgrade::print_upgrade_status(&status, json);
+                }
+                ServiceCommands::Upgrades {
+                    service_id,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let list =
+                        cargo_tangle::command::upgrade_local::list_upgrades(&manager, service_id)
+                            .await?;
+                    cargo_tangle::command::upgrade_local::print_available(&list, json);
+                }
+                ServiceCommands::UpgradeLocal {
+                    service_id,
+                    version_id,
+                    dry_run,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let result = cargo_tangle::command::upgrade_local::pin_version(
+                        &manager, service_id, version_id, dry_run,
+                    )
+                    .await?;
+                    cargo_tangle::command::upgrade_local::print_pin_result(
+                        service_id, &result, json,
+                    );
+                }
+                ServiceCommands::UpgradeWhitelist {
+                    service_id,
+                    versions,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let parsed =
+                        cargo_tangle::command::upgrade_local::parse_version_list(&versions)?;
+                    let result = cargo_tangle::command::upgrade_local::set_whitelist(
+                        &manager, service_id, parsed,
+                    )
+                    .await?;
+                    cargo_tangle::command::upgrade_local::print_whitelist_result(
+                        service_id, &result, json,
+                    );
+                }
+                ServiceCommands::UpgradeSkip {
+                    service_id,
+                    version_id,
+                    reason,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let result = cargo_tangle::command::upgrade_local::add_skip(
+                        &manager, service_id, version_id, reason,
+                    )
+                    .await?;
+                    cargo_tangle::command::upgrade_local::print_skip_result(
+                        service_id, &result, json,
+                    );
+                }
+                ServiceCommands::UpgradeAuthz {
+                    service_id,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let view =
+                        cargo_tangle::command::upgrade_local::show_authz(&manager, service_id)
+                            .await?;
+                    cargo_tangle::command::upgrade_local::print_authz(&view, json);
+                }
             },
+            BlueprintCommands::Ship {
+                network,
+                yes,
+                no_build,
+                package,
+                binary,
+                binary_uri,
+                pin_ipfs,
+                attestation_bundle,
+                attestation_hash,
+                promote,
+                no_promote,
+                policy_services,
+                dry_run,
+                blueprint_id,
+                json,
+            } => {
+                // CI mode (--yes) defaults to JSON output so action logs stay
+                // grep-able. Explicit --json (or its absence) still wins.
+                let json_out = json || yes;
+                let args = cargo_tangle::command::ship::ShipArgs {
+                    network,
+                    yes,
+                    no_build,
+                    package,
+                    binary,
+                    binary_uri,
+                    pin_ipfs,
+                    attestation_bundle,
+                    attestation_hash,
+                    promote,
+                    no_promote,
+                    policy_services,
+                    dry_run,
+                    blueprint_id,
+                    json: json_out,
+                };
+                cargo_tangle::command::ship::run(args).await?;
+            }
+            BlueprintCommands::PublishVersion {
+                network,
+                blueprint_id,
+                binary,
+                binary_uri,
+                pin_to_ipfs,
+                attestation_bundle,
+                attestation_hash,
+                json,
+            } => {
+                let ctx = upgrade_tx_ctx(&network)?;
+                let (sha256_hash, _len) = cargo_tangle::command::upgrade::hash_file(&binary)?;
+                let resolved_uri = if let Some(uri) = binary_uri {
+                    uri
+                } else if pin_to_ipfs {
+                    let pinned = cargo_tangle::command::upgrade::pin_file_to_ipfs(&binary).await?;
+                    pinned.uri
+                } else {
+                    bail!(
+                        "must supply --binary-uri or --pin-to-ipfs so the contract has a binaryUri to publish"
+                    );
+                };
+                let resolved_attestation = if let Some(hex) = attestation_hash {
+                    cargo_tangle::command::upgrade::parse_b256(&hex, "--attestation-hash")?
+                } else if let Some(bundle_path) = attestation_bundle {
+                    cargo_tangle::command::upgrade::hash_file(&bundle_path)?.0
+                } else {
+                    alloy_primitives::B256::ZERO
+                };
+                let result = cargo_tangle::command::upgrade::publish_version(
+                    &ctx,
+                    blueprint_id,
+                    sha256_hash,
+                    resolved_uri,
+                    resolved_attestation,
+                )
+                .await?;
+                cargo_tangle::command::upgrade::print_publish_result(&result, json);
+            }
+            BlueprintCommands::SetActiveVersion {
+                network,
+                blueprint_id,
+                version_id,
+                json,
+            } => {
+                let ctx = upgrade_tx_ctx(&network)?;
+                let tx = cargo_tangle::command::upgrade::set_active_version(
+                    &ctx,
+                    blueprint_id,
+                    version_id,
+                )
+                .await?;
+                cargo_tangle::command::upgrade::print_simple_tx(
+                    &format!("set-active-version(blueprint={blueprint_id}, version={version_id})"),
+                    &tx,
+                    json,
+                );
+            }
+            BlueprintCommands::DeprecateVersion {
+                network,
+                blueprint_id,
+                version_id,
+                json,
+            } => {
+                let ctx = upgrade_tx_ctx(&network)?;
+                let tx = cargo_tangle::command::upgrade::deprecate_version(
+                    &ctx,
+                    blueprint_id,
+                    version_id,
+                )
+                .await?;
+                cargo_tangle::command::upgrade::print_simple_tx(
+                    &format!("deprecate-version(blueprint={blueprint_id}, version={version_id})"),
+                    &tx,
+                    json,
+                );
+            }
+            BlueprintCommands::ListVersions {
+                network,
+                blueprint_id,
+                json,
+            } => {
+                let view = upgrade_view_ctx(&network, None)?;
+                let versions =
+                    cargo_tangle::command::upgrade::list_versions(&view, blueprint_id).await?;
+                let active =
+                    cargo_tangle::command::upgrade::get_active_version_id(&view, blueprint_id)
+                        .await?;
+                cargo_tangle::command::upgrade::print_versions_table(
+                    blueprint_id,
+                    &versions,
+                    active,
+                    json,
+                );
+            }
+            BlueprintCommands::ShowVersion {
+                network,
+                blueprint_id,
+                version_id,
+                json,
+            } => {
+                let view = upgrade_view_ctx(&network, None)?;
+                let v =
+                    cargo_tangle::command::upgrade::get_version(&view, blueprint_id, version_id)
+                        .await?;
+                cargo_tangle::command::upgrade::print_version_detail(blueprint_id, &v, json);
+            }
+            BlueprintCommands::TrustScore {
+                network,
+                blueprint_id,
+                version_id,
+                auditors_contract,
+                min_score,
+                json,
+            } => {
+                let auditors = match auditors_contract {
+                    Some(s) => Some(parse_address(&s, "AUDITORS_CONTRACT")?),
+                    None => None,
+                };
+                let view = upgrade_view_ctx(&network, auditors)?;
+                let score = cargo_tangle::command::upgrade::compute_trust_score(
+                    &view,
+                    blueprint_id,
+                    version_id,
+                )
+                .await?;
+                cargo_tangle::command::upgrade::print_trust_score(&score, json);
+                if let Some(min) = min_score {
+                    if score.score < min {
+                        return Err(eyre!(
+                            "trust score {} < required {} for blueprint {} version {}",
+                            score.score,
+                            min,
+                            blueprint_id,
+                            version_id
+                        ));
+                    }
+                }
+            }
         },
         Commands::Key { command } => match command {
             KeyCommands::Generate {
@@ -2535,9 +3252,139 @@ async fn main() -> Result<()> {
         Commands::Harness { command } => {
             cargo_tangle::command::harness::execute(command).await?;
         }
+        Commands::Attest { command } => match command {
+            AttestCommands::Submit {
+                network,
+                blueprint_id,
+                version_id,
+                report,
+                kind,
+                severity,
+                expires_in,
+                pin_report_to_ipfs,
+                report_hash,
+                json,
+            } => {
+                let ctx = upgrade_tx_ctx(&network)?;
+                let (resolved_hash, resolved_uri) =
+                    resolve_report_inputs(&report, report_hash.as_deref(), pin_report_to_ipfs)
+                        .await?;
+                let expires_at = cargo_tangle::command::upgrade::duration_to_expiry_timestamp(
+                    expires_in.as_deref(),
+                )?;
+                let result = cargo_tangle::command::upgrade::attest_version(
+                    &ctx,
+                    blueprint_id,
+                    version_id,
+                    resolved_hash,
+                    resolved_uri,
+                    kind,
+                    severity,
+                    expires_at,
+                )
+                .await?;
+                cargo_tangle::command::upgrade::print_attest_result(&result, json);
+            }
+            AttestCommands::Revoke {
+                network,
+                blueprint_id,
+                version_id,
+                attestation_id,
+                reason,
+                json,
+            } => {
+                let ctx = upgrade_tx_ctx(&network)?;
+                let tx = cargo_tangle::command::upgrade::revoke_attestation(
+                    &ctx,
+                    blueprint_id,
+                    version_id,
+                    attestation_id,
+                    reason,
+                )
+                .await?;
+                cargo_tangle::command::upgrade::print_simple_tx(
+                    &format!(
+                        "revoke-attestation(bp={blueprint_id}, ver={version_id}, att={attestation_id})"
+                    ),
+                    &tx,
+                    json,
+                );
+            }
+            AttestCommands::List {
+                network,
+                blueprint_id,
+                version_id,
+                json,
+            } => {
+                let view = upgrade_view_ctx(&network, None)?;
+                let rows = cargo_tangle::command::upgrade::list_attestations(
+                    &view,
+                    blueprint_id,
+                    version_id,
+                )
+                .await?;
+                cargo_tangle::command::upgrade::print_attestations(
+                    blueprint_id,
+                    version_id,
+                    &rows,
+                    json,
+                );
+            }
+        },
     }
 
     Ok(())
+}
+
+/// Build a `TxContext` from the shared `TangleClientArgs` resolver.
+fn upgrade_tx_ctx(
+    network: &cargo_tangle::command::tangle::TangleClientArgs,
+) -> Result<cargo_tangle::command::upgrade::TxContext> {
+    let cfg = network.client_config(0, None)?;
+    Ok(cargo_tangle::command::upgrade::TxContext {
+        http_rpc_url: cfg.http_rpc_endpoint.clone(),
+        tangle_contract: cfg.settings.tangle_contract,
+        keystore_path: PathBuf::from(cfg.keystore_uri.clone()),
+    })
+}
+
+fn upgrade_view_ctx(
+    network: &cargo_tangle::command::tangle::TangleClientArgs,
+    auditors_contract: Option<Address>,
+) -> Result<cargo_tangle::command::upgrade::ViewContext> {
+    let cfg = network.client_config(0, None)?;
+    Ok(cargo_tangle::command::upgrade::ViewContext {
+        http_rpc_url: cfg.http_rpc_endpoint.clone(),
+        tangle_contract: cfg.settings.tangle_contract,
+        auditors_contract,
+    })
+}
+
+async fn resolve_report_inputs(
+    report: &str,
+    report_hash_override: Option<&str>,
+    pin_report_to_ipfs: bool,
+) -> Result<(alloy_primitives::B256, String)> {
+    let path = std::path::Path::new(report);
+    if path.exists() {
+        let (digest, _) = cargo_tangle::command::upgrade::hash_file(path)?;
+        let uri = if pin_report_to_ipfs {
+            cargo_tangle::command::upgrade::pin_file_to_ipfs(path)
+                .await?
+                .uri
+        } else {
+            // Local-only artifact: emit a deterministic file:// URI as a fallback so the
+            // on-chain `reportUri` invariant (non-empty) is preserved.
+            format!("file://{}", path.display())
+        };
+        return Ok((digest, uri));
+    }
+    // Treat as URL/URI string.
+    let hash = match report_hash_override {
+        Some(hex) => cargo_tangle::command::upgrade::parse_b256(hex, "--report-hash")?,
+        None => alloy_primitives::B256::ZERO,
+    };
+    Ok((hash, report.to_string()))
 }
 
 fn parse_address_list(values: &[String], label: &str) -> Result<Vec<Address>> {

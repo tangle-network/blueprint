@@ -159,6 +159,10 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     #[cfg(feature = "vm-sandbox")]
     let network_interface = ctx.vm.network_interface.clone();
 
+    let cache_root = ctx.cache_dir().to_path_buf();
+    let local_authz_root = ctx.data_dir().join("upgrade-authz");
+    let allow_unchecked_attestations = ctx.allow_unchecked_attestations;
+
     let manager_task = async move {
         // Protocol abstraction: routes to Tangle or EigenLayer based on env.protocol_settings
         let protocol_type: crate::protocol::ProtocolType = (&env.protocol_settings).into();
@@ -169,6 +173,38 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
 
         let mut protocol_manager =
             crate::protocol::ProtocolManager::new(protocol_type, env.clone(), &ctx).await?;
+
+        // Tangle: assemble the binary-version upgrade pipeline. EigenLayer
+        // does not expose binary versions today; the protocol manager treats
+        // the attach call as a no-op.
+        let _upgrade_watcher_join = if matches!(
+            protocol_type,
+            crate::protocol::ProtocolType::Tangle
+        ) {
+            match build_upgrade_pipeline(
+                &env,
+                cache_root.clone(),
+                local_authz_root.clone(),
+                allow_unchecked_attestations,
+            )
+            .await
+            {
+                Ok((pipeline, join)) => {
+                    protocol_manager.with_upgrade_pipeline(pipeline);
+                    Some(join)
+                }
+                Err(err) => {
+                    blueprint_core::warn!(
+                        target: "upgrade",
+                        error = %err,
+                        "upgrade pipeline unavailable; manager will run with binary-version reconciliation disabled"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         // Run the protocol event loop
         protocol_manager
@@ -307,4 +343,62 @@ pub async fn run_auth_proxy(
 
         Ok(())
     }))
+}
+
+/// Construct the on-chain client + watcher pipeline for the Tangle protocol.
+///
+/// Returns the operator-facing pipeline plus the watcher's join handle.
+/// Callers must keep the handle alive for as long as the manager runs; a
+/// dropped handle aborts the watcher task.
+async fn build_upgrade_pipeline(
+    env: &BlueprintEnvironment,
+    cache_root: PathBuf,
+    local_authz_root: PathBuf,
+    allow_unchecked_attestations: bool,
+) -> std::result::Result<(crate::upgrade::UpgradePipeline, tokio::task::JoinHandle<()>), Report> {
+    use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
+
+    let settings = env
+        .protocol_settings
+        .tangle()
+        .map_err(|e| Report::msg(format!("missing Tangle protocol settings: {e}")))?;
+
+    let client_config = TangleClientConfig {
+        http_rpc_endpoint: env.http_rpc_endpoint.clone(),
+        ws_rpc_endpoint: env.ws_rpc_endpoint.clone(),
+        keystore_uri: env.keystore_uri.clone(),
+        data_dir: env.data_dir.clone(),
+        settings: TangleSettings {
+            blueprint_id: settings.blueprint_id,
+            service_id: settings.service_id,
+            tangle_contract: settings.tangle_contract,
+            staking_contract: settings.staking_contract,
+            status_registry_contract: settings.status_registry_contract,
+        },
+        test_mode: env.test_mode,
+        dry_run: env.dry_run,
+    };
+    // Build a dedicated keystore handle for the upgrade pipeline; we don't
+    // share the executor's `Keystore` because the lifetime requirements
+    // differ (the pipeline runs for the manager's full uptime).
+    let keystore = blueprint_keystore::Keystore::new(
+        blueprint_keystore::KeystoreConfig::new().fs_root(&env.keystore_uri),
+    )?;
+    let client = TangleClient::with_keystore(client_config, keystore)
+        .await
+        .map_err(|e| {
+            Report::msg(format!(
+                "failed to build Tangle client for upgrade pipeline: {e}"
+            ))
+        })?;
+
+    let chain = crate::upgrade::ChainView::new(client, settings.tangle_contract);
+    let attestation = crate::upgrade::AttestationVerifier::new(allow_unchecked_attestations);
+    let builder = crate::upgrade::UpgradePipelineBuilder {
+        chain,
+        cache_root,
+        attestation,
+        local_authz_root: Some(local_authz_root),
+    };
+    Ok(builder.spawn())
 }

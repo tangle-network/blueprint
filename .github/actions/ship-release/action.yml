@@ -1,0 +1,189 @@
+name: Ship Tangle Blueprint Release
+description: >
+  Publish a new blueprint binary version on-chain via `cargo tangle blueprint ship`.
+  Hashes the artifact locally, optionally pins it to IPFS, optionally pulls
+  a sigstore/SLSA attestation bundle, and submits `publishBinaryVersion`
+  (plus `setActiveBinaryVersion` when `promote: true`).
+
+inputs:
+  blueprint-id:
+    description: On-chain blueprint id to publish under.
+    required: true
+  binary-path:
+    description: Path to the release binary to ship.
+    required: true
+  binary-uri:
+    description: >
+      Pre-existing artifact URI (`ipfs://...` or `https://...`). Skips IPFS
+      pinning. If unset and `pin-ipfs` is `false`, the action errors out so
+      you never publish a version without an addressable binary.
+    required: false
+  pin-ipfs:
+    description: >
+      Pin the binary via the same credentials `cargo tangle` reads:
+      `IPFS_API_URL` + `IPFS_API_TOKEN`, or `PINATA_JWT`, or `WEB3_STORAGE_TOKEN`.
+      Set the secret in your workflow's `env:`.
+    required: false
+    default: "false"
+  attestation-bundle:
+    description: >
+      Path to a sigstore/SLSA bundle. Its sha256 lands on-chain as
+      `attestationHash`. Mutually exclusive with `attestation-hash`.
+    required: false
+  attestation-hash:
+    description: >
+      Pre-computed 32-byte hex hash to use as `attestationHash`. Use when
+      the bundle lives off-machine.
+    required: false
+  promote:
+    description: >
+      Call `setActiveBinaryVersion` immediately after publish so services on
+      AUTO adopt the new version on their next reconcile.
+    required: false
+    default: "false"
+  policy-services:
+    description: >
+      Comma-separated service IDs to bulk-flip into AUTO policy
+      (`setServiceUpgradePolicy(id, AUTO)`).
+    required: false
+  rpc-url:
+    description: HTTP RPC endpoint for the target EVM chain.
+    required: true
+  ws-rpc-url:
+    description: WebSocket RPC endpoint. Defaults to `rpc-url` host with `wss://` swap.
+    required: false
+  tangle-contract:
+    description: Tangle diamond proxy address on the target chain.
+    required: true
+  keystore-path:
+    description: Path to the keystore directory holding the deployer ECDSA key.
+    required: false
+    default: ./keystore
+  cargo-tangle-version:
+    description: >
+      Pin a specific cargo-tangle version. Defaults to whatever
+      `cargo install --locked cargo-tangle` resolves; pass a tag to lock
+      down for repeatability.
+    required: false
+    default: ""
+
+outputs:
+  version-id:
+    description: The newly-published version id (from the publish receipt).
+    value: ${{ steps.ship.outputs.version-id }}
+  sha256:
+    description: SHA-256 hex of the published binary.
+    value: ${{ steps.ship.outputs.sha256 }}
+  binary-uri:
+    description: Resolved binary URI (either input or pin result).
+    value: ${{ steps.ship.outputs.binary-uri }}
+  tx-hash:
+    description: Publish transaction hash.
+    value: ${{ steps.ship.outputs.tx-hash }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install cargo-tangle
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.cargo-tangle-version }}" ]; then
+          cargo install --locked --force cargo-tangle --version "${{ inputs.cargo-tangle-version }}"
+        else
+          cargo install --locked --force cargo-tangle
+        fi
+
+    - name: Resolve binary URI flag
+      id: binuri
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.binary-uri }}" ]; then
+          echo "flag=--binary-uri ${{ inputs.binary-uri }}" >> "$GITHUB_OUTPUT"
+        elif [ "${{ inputs.pin-ipfs }}" = "true" ]; then
+          echo "flag=--pin-ipfs" >> "$GITHUB_OUTPUT"
+        else
+          echo "::error ::Either binary-uri or pin-ipfs must be set"
+          exit 1
+        fi
+
+    - name: Resolve attestation flag
+      id: attest
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.attestation-bundle }}" ] && [ -n "${{ inputs.attestation-hash }}" ]; then
+          echo "::error ::attestation-bundle and attestation-hash are mutually exclusive"
+          exit 1
+        elif [ -n "${{ inputs.attestation-bundle }}" ]; then
+          echo "flag=--attestation-bundle ${{ inputs.attestation-bundle }}" >> "$GITHUB_OUTPUT"
+        elif [ -n "${{ inputs.attestation-hash }}" ]; then
+          echo "flag=--attestation-hash ${{ inputs.attestation-hash }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "flag=" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Resolve promote / policy / ws flags
+      id: extra
+      shell: bash
+      run: |
+        if [ "${{ inputs.promote }}" = "true" ]; then
+          echo "promote=--promote" >> "$GITHUB_OUTPUT"
+        else
+          echo "promote=--no-promote" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ -n "${{ inputs.policy-services }}" ]; then
+          echo "policy=--policy-services ${{ inputs.policy-services }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "policy=" >> "$GITHUB_OUTPUT"
+        fi
+
+        if [ -n "${{ inputs.ws-rpc-url }}" ]; then
+          echo "ws=--ws-rpc-url ${{ inputs.ws-rpc-url }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "ws=" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Ship version
+      id: ship
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # The CLI reads keystore + signing key from BLUEPRINT_KEYSTORE_URI;
+        # the DEPLOYER_KEY env (when set) gets imported into the keystore
+        # by the runner if the path is empty. See cli/src/command/signer.rs.
+        export BLUEPRINT_KEYSTORE_URI="${{ inputs.keystore-path }}"
+
+        OUTFILE=$(mktemp)
+        cargo tangle blueprint ship \
+          --yes \
+          --no-build \
+          --json \
+          --blueprint-id "${{ inputs.blueprint-id }}" \
+          --binary "${{ inputs.binary-path }}" \
+          ${{ steps.binuri.outputs.flag }} \
+          ${{ steps.attest.outputs.flag }} \
+          ${{ steps.extra.outputs.promote }} \
+          ${{ steps.extra.outputs.policy }} \
+          --http-rpc-url "${{ inputs.rpc-url }}" \
+          ${{ steps.extra.outputs.ws }} \
+          --tangle-contract "${{ inputs.tangle-contract }}" \
+          | tee "$OUTFILE"
+
+        # The final non-empty line of the JSON stream is the ship_complete
+        # event (see cli/src/command/ship.rs:print_shipped_summary).
+        FINAL=$(grep -E '"event":\s*"ship_complete"' "$OUTFILE" | tail -1 || true)
+        if [ -z "$FINAL" ]; then
+          echo "::error ::ship command did not emit a ship_complete event"
+          exit 1
+        fi
+
+        VERSION_ID=$(echo "$FINAL" | python3 -c "import sys, json; print(json.load(sys.stdin)['version_id'])")
+        SHA256=$(echo "$FINAL" | python3 -c "import sys, json; print(json.load(sys.stdin)['sha256'])")
+        BURI=$(echo "$FINAL" | python3 -c "import sys, json; print(json.load(sys.stdin)['binary_uri'])")
+        TX=$(echo "$FINAL" | python3 -c "import sys, json; print(json.load(sys.stdin)['tx_hash'])")
+
+        echo "version-id=$VERSION_ID" >> "$GITHUB_OUTPUT"
+        echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+        echo "binary-uri=$BURI" >> "$GITHUB_OUTPUT"
+        echo "tx-hash=$TX" >> "$GITHUB_OUTPUT"

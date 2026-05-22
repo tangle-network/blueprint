@@ -3419,6 +3419,7 @@ dependencies = [
 name = "blueprint-manager"
 version = "0.4.0-alpha.7"
 dependencies = [
+ "alloy-contract",
  "alloy-network 1.8.3",
  "alloy-primitives",
  "alloy-provider",
@@ -4428,10 +4429,12 @@ dependencies = [
  "indicatif",
  "nix 0.31.2",
  "rand 0.8.6",
+ "reqwest 0.12.28",
  "rustls 0.23.38",
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2 0.10.9",
  "tempfile",
  "testcontainers",
  "thiserror 2.0.18",

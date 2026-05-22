@@ -28,6 +28,7 @@ pub mod remote;
 pub mod rt;
 pub mod sdk;
 pub mod sources;
+pub mod upgrade;
 
 pub use executor::run_blueprint_manager;
 
