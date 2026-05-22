@@ -620,10 +620,21 @@ mod tests {
         assert!(b05.cumulative_count() >= 1);
     }
 
+    // Tests that mutate the process-global `ACTIVE_SERVICES` gauge must
+    // serialize against each other — prometheus's IntGauge is shared state
+    // and parallel test execution races otherwise (set(0) in one test races
+    // set(10)/get assertions in another).
+    static ACTIVE_SERVICES_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     // ── 5. Label cardinality is bounded -- exact label names ───────────
 
     #[test]
     fn label_names_are_exact_for_every_metric() {
+        // Serialize against `active_services_gauge_reflects_mutations` —
+        // both tests poke the same process-global IntGauge.
+        let _guard = ACTIVE_SERVICES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         // Observe with unique tags to create metric entries.
         // Zero-label HistogramVec metrics (CONTRACT_SCAN_DURATION,
         // BLOCK_PROCESSING_DURATION) also need a child observation — otherwise
@@ -812,6 +823,11 @@ mod tests {
 
     #[test]
     fn active_services_gauge_reflects_mutations() {
+        // Serialize against `label_names_are_exact_for_every_metric` —
+        // both tests poke the same process-global IntGauge.
+        let _guard = ACTIVE_SERVICES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         ACTIVE_SERVICES.set(10);
         assert_eq!(ACTIVE_SERVICES.get(), 10);
 
