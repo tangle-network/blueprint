@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- *(cargo-tangle)* blueprint binary upgrade flow: `blueprint publish-version`,
+  `set-active-version`, `deprecate-version`, `list-versions`, `show-version`,
+  `trust-score`; `blueprint service set-policy`, `ack-version`,
+  `effective-version`, `upgrade-status`; `attest submit`/`list`/`revoke`. Wraps
+  the new tnt-core `BlueprintsBinaryVersions` + `BlueprintsBinaryAttestations`
+  facets with local artifact hashing, optional IPFS pinning, and a CI-ready
+  weighted trust score against `BlueprintAuditors`.
+
 ## [0.5.0-alpha.7](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.6...cargo-tangle-v0.5.0-alpha.7) - 2026-05-21
 
 ### Other

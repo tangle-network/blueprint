@@ -187,6 +187,151 @@ cargo tangle blueprint service requests --json
 
 Both commands read via `TangleClient::{list_services,list_service_requests}` and print either friendly tables or JSON for automation.
 
+## Blueprint Upgrade Flow
+
+Shipping a new build of a blueprint touches three actors. The CLI gives each
+of them a first-class subcommand surface so nobody has to hand-craft calldata.
+
+```
+            ┌─────────────────────┐
+            │  blueprint owner    │  publish-version → set-active-version
+            └─────────┬───────────┘
+                      │
+                      ▼
+            ┌─────────────────────┐
+            │  auditor / scanner  │  attest submit → (optional) attest revoke
+            └─────────┬───────────┘
+                      │
+                      ▼
+            ┌─────────────────────┐
+            │  service operator   │  service set-policy → service ack-version
+            └─────────────────────┘
+```
+
+### 1. Publish a new version (blueprint owner)
+
+```bash
+# Hash the artifact locally, pin to IPFS, and submit publishBinaryVersion.
+cargo tangle blueprint publish-version \
+  --blueprint-id 7 \
+  --binary ./target/release/my-blueprint \
+  --pin-to-ipfs \
+  --attestation-bundle ./dist/sigstore-bundle.json \
+  --json
+```
+
+- `--binary <path>` is hashed (sha256) locally; the digest becomes
+  `sha256Hash` on-chain.
+- Provide either `--binary-uri ipfs://<cid>` (you've already pinned) or
+  `--pin-to-ipfs` (the CLI pins via `IPFS_API_URL`+`IPFS_API_TOKEN` if set,
+  or `PINATA_JWT` as a fallback).
+- `--attestation-bundle <path>` is hashed and stored as `attestationHash`.
+  Pass `--attestation-hash <hex>` to override directly (e.g. when the
+  bundle lives off-disk).
+
+The command prints the new `version_id` and tx hash. In JSON mode the
+output is a single line you can pipe to `jq`:
+
+```json
+{ "event": "binary_version_published",
+  "blueprint_id": 7, "version_id": 3,
+  "sha256_hash": "0x...", "binary_uri": "ipfs://...",
+  "attestation_hash": "0x...", "tx_hash": "0x...", "block_number": 12345 }
+```
+
+Promote (or roll back) the active pointer once you're ready:
+
+```bash
+cargo tangle blueprint set-active-version --blueprint-id 7 --version-id 3
+cargo tangle blueprint deprecate-version  --blueprint-id 7 --version-id 1
+cargo tangle blueprint list-versions      --blueprint-id 7        # table view
+cargo tangle blueprint show-version       --blueprint-id 7 --version-id 3
+```
+
+### 2. Attest as an auditor
+
+```bash
+# Hash the audit report locally, pin it, and emit attestBinaryVersion.
+cargo tangle attest submit \
+  --blueprint-id 7 \
+  --version-id 3 \
+  --report ./audits/2026-05-tangle-bp-7-v3.pdf \
+  --pin-report-to-ipfs \
+  --kind AUDIT \
+  --severity low \
+  --expires-in 6m \
+  --json
+```
+
+- `--report` accepts either a local file (which is hashed; optionally pinned
+  via `--pin-report-to-ipfs`) or a remote URL (`https://...`, `ipfs://...`).
+  When passing a URL, pre-compute the hash and feed it via `--report-hash <hex>`.
+- `--kind` is one of `AUDIT`, `FUZZ`, `FORMAL`, `BUG_BOUNTY`, `SELF`.
+- `--severity` maps to the on-chain uint8 ladder: `none`/`info`/`low`/`med`/`high`/`critical`.
+- `--expires-in` accepts human durations (`6m`, `30d`, `1y`, `90d12h`); omit
+  for non-expiring.
+
+Other attest commands:
+
+```bash
+cargo tangle attest list   --blueprint-id 7 --version-id 3 --json
+cargo tangle attest revoke --blueprint-id 7 --version-id 3 \
+  --attestation-id 2 \
+  --reason ipfs://bafy.../revocation-note.json
+```
+
+### 3. Adopt the upgrade as an operator
+
+Set the policy once, then ack each new version under `APPROVE`:
+
+```bash
+# Pick a policy: AUTO (follow blueprint owner), APPROVE (opt-in), MANUAL (pin to genesis).
+cargo tangle blueprint service set-policy --service-id 42 --policy APPROVE
+
+# Opt in to a specific version.
+cargo tangle blueprint service ack-version --service-id 42 --version-id 3
+
+# Inspect what's actually running and how far ahead the upstream is.
+cargo tangle blueprint service effective-version --service-id 42 --blueprint-id 7 --json
+cargo tangle blueprint service upgrade-status     --service-id 42 --blueprint-id 7 --json
+```
+
+`upgrade-status` prints the policy, the operator's acked version, the
+blueprint's active version, the effective version the manager will dispatch
+against, and the latest published version — exactly what an operator-facing
+dashboard needs.
+
+### CI gating: trust score
+
+```bash
+# Compute the weighted trust score the dapp would render for version 3.
+cargo tangle blueprint trust-score \
+  --blueprint-id 7 --version-id 3 \
+  --auditors-contract 0xAud1tors... \
+  --min-score 80           # exits non-zero if score < 80; great for CI
+```
+
+The score walks every non-revoked, non-expired attestation, looks each
+attester up in `BlueprintAuditors`, and produces a normalized `0..=100`
+number plus per-attestation diagnostics. Without `--auditors-contract` the
+score collapses to zero (all attesters treated as anonymous) — the flag
+should always be set in production.
+
+### IPFS configuration
+
+Two environment knobs:
+
+```bash
+# Generic (Kubo / w3up / any service that accepts multipart/form-data + Bearer):
+IPFS_API_URL=https://api.web3.storage/upload   IPFS_API_TOKEN=eyJ...
+
+# Pinata fallback (only used if IPFS_API_URL is unset):
+PINATA_JWT=eyJhbGciOi...
+```
+
+Pin endpoints must return JSON containing one of `cid`, `Hash`, or
+`IpfsHash`; the resulting `ipfs://<cid>` URI is what lands on-chain.
+
 ## Cloud Deployment
 
 > **Note:** Cloud deployment requires the `remote-providers` feature flag. See [Feature flags](#feature-flags) for installation instructions.
