@@ -332,6 +332,106 @@ PINATA_JWT=eyJhbGciOi...
 Pin endpoints must return JSON containing one of `cid`, `Hash`, or
 `IpfsHash`; the resulting `ipfs://<cid>` URI is what lands on-chain.
 
+## One-command shipping (`cargo tangle ship`)
+
+For the common case — "I just landed a feature, build the binary, pin it,
+publish the new version, and promote it" — there is `cargo tangle ship`.
+It composes all the above steps into a single interactive flow:
+
+```text
+$ cargo tangle ship
+🚀 Shipping blueprint:  blueprintId=7  (/home/me/my-blueprint)
+  RPC     https://sepolia.base.org
+  Wallet  0xAbC...123 ✓ blueprint owner
+
+? Build a release binary now?              › Yes
+  > Building: cargo build --release -p my-blueprint
+  sha256       0x9af3…                       (6.21 MB)
+? Pin binary to IPFS?                       › Yes
+  binaryUri    ipfs://bafyb…
+? Publish v? on-chain (blueprint=7)?        › Yes
+  ✓ Published v3 (block 184221)
+? Promote to active version?                › Yes
+  ✓ Promoted v3 (tx 0x…)
+
+── Shipped v3 ─────────────────────────────
+  sha256     0x9af3…
+  binaryUri  ipfs://bafyb…
+  promoted   true
+  block      184221
+  tx_hash    0x…
+```
+
+### Auto-detection
+
+The wizard tries (in order) `--blueprint-id`, `BLUEPRINT_ID=` in
+`./settings.env`, then `blueprintId` in `./metadata/blueprint-metadata.json`.
+It picks the first non-zero value.
+
+### CI mode
+
+Skip all prompts with `--yes`:
+
+```bash
+cargo tangle ship --yes --pin-ipfs --promote \
+  --blueprint-id 7 \
+  --binary ./target/release/my-blueprint \
+  --attestation-bundle ./dist/sigstore-bundle.json \
+  --policy-services 42,43
+```
+
+In `--yes` mode the wizard prints one JSON event per phase, with the final
+`ship_complete` event carrying the new `version_id`, the publish tx, and
+whether `setActiveBinaryVersion` ran. The
+[`tangle-network/blueprint/.github/actions/ship-release`](../.github/actions/ship-release)
+composite action consumes that JSON to populate its outputs.
+
+### Common flag matrix
+
+| Flag                  | Effect |
+|-----------------------|--------|
+| `--yes`               | Accept every prompt; switch output to JSON |
+| `--dry-run`           | Hash + (optionally) pin + report; submit nothing |
+| `--no-build --binary <path>` | Skip `cargo build`; ship a pre-built artifact |
+| `--binary-uri ipfs://…`      | Skip IPFS pin; assume URI is already addressable |
+| `--no-promote`        | Publish but don't `setActiveBinaryVersion` |
+| `--policy-services 42,43`    | Bulk-flip listed services into AUTO policy |
+| `--attestation-bundle <path>` | Hash the bundle and store its sha256 on-chain |
+| `--attestation-hash 0x…`      | Use a pre-computed `attestationHash` |
+
+## Manual-with-assist (operator local-authz)
+
+For operators on `MANUAL` policy who *want* the manager to swap into specific
+versions but don't want to (a) move out of MANUAL on-chain or (b) spend gas
+on `ackBinaryVersion`, the manager exposes a local authorization layer.
+Pre-authorized swaps still run the full sha256+attestation gate — the only
+thing the operator is sidestepping is the audit-trail tx.
+
+```bash
+# List what versions the manager sees on-chain (no chain calls — talks to the
+# local manager's /upgrades/{service_id}/available).
+cargo tangle blueprint service upgrades --service-id 42
+
+# Pre-authorize a single one-shot swap to v3 the next time it becomes effective.
+cargo tangle blueprint service upgrade-local --service-id 42 --version-id 3
+
+# Stage a fleet-wide rollout: every version in this list is acceptable.
+cargo tangle blueprint service upgrade-whitelist --service-id 42 --versions 2,4,5
+
+# Explicitly skip v3 (canary regression). Reason lands in the manager's audit log.
+cargo tangle blueprint service upgrade-skip --service-id 42 --version-id 3 \
+  --reason "Failed latency canary; waiting for v4"
+
+# Show what local-authz state the manager is holding for this service.
+cargo tangle blueprint service upgrade-authz --service-id 42 --json
+```
+
+Manager URL resolution (highest wins): `--manager-url` → `BLUEPRINT_MANAGER_URL`
+env → `http://127.0.0.1:9000`. The pre-authorization persists in
+`<manager-data-dir>/upgrade-authz/<serviceId>.json`, so the operator can stage
+a pin/whitelist during a maintenance window and walk away — a restart of
+the manager rebuilds the state cleanly.
+
 ## Cloud Deployment
 
 > **Note:** Cloud deployment requires the `remote-providers` feature flag. See [Feature flags](#feature-flags) for installation instructions.

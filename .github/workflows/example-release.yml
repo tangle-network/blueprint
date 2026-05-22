@@ -1,0 +1,59 @@
+# Example workflow that wires `release: { types: [published] }` to the
+# ship-release composite action. Copy into a blueprint repo's
+# `.github/workflows/` and tune the build step + secrets to match.
+name: Example — Ship blueprint release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      blueprint_id:
+        description: Override blueprint id
+        required: false
+      promote:
+        description: Promote to active version
+        required: false
+        default: "true"
+
+jobs:
+  ship:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required if you use the sigstore-action below
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release -p my-blueprint
+
+      # Optional: produce a sigstore bundle and feed its sha into the action.
+      # - uses: sigstore/cosign-action@v3
+      #   with:
+      #     args: sign-blob --bundle artifacts/my-blueprint.sigstore --yes target/release/my-blueprint
+
+      - name: Ship release
+        uses: tangle-network/blueprint/.github/actions/ship-release@main
+        with:
+          blueprint-id: ${{ inputs.blueprint_id || vars.BLUEPRINT_ID }}
+          binary-path: target/release/my-blueprint
+          pin-ipfs: "true"
+          # attestation-bundle: artifacts/my-blueprint.sigstore
+          promote: ${{ inputs.promote || 'true' }}
+          rpc-url: ${{ secrets.RPC_URL }}
+          tangle-contract: ${{ vars.TANGLE_CONTRACT }}
+        env:
+          # The keystore at ./keystore must contain the blueprint owner's
+          # ECDSA key for `publishBinaryVersion` to succeed. Wire your
+          # secret manager to populate it before this step (e.g. via
+          # `cargo tangle key import`).
+          DEPLOYER_KEY: ${{ secrets.DEPLOYER_KEY }}
+          # Pick whichever credential provider the IPFS pin should use:
+          WEB3_STORAGE_TOKEN: ${{ secrets.WEB3_STORAGE_TOKEN }}
+          # PINATA_JWT: ${{ secrets.PINATA_JWT }}
+          # IPFS_API_URL: ${{ vars.IPFS_API_URL }}
+          # IPFS_API_TOKEN: ${{ secrets.IPFS_API_TOKEN }}

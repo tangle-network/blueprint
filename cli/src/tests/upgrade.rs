@@ -141,6 +141,143 @@ fn invalid_severity_value_is_rejected() -> Result<()> {
 }
 
 #[test]
+fn help_for_ship_advertises_ci_flags() -> Result<()> {
+    // The ship wizard is the single entrypoint we promote to CI users. Its
+    // --help MUST surface every flag the GitHub Actions composite passes,
+    // otherwise the action breaks at runtime with "unrecognized argument".
+    let output = cargo_tangle_cmd()?
+        .args(["ship", "--help"])
+        .output()
+        .map_err(|e| eyre!("running ship help: {e}"))?;
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for flag in [
+        "--yes",
+        "--no-build",
+        "--binary",
+        "--binary-uri",
+        "--pin-ipfs",
+        "--attestation-bundle",
+        "--attestation-hash",
+        "--promote",
+        "--no-promote",
+        "--policy-services",
+        "--dry-run",
+        "--blueprint-id",
+        "--json",
+    ] {
+        assert!(
+            stdout.contains(flag),
+            "ship --help missing {flag}: {stdout}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn ship_rejects_mutually_exclusive_attestation_flags() -> Result<()> {
+    // --attestation-bundle and --attestation-hash both feed the on-chain
+    // `attestationHash` slot; allowing both would let an operator silently
+    // ship a sigstore bundle that disagrees with the hash. Clap must reject.
+    let dir = TempDir::new()?;
+    let bundle = dir.path().join("bundle.json");
+    fs::write(&bundle, b"x").unwrap();
+    let output = cargo_tangle_cmd()?
+        .args([
+            "ship",
+            "--yes",
+            "--blueprint-id",
+            "1",
+            "--binary",
+            bundle.to_string_lossy().as_ref(),
+            "--attestation-bundle",
+            bundle.to_string_lossy().as_ref(),
+            "--attestation-hash",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+        ])
+        .output()
+        .map_err(|e| eyre!("running ship with conflicting attestation flags: {e}"))?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used")
+            || stderr.contains("conflicts")
+            || stderr.contains("--attestation"),
+        "expected mutual-exclusion error, got: {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
+fn ship_rejects_promote_with_no_promote() -> Result<()> {
+    // Belt-and-suspenders against operator footgun: the wizard treats these
+    // as conflicting flags so we never land in an ambiguous state.
+    let output = cargo_tangle_cmd()?
+        .args(["ship", "--yes", "--promote", "--no-promote"])
+        .output()
+        .map_err(|e| eyre!("running ship with both promote flags: {e}"))?;
+    assert!(!output.status.success());
+    Ok(())
+}
+
+#[test]
+fn help_for_service_upgrades_lists_manager_url() -> Result<()> {
+    // upgrades / upgrade-local / upgrade-whitelist all go through the
+    // manager's local RPC. The --manager-url flag must be discoverable.
+    let output = cargo_tangle_cmd()?
+        .args(["blueprint", "service", "upgrades", "--help"])
+        .output()
+        .map_err(|e| eyre!("running upgrades help: {e}"))?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--service-id"));
+    assert!(stdout.contains("--manager-url"));
+    Ok(())
+}
+
+#[test]
+fn help_for_upgrade_skip_requires_reason() -> Result<()> {
+    let output = cargo_tangle_cmd()?
+        .args(["blueprint", "service", "upgrade-skip", "--help"])
+        .output()
+        .map_err(|e| eyre!("running upgrade-skip help: {e}"))?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--reason"));
+    assert!(stdout.contains("--version-id"));
+    Ok(())
+}
+
+#[test]
+fn upgrade_skip_without_reason_is_rejected() -> Result<()> {
+    // The `reason` field lands in the manager's audit log; making it
+    // optional would defeat the entire purpose of recording skips.
+    let output = cargo_tangle_cmd()?
+        .args([
+            "blueprint",
+            "service",
+            "upgrade-skip",
+            "--service-id",
+            "1",
+            "--version-id",
+            "2",
+        ])
+        .output()
+        .map_err(|e| eyre!("running upgrade-skip without reason: {e}"))?;
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--reason"),
+        "expected reason error: {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
 fn publish_version_requires_binary_uri_or_pin() -> Result<()> {
     // Create a temp binary so the file path check passes; the failure must be
     // about the missing URI, not the missing file.

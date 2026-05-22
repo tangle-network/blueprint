@@ -145,6 +145,56 @@ enum Commands {
         #[command(subcommand)]
         command: AttestCommands,
     },
+
+    /// One-command blueprint release: build, hash, pin, publish, (optionally)
+    /// promote, and bulk-flip service policies. Designed for both interactive
+    /// developer use and CI (`--yes --pin-ipfs --promote`).
+    Ship {
+        #[command(flatten)]
+        network: TangleClientArgs,
+        /// Accept all prompts. Implies `--json` for CI-friendly output.
+        #[arg(long)]
+        yes: bool,
+        /// Don't run `cargo build --release` — caller supplies `--binary`.
+        #[arg(long)]
+        no_build: bool,
+        /// Cargo package to build (`-p <pkg>`).
+        #[arg(long, short = 'p', value_name = "NAME")]
+        package: Option<String>,
+        /// Path to a pre-built release binary.
+        #[arg(long, value_name = "PATH")]
+        binary: Option<PathBuf>,
+        /// Pre-existing artifact URI (`ipfs://...`, `https://...`). Skips pinning.
+        #[arg(long, value_name = "URI", conflicts_with = "pin_ipfs")]
+        binary_uri: Option<String>,
+        /// Pin the binary to IPFS using `IPFS_API_URL` + `IPFS_API_TOKEN`, or `PINATA_JWT`.
+        #[arg(long)]
+        pin_ipfs: bool,
+        /// sigstore/SLSA bundle whose sha256 lands on-chain as `attestationHash`.
+        #[arg(long, value_name = "PATH")]
+        attestation_bundle: Option<PathBuf>,
+        /// Explicit `attestationHash` (32-byte hex). Conflicts with `--attestation-bundle`.
+        #[arg(long, value_name = "HEX", conflicts_with = "attestation_bundle")]
+        attestation_hash: Option<String>,
+        /// Promote the new version to active (`setActiveBinaryVersion`).
+        #[arg(long, conflicts_with = "no_promote")]
+        promote: bool,
+        /// Explicitly skip promotion even if interactive default is yes.
+        #[arg(long)]
+        no_promote: bool,
+        /// Comma-separated service IDs to bulk-flip into AUTO policy.
+        #[arg(long, value_name = "LIST")]
+        policy_services: Option<String>,
+        /// Validate everything end-to-end without submitting transactions.
+        #[arg(long)]
+        dry_run: bool,
+        /// Override blueprint id (skips auto-detection from settings.env / metadata).
+        #[arg(long)]
+        blueprint_id: Option<u64>,
+        /// JSON output for machine readers (also implied by `--yes`).
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -768,6 +818,88 @@ enum ServiceCommands {
         /// Blueprint ID hosting this service.
         #[arg(long)]
         blueprint_id: u64,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List the binary versions available for this service.
+    ///
+    /// Talks to the local blueprint-manager (not the chain) and asks it to
+    /// enumerate the published versions for the underlying blueprint, with
+    /// the currently-running one flagged. Useful as the entrypoint for
+    /// MANUAL-with-assist workflows (`upgrade-local`, `upgrade-whitelist`).
+    Upgrades {
+        #[arg(long)]
+        service_id: u64,
+        /// blueprint-manager local RPC base URL. Falls back to
+        /// `BLUEPRINT_MANAGER_URL` env, then `http://127.0.0.1:9000`.
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Pre-authorize the manager to swap this service to `--version-id`.
+    ///
+    /// MANUAL-with-assist: stores a one-shot pin in the manager's local
+    /// authz store. The manager will run its full verify-then-swap pipeline
+    /// the next time it reconciles this service, then clear the pin. No
+    /// on-chain ack tx is written; the service's upgrade policy must be
+    /// MANUAL for this to take effect.
+    UpgradeLocal {
+        #[arg(long)]
+        service_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        /// Don't actually pin — just report what the manager would do.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Replace this service's MANUAL-with-assist whitelist of acceptable
+    /// versions. Persisted across manager restarts. Pass `--versions ""` to
+    /// clear.
+    UpgradeWhitelist {
+        #[arg(long)]
+        service_id: u64,
+        /// Comma-separated version IDs (e.g. `2,4,5`). Empty = clear.
+        #[arg(long, value_name = "LIST")]
+        versions: String,
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Record an explicit skip on a published version for this service.
+    /// The manager will suppress alerts about it and never auto-swap into
+    /// it even if it lands in `effectiveBinaryVersion`. Persists across
+    /// manager restarts.
+    UpgradeSkip {
+        #[arg(long)]
+        service_id: u64,
+        #[arg(long)]
+        version_id: u64,
+        /// Required free-form reason. Lands in the manager's audit log.
+        #[arg(long, value_name = "TEXT")]
+        reason: String,
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the local-authz state (pinned, whitelisted, skipped) for this
+    /// service along with the on-chain policy and currently-running binary.
+    UpgradeAuthz {
+        #[arg(long)]
+        service_id: u64,
+        #[arg(long, value_name = "URL")]
+        manager_url: Option<Url>,
         #[arg(long)]
         json: bool,
     },
@@ -2136,6 +2268,87 @@ async fn main() -> Result<()> {
                     };
                     cargo_tangle::command::upgrade::print_upgrade_status(&status, json);
                 }
+                ServiceCommands::Upgrades {
+                    service_id,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let list =
+                        cargo_tangle::command::upgrade_local::list_upgrades(&manager, service_id)
+                            .await?;
+                    cargo_tangle::command::upgrade_local::print_available(&list, json);
+                }
+                ServiceCommands::UpgradeLocal {
+                    service_id,
+                    version_id,
+                    dry_run,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let result = cargo_tangle::command::upgrade_local::pin_version(
+                        &manager, service_id, version_id, dry_run,
+                    )
+                    .await?;
+                    cargo_tangle::command::upgrade_local::print_pin_result(
+                        service_id, &result, json,
+                    );
+                }
+                ServiceCommands::UpgradeWhitelist {
+                    service_id,
+                    versions,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let parsed =
+                        cargo_tangle::command::upgrade_local::parse_version_list(&versions)?;
+                    let result = cargo_tangle::command::upgrade_local::set_whitelist(
+                        &manager, service_id, parsed,
+                    )
+                    .await?;
+                    cargo_tangle::command::upgrade_local::print_whitelist_result(
+                        service_id, &result, json,
+                    );
+                }
+                ServiceCommands::UpgradeSkip {
+                    service_id,
+                    version_id,
+                    reason,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let result = cargo_tangle::command::upgrade_local::add_skip(
+                        &manager, service_id, version_id, reason,
+                    )
+                    .await?;
+                    cargo_tangle::command::upgrade_local::print_skip_result(
+                        service_id, &result, json,
+                    );
+                }
+                ServiceCommands::UpgradeAuthz {
+                    service_id,
+                    manager_url,
+                    json,
+                } => {
+                    let manager = cargo_tangle::command::upgrade_local::resolve_manager_url(
+                        manager_url.as_ref(),
+                    )?;
+                    let view =
+                        cargo_tangle::command::upgrade_local::show_authz(&manager, service_id)
+                            .await?;
+                    cargo_tangle::command::upgrade_local::print_authz(&view, json);
+                }
             },
             BlueprintCommands::PublishVersion {
                 network,
@@ -3073,6 +3286,45 @@ async fn main() -> Result<()> {
                 );
             }
         },
+        Commands::Ship {
+            network,
+            yes,
+            no_build,
+            package,
+            binary,
+            binary_uri,
+            pin_ipfs,
+            attestation_bundle,
+            attestation_hash,
+            promote,
+            no_promote,
+            policy_services,
+            dry_run,
+            blueprint_id,
+            json,
+        } => {
+            // CI mode (--yes) defaults to JSON output so action logs stay
+            // grep-able. Explicit --json (or its absence) still wins.
+            let json_out = json || yes;
+            let args = cargo_tangle::command::ship::ShipArgs {
+                network,
+                yes,
+                no_build,
+                package,
+                binary,
+                binary_uri,
+                pin_ipfs,
+                attestation_bundle,
+                attestation_hash,
+                promote,
+                no_promote,
+                policy_services,
+                dry_run,
+                blueprint_id,
+                json: json_out,
+            };
+            cargo_tangle::command::ship::run(args).await?;
+        }
     }
 
     Ok(())

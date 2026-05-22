@@ -94,6 +94,28 @@ impl ChainView {
             .map_err(|e| UpgradeError::ChainRead(format!("getServiceAckedVersionId: {e}")))
     }
 
+    /// `getBinaryVersion(blueprintId, versionId)`
+    pub async fn get_binary_version(
+        &self,
+        blueprint_id: u64,
+        version_id: u64,
+    ) -> Result<BinaryVersionInfo> {
+        let version = self
+            .contract()
+            .getBinaryVersion(blueprint_id, version_id)
+            .call()
+            .await
+            .map_err(|e| UpgradeError::ChainRead(format!("getBinaryVersion: {e}")))?;
+        Ok(BinaryVersionInfo {
+            version_id: version.versionId,
+            sha256: version.sha256Hash,
+            binary_uri: version.binaryUri,
+            attestation_hash: version.attestationHash,
+            published_at: version.publishedAt,
+            deprecated: version.deprecated,
+        })
+    }
+
     /// `effectiveBinaryVersion(serviceId)` — the protocol's source of truth
     /// for "what binary should this service be running right now."
     ///

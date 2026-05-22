@@ -23,6 +23,7 @@
 use super::attestation::AttestationVerifier;
 use super::chain::ChainView;
 use super::error::Result;
+use super::local_authz::{AuthzDecision, LocalAuthzStore};
 use super::state::{RunningBinary, UpgradeState};
 use super::swap::download_and_verify;
 use super::types::{
@@ -49,6 +50,10 @@ pub struct WatcherConfig {
     /// watcher resolves the chain for each on a reconcile signal; ownership
     /// of `ActiveBlueprints` stays with the protocol manager.
     pub tracked_services: TrackedServices,
+    /// Local authorization store consulted when on-chain policy is MANUAL.
+    /// MANUAL operators may pre-authorize specific versions without writing
+    /// an on-chain ack tx (the "MANUAL-with-assist" mode).
+    pub local_authz: LocalAuthzStore,
     /// Outgoing queue of swap requests the protocol event handler must drain
     /// and execute against `ActiveBlueprints`. See `SwapRequest`.
     pub swap_tx: mpsc::Sender<SwapRequest>,
@@ -220,20 +225,113 @@ impl UpgradeWatcher {
 
         match policy {
             UpgradePolicy::Manual => {
-                // MANUAL: never auto-swap, but surface the divergence so the
-                // operator sees they're pinned to an outdated version.
-                self.record_pending(blueprint_id, service_id, &target, policy, running)
-                    .await;
-                warn!(
-                    target: "upgrade",
-                    event = "binary_upgrade_blocked",
-                    blueprint_id,
-                    service_id,
-                    available_version_id = target.version_id,
-                    available_sha256 = %hex_short(target.sha256.as_slice()),
-                    "MANUAL policy — operator must switch policy to upgrade"
-                );
-                Ok(())
+                // MANUAL-with-assist: consult the local authz store before
+                // falling through to the alert-only path. This is the seam
+                // that lets a MANUAL operator pre-authorize specific
+                // versions without writing an on-chain ack — the manager
+                // still owns the verify-then-swap pipeline, the operator
+                // still controls policy on-chain, and no gas is spent.
+                let authz = self.config.local_authz.get(service_id).await;
+                let decision = authz.decide(target.version_id);
+                match decision {
+                    AuthzDecision::Swap { clear_pinned } => {
+                        // MANUAL pre-authorized: same attestation gate as
+                        // AUTO. The on-chain policy is still MANUAL — the
+                        // operator's audit trail is unchanged — but they
+                        // get the full safety pipeline. Refusing the
+                        // attestation gate here would erase the value-add.
+                        if let Err(err) = self.config.attestation.verify(service_id, &target) {
+                            warn!(
+                                target: "upgrade",
+                                event = "binary_upgrade_attestation_failed",
+                                blueprint_id,
+                                service_id,
+                                version_id = target.version_id,
+                                error = %err,
+                                "MANUAL-with-assist swap blocked by attestation gate"
+                            );
+                            self.config
+                                .state
+                                .push_history(history_entry(
+                                    blueprint_id,
+                                    service_id,
+                                    running,
+                                    &target,
+                                    policy,
+                                    UpgradeOutcome::AttestationFailed,
+                                ))
+                                .await;
+                            self.record_pending(blueprint_id, service_id, &target, policy, running)
+                                .await;
+                            return Ok(());
+                        }
+                        info!(
+                            target: "upgrade",
+                            event = "binary_upgrade_local_authz_swap",
+                            blueprint_id,
+                            service_id,
+                            version_id = target.version_id,
+                            clear_pinned,
+                            "MANUAL-with-assist authorized swap"
+                        );
+                        let result = self
+                            .execute_swap(blueprint_id, service_id, &target, policy, running)
+                            .await;
+                        // Consume the one-shot pin after dispatch. We do
+                        // this unconditionally on the Swap+clear_pinned
+                        // path so a failed dispatch does not leave a stale
+                        // pin that fires again on the next reconcile.
+                        if clear_pinned {
+                            if let Err(err) = self
+                                .config
+                                .local_authz
+                                .consume_pin_if(service_id, target.version_id)
+                                .await
+                            {
+                                warn!(
+                                    target: "upgrade",
+                                    service_id,
+                                    version_id = target.version_id,
+                                    error = %err,
+                                    "failed to consume local authz pin; \
+                                     operator may need to clear it manually"
+                                );
+                            }
+                        }
+                        result
+                    }
+                    AuthzDecision::Skip => {
+                        // Operator explicitly declined this version.
+                        // Suppress further pending state so the alert
+                        // channels stop firing on the same version.
+                        self.config.state.clear_pending(service_id).await;
+                        info!(
+                            target: "upgrade",
+                            event = "binary_upgrade_skipped",
+                            blueprint_id,
+                            service_id,
+                            version_id = target.version_id,
+                            "operator declined this version via local authz"
+                        );
+                        Ok(())
+                    }
+                    AuthzDecision::Hold => {
+                        // No matching local authorization. Preserves the
+                        // pre-existing MANUAL behavior exactly: alert + hold.
+                        self.record_pending(blueprint_id, service_id, &target, policy, running)
+                            .await;
+                        warn!(
+                            target: "upgrade",
+                            event = "binary_upgrade_blocked",
+                            blueprint_id,
+                            service_id,
+                            available_version_id = target.version_id,
+                            available_sha256 = %hex_short(target.sha256.as_slice()),
+                            "MANUAL policy — operator must switch policy or pre-authorize via local authz"
+                        );
+                        Ok(())
+                    }
+                }
             }
             UpgradePolicy::Approve => {
                 // APPROVE: only swap once the operator has acked this exact

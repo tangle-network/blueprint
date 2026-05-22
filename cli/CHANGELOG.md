@@ -16,6 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the new tnt-core `BlueprintsBinaryVersions` + `BlueprintsBinaryAttestations`
   facets with local artifact hashing, optional IPFS pinning, and a CI-ready
   weighted trust score against `BlueprintAuditors`.
+- *(cargo-tangle)* `cargo tangle ship` — one-command interactive release:
+  detects the workspace, builds `cargo build --release`, hashes the binary,
+  optionally pins to IPFS, optionally derives `attestationHash` from a
+  sigstore/SLSA bundle, publishes via `publishBinaryVersion`, promotes via
+  `setActiveBinaryVersion`, and (optionally) bulk-flips a list of services
+  into AUTO policy. CI mode: `--yes --pin-ipfs --promote`.
+- *(cargo-tangle)* MANUAL-with-assist local-authorization layer: new
+  `service upgrades` / `upgrade-local` / `upgrade-whitelist` / `upgrade-skip`
+  / `upgrade-authz` subcommands that drive the blueprint-manager's
+  `/upgrades/*` RPC. Pre-authorizes the manager to swap into specific
+  versions without writing an on-chain ack tx; on-chain policy stays MANUAL.
+- *(blueprint-manager)* `LocalAuthzStore` persistence layer for the upgrade
+  watcher. New `<data-dir>/upgrade-authz/<serviceId>.json` records carry
+  whitelisted / pinned / skipped versions; the watcher honors them under
+  the MANUAL policy branch (after the same sha256+attestation gate AUTO
+  uses) and persists across manager restarts.
+- *(ci)* `.github/actions/ship-release` composite action wraps
+  `cargo tangle ship` for release-driven publishing flows plus an example
+  workflow at `.github/workflows/example-release.yml`.
 
 ## [0.5.0-alpha.7](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.6...cargo-tangle-v0.5.0-alpha.7) - 2026-05-21
 

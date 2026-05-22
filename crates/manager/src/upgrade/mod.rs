@@ -39,6 +39,7 @@ pub mod abi;
 pub mod attestation;
 pub mod chain;
 pub mod error;
+pub mod local_authz;
 pub mod rpc;
 pub mod state;
 pub mod swap;
@@ -48,6 +49,9 @@ pub mod watcher;
 pub use attestation::AttestationVerifier;
 pub use chain::ChainView;
 pub use error::{Result, UpgradeError};
+pub use local_authz::{
+    AuthzDecision, AuthzView, LocalAuthz, LocalAuthzError, LocalAuthzStore, RunningEntry, SkipEntry,
+};
 pub use rpc::UpgradeApi;
 pub use state::{RunningBinary, UpgradeState};
 pub use types::{
@@ -74,6 +78,7 @@ pub struct UpgradePipeline {
     pub tracked_services: TrackedServices,
     pub swap_rx: tokio::sync::mpsc::Receiver<SwapRequest>,
     pub api: UpgradeApi,
+    pub local_authz: LocalAuthzStore,
 }
 
 impl std::fmt::Debug for UpgradePipeline {
@@ -87,6 +92,10 @@ pub struct UpgradePipelineBuilder {
     pub chain: ChainView,
     pub cache_root: std::path::PathBuf,
     pub attestation: AttestationVerifier,
+    /// Optional persistence root for `LocalAuthzStore`. When set, MANUAL
+    /// services may pre-authorize swaps locally; when `None` the watcher
+    /// behaves exactly as before (alert + hold).
+    pub local_authz_root: Option<std::path::PathBuf>,
 }
 
 impl UpgradePipelineBuilder {
@@ -99,7 +108,27 @@ impl UpgradePipelineBuilder {
         let state = UpgradeState::new();
         let tracked_services = TrackedServices::new();
         let (swap_tx, swap_rx) = tokio::sync::mpsc::channel::<SwapRequest>(32);
-        let api = UpgradeApi::new(self.chain.clone(), state.clone());
+        let local_authz = match self.local_authz_root {
+            Some(root) => match LocalAuthzStore::new_persisted(root.clone()) {
+                Ok(store) => store,
+                Err(err) => {
+                    blueprint_core::warn!(
+                        target: "upgrade",
+                        root = %root.display(),
+                        error = %err,
+                        "failed to initialize persisted local authz store; falling back to in-memory"
+                    );
+                    LocalAuthzStore::new_in_memory()
+                }
+            },
+            None => LocalAuthzStore::new_in_memory(),
+        };
+        let api = UpgradeApi::new(
+            self.chain.clone(),
+            state.clone(),
+            local_authz.clone(),
+            tracked_services.clone(),
+        );
 
         let config = WatcherConfig {
             chain: self.chain,
@@ -107,6 +136,7 @@ impl UpgradePipelineBuilder {
             attestation: self.attestation,
             cache_root: self.cache_root,
             tracked_services: tracked_services.clone(),
+            local_authz: local_authz.clone(),
             swap_tx,
         };
         let (watcher, join) = UpgradeWatcher::spawn(config);
@@ -118,6 +148,7 @@ impl UpgradePipelineBuilder {
                 tracked_services,
                 swap_rx,
                 api,
+                local_authz,
             },
             join,
         )

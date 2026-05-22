@@ -272,6 +272,12 @@ mod tests {
     }
 
     #[tokio::test]
+    // The `LOCK` MutexGuard intentionally crosses await: it serializes
+    // process-global env mutation across concurrent tests in the same
+    // process. An async Mutex would defeat that — env access is not
+    // async-safe. The await it spans (`download_and_verify`) cannot
+    // contend on this lock from any other code path.
+    #[allow(clippy::await_holding_lock)]
     async fn rejects_ipfs_uri_without_gateway() {
         // Trust invariant: we will not silently swap from a URI scheme we
         // can't dereference. Without IPFS_GATEWAY_URL the gateway path must

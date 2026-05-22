@@ -160,6 +160,7 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
     let network_interface = ctx.vm.network_interface.clone();
 
     let cache_root = ctx.cache_dir().to_path_buf();
+    let local_authz_root = ctx.data_dir().join("upgrade-authz");
     let allow_unchecked_attestations = ctx.allow_unchecked_attestations;
 
     let manager_task = async move {
@@ -180,8 +181,13 @@ pub async fn run_blueprint_manager_with_keystore<F: SendFuture<'static, ()>>(
             protocol_type,
             crate::protocol::ProtocolType::Tangle
         ) {
-            match build_upgrade_pipeline(&env, cache_root.clone(), allow_unchecked_attestations)
-                .await
+            match build_upgrade_pipeline(
+                &env,
+                cache_root.clone(),
+                local_authz_root.clone(),
+                allow_unchecked_attestations,
+            )
+            .await
             {
                 Ok((pipeline, join)) => {
                     protocol_manager.with_upgrade_pipeline(pipeline);
@@ -347,6 +353,7 @@ pub async fn run_auth_proxy(
 async fn build_upgrade_pipeline(
     env: &BlueprintEnvironment,
     cache_root: PathBuf,
+    local_authz_root: PathBuf,
     allow_unchecked_attestations: bool,
 ) -> std::result::Result<(crate::upgrade::UpgradePipeline, tokio::task::JoinHandle<()>), Report> {
     use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
@@ -391,6 +398,7 @@ async fn build_upgrade_pipeline(
         chain,
         cache_root,
         attestation,
+        local_authz_root: Some(local_authz_root),
     };
     Ok(builder.spawn())
 }
