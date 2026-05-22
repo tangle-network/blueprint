@@ -6,4 +6,5 @@ pub mod keys;
 pub mod operator;
 pub mod registration;
 pub mod service_cli;
+pub mod upgrade;
 pub mod util;
