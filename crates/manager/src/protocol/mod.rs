@@ -121,6 +121,33 @@ impl ProtocolManager {
         }
     }
 
+    /// Attach an [`UpgradePipeline`] to the underlying protocol handler when
+    /// running Tangle. EigenLayer ignores the pipeline today — the upgrade
+    /// flow is Tangle-protocol-specific.
+    ///
+    /// [`UpgradePipeline`]: crate::upgrade::UpgradePipeline
+    pub fn with_upgrade_pipeline(&mut self, pipeline: crate::upgrade::UpgradePipeline) {
+        match self {
+            Self::Tangle { handler, .. } => handler.with_upgrade_pipeline(pipeline),
+            Self::Eigenlayer { .. } => {
+                blueprint_core::info!(
+                    target: "upgrade",
+                    "ignoring upgrade pipeline attachment: EigenLayer does not expose binary versions yet"
+                );
+            }
+        }
+    }
+
+    /// Return the upgrade API for mounting on the auth proxy or a local
+    /// listener. `None` if no pipeline has been attached.
+    #[must_use]
+    pub fn upgrade_api(&self) -> Option<crate::upgrade::UpgradeApi> {
+        match self {
+            Self::Tangle { handler, .. } => handler.upgrade_api(),
+            Self::Eigenlayer { .. } => None,
+        }
+    }
+
     /// Run the protocol event loop
     ///
     /// # Errors

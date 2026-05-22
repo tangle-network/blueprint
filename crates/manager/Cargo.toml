@@ -36,12 +36,13 @@ blueprint-pricing-engine = { workspace = true, optional = true }
 blueprint-profiling = { workspace = true, optional = true }
 blueprint-faas = { workspace = true, optional = true, default-features = false }
 
-# Alloy dependencies for EigenLayer protocol
+# Alloy dependencies for EigenLayer protocol + binary-version upgrade flow
 alloy-provider = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-transport-http = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-sol-types = { workspace = true }
+alloy-contract = { workspace = true }
 
 # EigenLayer SDK for registration verification
 eigensdk = { workspace = true }

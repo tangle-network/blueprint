@@ -317,41 +317,59 @@ impl RemoteBinaryFetcher {
             .selected_binary
             .as_ref()
             .ok_or(Error::NoMatchingBinary)?;
+        verify_binary_digest(binary_path, &binary.sha256, binary.blake3.as_ref())
+    }
+}
 
-        let mut file = File::open(binary_path)?;
-        let mut buffer = [0u8; 8192];
-        let mut blake3_hasher = Hasher::new();
-        let mut sha256_hasher = Sha256::new();
+/// Shared sha256 (and optional blake3) digest gate for any locally-downloaded
+/// blueprint binary.
+///
+/// The upgrade path and the initial-fetch path both run identical bytes
+/// through this — keep it that way. A divergence here is a silent
+/// trust-root weakening.
+///
+/// # Errors
+///
+/// * `Error::HashMismatch` if sha256 or blake3 does not match.
+/// * `Error::Io` if the file cannot be read.
+pub(crate) fn verify_binary_digest(
+    binary_path: &Path,
+    expected_sha256: &[u8; 32],
+    expected_blake3: Option<&[u8; 32]>,
+) -> Result<()> {
+    let mut file = File::open(binary_path)?;
+    let mut buffer = [0u8; 8192];
+    let mut blake3_hasher = Hasher::new();
+    let mut sha256_hasher = Sha256::new();
 
-        loop {
-            let read = file.read(&mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            blake3_hasher.update(&buffer[..read]);
-            sha256_hasher.update(&buffer[..read]);
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
         }
+        blake3_hasher.update(&buffer[..read]);
+        sha256_hasher.update(&buffer[..read]);
+    }
 
-        let computed_blake3 = blake3_hasher.finalize();
-        if let Some(expected) = &binary.blake3 {
-            if computed_blake3.as_bytes() != expected {
-                return Err(Error::HashMismatch {
-                    expected: hex::encode(expected),
-                    actual: hex::encode(computed_blake3.as_bytes()),
-                });
-            }
-        }
-
-        let computed_sha: [u8; 32] = sha256_hasher.finalize().into();
-        if computed_sha != binary.sha256 {
+    let computed_blake3 = blake3_hasher.finalize();
+    if let Some(expected) = expected_blake3 {
+        if computed_blake3.as_bytes() != expected {
             return Err(Error::HashMismatch {
-                expected: hex::encode(binary.sha256),
-                actual: hex::encode(computed_sha),
+                expected: hex::encode(expected),
+                actual: hex::encode(computed_blake3.as_bytes()),
             });
         }
-
-        Ok(())
     }
+
+    let computed_sha: [u8; 32] = sha256_hasher.finalize().into();
+    if &computed_sha != expected_sha256 {
+        return Err(Error::HashMismatch {
+            expected: hex::encode(expected_sha256),
+            actual: hex::encode(computed_sha),
+        });
+    }
+
+    Ok(())
 }
 
 impl BlueprintSourceHandler for RemoteBinaryFetcher {
