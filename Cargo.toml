@@ -146,14 +146,14 @@ blueprint-producers-extra = { version = "0.2.0-alpha.5", path = "crates/producer
 blueprint-tangle-aggregation-svc = { version = "0.2.0-alpha.8", path = "crates/tangle-aggregation-svc", default-features = false }
 
 # Blueprint utils
-blueprint-manager = { version = "0.4.0-alpha.7", path = "./crates/manager", default-features = false }
+blueprint-manager = { version = "0.4.0-alpha.8", path = "./crates/manager", default-features = false }
 blueprint-manager-bridge = { version = "0.2.0-alpha.7", path = "./crates/manager/bridge", default-features = false }
 blueprint-remote-providers = { version = "0.2.0-alpha.8", path = "./crates/blueprint-remote-providers", default-features = false }
 blueprint-faas = { version = "0.2.0-alpha.5", path = "./crates/blueprint-faas", default-features = false }
 blueprint-profiling = { version = "0.2.0-alpha.4", path = "./crates/blueprint-profiling", default-features = false }
 
 # Example blueprints
-incredible-squaring-blueprint-lib = { version = "0.2.0-alpha.7", path = "./examples/incredible-squaring/incredible-squaring-lib", default-features = false }
+incredible-squaring-blueprint-lib = { version = "0.2.0-alpha.8", path = "./examples/incredible-squaring/incredible-squaring-lib", default-features = false }
 blueprint-build-utils = { version = "0.2.0-alpha.5", path = "./crates/build-utils", default-features = false }
 blueprint-auth = { version = "0.2.0-alpha.7", path = "./crates/auth", default-features = false }
 
@@ -223,7 +223,7 @@ blueprint-eigenlayer-testing-utils = { version = "0.2.0-alpha.8", path = "./crat
 blueprint-metrics = { version = "0.2.0-alpha.4", path = "./crates/metrics", default-features = false }
 blueprint-metrics-rpc-calls = { version = "0.2.0-alpha.4", path = "./crates/metrics/rpc-calls", default-features = false }
 
-cargo-tangle = { version = "0.5.0-alpha.7", path = "./cli", default-features = false }
+cargo-tangle = { version = "0.5.0-alpha.8", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }
 bollard = { version = "0.18.0", features = ["ssl"] }
 

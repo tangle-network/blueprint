@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.7...blueprint-manager-v0.4.0-alpha.8) - 2026-05-22
+
+### Added
+
+- blueprint binary upgrade flow — CLI + manager watcher + ship wizard + local-ack + GH Action (#1434)
+
 ## [0.4.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.6...blueprint-manager-v0.4.0-alpha.7) - 2026-05-21
 
 ### Other
