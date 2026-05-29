@@ -5,7 +5,7 @@ use crate::{
     logging::grafana::{
         CreateDataSourceRequest, Dashboard, GrafanaClient, LokiJsonData, PrometheusJsonData,
     },
-    logging::loki::init_loki_logging,
+    logging::loki::{TelemetryGuard, init_telemetry},
     metrics::{
         opentelemetry::OpenTelemetryConfig, provider::EnhancedMetricsProvider,
         service::MetricsService,
@@ -51,6 +51,8 @@ pub struct QoSService<C: HeartbeatConsumer + Send + Sync + 'static> {
     prometheus_server: Option<Arc<PrometheusServer>>,
     completion_tx: Arc<Mutex<Option<oneshot::Sender<Result<()>>>>>,
     completion_rx: Mutex<Option<tokio::sync::oneshot::Receiver<Result<()>>>>,
+    /// Owns the OTLP trace exporter (when enabled); flushes queued spans on drop.
+    _telemetry_guard: Option<TelemetryGuard>,
 }
 
 impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
@@ -118,13 +120,20 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
             ms.provider().clone().start_collection().await?;
         }
 
-        if let Some(loki_config) = &config.loki {
-            if let Err(e) = init_loki_logging(loki_config.clone()) {
-                error!("Failed to initialize Loki logging: {}", e);
-            } else {
-                info!("Initialized Loki logging");
-            }
-        }
+        // Install the global tracing subscriber (fmt + EnvFilter, plus Loki and
+        // OTLP trace-export layers when configured). The returned guard owns the
+        // trace exporter and flushes queued spans on drop, so the QoSService holds
+        // it for its lifetime. Telemetry never aborts startup.
+        let telemetry_guard = config.loki.as_ref().map(|loki_config| {
+            let service_name = loki_config
+                .labels
+                .get("service")
+                .cloned()
+                .unwrap_or_else(|| "blueprint".to_string());
+            let guard = init_telemetry(loki_config, &service_name);
+            info!("Initialized telemetry (logs + trace export when configured)");
+            guard
+        });
 
         let bind_ip = config.docker_bind_ip.clone();
         let (grafana_server, loki_server, prometheus_server) = if config.manage_servers {
@@ -223,6 +232,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> QoSService<C> {
             prometheus_server,
             completion_tx: Arc::new(Mutex::new(Some(tx))),
             completion_rx: Mutex::new(Some(rx)),
+            _telemetry_guard: telemetry_guard,
         })
     }
 
