@@ -379,7 +379,7 @@ tonic-web = { version = "0.14.5", default-features = false }
 prometheus = { version = "0.14", default-features = false }
 opentelemetry = { version = "0.29", default-features = false }
 opentelemetry-prometheus = { version = "0.29", default-features = false }
-opentelemetry_sdk = { version = "0.29", default-features = false }
+opentelemetry_sdk = { version = "0.31", default-features = false }
 # Trace export path. blueprint-qos already pulls opentelemetry/opentelemetry_sdk
 # 0.31 transitively via tracing-opentelemetry 0.32; the OTLP exporter and the
 # tracer provider it feeds must share that same 0.31 core, so these are pinned to
