@@ -388,7 +388,7 @@ opentelemetry_sdk = { version = "0.29", default-features = false }
 opentelemetry-otlp = { version = "0.31", default-features = false }
 opentelemetry-031 = { package = "opentelemetry", version = "0.31", default-features = false }
 opentelemetry_sdk-031 = { package = "opentelemetry_sdk", version = "0.31", default-features = false }
-opentelemetry-semantic-conventions = { version = "0.29", default-features = false }
+opentelemetry-semantic-conventions = { version = "0.32", default-features = false }
 opentelemetry_api = { version = "0.20", default-features = false }
 tracing-loki = { version = "0.2", default-features = false }
 tracing-opentelemetry = { version = "0.32", default-features = false }
