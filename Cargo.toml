@@ -380,6 +380,14 @@ prometheus = { version = "0.14", default-features = false }
 opentelemetry = { version = "0.29", default-features = false }
 opentelemetry-prometheus = { version = "0.29", default-features = false }
 opentelemetry_sdk = { version = "0.29", default-features = false }
+# Trace export path. blueprint-qos already pulls opentelemetry/opentelemetry_sdk
+# 0.31 transitively via tracing-opentelemetry 0.32; the OTLP exporter and the
+# tracer provider it feeds must share that same 0.31 core, so these are pinned to
+# 0.31 (the metrics path above stays on 0.29 via opentelemetry-prometheus, which
+# has no 0.31 release in this toolchain's offline registry).
+opentelemetry-otlp = { version = "0.31", default-features = false }
+opentelemetry-031 = { package = "opentelemetry", version = "0.31", default-features = false }
+opentelemetry_sdk-031 = { package = "opentelemetry_sdk", version = "0.31", default-features = false }
 opentelemetry-semantic-conventions = { version = "0.29", default-features = false }
 opentelemetry_api = { version = "0.20", default-features = false }
 tracing-loki = { version = "0.2", default-features = false }
