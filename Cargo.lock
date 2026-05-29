@@ -3710,7 +3710,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-qos"
-version = "0.2.0-alpha.8"
+version = "0.2.0-alpha.9"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
