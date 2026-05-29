@@ -449,7 +449,7 @@ rust-bls-bn254 = { version = "0.2.1", default-features = false }
 testcontainers = { version = "0.23.1", default-features = false }
 
 # Metrics
-metrics = { version = "0.24.2", default-features = false }
+metrics = { version = "0.24.6", default-features = false }
 
 # x402 protocol
 x402-types = { version = "1", default-features = false }
