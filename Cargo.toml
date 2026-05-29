@@ -367,7 +367,7 @@ chrono = { version = "0.4", default-features = false }
 # System & OS
 sysinfo = { version = "0.38.0", default-features = false }
 num_cpus = { version = "1.17", default-features = false }
-libc = { version = "0.2.175", default-features = false }
+libc = { version = "0.2.186", default-features = false }
 
 # gRPC & Protocol Buffers
 tonic = { version = "0.13.1", default-features = false, features = ["tls-webpki-roots"] }
@@ -449,7 +449,7 @@ rust-bls-bn254 = { version = "0.2.1", default-features = false }
 testcontainers = { version = "0.23.1", default-features = false }
 
 # Metrics
-metrics = { version = "0.24.2", default-features = false }
+metrics = { version = "0.24.6", default-features = false }
 
 # x402 protocol
 x402-types = { version = "1", default-features = false }
