@@ -30,7 +30,14 @@ pub fn get_blueprint_binary(blueprint_binaries: &[BlueprintBinary]) -> Option<&B
     None
 }
 
-fn normalize_arch(value: &str) -> String {
+/// Canonicalize an architecture identifier so values published by tooling
+/// (`amd64`, `arm64`, …) compare equal to Rust's `std::env::consts::ARCH`
+/// (`x86_64`, `aarch64`, …).
+///
+/// Shared by the initial-fetch path and the upgrade-swap manifest resolver so
+/// the two never drift — a divergence would let one path match a binary the
+/// other rejects.
+pub(crate) fn normalize_arch(value: &str) -> String {
     match value.to_lowercase().as_str() {
         "amd" => "x86".to_string(),
         "amd64" => "x86_64".to_string(),
@@ -39,7 +46,10 @@ fn normalize_arch(value: &str) -> String {
     }
 }
 
-fn normalize_os(value: &str) -> String {
+/// Canonicalize an OS identifier (`darwin`/`osx` → `macos`, target-triple
+/// fragments like `unknown-linux-gnu` → `linux`, …). See [`normalize_arch`]
+/// for why this is shared.
+pub(crate) fn normalize_os(value: &str) -> String {
     let lower = value.to_lowercase();
     if lower.contains("darwin") || lower.contains("macos") || lower == "mac" || lower == "osx" {
         "macos".to_string()

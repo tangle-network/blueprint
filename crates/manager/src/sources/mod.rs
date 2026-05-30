@@ -13,6 +13,7 @@ use url::Url;
 #[cfg(feature = "containers")]
 pub mod container;
 pub mod github;
+pub mod manifest;
 pub mod remote;
 pub mod testing;
 pub mod types;
