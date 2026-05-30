@@ -16,7 +16,7 @@ installers = ["shell"]
 # shipping Intel Macs in 2023, and Rosetta 2 runs the aarch64 binary
 # transparently on the remaining Intel users. Add back only if a real
 # user reports an aarch64-on-Intel regression.
-targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Whether to install an updater program
@@ -33,3 +33,4 @@ global = "ubuntu-latest"
 # Custom runners to use for each target platform
 aarch64-apple-darwin = "macos-15"
 x86_64-unknown-linux-gnu = "ubuntu-latest"
+aarch64-unknown-linux-gnu = "ubuntu-24.04-arm"
