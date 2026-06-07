@@ -63,6 +63,10 @@ tokio-rustls = { workspace = true }
 aws-lc-rs = { workspace = true }
 chacha20poly1305 = { workspace = true }
 
+# Post-launch TEE attestation verification lives in `blueprint-tee`; this crate
+# fetches provider evidence and delegates proof construction there.
+blueprint-tee = { workspace = true, optional = true }
+
 # Utilities
 uuid = { workspace = true, features = ["v4", "serde"] }
 libc = { workspace = true }
@@ -90,12 +94,26 @@ tracing-subscriber.workspace = true
 regex = { workspace = true }
 # For container-based testing
 testcontainers = { workspace = true }
+# TEE attestation tests: generate RSA keys + sign RS256 JWTs to verify against a
+# mock JWKS, and mint synthetic COSE/x509 material for the AWS Nitro verifier.
+rsa = { version = "0.9", features = ["sha2"] }
+jsonwebtoken = { version = "9" } # default features (use_pem) for test token signing
+p384 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
+coset = { version = "0.3" }
+ciborium = { version = "0.2" }
+rcgen = { version = "0.13", features = ["pem"] }
+sha2 = { workspace = true, features = ["std"] }
+base64 = { workspace = true, features = ["std"] }
 # Pinned: matches pinned kube/k8s-openapi versions above
 kube = { version = "0.90", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.21", features = ["v1_29"] }
 
 [features]
-default = ["std", "aws"]
+# `tee-attestation` is in the default set so the `require_tee` verifier is never
+# silently compiled out. JWT verification is delegated to `blueprint-tee`; the
+# AWS Nitro COSE path stays opt-in behind `tee-attestation-nitro`, and without it
+# the AWS gate fails closed.
+default = ["std", "aws", "tee-attestation"]
 std = [
     "blueprint-std/std",
     "blueprint-core/std",
@@ -110,8 +128,19 @@ digitalocean = []  # DigitalOcean support via REST API
 vultr = []  # Vultr support via REST API
 kubernetes = ["dep:kube", "dep:k8s-openapi"]
 docker = ["dep:bollard"]
-testing = []
+testing = ["blueprint-tee/testing"]
 
+# Post-launch TEE attestation: fetch provider evidence, then delegate
+# cryptographic verification to `blueprint-tee` before a `require_tee` deployment
+# is reported trusted. Ships by default so the gate cannot silently compile out.
+# Without `tee-attestation-nitro`, the AWS gate fails closed (Unsatisfiable).
+tee-attestation = ["dep:blueprint-tee", "blueprint-tee/gcp-confidential", "blueprint-tee/azure-snp"]
+# AWS Nitro NSM COSE_Sign1 verifier. Pulls the COSE/CBOR/ECDSA/x509 crates
+# through `blueprint-tee`; opt-in because most remote deployments use JWT tokens.
+tee-attestation-nitro = [
+    "tee-attestation",
+    "blueprint-tee/aws-nitro",
+]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -45,8 +45,18 @@ impl CloudProviderAdapter for VultrAdapter {
         &self,
         _instance_type: &str,
         region: &str,
-        _require_tee: bool,
+        require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        // Fail closed at the trait boundary: this provider has no
+        // confidential-compute / TEE attestation path. Refuse rather than
+        // silently return a non-TEE instance for a require_tee request.
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "Vultr does not support confidential-compute / TEE attestation; \
+                 refusing require_tee"
+                    .into(),
+            ));
+        }
         let spec = ResourceSpec {
             cpu: 2.0,
             memory_gb: 4.0,

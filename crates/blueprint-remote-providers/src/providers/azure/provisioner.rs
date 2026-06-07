@@ -223,6 +223,29 @@ impl AzureProvisioner {
         metadata.insert("os".to_string(), "Ubuntu 22.04 LTS".to_string());
         metadata.insert("require_tee".to_string(), require_tee.to_string());
 
+        // require_tee gate: verify the MAA attestation token before reporting
+        // this Confidential VM as a usable TEE deployment.
+        #[cfg(feature = "tee-attestation")]
+        if require_tee {
+            crate::attestation::gate_provisioned(
+                &crate::core::remote::CloudProvider::Azure,
+                Some(public_ip.as_str()),
+                &config.custom_config,
+                &mut metadata,
+            )
+            .await?;
+        }
+        // Fail-closed when the verifier is compiled out: a build without the
+        // attestation code can never reach the "TEE-trusted" verdict.
+        #[cfg(not(feature = "tee-attestation"))]
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "require_tee set but this binary was built without the `tee-attestation` \
+                 feature; refusing to report an unverified VM as a TEE deployment"
+                    .into(),
+            ));
+        }
+
         Ok(ProvisionedInfrastructure {
             provider: crate::core::remote::CloudProvider::Azure,
             instance_id: format!(

@@ -237,6 +237,29 @@ impl GcpProvisioner {
             metadata.insert("instance_numeric_id".to_string(), numeric_id.to_string());
         }
 
+        // require_tee gate: verify the Confidential Space OIDC attestation token
+        // before reporting this VM as a usable TEE deployment.
+        #[cfg(feature = "tee-attestation")]
+        if require_tee {
+            crate::attestation::gate_provisioned(
+                &CloudProvider::GCP,
+                public_ip.as_deref().or(private_ip.as_deref()),
+                &config.custom_config,
+                &mut metadata,
+            )
+            .await?;
+        }
+        // Fail-closed when the verifier is compiled out: a build without the
+        // attestation code can never reach the "TEE-trusted" verdict.
+        #[cfg(not(feature = "tee-attestation"))]
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "require_tee set but this binary was built without the `tee-attestation` \
+                 feature; refusing to report an unverified VM as a TEE deployment"
+                    .into(),
+            ));
+        }
+
         Ok(ProvisionedInfrastructure {
             provider: CloudProvider::GCP,
             instance_id: config.name.clone(),

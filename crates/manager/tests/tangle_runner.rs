@@ -1,5 +1,6 @@
 use core::convert::TryFrom;
 use std::path::Path;
+use std::pin::Pin;
 use std::str::FromStr;
 use std::string::ToString;
 use std::sync::Arc;
@@ -8,7 +9,6 @@ use std::time::Duration;
 use alloy_network::EthereumWallet;
 use alloy_primitives::{Address, Bytes};
 use alloy_provider::{Provider, ProviderBuilder};
-use alloy_rpc_types::Filter;
 use alloy_rpc_types::transaction::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::SolCall;
@@ -19,9 +19,7 @@ use blueprint_anvil_testing_utils::{
 };
 use blueprint_auth::db::{RocksDb, RocksDbConfig};
 use blueprint_client_tangle::contracts::ITangle::addPermittedCallerCall;
-use blueprint_client_tangle::{
-    JobSubmissionResult, TangleClient, TangleClientConfig, TangleSettings,
-};
+use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
 use blueprint_core::{Job, JobResult};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
@@ -36,7 +34,7 @@ use blueprint_tangle_extra::extract::{TangleArg, TangleResult};
 use blueprint_tangle_extra::{TangleConsumer, TangleLayer, TangleProducer};
 use futures_util::future::poll_fn;
 use futures_util::pin_mut;
-use futures_util::{SinkExt, StreamExt, stream};
+use futures_util::{SinkExt, StreamExt, sink, stream};
 use hex::FromHex;
 use tempfile::TempDir;
 use tokio::sync::oneshot;
@@ -176,14 +174,16 @@ async fn blueprint_runner_processes_jobs_on_tangle() -> Result<()> {
         let router = harness.router();
         let runner_env = harness.runner_env();
         let control_client = harness.control_client();
-        let runner_task = tokio::spawn(async move {
+        let (result_tx, result_rx) = oneshot::channel();
+        let observer = observe_first_ok_result(result_tx);
+        let mut runner_task = tokio::spawn(async move {
             BlueprintRunner::builder(TestRunnerConfig, runner_env)
                 .router(router)
                 .producer(producer)
                 .consumer(consumer)
+                .consumer(observer)
                 .run()
                 .await
-                .expect("blueprint runner should stay alive");
         });
 
         let raw_payload = b"tangle-runner".to_vec();
@@ -193,14 +193,23 @@ async fn blueprint_runner_processes_jobs_on_tangle() -> Result<()> {
             .await
             .context("failed to submit job")?;
 
-        let output = wait_for_job_result((*control_client).clone(), submission)
-            .await
-            .context("job result not observed")?;
+        let output = match wait_for_observed_runner_result(&mut runner_task, result_rx).await {
+            Ok(output) => output,
+            Err(err) => {
+                runner_task.abort();
+                let _ = runner_task.await;
+                return Err(err).context("job result not observed");
+            }
+        };
         let decoded = Vec::<u8>::abi_decode(&output).context("failed to decode job result")?;
         assert_eq!(decoded, raw_payload);
 
+        let completion = wait_for_job_completion((*control_client).clone(), submission.call_id)
+            .await
+            .context("job completion not observed on-chain");
         runner_task.abort();
         let _ = runner_task.await;
+        completion?;
         drop(harness);
 
         Ok(())
@@ -364,50 +373,39 @@ async fn run_minimal_runner_loop(
     Ok(())
 }
 
-async fn wait_for_job_result(
-    client: TangleClient,
-    submission: JobSubmissionResult,
+fn observe_first_ok_result(
+    result_tx: oneshot::Sender<Vec<u8>>,
+) -> Pin<Box<dyn futures_util::Sink<JobResult, Error = anyhow::Error> + Send + 'static>> {
+    Box::pin(sink::unfold(
+        Some(result_tx),
+        |mut result_tx, result: JobResult| async move {
+            if let (Some(tx), JobResult::Ok { body, .. }) = (result_tx.take(), result) {
+                let _ = tx.send(body.to_vec());
+            }
+
+            Ok::<_, anyhow::Error>(result_tx)
+        },
+    ))
+}
+
+async fn wait_for_observed_runner_result(
+    runner_task: &mut tokio::task::JoinHandle<Result<(), blueprint_runner::error::RunnerError>>,
+    result_rx: oneshot::Receiver<Vec<u8>>,
 ) -> Result<Vec<u8>> {
-    use blueprint_client_tangle::contracts::ITangle;
-    use tokio::time::sleep;
-
-    let tangle_address = client.tangle_address();
-    let mut from_block = if let Some(block_number) = submission.tx.block_number {
-        block_number
-    } else {
-        client.block_number().await?.saturating_sub(1)
-    };
-
-    let fut = async {
-        loop {
-            let current = client.block_number().await?;
-            if from_block > current {
-                sleep(Duration::from_millis(200)).await;
-                continue;
-            }
-            let filter = Filter::new()
-                .address(tangle_address)
-                .from_block(from_block)
-                .to_block(current);
-            let logs = client.get_logs(&filter).await?;
-            for log in logs {
-                if let Ok(decoded) = log.log_decode::<ITangle::JobResultSubmitted>() {
-                    if decoded.inner.serviceId == SERVICE_ID
-                        && decoded.inner.callId == submission.call_id
-                    {
-                        let bytes: Vec<u8> = decoded.inner.result.clone().into();
-                        return Ok(bytes);
-                    }
-                }
-            }
-            from_block = current;
-            sleep(Duration::from_millis(200)).await;
+    tokio::select! {
+        output = timeout(JOB_RESULT_TIMEOUT, result_rx) => {
+            output
+                .context("timed out waiting for local runner result")?
+                .context("local runner result channel closed")
         }
-    };
-
-    timeout(JOB_RESULT_TIMEOUT, fut)
-        .await
-        .context("timed out waiting for JobResultSubmitted")?
+        runner_result = runner_task => {
+            match runner_result {
+                Ok(Ok(())) => Err(anyhow!("blueprint runner exited before processing the job")),
+                Ok(Err(err)) => Err(anyhow!("blueprint runner failed before processing the job: {err}")),
+                Err(err) => Err(anyhow!("blueprint runner task panicked: {err}")),
+            }
+        }
+    }
 }
 
 async fn wait_for_job_completion(client: TangleClient, call_id: u64) -> Result<()> {

@@ -225,8 +225,18 @@ impl CloudProviderAdapter for VastAiAdapter {
         &self,
         instance_type: &str,
         _region: &str,
-        _require_tee: bool,
+        require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        // Fail closed at the trait boundary: this provider has no
+        // confidential-compute / TEE attestation path. Refuse rather than
+        // silently return a non-TEE instance for a require_tee request.
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "Vast.ai does not support confidential-compute / TEE attestation; \
+                 refusing require_tee"
+                    .into(),
+            ));
+        }
         // `instance_type` carries the serialized search query from the mapper.
         let query: serde_json::Value = if instance_type.is_empty() {
             VastAiInstanceMapper::build_query(
@@ -431,8 +441,10 @@ impl CloudProviderAdapter for VastAiAdapter {
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
-            let client = build_http_client()?;
-            match client
+            // Reuse the pre-built pooled client instead of rebuilding the
+            // TLS stack on every (interval-driven) health probe.
+            match self
+                .http
                 .get(&format!("{endpoint}/health"), &ApiAuthentication::None)
                 .await
             {

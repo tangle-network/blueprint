@@ -273,30 +273,36 @@ async fn stream_ssh_logs(
 ) -> Result<()> {
     info!("Streaming SSH container logs for: {}", container_id);
 
-    loop {
-        // Get logs from container
-        let logs = ssh_client.stream_logs(&container_id, follow).await?;
-
-        // Parse and send log entries
+    if !follow {
+        // One-shot: pull the current logs once and forward each line.
+        let logs = ssh_client.stream_logs(&container_id, false).await?;
         for line in logs.lines() {
             if line.trim().is_empty() {
                 continue;
             }
-
             let entry = parse_log_line(&service_id, &container_id, line);
-
             if tx.send(entry).await.is_err() {
                 debug!("Log receiver dropped, stopping stream");
                 break;
             }
         }
+        return Ok(());
+    }
 
-        if !follow {
+    // Follow mode: reuse the high-water-mark deduplicating stream from the SSH
+    // client (`--since`-bounded polling) so each line is parsed and emitted
+    // exactly once, instead of re-running full `docker logs` every second and
+    // re-emitting the entire history each pass.
+    let mut lines = ssh_client.stream_container_logs(&container_id).await?;
+    while let Some(line) = lines.recv().await {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry = parse_log_line(&service_id, &container_id, &line);
+        if tx.send(entry).await.is_err() {
+            debug!("Log receiver dropped, stopping stream");
             break;
         }
-
-        // Wait before next poll
-        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
     Ok(())
@@ -660,8 +666,13 @@ async fn stream_local_file_logs(
     Ok(())
 }
 
-/// Parse a log line into a LogEntry
+/// Parse a log line into a LogEntry.
+///
+/// Docker/Podman `logs --timestamps` (used by the deduplicating follow stream)
+/// prepend an RFC3339 timestamp; strip it so JSON/plain detection sees the real
+/// payload. Lines without a leading timestamp (the one-shot path) pass through.
 fn parse_log_line(service_id: &str, container_id: &str, line: &str) -> LogEntry {
+    let line = strip_leading_rfc3339(line);
     // Try to parse structured logs (JSON)
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
         let level = json["level"]
@@ -701,6 +712,17 @@ fn parse_log_line(service_id: &str, container_id: &str, line: &str) -> LogEntry 
             metadata: HashMap::new(),
         }
     }
+}
+
+/// Strip a leading RFC3339 timestamp token (and the single following space) if
+/// present; otherwise return the line unchanged.
+fn strip_leading_rfc3339(line: &str) -> &str {
+    if let Some((token, rest)) = line.split_once(' ') {
+        if chrono::DateTime::parse_from_rfc3339(token).is_ok() {
+            return rest;
+        }
+    }
+    line
 }
 
 /// Parse Kubernetes log line (with timestamp prefix)

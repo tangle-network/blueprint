@@ -4,10 +4,14 @@
 //! including typed attestation reports, claims, and a pluggable verifier trait.
 
 pub mod claims;
+pub mod error;
+pub mod policy;
 pub mod providers;
 pub mod report;
 pub mod verifier;
 
 pub use claims::AttestationClaims;
+pub use error::AttestationError;
+pub use policy::{AttestationPolicy, fresh_nonce};
 pub use report::{AttestationFormat, AttestationReport, Measurement, PublicKeyBinding};
 pub use verifier::{AttestationVerifier, VerificationLevel, VerifiedAttestation};

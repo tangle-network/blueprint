@@ -107,10 +107,17 @@ impl AutoDeploymentManager {
             }
         }
 
-        let manager_preferences = self.deployment_preferences.clone();
-        tokio::spawn(async move {
-            *manager_preferences.write().await = preferences;
-        });
+        // Populate synchronously so the constructor's contract holds: a caller
+        // that reads preferences immediately after must see the loaded values,
+        // not defaults. `try_write` is a pure sync operation (no Tokio runtime
+        // required, unlike the previous detached `tokio::spawn`, which raced the
+        // return and panicked when called outside a runtime). The lock is freshly
+        // created in `new()` and uncontended during setup, so this never blocks.
+        *self.deployment_preferences.try_write().map_err(|_| {
+            Error::ConfigurationError(
+                "deployment preferences lock was held while loading config".into(),
+            )
+        })? = preferences;
 
         info!("Loaded deployment preferences from config file");
         Ok(())

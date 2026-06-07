@@ -93,38 +93,19 @@ impl MachineTypeDiscovery {
         Ok(machines)
     }
 
-    /// Discover AWS EC2 instance types
+    /// Discover AWS EC2 instance types.
+    ///
+    /// Returns a curated set of common instance types. A live
+    /// `DescribeInstanceTypes` query is intentionally NOT made here: the prior
+    /// implementation issued a SigV4-shaped GET and then discarded the body on
+    /// every path (success and failure both fell through to this same list), so
+    /// the round-trip + auth header was pure waste. Until the XML response is
+    /// actually parsed and used, return the fallback directly.
     async fn discover_aws_instances(
         &self,
-        region: &str,
-        credentials: &CloudCredentials,
+        _region: &str,
+        _credentials: &CloudCredentials,
     ) -> Result<Vec<MachineType>> {
-        // AWS DescribeInstanceTypes API
-        let url = format!(
-            "https://ec2.{region}.amazonaws.com/?Action=DescribeInstanceTypes&Version=2016-11-15"
-        );
-
-        // In production, this would use proper AWS signature v4
-        let response = self
-            .client
-            .get(&url)
-            .header(
-                "Authorization",
-                format!(
-                    "AWS4-HMAC-SHA256 Credential={}",
-                    credentials.access_key.as_ref().unwrap_or(&String::new())
-                ),
-            )
-            .send()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to query AWS: {e}")))?;
-
-        if !response.status().is_success() {
-            // Return standard instance types for each provider
-            return Ok(self.get_common_aws_instances());
-        }
-
-        // Parse XML response (simplified)
         Ok(self.get_common_aws_instances())
     }
 

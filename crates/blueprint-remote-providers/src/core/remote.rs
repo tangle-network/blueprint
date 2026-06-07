@@ -28,6 +28,24 @@ pub struct RemoteClusterManager {
     _private: (),
 }
 
+/// Select `context_name` as the active context of an already-parsed
+/// [`Kubeconfig`], in place.
+///
+/// This mutates the in-memory config (no second file read) by validating that
+/// the named context exists and setting it as `current_context`, which is what
+/// [`Config::from_custom_kubeconfig`] reads. Fails closed if the context is not
+/// present so a typo'd context never silently falls back to the file default.
+#[cfg(feature = "kubernetes")]
+fn select_context(kubeconfig: &mut Kubeconfig, context_name: &str) -> Result<()> {
+    if !kubeconfig.contexts.iter().any(|c| c.name == context_name) {
+        return Err(Error::ConfigurationError(format!(
+            "context '{context_name}' not found in kubeconfig"
+        )));
+    }
+    kubeconfig.current_context = Some(context_name.to_string());
+    Ok(())
+}
+
 #[cfg(feature = "kubernetes")]
 impl RemoteClusterManager {
     pub fn new() -> Self {
@@ -41,47 +59,37 @@ impl RemoteClusterManager {
     pub async fn add_cluster(&self, name: String, config: KubernetesClusterConfig) -> Result<()> {
         info!("Adding remote cluster: {}", name);
 
-        // Create Kubernetes client with remote context
-        let kube_config = if let Some(ref path) = config.kubeconfig_path {
-            let kubeconfig_yaml = tokio::fs::read_to_string(path).await.map_err(|e| {
-                Error::ConfigurationError(format!("Failed to read kubeconfig file: {}", e))
-            })?;
-            let kubeconfig: kube::config::Kubeconfig = serde_yaml::from_str(&kubeconfig_yaml)
-                .map_err(|e| Error::ConfigurationError(format!("Invalid kubeconfig: {}", e)))?;
-            Config::from_custom_kubeconfig(kubeconfig, &Default::default()).await?
-        } else {
-            Config::infer().await?
-        };
-
-        // If a specific context is requested, switch to it
-        let kube_config = if let Some(ref context_name) = config.context {
-            // Load the full kubeconfig to access all contexts
-            let kubeconfig_yaml = if let Some(ref path) = config.kubeconfig_path {
-                std::fs::read_to_string(path)
-                    .map_err(|e| Error::Other(format!("Failed to read kubeconfig: {}", e)))?
-            } else {
+        // Build the client config. The kubeconfig file is read (async) and parsed
+        // at most once: when a context override is requested we reuse the already
+        // parsed `Kubeconfig` instead of re-reading the file with blocking I/O.
+        let kube_config = match (&config.kubeconfig_path, &config.context) {
+            // Explicit kubeconfig path: read + parse once.
+            (Some(path), context) => {
+                let yaml = tokio::fs::read_to_string(path).await.map_err(|e| {
+                    Error::ConfigurationError(format!("Failed to read kubeconfig file: {}", e))
+                })?;
+                let mut kubeconfig: Kubeconfig = serde_yaml::from_str(&yaml)
+                    .map_err(|e| Error::ConfigurationError(format!("Invalid kubeconfig: {}", e)))?;
+                if let Some(context_name) = context {
+                    select_context(&mut kubeconfig, context_name)?;
+                }
+                Config::from_custom_kubeconfig(kubeconfig, &Default::default()).await?
+            }
+            // No path but a context override: read the default kubeconfig (async).
+            (None, Some(context_name)) => {
                 let home =
                     std::env::var("HOME").map_err(|_| Error::Other("HOME not set".into()))?;
                 let default_path = format!("{}/.kube/config", home);
-                std::fs::read_to_string(&default_path)
-                    .map_err(|e| Error::Other(format!("Failed to read kubeconfig: {}", e)))?
-            };
-
-            let mut kubeconfig: Kubeconfig = serde_yaml::from_str(&kubeconfig_yaml)
-                .map_err(|e| Error::Other(format!("Failed to parse kubeconfig: {}", e)))?;
-
-            // Set the current context to the requested one
-            if !kubeconfig.contexts.iter().any(|c| c.name == *context_name) {
-                return Err(Error::Other(format!(
-                    "Context '{}' not found in kubeconfig",
-                    context_name
-                )));
+                let yaml = tokio::fs::read_to_string(&default_path)
+                    .await
+                    .map_err(|e| Error::Other(format!("Failed to read kubeconfig: {}", e)))?;
+                let mut kubeconfig: Kubeconfig = serde_yaml::from_str(&yaml)
+                    .map_err(|e| Error::Other(format!("Failed to parse kubeconfig: {}", e)))?;
+                select_context(&mut kubeconfig, context_name)?;
+                Config::from_custom_kubeconfig(kubeconfig, &Default::default()).await?
             }
-            kubeconfig.current_context = Some(context_name.clone());
-
-            Config::from_custom_kubeconfig(kubeconfig, &Default::default()).await?
-        } else {
-            kube_config
+            // Neither: infer from the environment.
+            (None, None) => Config::infer().await?,
         };
 
         let client = Client::try_from(kube_config)?;
