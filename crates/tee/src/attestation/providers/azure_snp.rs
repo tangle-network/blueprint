@@ -1,17 +1,19 @@
-//! Azure SEV-SNP / SKR attestation verifier.
+//! Azure SEV-SNP / MAA attestation verifier.
 //!
-//! Currently validates Azure CVM attestation structurally:
-//! - SEV-SNP measurement comparison
-//! - Debug mode detection
-//!
-//! **Limitation:** MAA (Microsoft Azure Attestation) token signature validation
-//! and guest policy enforcement are not yet implemented. These require
-//! provider-specific dependencies that will be added in a future release.
+//! `verify_token` performs cryptographic verification of a Microsoft Azure
+//! Attestation token against the MAA JWKS plus nonce/audience/measurement policy
+//! checks. The synchronous [`AttestationVerifier`] implementation remains a
+//! structural check for already-materialized reports.
 
-use crate::attestation::report::AttestationReport;
+use crate::attestation::providers::jwt::{JwksSource, verify_jwt_attestation};
+use crate::attestation::report::{AttestationFormat, AttestationReport};
 use crate::attestation::verifier::{AttestationVerifier, VerifiedAttestation};
+use crate::attestation::{AttestationError, AttestationPolicy};
 use crate::config::TeeProvider;
 use crate::errors::TeeError;
+
+/// Default shared MAA instance. Per-region instances are preferred in prod.
+pub const DEFAULT_MAA_INSTANCE: &str = "https://sharedeus.eus.attest.azure.net";
 
 /// Verifier for Azure SEV-SNP attestation reports.
 pub struct AzureSnpVerifier {
@@ -19,14 +21,26 @@ pub struct AzureSnpVerifier {
     pub expected_measurement: Option<String>,
     /// Whether to allow debug-mode VMs.
     pub allow_debug: bool,
+    http: reqwest::Client,
+    jwks: JwksSource,
+    allowed_issuers: Vec<String>,
 }
 
 impl AzureSnpVerifier {
     /// Create a new Azure SNP verifier.
     pub fn new() -> Self {
+        Self::for_instance(DEFAULT_MAA_INSTANCE)
+    }
+
+    /// Construct against a specific MAA instance URL.
+    pub fn for_instance(instance_url: &str) -> Self {
+        let instance = instance_url.trim_end_matches('/').to_string();
         Self {
             expected_measurement: None,
             allow_debug: false,
+            http: default_http_client(),
+            jwks: JwksSource::new(format!("{instance}/certs")),
+            allowed_issuers: vec![instance],
         }
     }
 
@@ -40,6 +54,44 @@ impl AzureSnpVerifier {
     pub fn allow_debug(mut self, allow: bool) -> Self {
         self.allow_debug = allow;
         self
+    }
+
+    /// Override the JWKS URL, primarily for tests.
+    pub fn with_jwks_url(mut self, url: impl Into<String>) -> Self {
+        self.jwks = JwksSource::new(url);
+        self
+    }
+
+    /// Override allowed token issuers, primarily for tests.
+    pub fn with_allowed_issuers(mut self, issuers: Vec<String>) -> Self {
+        self.allowed_issuers = issuers;
+        self
+    }
+
+    /// Verify an Azure MAA token cryptographically.
+    pub async fn verify_token(
+        &self,
+        token: &str,
+        policy: &AttestationPolicy,
+    ) -> Result<VerifiedAttestation, AttestationError> {
+        let mut policy = policy.clone();
+        if self.allow_debug {
+            policy.allow_debug = true;
+        }
+        if policy.expected_measurement.is_none() {
+            policy.expected_measurement = self.expected_measurement.clone();
+        }
+        let issuers: Vec<&str> = self.allowed_issuers.iter().map(String::as_str).collect();
+        verify_jwt_attestation(
+            TeeProvider::AzureSnp,
+            AttestationFormat::AzureMaaToken,
+            token,
+            &self.jwks,
+            &issuers,
+            &policy,
+            &self.http,
+        )
+        .await
     }
 }
 
@@ -81,7 +133,7 @@ impl AttestationVerifier for AzureSnpVerifier {
         }
 
         tracing::debug!(
-            "structural validation only — cryptographic signature verification requires MAA token validation"
+            "structural validation only; call verify_token() for cryptographic MAA JWT verification"
         );
 
         Ok(VerifiedAttestation::new(
@@ -93,4 +145,11 @@ impl AttestationVerifier for AzureSnpVerifier {
     fn supported_provider(&self) -> TeeProvider {
         TeeProvider::AzureSnp
     }
+}
+
+fn default_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_default()
 }

@@ -210,7 +210,7 @@ impl AzureSkrBackend {
 
         // Pull and run the workload container
         custom_data_lines.push(format!("docker pull {}", req.image));
-        let mut docker_run = format!("docker run -d --name tee-workload");
+        let mut docker_run = "docker run -d --name tee-workload".to_string();
         for (key, value) in &req.env {
             docker_run.push_str(&format!(" -e {key}={value}"));
         }

@@ -21,7 +21,7 @@ use blueprint_remote_providers::attestation::gcp::GcpConfidentialSpaceGate;
 use blueprint_remote_providers::attestation::{
     AttestationError, AttestationPolicy, TeeAttestationGate,
 };
-use blueprint_remote_providers::core::remote::CloudProvider;
+use blueprint_tee::TeeProvider;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rsa::RsaPrivateKey;
 use rsa::pkcs1::EncodeRsaPrivateKey;
@@ -144,9 +144,13 @@ async fn gcp_valid_token_is_trusted() {
         .verify(token.as_bytes(), &policy)
         .await
         .expect("valid token + correct claims must be trusted");
-    assert_eq!(verified.provider(), &CloudProvider::GCP);
+    assert_eq!(verified.verified_by(), TeeProvider::GcpConfidential);
     assert_eq!(
-        verified.claims().get("eat_nonce").map(String::as_str),
+        verified
+            .report()
+            .claims
+            .get_custom("eat_nonce")
+            .and_then(serde_json::Value::as_str),
         Some("nonce-123")
     );
 }
@@ -307,8 +311,8 @@ async fn azure_valid_token_is_trusted() {
         .verify(token.as_bytes(), &policy)
         .await
         .expect("valid MAA token must be trusted");
-    assert_eq!(verified.provider(), &CloudProvider::Azure);
-    assert_eq!(verified.measurement(), Some("aabbccdd"));
+    assert_eq!(verified.verified_by(), TeeProvider::AzureSnp);
+    assert_eq!(verified.report().measurement.digest, "aabbccdd");
 }
 
 #[tokio::test]
@@ -533,10 +537,10 @@ mod nitro {
         let verified = gate
             .verify_document(&cose, &policy)
             .expect("valid COSE doc with good chain must be trusted");
-        assert_eq!(verified.provider(), &CloudProvider::AWS);
+        assert_eq!(verified.verified_by(), TeeProvider::AwsNitro);
         assert_eq!(
-            verified.measurement(),
-            Some(hex::encode([0xAB; 48]).as_str())
+            verified.report().measurement.digest,
+            hex::encode([0xAB; 48])
         );
     }
 
@@ -703,143 +707,6 @@ mod nitro {
     async fn fetch_fails_closed() {
         let gate = AwsNitroGate::new();
         let err = gate.fetch("1.2.3.4", "n").await.unwrap_err();
-        assert!(
-            matches!(err, AttestationError::Unsatisfiable { .. }),
-            "got {err:?}"
-        );
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Interop seam toward the in-enclave hardware-quote verifier (blueprint-tee)
-// ---------------------------------------------------------------------------
-// Gated on `tee-attestation-seam`. This proves the seam actually links against
-// blueprint-tee and that delegation routes a fetched report through a real
-// `AttestationVerifier::verify` — it is not dead, unexercised code.
-
-#[cfg(feature = "tee-attestation-seam")]
-mod seam {
-    use super::*;
-    use blueprint_remote_providers::attestation::seam::{
-        delegate_to_hardware_verifier, report_from_evidence, tee_provider_for,
-    };
-    use blueprint_tee::{
-        AttestationClaims, AttestationFormat, AttestationReport, AttestationVerifier, TeeError,
-        TeeProvider, VerifiedAttestation,
-    };
-
-    /// A stub verifier that performs a genuine (structural) check: it trusts a
-    /// report only when its measurement digest matches the pinned expectation,
-    /// and rejects everything else. It does NOT rubber-stamp arbitrary input —
-    /// the point is to prove the seam routes through real verification logic.
-    struct PinnedMeasurementVerifier {
-        provider: TeeProvider,
-        expected_digest: String,
-    }
-
-    impl AttestationVerifier for PinnedMeasurementVerifier {
-        fn verify(&self, report: &AttestationReport) -> Result<VerifiedAttestation, TeeError> {
-            if report.provider != self.provider {
-                return Err(TeeError::UnsupportedProvider(format!(
-                    "{:?}",
-                    report.provider
-                )));
-            }
-            if report.measurement.digest != self.expected_digest {
-                return Err(TeeError::MeasurementMismatch {
-                    expected: self.expected_digest.clone(),
-                    actual: report.measurement.digest.clone(),
-                });
-            }
-            Ok(VerifiedAttestation::new_for_test(
-                report.clone(),
-                self.provider,
-            ))
-        }
-
-        fn supported_provider(&self) -> TeeProvider {
-            self.provider
-        }
-    }
-
-    #[test]
-    fn provider_mapping_round_trips() {
-        assert_eq!(
-            tee_provider_for(&CloudProvider::AWS),
-            Some(TeeProvider::AwsNitro)
-        );
-        assert_eq!(
-            tee_provider_for(&CloudProvider::Azure),
-            Some(TeeProvider::AzureSnp)
-        );
-        assert_eq!(
-            tee_provider_for(&CloudProvider::GCP),
-            Some(TeeProvider::GcpConfidential)
-        );
-        assert_eq!(tee_provider_for(&CloudProvider::DigitalOcean), None);
-    }
-
-    #[test]
-    fn delegation_trusts_a_matching_report() {
-        // Build a report from fetched evidence and run it through the deep
-        // verifier. Measurement is normalized to lowercase by `Measurement`.
-        let report = report_from_evidence(
-            &CloudProvider::AWS,
-            AttestationFormat::NitroDocument,
-            b"fetched-evidence".to_vec(),
-            "abcdef",
-            super::now(),
-            AttestationClaims::new(),
-        )
-        .expect("known provider must map");
-
-        let verifier = PinnedMeasurementVerifier {
-            provider: TeeProvider::AwsNitro,
-            expected_digest: "abcdef".to_string(),
-        };
-        let verified = delegate_to_hardware_verifier(&report, &verifier)
-            .expect("a matching report must verify through the seam");
-        assert_eq!(verified.verified_by(), TeeProvider::AwsNitro);
-        assert_eq!(verified.report().evidence, b"fetched-evidence");
-    }
-
-    #[test]
-    fn delegation_rejects_a_measurement_mismatch() {
-        // A report whose measurement does not match must fail closed through the
-        // seam — delegation surfaces the verifier's rejection as a Signature error.
-        let report = report_from_evidence(
-            &CloudProvider::AWS,
-            AttestationFormat::NitroDocument,
-            b"fetched-evidence".to_vec(),
-            "deadbeef",
-            super::now(),
-            AttestationClaims::new(),
-        )
-        .expect("known provider must map");
-
-        let verifier = PinnedMeasurementVerifier {
-            provider: TeeProvider::AwsNitro,
-            expected_digest: "abcdef".to_string(),
-        };
-        let err = delegate_to_hardware_verifier(&report, &verifier)
-            .expect_err("a mismatched report must be rejected");
-        assert!(
-            matches!(err, AttestationError::Signature { .. }),
-            "got {err:?}"
-        );
-    }
-
-    #[test]
-    fn unmappable_provider_is_unsatisfiable() {
-        let err = report_from_evidence(
-            &CloudProvider::DigitalOcean,
-            AttestationFormat::Mock,
-            Vec::new(),
-            "00",
-            super::now(),
-            AttestationClaims::new(),
-        )
-        .expect_err("a provider with no blueprint-tee mapping must fail closed");
         assert!(
             matches!(err, AttestationError::Unsatisfiable { .. }),
             "got {err:?}"

@@ -33,7 +33,7 @@ pub use providers::{AwsInstanceMapper, AwsProvisioner};
 
 #[cfg(feature = "tee-attestation")]
 pub use attestation::{
-    AttestationError, AttestationPolicy, TeeAttestationGate, VerifiedTeeDeployment,
+    AttestationError, AttestationPolicy, TeeAttestationGate, VerifiedAttestation,
     enforce_require_tee,
 };
 

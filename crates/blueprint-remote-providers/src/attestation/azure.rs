@@ -6,15 +6,15 @@
 //! guest's vTPM remotely, so it fetches the already-minted MAA token over an
 //! HTTPS endpoint the workload exposes (challenged with our nonce).
 //!
-//! Verification is a real JWT check against the MAA instance's JWKS
-//! (`https://<instance>/certs`) plus claim policy. See [`super::jwt`].
+//! Verification is delegated to
+//! [`blueprint_tee::attestation::providers::azure_snp::AzureSnpVerifier`].
 
-use super::jwt::{JwksSource, verify_jwt_attestation};
-use super::{AttestationError, AttestationPolicy, TeeAttestationGate, VerifiedTeeDeployment};
+use super::{AttestationError, AttestationPolicy, TeeAttestationGate, VerifiedAttestation};
 use crate::core::remote::CloudProvider;
+use blueprint_tee::attestation::providers::azure_snp::AzureSnpVerifier;
 
 /// Default shared MAA instance (per-region instances are preferred in prod).
-pub const DEFAULT_MAA_INSTANCE: &str = "https://sharedeus.eus.attest.azure.net";
+pub use blueprint_tee::attestation::providers::azure_snp::DEFAULT_MAA_INSTANCE;
 
 /// Path on the VM endpoint that returns the MAA token.
 const DEFAULT_TOKEN_PATH: &str = "/.well-known/maa-token";
@@ -22,9 +22,8 @@ const DEFAULT_TOKEN_PATH: &str = "/.well-known/maa-token";
 /// Gate for Azure Confidential VM / MAA.
 pub struct AzureMaaGate {
     http: reqwest::Client,
-    jwks: JwksSource,
+    verifier: AzureSnpVerifier,
     token_path: String,
-    allowed_issuers: Vec<String>,
 }
 
 impl AzureMaaGate {
@@ -41,15 +40,14 @@ impl AzureMaaGate {
         let instance = instance_url.trim_end_matches('/').to_string();
         Self {
             http: super::default_http_client(),
-            jwks: JwksSource::new(format!("{instance}/certs")),
+            verifier: AzureSnpVerifier::for_instance(&instance),
             token_path: DEFAULT_TOKEN_PATH.to_string(),
-            allowed_issuers: vec![instance],
         }
     }
 
     /// Override the JWKS URL (used by tests).
     pub fn with_jwks_url(mut self, url: impl Into<String>) -> Self {
-        self.jwks = JwksSource::new(url);
+        self.verifier = self.verifier.with_jwks_url(url);
         self
     }
 
@@ -61,7 +59,7 @@ impl AzureMaaGate {
 
     /// Override allowed issuers (used by tests).
     pub fn with_allowed_issuers(mut self, issuers: Vec<String>) -> Self {
-        self.allowed_issuers = issuers;
+        self.verifier = self.verifier.with_allowed_issuers(issuers);
         self
     }
 }
@@ -88,18 +86,18 @@ impl TeeAttestationGate for AzureMaaGate {
             .send()
             .await
             .map_err(|e| AttestationError::Fetch {
-                provider: CloudProvider::Azure,
+                provider: "Azure".to_string(),
                 reason: format!("MAA token fetch from {url} failed: {e}"),
             })?;
         if !resp.status().is_success() {
             return Err(AttestationError::Fetch {
-                provider: CloudProvider::Azure,
+                provider: "Azure".to_string(),
                 reason: format!("MAA token endpoint returned HTTP {}", resp.status()),
             });
         }
         let body = super::read_body_capped(resp, super::MAX_TOKEN_BYTES, |reason| {
             AttestationError::Fetch {
-                provider: CloudProvider::Azure,
+                provider: "Azure".to_string(),
                 reason,
             }
         })
@@ -111,21 +109,12 @@ impl TeeAttestationGate for AzureMaaGate {
         &self,
         evidence: &[u8],
         policy: &AttestationPolicy,
-    ) -> Result<VerifiedTeeDeployment, AttestationError> {
+    ) -> Result<VerifiedAttestation, AttestationError> {
         let token = std::str::from_utf8(evidence).map_err(|e| AttestationError::Malformed {
-            provider: CloudProvider::Azure,
+            provider: "Azure".to_string(),
             reason: format!("MAA token is not UTF-8: {e}"),
         })?;
-        let issuers: Vec<&str> = self.allowed_issuers.iter().map(String::as_str).collect();
-        verify_jwt_attestation(
-            CloudProvider::Azure,
-            token,
-            &self.jwks,
-            &issuers,
-            policy,
-            &self.http,
-        )
-        .await
+        self.verifier.verify_token(token, policy).await
     }
 }
 

@@ -8,6 +8,9 @@
 //! `native` module with platform dispatch. The separate `tdx` and `sev_snp`
 //! modules re-export convenience constructors for backward compatibility.
 
+#[cfg(any(feature = "azure-snp", feature = "gcp-confidential"))]
+pub mod jwt;
+
 #[cfg(feature = "aws-nitro")]
 pub mod aws_nitro;
 

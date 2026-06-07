@@ -9,7 +9,7 @@ Crate `blueprint-remote-providers`: Multi-cloud infrastructure provisioning for 
 - [x] `tests/` - Extensive test suite: integration tests, provider-specific tests, deployment decision tests, property tests, networking tests, security tests, Kubernetes E2E, real blueprint deployment, SDK provisioning, update/rollback.
 
 ### Files
-- `Cargo.toml` - Crate manifest (`blueprint-remote-providers`). Key deps: `blueprint-core`, `blueprint-keystore`, `blueprint-pricing-engine`, `bollard` (Docker), `kube`/`k8s-openapi` (Kubernetes), `aws-sdk-ec2`/`aws-sdk-eks`/`aws-sdk-autoscaling`, `reqwest`, `tokio-rustls`, `chacha20poly1305`. Features: `aws` (default), `aws-eks`, `gcp`, `azure`, `digitalocean`, `vultr`, `kubernetes`, `docker`, `testing`, `tee-attestation` (default; JWT path), `tee-attestation-nitro` (AWS Nitro COSE verifier), `tee-attestation-seam` (blueprint-tee deep-quote interop).
+- `Cargo.toml` - Crate manifest (`blueprint-remote-providers`). Key deps: `blueprint-core`, `blueprint-keystore`, `blueprint-pricing-engine`, `bollard` (Docker), `kube`/`k8s-openapi` (Kubernetes), `aws-sdk-ec2`/`aws-sdk-eks`/`aws-sdk-autoscaling`, `reqwest`, `tokio-rustls`, `chacha20poly1305`, `blueprint-tee` (TEE attestation proof authority). Features: `aws` (default), `aws-eks`, `gcp`, `azure`, `digitalocean`, `vultr`, `kubernetes`, `docker`, `testing`, `tee-attestation` (default; GCP/Azure JWT verification via `blueprint-tee`), `tee-attestation-nitro` (AWS Nitro COSE verification via `blueprint-tee`).
 - `README.md` - Crate documentation.
 
 ## Key APIs (no snippets)
@@ -28,9 +28,10 @@ Crate `blueprint-remote-providers`: Multi-cloud infrastructure provisioning for 
 ## TEE attestation (`require_tee`) — operator notes
 
 The `attestation` module gates a `require_tee` deployment: a VM is only reported
-TEE-trusted after its provider attestation is fetched **and** cryptographically
-verified. It fails closed — any fetch/verify failure errors the provision instead
-of blessing an unattested VM (`gate_provisioned` is the chokepoint).
+TEE-trusted after its provider attestation is fetched and delegated to
+`blueprint-tee` for cryptographic verification. It fails closed — any
+fetch/verify failure errors the provision instead of blessing an unattested VM
+(`gate_provisioned` is the chokepoint).
 
 **End-to-end is NOT turnkey from this crate alone.** The verify halves are real and
 tested, but the *fetch* of live evidence depends on a component that must run inside
