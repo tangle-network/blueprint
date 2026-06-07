@@ -3,6 +3,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Core architecture
+#[cfg(feature = "tee-attestation")]
+pub mod attestation;
 pub mod auth_integration;
 pub mod config;
 pub mod core;
@@ -28,6 +30,12 @@ pub use providers::{ProvisionedInfrastructure, ProvisioningConfig};
 
 #[cfg(feature = "aws")]
 pub use providers::{AwsInstanceMapper, AwsProvisioner};
+
+#[cfg(feature = "tee-attestation")]
+pub use attestation::{
+    AttestationError, AttestationPolicy, TeeAttestationGate, VerifiedTeeDeployment,
+    enforce_require_tee,
+};
 
 pub fn create_provider_client(timeout_secs: u64) -> Result<reqwest::Client> {
     use blueprint_std::time::Duration;

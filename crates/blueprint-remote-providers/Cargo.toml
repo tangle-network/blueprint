@@ -63,6 +63,21 @@ tokio-rustls = { workspace = true }
 aws-lc-rs = { workspace = true }
 chacha20poly1305 = { workspace = true }
 
+# Post-launch TEE attestation verification (feature-gated; absent from default build).
+# JWT (GCP OIDC / Azure MAA) reuses the always-present `jsonwebtoken` + `reqwest`.
+# COSE (AWS Nitro NSM) verification pulls these only under `tee-attestation`.
+# Note: the Nitro path does NOT need `sha2` — coset/p384/x509-parser do the
+# hashing internally — so it is intentionally absent here. `sha2` remains a
+# dev-dependency, used only by the tests that mint synthetic COSE/JWT material.
+coset = { workspace = true, optional = true }
+ciborium = { workspace = true, optional = true }
+p384 = { workspace = true, optional = true }
+x509-parser = { workspace = true, optional = true }
+# Interop seam toward the in-enclave DCAP/SNP/TDX verifier (`AttestationVerifier`).
+# Optional: the cloud-token path does not need it; only consumers that want to
+# hand a fetched report to the deep hardware-quote verifier pull it in.
+blueprint-tee = { workspace = true, optional = true }
+
 # Utilities
 uuid = { workspace = true, features = ["v4", "serde"] }
 libc = { workspace = true }
@@ -90,12 +105,27 @@ tracing-subscriber.workspace = true
 regex = { workspace = true }
 # For container-based testing
 testcontainers = { workspace = true }
+# TEE attestation tests: generate RSA keys + sign RS256 JWTs to verify against a
+# mock JWKS, and mint synthetic COSE/x509 material for the AWS Nitro verifier.
+rsa = { version = "0.9", features = ["sha2"] }
+jsonwebtoken = { version = "9" } # default features (use_pem) for test token signing
+p384 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
+coset = { version = "0.3" }
+ciborium = { version = "0.2" }
+rcgen = { version = "0.13", features = ["pem"] }
+sha2 = { workspace = true, features = ["std"] }
+base64 = { workspace = true, features = ["std"] }
 # Pinned: matches pinned kube/k8s-openapi versions above
 kube = { version = "0.90", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.21", features = ["v1_29"] }
 
 [features]
-default = ["std", "aws"]
+# `tee-attestation` is in the default set so the `require_tee` verifier is never
+# silently compiled out: the JWT path (GCP Confidential Space, Azure MAA) reuses
+# the always-present `jsonwebtoken` + `reqwest` and adds no extra dependencies.
+# The AWS Nitro COSE path (which pulls coset/ciborium/p384/x509-parser) stays
+# opt-in behind `tee-attestation-nitro`; without it the AWS gate fails closed.
+default = ["std", "aws", "tee-attestation"]
 std = [
     "blueprint-std/std",
     "blueprint-core/std",
@@ -111,6 +141,27 @@ vultr = []  # Vultr support via REST API
 kubernetes = ["dep:kube", "dep:k8s-openapi"]
 docker = ["dep:bollard"]
 testing = []
+
+# Post-launch TEE attestation: fetch + cryptographically verify provider
+# attestation before a `require_tee` deployment is reported trusted. This is the
+# JWT path (GCP Confidential Space OIDC, Azure MAA) and reuses the always-present
+# `jsonwebtoken` + `reqwest` — no extra dependencies — so it ships by default.
+# Without `tee-attestation-nitro`, the AWS gate fails closed (Unsatisfiable).
+tee-attestation = []
+# AWS Nitro NSM COSE_Sign1 verifier. Pulls the COSE/CBOR/ECDSA/x509 crates only
+# needed for the Nitro document path; opt-in because most deployments use the
+# JWT providers. Implies `tee-attestation`.
+tee-attestation-nitro = [
+    "tee-attestation",
+    "dep:coset",
+    "dep:ciborium",
+    "dep:p384",
+    "dep:x509-parser",
+]
+# Interop with the in-enclave hardware-quote verifier (`blueprint_tee::AttestationVerifier`).
+# Lets callers convert a fetched cloud report into a `blueprint_tee::AttestationReport`
+# and hand it to the deep DCAP/SNP/TDX verifier instead of duplicating that logic here.
+tee-attestation-seam = ["tee-attestation-nitro", "dep:blueprint-tee"]
 
 
 [package.metadata.docs.rs]

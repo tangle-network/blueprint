@@ -27,6 +27,32 @@ jobs:
       - name: Run pricing tests
         run: cargo test -p blueprint-remote-providers test_pricing
 
+  test-remote-providers-attestation:
+    name: cargo test (blueprint-remote-providers-tee-attestation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # JWT attestation path (GCP Confidential Space / Azure MAA) ships in the
+      # default feature set; run the end-to-end gate tests + inline unit tests.
+      - name: Run TEE attestation integration tests (JWT path)
+        run: cargo test -p blueprint-remote-providers --test tee_attestation --features tee-attestation
+
+      - name: Run TEE attestation unit tests (JWT path)
+        run: cargo test -p blueprint-remote-providers --lib --features tee-attestation
+
+      # AWS Nitro COSE verifier + in-enclave seam compile and test only under
+      # the opt-in features; keep them green so the security-critical path can
+      # never rot silently.
+      - name: Run TEE attestation tests (Nitro COSE + seam)
+        run: cargo test -p blueprint-remote-providers --test tee_attestation --features tee-attestation-seam
+
+      - name: Build all attestation features
+        run: cargo build -p blueprint-remote-providers --features tee-attestation-seam
+
   test-remote-providers-kubernetes:
     name: cargo test (blueprint-remote-providers-kubernetes)
     runs-on: ubuntu-latest

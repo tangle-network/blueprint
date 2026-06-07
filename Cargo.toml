@@ -241,7 +241,9 @@ tokio = { version = "^1", default-features = false }
 tokio-util = { version = "^0.7", default-features = false }
 tokio-cron-scheduler = { version = "0.13.0", default-features = false }
 once_cell = { version = "1.19.0", default-features = false, features = ["std"] }
-x509-parser = { version = "0.18.0" }
+# `verify-aws` enables cert-signature verification via aws-lc-rs (the crypto
+# backend this workspace already uses), needed for AWS Nitro cert-chain checks.
+x509-parser = { version = "0.18.0", features = ["verify-aws"] }
 tokio-stream = { version = "0.1.15", default-features = false, features = ["net"] }
 pin-project-lite = "0.2.17"
 tower = { version = "0.5.2", default-features = false }
@@ -290,6 +292,11 @@ rust_decimal = { version = "1.37", default-features = false }
 jsonwebtoken = { version = "9", default-features = false }
 pasetors = { version = "0.7.7", default-features = false }
 pem = { version = "3.0", default-features = false }
+# TEE remote attestation (COSE + x509 + ECDSA) — used only when a crate opts into
+# the `tee-attestation` feature; kept out of the default build.
+coset = { version = "0.3", default-features = false }
+ciborium = { version = "0.2", default-features = false }
+p384 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8"] }
 
 # Error Handling & Logging
 anyhow = { version = "1.0.99", default-features = false }

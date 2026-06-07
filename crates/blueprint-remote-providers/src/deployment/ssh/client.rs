@@ -1151,28 +1151,46 @@ WantedBy=multi-user.target
         let ssh_client = self.ssh_client.clone();
         let container = container_id.to_string();
 
-        // Spawn background task to stream logs
+        // Spawn background task to stream logs.
+        //
+        // `run_remote_command` is one-shot (it buffers the full child output), so
+        // there is no live `docker logs -f` stream available over this primitive.
+        // We poll, but advance a high-water mark via `--since=<unix_ts>` so each
+        // poll returns only lines newer than the last one we forwarded. This
+        // emits every line exactly once instead of re-sending the last N lines
+        // every second (the previous `--tail=10` loop duplicated forever).
+        let runtime_bin = match runtime {
+            ContainerRuntime::Docker => "docker",
+            ContainerRuntime::Podman => "podman",
+            ContainerRuntime::Containerd => {
+                warn!("Log streaming not supported for containerd");
+                return Err(Error::ConfigurationError(
+                    "Log streaming not supported for containerd".into(),
+                ));
+            }
+        };
         tokio::spawn(async move {
-            let cmd = match runtime {
-                ContainerRuntime::Docker => format!("docker logs -f {container}"),
-                ContainerRuntime::Podman => format!("podman logs -f {container}"),
-                ContainerRuntime::Containerd => {
-                    warn!("Log streaming not supported for containerd");
-                    return;
-                }
-            };
-
-            // This would ideally use SSH session with PTY for real-time streaming
-            // For now, we poll logs periodically
+            // Start from "now"; only forward lines stamped after this point.
+            let mut since = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
             loop {
-                match ssh_client
-                    .run_remote_command(&cmd.replace("-f", "--tail=10"))
-                    .await
-                {
+                // `--timestamps` so we can read each line's time and advance the
+                // high-water mark; `--since` bounds the window to new lines.
+                let cmd = format!("{runtime_bin} logs --timestamps --since {since} {container}");
+                match ssh_client.run_remote_command(&cmd).await {
                     Ok(logs) => {
                         for line in logs.lines() {
+                            // Advance the watermark past any line we forward so the
+                            // next `--since` excludes it (dedup across polls).
+                            if let Some(ts) = parse_docker_log_timestamp(line) {
+                                if ts >= since {
+                                    since = ts + 1;
+                                }
+                            }
                             if tx.send(line.to_string()).await.is_err() {
-                                break;
+                                return;
                             }
                         }
                     }
@@ -1416,5 +1434,34 @@ WantedBy=multi-user.target
                 health_check: None,
             },
         }
+    }
+}
+
+/// Parse the leading RFC3339 timestamp Docker/Podman prepend with
+/// `logs --timestamps` (e.g. `2024-01-02T03:04:05.123456789Z msg`) into unix
+/// seconds. Returns `None` for lines without a parseable leading timestamp so
+/// the caller leaves its high-water mark unchanged.
+fn parse_docker_log_timestamp(line: &str) -> Option<u64> {
+    let token = line.split_whitespace().next()?;
+    let dt = chrono::DateTime::parse_from_rfc3339(token).ok()?;
+    u64::try_from(dt.timestamp()).ok()
+}
+
+#[cfg(test)]
+mod log_ts_tests {
+    use super::parse_docker_log_timestamp;
+
+    #[test]
+    fn parses_rfc3339_prefix() {
+        let ts = parse_docker_log_timestamp("2024-01-02T03:04:05.123456789Z hello world")
+            .expect("should parse");
+        // 2024-01-02T03:04:05Z = 1704164645
+        assert_eq!(ts, 1_704_164_645);
+    }
+
+    #[test]
+    fn no_timestamp_returns_none() {
+        assert_eq!(parse_docker_log_timestamp("plain log line"), None);
+        assert_eq!(parse_docker_log_timestamp(""), None);
     }
 }

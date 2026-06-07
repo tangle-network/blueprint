@@ -54,8 +54,18 @@ impl CloudProviderAdapter for CoreWeaveAdapter {
         &self,
         instance_type: &str,
         region: &str,
-        _require_tee: bool,
+        require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        // Fail closed at the trait boundary: this provider has no
+        // confidential-compute / TEE attestation path. Refuse rather than
+        // silently return a non-TEE instance for a require_tee request.
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "CoreWeave does not support confidential-compute / TEE attestation; \
+                 refusing require_tee"
+                    .into(),
+            ));
+        }
         // CoreWeave does not have an "instance" that exists separately from a
         // Kubernetes workload. We return a placeholder ProvisionedInstance whose
         // `id` uniquely identifies the logical deployment slot in the tenant
@@ -200,6 +210,8 @@ impl CloudProviderAdapter for CoreWeaveAdapter {
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
+            // CoreWeave is a Kubernetes-backed adapter and holds no pooled HTTP
+            // client; build a short-lived one for the occasional health probe.
             let client = build_http_client()?;
             match client
                 .get(&format!("{endpoint}/health"), &ApiAuthentication::None)

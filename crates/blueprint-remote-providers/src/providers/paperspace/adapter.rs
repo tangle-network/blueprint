@@ -145,8 +145,18 @@ impl CloudProviderAdapter for PaperspaceAdapter {
         &self,
         instance_type: &str,
         region: &str,
-        _require_tee: bool,
+        require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        // Fail closed at the trait boundary: this provider has no
+        // confidential-compute / TEE attestation path. Refuse rather than
+        // silently return a non-TEE instance for a require_tee request.
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "Paperspace does not support confidential-compute / TEE attestation; \
+                 refusing require_tee"
+                    .into(),
+            ));
+        }
         let name = generate_instance_name("paperspace");
         let region_name = if region.is_empty() {
             self.default_region.as_str()
@@ -341,8 +351,10 @@ impl CloudProviderAdapter for PaperspaceAdapter {
 
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         if let Some(endpoint) = deployment.qos_grpc_endpoint() {
-            let client = build_http_client()?;
-            match client
+            // Reuse the pre-built pooled client instead of rebuilding the
+            // TLS stack on every (interval-driven) health probe.
+            match self
+                .http
                 .get(&format!("{endpoint}/health"), &ApiAuthentication::None)
                 .await
             {

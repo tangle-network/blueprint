@@ -111,7 +111,17 @@ default = ["containers"]
 ##
 ## This feature enables deployment to cloud providers like AWS, GCP, Azure, DigitalOcean, and Vultr.
 ## It includes real SDK integrations for provisioning instances and deploying Blueprint services.
-remote-providers = ["dep:blueprint-remote-providers", "dep:blueprint-pricing-engine", "dep:blueprint-profiling"]
+# `blueprint-remote-providers/tee-attestation` ships the require_tee verifier (JWT
+# path for GCP/Azure, no extra deps) so a require_tee deployment is genuinely
+# attested instead of fail-closed-erroring in the shipped manager. The AWS Nitro
+# COSE verifier remains opt-in via `tee-attestation-nitro`.
+remote-providers = [
+    "dep:blueprint-remote-providers",
+    "blueprint-remote-providers/std",
+    "blueprint-remote-providers/tee-attestation",
+    "dep:blueprint-pricing-engine",
+    "dep:blueprint-profiling",
+]
 
 ## Enable QoS monitoring for local and remote instances
 qos = ["dep:blueprint-qos"]

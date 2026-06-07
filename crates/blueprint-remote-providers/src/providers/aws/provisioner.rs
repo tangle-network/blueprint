@@ -120,6 +120,35 @@ impl AwsProvisioner {
         let public_ip = instance.public_ip_address().map(|s| s.to_string());
         let private_ip = instance.private_ip_address().map(|s| s.to_string());
 
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("require_tee".to_string(), require_tee.to_string());
+
+        // require_tee gate: a TEE VM is only reported usable once its attestation
+        // is fetched and cryptographically verified. AWS Nitro fails closed here
+        // by design (the NSM document is producible only inside the enclave).
+        #[cfg(feature = "tee-attestation")]
+        if require_tee {
+            crate::attestation::gate_provisioned(
+                &crate::core::remote::CloudProvider::AWS,
+                public_ip.as_deref().or(private_ip.as_deref()),
+                &config.custom_config,
+                &mut metadata,
+            )
+            .await?;
+        }
+        // Fail-closed when the verifier is compiled out: a build without the
+        // attestation code can never reach the "TEE-trusted" verdict. Without
+        // this arm the gate above would silently vanish in the default build and
+        // an unattested VM would be reported as a TEE deployment.
+        #[cfg(not(feature = "tee-attestation"))]
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "require_tee set but this binary was built without the `tee-attestation` \
+                 feature; refusing to report an unverified VM as a TEE deployment"
+                    .into(),
+            ));
+        }
+
         Ok(ProvisionedInfrastructure {
             provider: crate::core::remote::CloudProvider::AWS,
             instance_id: instance_id.to_string(),
@@ -127,11 +156,7 @@ impl AwsProvisioner {
             private_ip,
             region: config.region.clone(),
             instance_type: instance_selection.instance_type,
-            metadata: {
-                let mut metadata = std::collections::HashMap::new();
-                metadata.insert("require_tee".to_string(), require_tee.to_string());
-                metadata
-            },
+            metadata,
         })
     }
 
