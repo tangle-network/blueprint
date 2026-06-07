@@ -44,14 +44,14 @@ jobs:
       - name: Run TEE attestation unit tests (JWT path)
         run: cargo test -p blueprint-remote-providers --lib --features tee-attestation
 
-      # AWS Nitro COSE verifier + in-enclave seam compile and test only under
-      # the opt-in features; keep them green so the security-critical path can
-      # never rot silently.
-      - name: Run TEE attestation tests (Nitro COSE + seam)
-        run: cargo test -p blueprint-remote-providers --test tee_attestation --features tee-attestation-seam
+      # AWS Nitro COSE verifier compiles and tests only under the opt-in
+      # feature; keep it green so the security-critical path cannot rot
+      # silently.
+      - name: Run TEE attestation tests (Nitro COSE)
+        run: cargo test -p blueprint-remote-providers --test tee_attestation --features tee-attestation-nitro
 
       - name: Build all attestation features
-        run: cargo build -p blueprint-remote-providers --features tee-attestation-seam
+        run: cargo build -p blueprint-remote-providers --features tee-attestation-nitro
 
   test-remote-providers-kubernetes:
     name: cargo test (blueprint-remote-providers-kubernetes)

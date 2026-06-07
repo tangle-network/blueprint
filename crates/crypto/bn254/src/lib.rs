@@ -9,6 +9,7 @@ mod tests;
 
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G1Projective, G2Affine};
 use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
+#[cfg(feature = "std")]
 use ark_ff::UniformRand;
 use ark_ff::{BigInteger256, Field, One, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};

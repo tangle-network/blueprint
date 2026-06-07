@@ -333,7 +333,7 @@ tokio-rustls = { version = "0.26.2", default-features = false, features = ["tls1
 rustls-pemfile = { version = "2.2.0", default-features = false }
 rcgen = { version = "0.14.7", default-features = false, features = ["pem"] }
 hyper-rustls = { version = "0.27.7", default-features = false, features = ["http2", "ring"] }
-local-ip-address = "0.6.12"
+local-ip-address = "0.6.13"
 
 # System & OS
 parking_lot = { version = "0.12.4", default-features = false }
@@ -410,7 +410,7 @@ alloy = { version = "1.8", default-features = false }
 alloy-primitives = { version = "1.5", default-features = false }
 alloy-json-abi = { version = "1.5", default-features = false }
 alloy-json-rpc = { version = "1.8", default-features = false }
-alloy-dyn-abi = { version = "1.5", default-features = false, features = ["eip712"] }
+alloy-dyn-abi = { version = "1.6", default-features = false, features = ["eip712"] }
 alloy-sol-types = { version = "1.5", default-features = false }
 alloy-rlp = { version = "0.3.12", default-features = false }
 alloy-rpc-client = { version = "2.0", default-features = false }
@@ -440,10 +440,10 @@ gcloud-sdk = { version = "0.29", default-features = false }
 gcp_auth = { version = "0.12" }
 
 # Arkworks
-ark-bn254 = { version = "0.5.0", default-features = false }
-ark-ec = { version = "0.5.0", default-features = false }
-ark-ff = { version = "0.5.0", default-features = false }
-ark-serialize = { version = "0.5.0", default-features = false, features = ["derive"] }
+ark-bn254 = { version = "0.6.0", default-features = false }
+ark-ec = { version = "0.6.0", default-features = false }
+ark-ff = { version = "0.6.0", default-features = false }
+ark-serialize = { version = "0.6.0", default-features = false, features = ["derive"] }
 num-bigint = { version = "0.4.6", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
 rayon = { version = "1", default-features = false }
@@ -481,7 +481,7 @@ azure_identity = { version = "0.33", default-features = false }
 # Additional dependencies
 openssl = { version = "0.10", default-features = false }
 zip = { version = "8.4", default-features = false }
-warp = { version = "0.3", default-features = false }
+warp = { version = "0.4.3", default-features = false }
 shell-escape = { version = "0.1", default-features = false }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "getrandom"] }
 mockall = { version = "0.14", default-features = false }
