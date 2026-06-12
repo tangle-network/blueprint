@@ -3,8 +3,7 @@ use crate::blueprint_protocol::HandshakeMessage;
 use crate::discovery::PeerManager;
 use crate::discovery::peers::VerificationIdentifierKey;
 use crate::discovery::utils::get_address_from_compressed_pubkey;
-use crate::types::{MAX_MESSAGE_SIZE, ProtocolMessage};
-use bincode::Options;
+use crate::types::ProtocolMessage;
 use blueprint_core::{debug, error, info, warn};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::KeyType;
@@ -393,10 +392,8 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
 
                 debug!(%propagation_source, "Received gossip message");
 
-                // Deserialize with bounded size to prevent memory amplification
-                let Ok(protocol_message) = bincode::options()
-                    .with_limit(MAX_MESSAGE_SIZE as u64)
-                    .deserialize::<ProtocolMessage>(&message.data)
+                // Canonical codec: varint with bounded size to prevent memory amplification
+                let Ok(protocol_message) = crate::codec::decode_protocol_message(&message.data)
                 else {
                     warn!(%propagation_source, "Failed to deserialize gossip message");
                     return;

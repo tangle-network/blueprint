@@ -2,6 +2,7 @@
 
 pub mod behaviours;
 pub mod blueprint_protocol;
+pub mod codec;
 pub mod discovery;
 pub mod error;
 pub mod service;
