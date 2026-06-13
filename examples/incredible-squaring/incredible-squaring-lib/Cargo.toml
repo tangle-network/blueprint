@@ -2,6 +2,11 @@
 name = "incredible-squaring-blueprint-lib"
 version = "0.2.0-alpha.9"
 description = "Example Tangle blueprint demonstrating job processing across local/FaaS execution and single/multi-operator aggregation."
+# Example crate — never published to crates.io (matches its sibling -bin and the
+# other examples). Without this, release-plz tries to `cargo package` it for its
+# equality check and fails on workspace `edition` inheritance, breaking every
+# release-plz run on main.
+publish = false
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
