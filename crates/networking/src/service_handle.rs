@@ -151,7 +151,8 @@ impl<K: KeyType> NetworkServiceHandle<K> {
             payload: message.into(),
         };
 
-        let raw_payload = bincode::serialize(&protocol_message).map_err(|err| err.to_string())?;
+        let raw_payload = crate::codec::encode_protocol_message(&protocol_message)
+            .map_err(|err| err.to_string())?;
         match protocol_message.routing.recipient {
             Some(recipient) => {
                 let instance_message_request = InstanceMessageRequest::Protocol {

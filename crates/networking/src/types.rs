@@ -2,8 +2,7 @@ use libp2p::{PeerId, gossipsub::IdentTopic};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-/// Maximum allowed size for a message payload
-pub const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+pub use crate::codec::MAX_MESSAGE_SIZE;
 
 /// Type of message delivery mechanism
 #[derive(Debug, Clone)]

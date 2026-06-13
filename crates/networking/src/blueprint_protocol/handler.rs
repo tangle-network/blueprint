@@ -1,14 +1,13 @@
 use std::time::{Duration, Instant};
 
 use alloy_primitives::Address;
-use bincode::Options;
 use blueprint_core::{debug, warn};
 use blueprint_crypto::{BytesEncoding, KeyType, hashing::keccak_256};
 use libp2p::{PeerId, request_response};
 
 use crate::blueprint_protocol::HandshakeMessage;
 use crate::discovery::peers::VerificationIdentifierKey;
-use crate::types::{MAX_MESSAGE_SIZE, ProtocolMessage};
+use crate::types::ProtocolMessage;
 
 use super::{BlueprintProtocolBehaviour, InstanceMessageRequest, InstanceMessageResponse};
 
@@ -193,23 +192,21 @@ impl<K: KeyType> BlueprintProtocolBehaviour<K> {
                     return;
                 }
 
-                let protocol_message: ProtocolMessage = match bincode::options()
-                    .with_limit(MAX_MESSAGE_SIZE as u64)
-                    .deserialize(&payload)
-                {
-                    Ok(message) => message,
-                    Err(e) => {
-                        warn!(%peer, "Failed to deserialize protocol message: {:?}", e);
-                        let response = InstanceMessageResponse::Error {
-                            code: 400,
-                            message: format!("Invalid protocol message: {:?}", e),
-                        };
-                        if let Err(e) = self.send_response(channel, response) {
-                            warn!(%peer, "Failed to send error response: {:?}", e);
+                let protocol_message: ProtocolMessage =
+                    match crate::codec::decode_protocol_message(&payload) {
+                        Ok(message) => message,
+                        Err(e) => {
+                            warn!(%peer, "Failed to deserialize protocol message: {:?}", e);
+                            let response = InstanceMessageResponse::Error {
+                                code: 400,
+                                message: format!("Invalid protocol message: {:?}", e),
+                            };
+                            if let Err(e) = self.send_response(channel, response) {
+                                warn!(%peer, "Failed to send error response: {:?}", e);
+                            }
+                            return;
                         }
-                        return;
-                    }
-                };
+                    };
 
                 debug!(%peer, %protocol, %protocol_message, "Received protocol request");
                 if let Err(e) = self.protocol_message_sender.send(protocol_message) {
