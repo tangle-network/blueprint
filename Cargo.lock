@@ -114,8 +114,8 @@ dependencies = [
  "alloy-genesis",
  "alloy-json-rpc 1.8.3",
  "alloy-network 1.8.3",
- "alloy-provider",
- "alloy-pubsub",
+ "alloy-provider 1.8.3",
+ "alloy-pubsub 1.8.3",
  "alloy-rpc-client 1.8.3",
  "alloy-rpc-types",
  "alloy-serde 1.8.3",
@@ -125,7 +125,7 @@ dependencies = [
  "alloy-transport 1.8.3",
  "alloy-transport-http 1.8.3",
  "alloy-transport-ipc",
- "alloy-transport-ws",
+ "alloy-transport-ws 1.8.3",
  "alloy-trie",
 ]
 
@@ -234,8 +234,8 @@ dependencies = [
  "alloy-network 1.8.3",
  "alloy-network-primitives 1.8.3",
  "alloy-primitives",
- "alloy-provider",
- "alloy-pubsub",
+ "alloy-provider 1.8.3",
+ "alloy-pubsub 1.8.3",
  "alloy-rpc-types-eth 1.8.3",
  "alloy-sol-types",
  "alloy-transport 1.8.3",
@@ -549,7 +549,7 @@ dependencies = [
  "alloy-network 1.8.3",
  "alloy-network-primitives 1.8.3",
  "alloy-primitives",
- "alloy-pubsub",
+ "alloy-pubsub 1.8.3",
  "alloy-rpc-client 1.8.3",
  "alloy-rpc-types-anvil",
  "alloy-rpc-types-debug",
@@ -561,7 +561,48 @@ dependencies = [
  "alloy-transport 1.8.3",
  "alloy-transport-http 1.8.3",
  "alloy-transport-ipc",
- "alloy-transport-ws",
+ "alloy-transport-ws 1.8.3",
+ "async-stream",
+ "async-trait",
+ "auto_impl",
+ "dashmap",
+ "either",
+ "futures",
+ "futures-utils-wasm",
+ "lru 0.16.4",
+ "parking_lot 0.12.5",
+ "pin-project",
+ "reqwest 0.13.2",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+ "wasmtimer",
+]
+
+[[package]]
+name = "alloy-provider"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8955ab30418343de57b356de2ea60200f9fb8016a7ea3bc7f5c6176f01a8b1cf"
+dependencies = [
+ "alloy-chains",
+ "alloy-consensus 2.0.5",
+ "alloy-eips 2.0.5",
+ "alloy-json-rpc 2.0.5",
+ "alloy-network 2.0.5",
+ "alloy-network-primitives 2.0.5",
+ "alloy-primitives",
+ "alloy-pubsub 2.0.5",
+ "alloy-rpc-client 2.0.5",
+ "alloy-rpc-types-eth 2.0.5",
+ "alloy-signer 2.0.5",
+ "alloy-sol-types",
+ "alloy-transport 2.0.5",
+ "alloy-transport-http 2.0.5",
+ "alloy-transport-ws 2.0.5",
  "async-stream",
  "async-trait",
  "auto_impl",
@@ -605,6 +646,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-pubsub"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cd85cfea1fa8ebd20d3475e961fe3a3624c0eb4659ea137715c0c83c8aeaff0"
+dependencies = [
+ "alloy-json-rpc 2.0.5",
+ "alloy-primitives",
+ "alloy-transport 2.0.5",
+ "auto_impl",
+ "bimap",
+ "futures",
+ "parking_lot 0.12.5",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tower 0.5.3",
+ "tracing",
+ "wasmtimer",
+]
+
+[[package]]
 name = "alloy-rlp"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -634,11 +697,11 @@ checksum = "94fcc9604042ca80bd37aa5e232ea1cd851f337e31e2babbbb345bc0b1c30de3"
 dependencies = [
  "alloy-json-rpc 1.8.3",
  "alloy-primitives",
- "alloy-pubsub",
+ "alloy-pubsub 1.8.3",
  "alloy-transport 1.8.3",
  "alloy-transport-http 1.8.3",
  "alloy-transport-ipc",
- "alloy-transport-ws",
+ "alloy-transport-ws 1.8.3",
  "futures",
  "pin-project",
  "reqwest 0.13.2",
@@ -660,8 +723,10 @@ checksum = "24f461f091dc8f657e73b5dea18fd63d5c7049720cd252f1eade4a7ebed6a7e1"
 dependencies = [
  "alloy-json-rpc 2.0.5",
  "alloy-primitives",
+ "alloy-pubsub 2.0.5",
  "alloy-transport 2.0.5",
  "alloy-transport-http 2.0.5",
+ "alloy-transport-ws 2.0.5",
  "futures",
  "pin-project",
  "reqwest 0.13.2",
@@ -1138,7 +1203,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1bd98c3870b8a44b79091dde5216a81d58ffbc1fd8ed61b776f9fee0f3bdf20"
 dependencies = [
  "alloy-json-rpc 1.8.3",
- "alloy-pubsub",
+ "alloy-pubsub 1.8.3",
  "alloy-transport 1.8.3",
  "bytes",
  "futures",
@@ -1157,8 +1222,27 @@ version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec3ab7a72b180992881acc112628b7668337a19ce15293ee974600ea7b693691"
 dependencies = [
- "alloy-pubsub",
+ "alloy-pubsub 1.8.3",
  "alloy-transport 1.8.3",
+ "futures",
+ "http 1.4.0",
+ "rustls 0.23.38",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "url",
+ "ws_stream_wasm",
+]
+
+[[package]]
+name = "alloy-transport-ws"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33e32e0b47d3b3bf5770b7c132090c614b008d307c5e1544f1925f5b7e9e9af6"
+dependencies = [
+ "alloy-pubsub 2.0.5",
+ "alloy-transport 2.0.5",
  "futures",
  "http 1.4.0",
  "rustls 0.23.38",
@@ -1298,7 +1382,7 @@ version = "0.2.0-alpha.4"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-signer-local",
  "alloy-sol-types",
@@ -2953,7 +3037,7 @@ dependencies = [
  "alloy-eips 2.0.5",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-rpc-types-eth 1.8.3",
  "alloy-signer-local",
@@ -3063,7 +3147,7 @@ name = "blueprint-chain-setup-anvil"
 version = "0.2.0-alpha.9"
 dependencies = [
  "alloy-contract",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-rpc-types-eth 1.8.3",
  "blueprint-core",
@@ -3095,7 +3179,7 @@ dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-transport 1.8.3",
  "blueprint-chain-setup-anvil",
  "blueprint-client-core",
@@ -3124,8 +3208,8 @@ dependencies = [
  "alloy-json-rpc 1.8.3",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
- "alloy-pubsub",
+ "alloy-provider 2.0.5",
+ "alloy-pubsub 1.8.3",
  "alloy-rlp",
  "alloy-rpc-types",
  "alloy-rpc-types-eth 1.8.3",
@@ -3154,7 +3238,7 @@ dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-signer 1.8.3",
  "alloy-signer-local",
@@ -3198,7 +3282,7 @@ name = "blueprint-context-derive"
 version = "0.2.0-alpha.4"
 dependencies = [
  "alloy-network 1.8.3",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-transport 1.8.3",
  "blueprint-context-derive",
  "blueprint-sdk",
@@ -3390,7 +3474,7 @@ dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-signer-local",
  "blueprint-client-eigenlayer",
  "blueprint-core",
@@ -3421,7 +3505,7 @@ name = "blueprint-eigenlayer-testing-utils"
 version = "0.2.0-alpha.9"
 dependencies = [
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "axum",
  "blueprint-auth",
  "blueprint-chain-setup",
@@ -3445,7 +3529,7 @@ dependencies = [
  "alloy-consensus 1.8.3",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rlp",
  "alloy-rpc-client 2.0.5",
  "alloy-rpc-types",
@@ -3580,7 +3664,7 @@ dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-signer-local",
  "alloy-sol-types",
@@ -3784,7 +3868,7 @@ version = "0.3.0-alpha.8"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-signer-local",
  "alloy-sol-types",
@@ -3872,7 +3956,7 @@ version = "0.2.0-alpha.10"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-signer-local",
  "alloy-sol-types",
@@ -4008,7 +4092,7 @@ version = "0.2.0-alpha.9"
 dependencies = [
  "alloy-contract",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-signer 1.8.3",
  "alloy-signer-local",
  "async-trait",
@@ -4127,7 +4211,7 @@ dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-signer 1.8.3",
  "alloy-signer-local",
  "ark-bn254 0.6.0",
@@ -4158,7 +4242,7 @@ dependencies = [
  "alloy",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-signer-local",
  "alloy-sol-types",
@@ -4270,7 +4354,7 @@ name = "blueprint-x402"
 version = "0.2.0-alpha.9"
 dependencies = [
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "axum",
  "base64 0.22.1",
  "blueprint-core",
@@ -4564,7 +4648,7 @@ dependencies = [
  "alloy-json-abi",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types-eth 1.8.3",
  "alloy-signer-local",
  "alloy-sol-types",
@@ -6261,7 +6345,7 @@ dependencies = [
  "alloy-contract",
  "alloy-json-abi",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 1.8.3",
  "alloy-rpc-types-eth 1.8.3",
  "alloy-sol-types",
  "color-eyre",
@@ -8108,8 +8192,8 @@ dependencies = [
  "alloy-json-abi",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
- "alloy-pubsub",
+ "alloy-provider 2.0.5",
+ "alloy-pubsub 1.8.3",
  "alloy-rpc-client 2.0.5",
  "alloy-rpc-types",
  "alloy-rpc-types-eth 1.8.3",
@@ -10726,7 +10810,7 @@ version = "0.2.0-alpha.4"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-signer-local",
  "alloy-sol-types",
@@ -16275,7 +16359,7 @@ dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 2.0.5",
  "alloy-rpc-types",
  "alloy-signer-local",
  "alloy-sol-types",
@@ -16311,7 +16395,7 @@ dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
  "alloy-primitives",
- "alloy-provider",
+ "alloy-provider 1.8.3",
  "alloy-rpc-client 1.8.3",
  "alloy-rpc-types-eth 1.8.3",
  "alloy-signer 1.8.3",

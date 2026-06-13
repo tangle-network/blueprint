@@ -416,7 +416,7 @@ alloy-rlp = { version = "0.3.12", default-features = false }
 alloy-rpc-client = { version = "2.0", default-features = false }
 alloy-rpc-types = { version = "1.8", default-features = false }
 alloy-rpc-types-eth = { version = "1.8", default-features = false }
-alloy-provider = { version = "1.8", default-features = false, features = ["reqwest", "ws"] }
+alloy-provider = { version = "2.0", default-features = false, features = ["reqwest", "ws"] }
 alloy-pubsub = { version = "1.8", default-features = false }
 alloy-signer = { version = "1.8", default-features = false }
 alloy-signer-local = { version = "1.8", default-features = false }
