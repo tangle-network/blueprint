@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.9...blueprint-manager-v0.4.0-alpha.10) - 2026-06-13
+
+### Added
+
+- *(remote-providers)* verify TEE attestations fail closed (#1453)
+
 ## [0.4.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.7...blueprint-manager-v0.4.0-alpha.8) - 2026-05-22
 
 ### Added

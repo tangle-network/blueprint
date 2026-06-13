@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-networking-agg-sig-gossip-extension-v0.2.0-alpha.7...blueprint-networking-agg-sig-gossip-extension-v0.2.0-alpha.8) - 2026-06-13
+
+### Fixed
+
+- *(networking)* unify ProtocolMessage codec (send encoded fixint, receivers decoded varint) (#1454)
+
 ## [0.2.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-networking-agg-sig-gossip-extension-v0.2.0-alpha.6...blueprint-networking-agg-sig-gossip-extension-v0.2.0-alpha.7) - 2026-05-21
 
 ### Other

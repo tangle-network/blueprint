@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-extra-v0.2.0-alpha.8...blueprint-eigenlayer-extra-v0.2.0-alpha.9) - 2026-06-13
+
+### Other
+
+- updated the following local packages: blueprint-crypto-bn254, blueprint-keystore, blueprint-runner, blueprint-client-eigenlayer
+
 ## [0.2.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-eigenlayer-extra-v0.2.0-alpha.7...blueprint-eigenlayer-extra-v0.2.0-alpha.8) - 2026-05-21
 
 ### Other
