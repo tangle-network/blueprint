@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-metrics-v0.2.0-alpha.4...blueprint-metrics-v0.2.0-alpha.5) - 2026-06-13
+
+### Other
+
+- updated the following local packages: blueprint-metrics-rpc-calls
+
 ## [0.1.0-alpha.3](https://github.com/tangle-network/blueprint/compare/blueprint-metrics-v0.1.0-alpha.2...blueprint-metrics-v0.1.0-alpha.3) - 2025-05-01
 
 ### Other
