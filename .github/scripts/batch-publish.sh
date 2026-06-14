@@ -149,6 +149,39 @@ echo ""
 # Track failures for retry
 declare -a failed_packages=()
 
+# crates.io SPARSE-INDEX path for a crate name. `cargo publish` resolves a
+# crate's dependencies against the sparse index (index.crates.io), which
+# propagates SLOWER than the web API. The old check polled the web API, so the
+# script would declare a dep "live" and move on while cargo still couldn't see
+# it — every dependent then failed "failed to select a version" and the run
+# stalled at the first no-progress pass. We must wait on the sparse index.
+sparse_index_path() {
+    local name="$1" len=${#name}
+    if   ((len == 1)); then echo "1/$name"
+    elif ((len == 2)); then echo "2/$name"
+    elif ((len == 3)); then echo "3/${name:0:1}/$name"
+    else echo "${name:0:2}/${name:2:2}/$name"
+    fi
+}
+
+# Is this exact version visible in the sparse index (i.e. cargo-resolvable)?
+version_is_live() {
+    local name="$1" version="$2"
+    curl -fsSL --max-time 10 "https://index.crates.io/$(sparse_index_path "$name")" 2>/dev/null \
+        | grep -q "\"vers\":\"$version\""
+}
+
+# Poll the sparse index until the version is resolvable (or timeout), so a
+# just-published dependency is visible before its dependents publish next.
+wait_until_live() {
+    local name="$1" version="$2" max="${3:-300}" waited=0
+    while ((waited < max)); do
+        version_is_live "$name" "$version" && return 0
+        sleep 15; waited=$((waited + 15))
+    done
+    return 1
+}
+
 # Publish packages in topological order
 for ((i=0; i<total_packages; i++)); do
     package="${topo_order[$i]}"
@@ -168,40 +201,24 @@ for ((i=0; i<total_packages; i++)); do
         continue
     fi
 
-    version_is_live() {
-        local name="$1" version="$2"
-        local body
-        body=$(curl -fsSL --max-time 10 "https://crates.io/api/v1/crates/$name/$version" 2>/dev/null || echo "")
-        [[ -n "$body" ]] && echo "$body" | grep -q "\"num\":\"$version\""
-    }
-
     run_publish() {
         # Always echo the real output so silent rejections are auditable.
         cargo publish --package "$package" --allow-dirty --no-verify 2>&1
     }
 
     if version_is_live "$package" "$target_version"; then
-        echo "✓ $package $target_version already on crates.io (skipped)"
+        echo "✓ $package $target_version already in sparse index (skipped)"
     else
         output=$(run_publish || true)
         echo "$output" | tail -8
-        # Registry needs a moment to index a just-uploaded version.
-        sleep 15
-        if version_is_live "$package" "$target_version"; then
-            echo "✓ $package $target_version now live on crates.io"
+        # Wait for the SPARSE INDEX to show the version so dependents (published
+        # next, in topo order) can resolve it. Polls up to 5 min, exits early.
+        if wait_until_live "$package" "$target_version" 300; then
+            echo "✓ $package $target_version live in sparse index"
         else
-            echo "⚠ First attempt did not land $package $target_version; waiting 30s and retrying..."
-            sleep 30
-            output=$(run_publish || true)
-            echo "$output" | tail -8
-            sleep 15
-            if version_is_live "$package" "$target_version"; then
-                echo "✓ $package $target_version live after retry"
-            else
-                echo "✗ $package $target_version still missing from crates.io after retry"
-                failed_packages+=("$package")
-                echo "Continuing with remaining packages..."
-            fi
+            echo "✗ $package $target_version not in sparse index after 5min"
+            failed_packages+=("$package")
+            echo "Continuing with remaining packages..."
         fi
     fi
 
@@ -250,12 +267,11 @@ if ((${#failed_packages[@]} > 0)); then
                 continue
             fi
             if version_is_live "$package" "$target_version"; then
-                echo "✓ $package $target_version already on crates.io"
+                echo "✓ $package $target_version already in sparse index"
             else
                 output=$(run_publish || true)
                 echo "$output" | tail -8
-                sleep 15
-                if version_is_live "$package" "$target_version"; then
+                if wait_until_live "$package" "$target_version" 300; then
                     echo "✓ $package $target_version now live"
                 else
                     echo "✗ $package $target_version still missing after publish attempt"
