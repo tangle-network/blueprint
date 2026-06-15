@@ -409,7 +409,7 @@ serial_test = { version = "3.4.0", default-features = false }
 alloy = { version = "1.8", default-features = false }
 alloy-primitives = { version = "1.5", default-features = false }
 alloy-json-abi = { version = "1.5", default-features = false }
-alloy-json-rpc = { version = "1.8", default-features = false }
+alloy-json-rpc = { version = "2.0", default-features = false }
 alloy-dyn-abi = { version = "1.6", default-features = false, features = ["eip712"] }
 alloy-sol-types = { version = "1.5", default-features = false }
 alloy-rlp = { version = "0.3.12", default-features = false }
