@@ -12071,6 +12071,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_chacha"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e6af7f3e25ded52c41df4e0b1af2d047e45896c2f3281792ed68a1c243daedb"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12097,13 +12107,14 @@ checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "rand_dev"
-version = "0.1.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbee97c27dada05f03db49ffe6516872f6c926e0fd525f9ce0cb3c051adf145c"
+checksum = "8ce0cb5cf648104d37cec5212da34e75d765417ad03d742d5721442bc69475dd"
 dependencies = [
- "hex",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
+ "const-hex",
+ "getrandom 0.4.2",
+ "rand_chacha 0.10.0",
+ "rand_core 0.10.1",
 ]
 
 [[package]]

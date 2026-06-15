@@ -53,7 +53,7 @@ blueprint-crypto = { workspace = true, features = ["bn254", "bls", "aggregation"
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 sha2 = { workspace = true }
-rand_dev = "0.1"
+rand_dev = "0.3"
 rand = { workspace = true }
 hex = { workspace = true }
 serial_test = { workspace = true, features = ["async"] }
