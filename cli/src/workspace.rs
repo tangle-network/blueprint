@@ -250,7 +250,7 @@ service_id   = 0
         assert_eq!(net.chain_id, Some(31337));
         assert_eq!(
             net.tangle_contract.to_string().to_lowercase(),
-            "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+            "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9"
         );
         assert_eq!(ws.defaults.blueprint_id, Some(0));
     }
