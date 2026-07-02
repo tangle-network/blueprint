@@ -131,7 +131,7 @@ blueprint-sdk = { version = "0.2.0-alpha.9", path = "./crates/sdk", default-feat
 # self-only distributePayment, RFQ replay / freshness / cumulative TTL
 # hardening, the collapsed approveService(ApprovalParams) entry point,
 # claimRewards / claimRewardsAll griefing isolation, and O(1) operator
-tnt-core-bindings = "0.17.1"
+tnt-core-bindings = "0.18"  # blueprintDefinitionHash view + BlueprintDefinitionRecorded event (0.18.0)
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.5", path = "crates/core", default-features = false }
@@ -519,3 +519,8 @@ debug = true
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+
+# Interim until tnt-core-bindings 0.18.0 publishes (tnt-core#193). Drop after publish.
+[patch.crates-io]
+tnt-core-bindings = { git = "ssh://git@github.com/tangle-network/tnt-core.git", branch = "feat/registry-gas-hardening" }

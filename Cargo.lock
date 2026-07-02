@@ -14364,9 +14364,8 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bindings"
-version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9638c85526f68b60d95bbe660f6f09ab116dfd06a4793f747374646278b82256"
+version = "0.18.0"
+source = "git+ssh://git@github.com/tangle-network/tnt-core.git?branch=feat%2Fregistry-gas-hardening#0ea2efa13471014ceeab9dce545e10b4d0ef6e6f"
 dependencies = [
  "alloy",
  "alloy-contract",

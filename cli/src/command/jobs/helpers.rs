@@ -14,17 +14,53 @@ use std::path::Path;
 use std::str::FromStr;
 
 /// Load the on-chain job schema for the specified blueprint/job pair.
+///
+/// Job schemas (`paramsSchema`/`resultSchema`) are read from Tangle-core
+/// storage via `getBlueprintDefinition`, since the submit/encode path depends
+/// on the schemas that remain on-chain — not on the event-only display prose.
 pub async fn load_job_schema(
     client: &TangleClient,
     blueprint_id: u64,
     job_index: u8,
 ) -> Result<JobSchema> {
-    let definition = fetch_blueprint_definition(client, blueprint_id).await?;
-    JobSchema::from_definition(&definition, job_index)
+    let definition = fetch_blueprint_definition_onchain(client, blueprint_id).await?;
+    let mut schema = JobSchema::from_definition(&definition, job_index)?;
+    // The human-readable job name shown in interactive prompts now lives only in
+    // the event payload; overlay it while keeping the on-chain schema for encoding.
+    if let Ok(display) = fetch_blueprint_definition(client, blueprint_id).await
+        && let Some(job) = display.jobs.get(job_index as usize)
+        && !job.name.trim().is_empty()
+    {
+        schema.set_display_name(job.name.clone());
+    }
+    Ok(schema)
 }
 
-/// Fetch and decode the blueprint definition stored on-chain.
+/// Fetch and decode the blueprint definition for DISPLAY purposes (job
+/// names/descriptions/`metadataUri` and the blueprint metadata prose).
+///
+/// These fields are no longer kept in Tangle-core storage, so this reads them
+/// from the `BlueprintDefinitionRecorded` event and verifies the payload
+/// against the on-chain `blueprintDefinitionHash`. For schema-bearing paths
+/// (submit/encode) use [`fetch_blueprint_definition_onchain`] instead.
 pub async fn fetch_blueprint_definition(
+    client: &TangleClient,
+    blueprint_id: u64,
+) -> Result<BlueprintDefinition> {
+    let raw_definition = client
+        .get_raw_blueprint_definition_from_event(blueprint_id)
+        .await
+        .map_err(|e| eyre!(e.to_string()))?;
+    let definition = decode_blueprint_definition(&raw_definition)?;
+    warn_if_unverified_sources(&definition);
+    Ok(definition)
+}
+
+/// Fetch and decode the blueprint definition from Tangle-core storage.
+///
+/// Use this for schema-bearing paths (submit/encode); it reads
+/// `getBlueprintDefinition`, whose schemas/sources/config stay on-chain.
+pub async fn fetch_blueprint_definition_onchain(
     client: &TangleClient,
     blueprint_id: u64,
 ) -> Result<BlueprintDefinition> {
@@ -78,6 +114,12 @@ impl JobSchema {
     #[must_use]
     pub fn job_name(&self) -> &str {
         &self.job_name
+    }
+
+    /// Override the display name (sourced from the event payload) without
+    /// touching the on-chain parameter/result schema used for encoding.
+    fn set_display_name(&mut self, name: String) {
+        self.job_name = name;
     }
 
     /// Whether this job definition includes a parameter schema.
