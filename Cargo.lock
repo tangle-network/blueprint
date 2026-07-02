@@ -14365,7 +14365,7 @@ dependencies = [
 [[package]]
 name = "tnt-core-bindings"
 version = "0.18.0"
-source = "git+ssh://git@github.com/tangle-network/tnt-core.git?branch=feat%2Fregistry-gas-hardening#0ea2efa13471014ceeab9dce545e10b4d0ef6e6f"
+source = "git+https://github.com/tangle-network/tnt-core.git?rev=3f2b9f05f2e886af4f0b3d080b6c29cf895b62e7#3f2b9f05f2e886af4f0b3d080b6c29cf895b62e7"
 dependencies = [
  "alloy",
  "alloy-contract",

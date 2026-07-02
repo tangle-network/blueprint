@@ -126,7 +126,8 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.9", path = "./crates/sdk", default-features = false }
-# tnt-core 0.17.0 introduces the subscription billing rearchitecture
+# tnt-core 0.18 adds the event-sourced blueprint definition (blueprintDefinitionHash view +
+# BlueprintDefinitionRecorded event) on top of 0.17.0's subscription billing rearchitecture
 # (requestService + fundService flow), the payments facet split with
 # self-only distributePayment, RFQ replay / freshness / cumulative TTL
 # hardening, the collapsed approveService(ApprovalParams) entry point,
@@ -521,6 +522,7 @@ inherits = "release"
 lto = "thin"
 
 
-# Interim until tnt-core-bindings 0.18.0 publishes (tnt-core#193). Drop after publish.
+# Interim until tnt-core-bindings 0.18.0 publishes (tnt-core#193). Public HTTPS + pinned rev
+# for reproducible, auth-free CI/contributor builds. Drop this patch after the crates.io publish.
 [patch.crates-io]
-tnt-core-bindings = { git = "ssh://git@github.com/tangle-network/tnt-core.git", branch = "feat/registry-gas-hardening" }
+tnt-core-bindings = { git = "https://github.com/tangle-network/tnt-core.git", rev = "3f2b9f05f2e886af4f0b3d080b6c29cf895b62e7" }

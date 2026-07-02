@@ -202,7 +202,7 @@ pub fn print_positions(
                 json!({
                     "amount": lock.amount.to_string(),
                     "multiplier": lock.multiplier.to_string(),
-                    "expiry_block": lock.expiry_block,
+                    "expiry_timestamp": lock.expiry_timestamp,
                 })
             })
             .collect();
@@ -276,8 +276,8 @@ pub fn print_positions(
         println!("{}:", style("Locks").green());
         for (idx, lock) in locks.iter().enumerate() {
             println!(
-                "  #{idx} amount={} multiplier={} expiry_block={}",
-                lock.amount, lock.multiplier, lock.expiry_block
+                "  #{idx} amount={} multiplier={} expiry_timestamp={}",
+                lock.amount, lock.multiplier, lock.expiry_timestamp
             );
         }
     }

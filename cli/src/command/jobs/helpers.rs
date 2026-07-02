@@ -47,13 +47,22 @@ pub async fn fetch_blueprint_definition(
     client: &TangleClient,
     blueprint_id: u64,
 ) -> Result<BlueprintDefinition> {
-    let raw_definition = client
-        .get_raw_blueprint_definition_from_event(blueprint_id)
-        .await
-        .map_err(|e| eyre!(e.to_string()))?;
-    let definition = decode_blueprint_definition(&raw_definition)?;
-    warn_if_unverified_sources(&definition);
-    Ok(definition)
+    match client.get_raw_blueprint_definition_from_event(blueprint_id).await {
+        Ok(raw_definition) => {
+            let definition = decode_blueprint_definition(&raw_definition)?;
+            warn_if_unverified_sources(&definition);
+            Ok(definition)
+        }
+        // The display event may be pruned or unreachable on a non-archive RPC. Degrade to the
+        // on-chain definition (schemas/sources/config intact, display prose empty) so display
+        // commands still work instead of hard-failing.
+        Err(e) => {
+            tracing::warn!(
+                "blueprint {blueprint_id} display event unavailable ({e}); falling back to                  on-chain definition (job/metadata display strings will be empty)"
+            );
+            fetch_blueprint_definition_onchain(client, blueprint_id).await
+        }
+    }
 }
 
 /// Fetch and decode the blueprint definition from Tangle-core storage.

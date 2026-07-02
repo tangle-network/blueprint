@@ -363,8 +363,8 @@ pub struct LockInfo {
     pub amount: U256,
     /// Multiplier tier.
     pub multiplier: LockMultiplier,
-    /// Block when lock expires.
-    pub expiry_block: u64,
+    /// Unix timestamp when the lock expires (tnt-core 0.18: expiryTimestamp).
+    pub expiry_timestamp: u64,
 }
 
 /// Delegation info for a delegator.
@@ -837,8 +837,12 @@ impl TangleClient {
             let logs = self.get_logs(&filter).await?;
             // Newest wins: the latest recording is the current definition.
             for log in logs.iter().rev() {
-                let decoded = BlueprintDefinitionRecorded::decode_log(&log.inner)
-                    .map_err(|e| Error::Contract(e.to_string()))?;
+                // A log matching only topic0 could be emitted by another contract; a decode
+                // failure there must not abort the scan. Skip it — the keccak check below is
+                // the real integrity anchor, so a foreign/forged log can never be accepted.
+                let Ok(decoded) = BlueprintDefinitionRecorded::decode_log(&log.inner) else {
+                    continue;
+                };
                 let encoded = decoded.encodedDefinition.to_vec();
                 if keccak256(&encoded) == expected_hash {
                     return Ok(encoded);
@@ -2000,7 +2004,7 @@ impl TangleClient {
             .map(|lock| LockInfo {
                 amount: lock.amount,
                 multiplier: LockMultiplier::from(lock.multiplier),
-                expiry_block: lock.expiryTimestamp,
+                expiry_timestamp: lock.expiryTimestamp,
             })
             .collect())
     }
