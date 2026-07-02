@@ -674,15 +674,12 @@ impl TangleClient {
             // up from a wide initial lookback, advance one bounded window per poll
             // (the caller loops, so head is reached over successive calls).
             let to_block = core::cmp::min(
-                from_block.saturating_add(self.max_getlogs_range - 1),
+                from_block.saturating_add(self.max_getlogs_range.saturating_sub(1)),
                 current_block,
             );
 
             // Get block info
-            let Some(block) = (match self
-                .get_block(BlockNumberOrTag::Number(to_block))
-                .await
-            {
+            let Some(block) = (match self.get_block(BlockNumberOrTag::Number(to_block)).await {
                 Ok(block) => block,
                 Err(err) => {
                     tracing::warn!(error = %err, block = to_block, "Failed to fetch block");
@@ -764,6 +761,24 @@ impl TangleClient {
             .await
             .map_err(|e| Error::Contract(e.to_string()))?;
         Ok(result)
+    }
+
+    /// Get the live operator count for a blueprint.
+    ///
+    /// tnt-core v0.18.0 removed the stored `operatorCount` from the Blueprint
+    /// struct; `blueprintOperatorCount` derives it from the operator set.
+    pub async fn get_blueprint_operator_count(&self, blueprint_id: u64) -> Result<u32> {
+        let contract = self.tangle_contract();
+        let count = contract
+            .blueprintOperatorCount(blueprint_id)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        u32::try_from(count).map_err(|_| {
+            Error::Contract(format!(
+                "blueprintOperatorCount({blueprint_id}) = {count} exceeds u32"
+            ))
+        })
     }
 
     /// Fetch the raw ABI-encoded blueprint definition bytes.

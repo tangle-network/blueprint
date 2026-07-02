@@ -28,6 +28,7 @@
 //!     timestamp: 1700000000,
 //!     expiry: 1700003600,
 //!     confidentiality: 0,
+//!     inputs_hash: keccak256(&job_inputs), // binds the price to the exact submitted inputs
 //! };
 //!
 //! let signed = signer.sign(&details)?;
@@ -84,7 +85,7 @@ impl TryFrom<u8> for Confidentiality {
 
 /// Per-job quote details that get EIP-712 signed
 ///
-/// Matches `Types.JobQuoteDetails` in tnt-core (v0.13.0+):
+/// Matches `Types.JobQuoteDetails` in tnt-core (v0.18.0+):
 /// ```solidity
 /// struct JobQuoteDetails {
 ///     address requester;
@@ -94,6 +95,7 @@ impl TryFrom<u8> for Confidentiality {
 ///     uint64 timestamp;
 ///     uint64 expiry;
 ///     uint8 confidentiality;
+///     bytes32 inputsHash;
 /// }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,6 +112,11 @@ pub struct JobQuoteDetails {
     /// 0 = Any (no TEE), 1 = Required, 2 = Preferred.
     /// Prevents replay of a non-TEE quote for a TEE-required service.
     pub confidentiality: u8,
+    /// `keccak256(inputs)` of the exact job inputs the requester will submit
+    /// on-chain, binding the operator's price to those inputs. There is NO
+    /// wildcard: submission reverts `JobQuoteInputsMismatch` unless
+    /// `keccak256(submitted inputs)` equals this value (tnt-core v0.18.0+).
+    pub inputs_hash: B256,
 }
 
 impl JobQuoteDetails {
@@ -266,12 +273,13 @@ fn compute_domain_separator(domain: QuoteSigningDomain) -> B256 {
 /// keccak256(abi.encode(JOB_QUOTE_TYPEHASH, requester, serviceId, jobIndex, price, timestamp, expiry, confidentiality))
 /// ```
 fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
-    const JOB_QUOTE_TYPEHASH_STR: &str = "JobQuoteDetails(address requester,uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry,uint8 confidentiality)";
+    const JOB_QUOTE_TYPEHASH_STR: &str = "JobQuoteDetails(address requester,uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry,uint8 confidentiality,bytes32 inputsHash)";
 
     let typehash = keccak256(JOB_QUOTE_TYPEHASH_STR.as_bytes());
 
     // abi.encode pads each field to 32 bytes, matching Solidity's abi.encode behavior.
-    // `requester` is the first field after the typehash (v0.13.0 binding).
+    // `requester` is the first field after the typehash (v0.13.0 binding);
+    // `inputsHash` is the trailing field (v0.18.0 input binding).
     let encoded = (
         typehash,
         details.requester,
@@ -281,6 +289,7 @@ fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
         U256::from(details.timestamp),
         U256::from(details.expiry),
         U256::from(details.confidentiality),
+        details.inputs_hash,
     )
         .abi_encode();
 
@@ -307,6 +316,7 @@ impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::
                 timestamp: quote.details.timestamp,
                 expiry: quote.details.expiry,
                 confidentiality: quote.details.confidentiality,
+                inputsHash: quote.details.inputs_hash,
             },
             signature: sig_bytes.into(),
             operator: quote.operator,
@@ -340,6 +350,12 @@ mod tests {
         address!("000000000000000000000000000000000000bEEF")
     }
 
+    /// `keccak256("")` — the inputs hash for an empty inputs payload. Also the value the
+    /// cross-repo Solidity vectors (EIP712Compatibility.t.sol) pin their digests against.
+    fn empty_inputs_hash() -> B256 {
+        keccak256([])
+    }
+
     #[test]
     fn test_hash_job_quote_deterministic() {
         let details = JobQuoteDetails {
@@ -350,6 +366,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
         let h1 = hash_job_quote_details(&details);
         let h2 = hash_job_quote_details(&details);
@@ -366,6 +383,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
         let details2 = JobQuoteDetails {
             requester: placeholder_requester(),
@@ -375,6 +393,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
         assert_ne!(
             hash_job_quote_details(&details1),
@@ -393,6 +412,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
         let other = JobQuoteDetails {
             requester: address!("00000000000000000000000000000000DeadBeef"),
@@ -415,6 +435,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
         let tee_required = JobQuoteDetails {
             confidentiality: 1,
@@ -428,6 +449,30 @@ mod tests {
     }
 
     #[test]
+    fn test_inputs_hash_changes_hash() {
+        let base = JobQuoteDetails {
+            requester: placeholder_requester(),
+            service_id: 1,
+            job_index: 0,
+            price: U256::from(100u64),
+            timestamp: 1700000000,
+            expiry: 1700003600,
+            confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
+        };
+        let other_inputs = JobQuoteDetails {
+            inputs_hash: keccak256(b"different job inputs"),
+            ..base.clone()
+        };
+        // A quote priced for one inputs payload must NOT verify for another —
+        // this mirrors the on-chain JobQuoteInputsMismatch check.
+        assert_ne!(
+            hash_job_quote_details(&base),
+            hash_job_quote_details(&other_inputs),
+        );
+    }
+
+    #[test]
     fn test_digest_differs_across_domains() {
         let details = JobQuoteDetails {
             requester: placeholder_requester(),
@@ -437,6 +482,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
         let domain1 = test_domain();
         let domain2 = QuoteSigningDomain {
@@ -467,6 +513,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
 
         let signed = signer.sign(&details).unwrap();
@@ -492,6 +539,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
 
         let signed = signer.sign(&details).unwrap();
@@ -514,6 +562,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
 
         let mut signed = signer.sign(&details).unwrap();
@@ -565,22 +614,23 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
 
         let struct_hash = hash_job_quote_details(&details);
         assert_eq!(
             struct_hash,
             B256::from(hex_literal::hex!(
-                "81efa1579f66bc16802d9c482eb23561fa1a86e1288cb65902b4619005a04a87"
+                "223829f63247a6b4a7724cdd0b3bb9b33ffacf2ac573851b8b4d6d028885c710"
             )),
-            "struct hash must match Solidity Vector 1 (v0.13.0 typehash with requester)"
+            "struct hash must match Solidity Vector 1 (v0.18.0 typehash with inputsHash)"
         );
 
         let digest = job_quote_digest_eip712(&details, domain);
         assert_eq!(
             digest,
-            hex_literal::hex!("fd2339fda45c2e7e30f8d5dbcc062f82af12757ad80175cbdd6972627fb3c54c"),
-            "EIP-712 digest must match Solidity Vector 1 (v0.13.0 typehash with requester)"
+            hex_literal::hex!("9bd02b8b280e84cda6136def5cae3eb19e0c5ab5bd4619a0cad56bc2c4f15a11"),
+            "EIP-712 digest must match Solidity Vector 1 (v0.18.0 typehash with inputsHash)"
         );
     }
 
@@ -595,13 +645,14 @@ mod tests {
             timestamp: 1000000,
             expiry: 1003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
 
         let digest = job_quote_digest_eip712(&details, domain);
         assert_eq!(
             digest,
-            hex_literal::hex!("c21c630f71383acd4d8f5465a13264f9e376dfb323acfe97d5202bc9a5baa221"),
-            "zero-price digest must match Solidity Vector 2 (v0.13.0 typehash with requester)"
+            hex_literal::hex!("1e88efd60c60a4c1e73e353d8ded5256bfffd2b115bf79c1646a555f8936ebf1"),
+            "zero-price digest must match Solidity Vector 2 (v0.18.0 typehash with inputsHash)"
         );
     }
 
@@ -616,13 +667,14 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700007200,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
 
         let digest = job_quote_digest_eip712(&details, domain);
         assert_eq!(
             digest,
-            hex_literal::hex!("ebd98b504cfdbe392ddf9813148e2f7808bb6f7ef85c376315fe0446c2ffc9ee"),
-            "large-price digest must match Solidity Vector 3 (v0.13.0 typehash with requester)"
+            hex_literal::hex!("b8c5094b407d6dd0c0e83ad9cd611be39095713ed16c720a8fe4a829ba84fc7f"),
+            "large-price digest must match Solidity Vector 3 (v0.18.0 typehash with inputsHash)"
         );
     }
 
@@ -642,6 +694,7 @@ mod tests {
             timestamp: 1700000000,
             expiry: 1700003600,
             confidentiality: 0,
+            inputs_hash: empty_inputs_hash(),
         };
 
         // Sign and verify the digest recovers to the expected address
@@ -664,8 +717,8 @@ mod tests {
         r.copy_from_slice(&sig_bytes[..32]);
         assert_eq!(
             r,
-            hex_literal::hex!("9d22c9909f6ebbcadc4ec85467c487e3d29afa8409f058371894af17f176db4c"),
-            "signature `r` must match Solidity Vector 4 (v0.13.0 with requester)"
+            hex_literal::hex!("2561b12e4d70171c286c5dcedd0680c480eddf0c9846d1306218681793959308"),
+            "signature `r` must match Solidity Vector 4 (v0.18.0 with inputsHash)"
         );
 
         let valid = verify_job_quote(&signed, &signer.verifying_key(), domain).unwrap();

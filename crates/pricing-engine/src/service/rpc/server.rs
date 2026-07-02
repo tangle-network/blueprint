@@ -487,6 +487,11 @@ impl PricingEngine for PricingEngineService {
         // so downstream signing code can rely on a non-zero `requester`.
         let requester = parse_requester(&req.requester)?;
 
+        // Validate the inputs hash up-front: tnt-core v0.18.0+ binds the signed
+        // price to keccak256(inputs) with no wildcard — a quote signed over a
+        // missing/malformed hash could never be redeemed on-chain.
+        let inputs_hash = parse_inputs_hash(&req.inputs_hash)?;
+
         info!(
             "Received GetJobPrice request for service {} job index {}",
             service_id, job_index
@@ -576,6 +581,7 @@ impl PricingEngine for PricingEngineService {
             expiry,
             confidentiality,
             requester: requester.0.to_vec(),
+            inputs_hash: inputs_hash.to_vec(),
         };
 
         // Generate proof of work for response
@@ -668,6 +674,26 @@ fn parse_requester(bytes: &[u8]) -> std::result::Result<alloy_primitives::Addres
         ));
     }
     Ok(addr)
+}
+
+/// Parse and validate the `inputs_hash` bytes from a job price request. Rejects
+/// anything that is not exactly 32 bytes: tnt-core v0.18.0+ verifies
+/// `keccak256(submitted inputs) == quote.details.inputsHash` with no wildcard,
+/// so a quote signed over a missing or malformed hash is unredeemable — fail
+/// fast at the gRPC boundary.
+fn parse_inputs_hash(bytes: &[u8]) -> std::result::Result<alloy_primitives::B256, Status> {
+    if bytes.is_empty() {
+        return Err(Status::invalid_argument(
+            "inputs_hash required: keccak256 of the exact job inputs to be submitted on-chain",
+        ));
+    }
+    if bytes.len() != 32 {
+        return Err(Status::invalid_argument(format!(
+            "inputs_hash must be a 32-byte keccak256 hash, got {} bytes",
+            bytes.len()
+        )));
+    }
+    Ok(alloy_primitives::B256::from_slice(bytes))
 }
 
 /// Internal settlement option (pre-proto conversion).
@@ -855,6 +881,14 @@ mod tests {
         bytes
     }
 
+    /// keccak256 of a fixed inputs payload for tests. Production callers MUST
+    /// send keccak256 of the exact inputs they will submit on-chain; the gRPC
+    /// layer rejects anything that is not 32 bytes (tnt-core v0.18.0+ binds
+    /// quotes to inputs with no wildcard).
+    fn test_inputs_hash_bytes() -> Vec<u8> {
+        alloy_primitives::keccak256(b"test job inputs").to_vec()
+    }
+
     fn make_service(job_entries: Vec<((u64, u32), U256)>) -> PricingEngineService {
         let mut svc = PricingEngineService::new_with_configs(
             test_config(),
@@ -893,6 +927,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -923,6 +958,7 @@ mod tests {
                 challenge_timestamp: ts,
                 require_tee: false,
                 requester: test_requester_bytes(),
+                inputs_hash: test_inputs_hash_bytes(),
             });
             let resp = svc.get_job_price(req).await.unwrap().into_inner();
             let details = resp.quote_details.unwrap();
@@ -948,6 +984,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -969,6 +1006,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -989,6 +1027,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1007,6 +1046,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1026,6 +1066,7 @@ mod tests {
             challenge_timestamp: 0, // 0 = missing
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1045,6 +1086,7 @@ mod tests {
             challenge_timestamp: old_ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1064,6 +1106,7 @@ mod tests {
             challenge_timestamp: future_ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1085,6 +1128,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1104,6 +1148,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1135,6 +1180,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1168,6 +1214,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1476,6 +1523,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: true,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1502,6 +1550,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: true,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1525,6 +1574,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: true,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1547,6 +1597,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: true,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1569,6 +1620,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();
@@ -1594,7 +1646,8 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
-            requester: vec![0u8; 20], // zero address
+            requester: vec![0u8; 20], // zero address,
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1617,7 +1670,8 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
-            requester: vec![], // missing
+            requester: vec![], // missing,
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1635,7 +1689,8 @@ mod tests {
             proof_of_work: pow,
             challenge_timestamp: ts,
             require_tee: false,
-            requester: vec![0xbe; 19], // 19 bytes, not 20
+            requester: vec![0xbe; 19], // 19 bytes, not 20,
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let err = svc.get_job_price(req).await.unwrap_err();
@@ -1645,6 +1700,76 @@ mod tests {
             "error must mention length: {}",
             err.message()
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_rejects_missing_inputs_hash() {
+        let svc = make_service(vec![((1, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: false,
+            requester: test_requester_bytes(),
+            inputs_hash: vec![], // missing — quote would be unredeemable on-chain
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(
+            err.message().contains("inputs_hash"),
+            "error must name the missing field: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_rejects_short_inputs_hash() {
+        let svc = make_service(vec![((1, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: false,
+            requester: test_requester_bytes(),
+            inputs_hash: vec![0x11; 31], // 31 bytes, not a keccak256 output
+        });
+
+        let err = svc.get_job_price(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(
+            err.message().contains("32-byte"),
+            "error must mention length: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_job_price_echoes_inputs_hash_in_signed_details() {
+        let svc = make_service(vec![((1, 0), U256::from(100u64))]);
+        let (ts, pow) = valid_pow(1).await;
+
+        let req = Request::new(GetJobPriceRequest {
+            service_id: 1,
+            job_index: 0,
+            proof_of_work: pow,
+            challenge_timestamp: ts,
+            require_tee: false,
+            requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
+        });
+
+        let resp = svc.get_job_price(req).await.unwrap().into_inner();
+        let details = resp.quote_details.unwrap();
+        // The signed details must carry the exact hash the requester supplied —
+        // any other value could never be redeemed on-chain (JobQuoteInputsMismatch).
+        assert_eq!(details.inputs_hash, test_inputs_hash_bytes());
     }
 
     #[tokio::test]
@@ -1693,6 +1818,7 @@ mod tests {
             challenge_timestamp: ts,
             require_tee: false,
             requester: test_requester_bytes(),
+            inputs_hash: test_inputs_hash_bytes(),
         });
 
         let resp = svc.get_job_price(req).await.unwrap().into_inner();

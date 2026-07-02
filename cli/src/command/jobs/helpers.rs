@@ -47,7 +47,10 @@ pub async fn fetch_blueprint_definition(
     client: &TangleClient,
     blueprint_id: u64,
 ) -> Result<BlueprintDefinition> {
-    match client.get_raw_blueprint_definition_from_event(blueprint_id).await {
+    match client
+        .get_raw_blueprint_definition_from_event(blueprint_id)
+        .await
+    {
         Ok(raw_definition) => {
             let definition = decode_blueprint_definition(&raw_definition)?;
             warn_if_unverified_sources(&definition);
@@ -58,7 +61,7 @@ pub async fn fetch_blueprint_definition(
         // commands still work instead of hard-failing.
         Err(e) => {
             tracing::warn!(
-                "blueprint {blueprint_id} display event unavailable ({e}); falling back to                  on-chain definition (job/metadata display strings will be empty)"
+                "blueprint {blueprint_id} display event unavailable ({e}); falling back to on-chain definition (job/metadata display strings will be empty)"
             );
             fetch_blueprint_definition_onchain(client, blueprint_id).await
         }

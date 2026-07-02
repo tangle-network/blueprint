@@ -272,6 +272,17 @@ fn proto_to_native_job_quote(
         ));
     }
 
+    // 32 bytes required: tnt-core v0.18.0+ verifies keccak256(submitted inputs)
+    // against the signed hash with no wildcard, so signing over a missing or
+    // malformed hash would produce an unredeemable quote.
+    if details.inputs_hash.len() != 32 {
+        return Err(PricingError::Signing(format!(
+            "inputs_hash must be 32 bytes (keccak256 of the job inputs), got {}",
+            details.inputs_hash.len()
+        )));
+    }
+    let inputs_hash = alloy_primitives::B256::from_slice(&details.inputs_hash);
+
     Ok(jq::JobQuoteDetails {
         requester,
         service_id: details.service_id,
@@ -285,6 +296,7 @@ fn proto_to_native_job_quote(
                 details.confidentiality
             ))
         })?,
+        inputs_hash,
     })
 }
 
@@ -344,6 +356,12 @@ fn build_abi_quote_details(
         timestamp: details.timestamp,
         expiry: details.expiry,
         confidentiality,
+        // This signer only issues create-flow quotes (there is no extend RFQ in
+        // the proto surface). tnt-core v0.18.0+ binds the flow into the signature
+        // and REQUIRES serviceId == 0 on Create, so an operator's create quote
+        // cannot be replayed against extendServiceFromQuotes.
+        operation: 0, // QuoteOperation.Create
+        serviceId: 0,
         securityCommitments: security_commitments,
         resourceCommitments: resource_commitments,
     })

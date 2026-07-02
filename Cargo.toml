@@ -521,8 +521,3 @@ debug = true
 inherits = "release"
 lto = "thin"
 
-
-# Interim until tnt-core-bindings 0.18.0 publishes (tnt-core#193). Public HTTPS + pinned rev
-# for reproducible, auth-free CI/contributor builds. Drop this patch after the crates.io publish.
-[patch.crates-io]
-tnt-core-bindings = { git = "https://github.com/tangle-network/tnt-core.git", rev = "3f2b9f05f2e886af4f0b3d080b6c29cf895b62e7" }

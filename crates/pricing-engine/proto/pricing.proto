@@ -159,6 +159,10 @@ message GetJobPriceRequest {
   // rejected by the on-chain verifier in tnt-core v0.13.0+. Bound into the
   // EIP-712 signature so a quote can only be redeemed by this address.
   bytes requester = 6;
+  // keccak256 of the exact job inputs the requester will submit on-chain
+  // (32 bytes, required). Bound into the EIP-712 signature; tnt-core v0.18.0+
+  // reverts JobQuoteInputsMismatch when the submitted inputs hash differently.
+  bytes inputs_hash = 7;
 }
 
 // Response message for GetJobPrice RPC
@@ -201,7 +205,7 @@ message SettlementOption {
   string scheme = 6;
 }
 
-// Per-job quote details matching tnt-core Types.JobQuoteDetails (v0.13.0+)
+// Per-job quote details matching tnt-core Types.JobQuoteDetails (v0.18.0+)
 message JobQuoteDetails {
   // The service instance ID
   uint64 service_id = 1;
@@ -221,4 +225,9 @@ message JobQuoteDetails {
   // rejected by the on-chain verifier in tnt-core v0.13.0+. Bound into the
   // EIP-712 signature so a quote can only be redeemed by this address.
   bytes requester = 7;
+  // keccak256 of the exact job inputs the quote is priced against (32 bytes,
+  // required). Echoed from GetJobPriceRequest.inputs_hash and bound into the
+  // EIP-712 signature; tnt-core v0.18.0+ reverts JobQuoteInputsMismatch when
+  // the submitted inputs hash differently.
+  bytes inputs_hash = 8;
 }
