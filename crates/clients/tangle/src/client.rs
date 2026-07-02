@@ -1189,7 +1189,82 @@ impl TangleClient {
             .map_err(|e| Error::Contract(e.to_string()))
     }
 
+    /// Fetch the operator's current RPC endpoint for a blueprint from events.
+    ///
+    /// tnt-core v0.18.0 stopped persisting `rpcAddress` (getOperatorPreferences
+    /// always returns an empty string); the endpoint rides `OperatorRegistered` /
+    /// `OperatorPreferencesUpdated` in full on every change. This scans backward
+    /// from the chain head, filtered to the Tangle contract + `(blueprintId,
+    /// operator)` topics, and returns the newest event's `rpcAddress`.
+    ///
+    /// # Errors
+    /// Returns [`Error::Contract`] when no matching event exists in the scanned
+    /// history (unregistered operator, or a pruned non-archive RPC).
+    pub async fn get_operator_rpc_endpoint(
+        &self,
+        blueprint_id: u64,
+        operator: Address,
+    ) -> Result<String> {
+        use crate::contracts::ITangle::{OperatorPreferencesUpdated, OperatorRegistered};
+
+        let mut id_topic = [0u8; 32];
+        id_topic[24..].copy_from_slice(&blueprint_id.to_be_bytes());
+        let id_topic = B256::from(id_topic);
+
+        let head = self.block_number().await?;
+        let mut to_block = head;
+        loop {
+            let from_block = to_block.saturating_sub(self.max_getlogs_range.saturating_sub(1));
+            let filter = Filter::new()
+                .address(self.tangle_address)
+                .event_signature(vec![
+                    OperatorRegistered::SIGNATURE_HASH,
+                    OperatorPreferencesUpdated::SIGNATURE_HASH,
+                ])
+                .topic1(id_topic)
+                .topic2(operator.into_word())
+                .from_block(from_block)
+                .to_block(to_block);
+
+            let logs = self.get_logs(&filter).await?;
+            // Newest wins: the latest registration/update carries the live endpoint.
+            for log in logs.iter().rev() {
+                let topic0 = log.topic0().copied();
+                let rpc_address = if topic0 == Some(OperatorRegistered::SIGNATURE_HASH) {
+                    OperatorRegistered::decode_log(&log.inner)
+                        .map(|e| e.rpcAddress.clone())
+                        .ok()
+                } else if topic0 == Some(OperatorPreferencesUpdated::SIGNATURE_HASH) {
+                    OperatorPreferencesUpdated::decode_log(&log.inner)
+                        .map(|e| e.rpcAddress.clone())
+                        .ok()
+                } else {
+                    None
+                };
+                if let Some(rpc_address) = rpc_address {
+                    return Ok(rpc_address);
+                }
+            }
+
+            if from_block == 0 {
+                break;
+            }
+            to_block = from_block.saturating_sub(1);
+        }
+
+        Err(Error::Contract(format!(
+            "no OperatorRegistered/OperatorPreferencesUpdated event found for blueprint \
+             {blueprint_id} operator {operator} (unregistered, or logs pruned on this RPC)"
+        )))
+    }
+
     /// Fetch operator metadata (ECDSA public key + RPC endpoint) for a blueprint.
+    ///
+    /// `rpc_endpoint` is event-sourced (tnt-core v0.18.0 keeps storage empty).
+    /// When the event history is unavailable (pruned RPC), the endpoint degrades
+    /// to an empty string with a warning — key and restaking data still come
+    /// from storage. Use [`Self::get_operator_rpc_endpoint`] directly when a
+    /// missing endpoint must be a hard error.
     pub async fn get_operator_metadata(
         &self,
         blueprint_id: u64,
@@ -1208,9 +1283,21 @@ impl TangleClient {
             .await
             .map_err(|e| Error::Contract(format!("getOperatorMetadata failed: {e}")))?;
         let public_key = normalize_public_key(&prefs.ecdsaPublicKey.0)?;
+        let rpc_endpoint = match self.get_operator_rpc_endpoint(blueprint_id, operator).await {
+            Ok(endpoint) => endpoint,
+            Err(e) => {
+                tracing::warn!(
+                    blueprint_id,
+                    %operator,
+                    error = %e,
+                    "operator rpc endpoint unavailable from events; returning empty endpoint"
+                );
+                String::new()
+            }
+        };
         Ok(OperatorMetadata {
             public_key,
-            rpc_endpoint: prefs.rpcAddress.to_string(),
+            rpc_endpoint,
             restaking: RestakingMetadata {
                 stake: restaking_meta.stake,
                 delegation_count: restaking_meta.delegationCount,
