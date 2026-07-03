@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.11](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.10...cargo-tangle-v0.5.0-alpha.11) - 2026-07-03
+
+### Added
+
+- *(tangle)* event-source blueprint display data (createBlueprint gas cut companion) (#1463)
+
 ## [0.5.0-alpha.10](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.9...cargo-tangle-v0.5.0-alpha.10) - 2026-06-13
 
 ### Other
