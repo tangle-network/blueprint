@@ -126,12 +126,13 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.9", path = "./crates/sdk", default-features = false }
-# tnt-core 0.17.0 introduces the subscription billing rearchitecture
+# tnt-core 0.18 adds the event-sourced blueprint definition (blueprintDefinitionHash view +
+# BlueprintDefinitionRecorded event) on top of 0.17.0's subscription billing rearchitecture
 # (requestService + fundService flow), the payments facet split with
 # self-only distributePayment, RFQ replay / freshness / cumulative TTL
 # hardening, the collapsed approveService(ApprovalParams) entry point,
 # claimRewards / claimRewardsAll griefing isolation, and O(1) operator
-tnt-core-bindings = "0.17.1"
+tnt-core-bindings = "0.18"  # blueprintDefinitionHash view + BlueprintDefinitionRecorded event (0.18.0)
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.5", path = "crates/core", default-features = false }
@@ -519,3 +520,4 @@ debug = true
 [profile.dist]
 inherits = "release"
 lto = "thin"
+

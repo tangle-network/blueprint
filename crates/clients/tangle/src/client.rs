@@ -14,7 +14,7 @@ use alloy_rpc_types::{
     Block, BlockNumberOrTag, Filter, Log, TransactionReceipt,
     transaction::{TransactionInput, TransactionRequest},
 };
-use alloy_sol_types::SolCall;
+use alloy_sol_types::{SolCall, SolEvent};
 use blueprint_client_core::{BlueprintServicesClient, OperatorSet};
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::Keystore;
@@ -29,8 +29,8 @@ use tokio::sync::Mutex;
 
 use crate::config::TangleClientConfig;
 use crate::contracts::{
-    IBlueprintServiceManager, IMultiAssetDelegation, IMultiAssetDelegationTypes,
-    IOperatorStatusRegistry, ITangle, ITangleTypes,
+    IBlueprintServiceManager, IMasterBlueprintServiceManager, IMultiAssetDelegation,
+    IMultiAssetDelegationTypes, IOperatorStatusRegistry, ITangle, ITangleBlueprints, ITangleTypes,
 };
 use crate::error::{Error, Result};
 use crate::services::ServiceRequestParams;
@@ -45,6 +45,23 @@ const CREATE_BLUEPRINT_MIN_GAS_LIMIT: u64 = 5_000_000;
 const REGISTER_BLUEPRINT_OPERATOR_MIN_GAS_LIMIT: u64 = 1_000_000;
 const REQUEST_SERVICE_MIN_GAS_LIMIT: u64 = 2_000_000;
 const APPROVE_SERVICE_MIN_GAS_LIMIT: u64 = 1_000_000;
+
+/// Default max `eth_getLogs` block span per request. Hosted RPCs commonly cap
+/// the range (Base Sepolia's public node rejects >2000 with error -32602), and
+/// it varies by provider — override per chain with `MAX_GETLOGS_RANGE` in
+/// `settings.env`. A single poll scans at most this many blocks; the caller
+/// catches up to head over successive polls.
+const DEFAULT_MAX_GETLOGS_RANGE: u64 = 2_000;
+
+/// Resolve the per-chain `eth_getLogs` window from the environment (set via
+/// `settings.env`, which the CLI dotenv-loads), falling back to the default.
+fn resolve_max_getlogs_range() -> u64 {
+    std::env::var("MAX_GETLOGS_RANGE")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(DEFAULT_MAX_GETLOGS_RANGE)
+}
 const ERC20_APPROVE_MIN_GAS_LIMIT: u64 = 100_000;
 const REGISTER_OPERATOR_RESTAKING_MIN_GAS_LIMIT: u64 = 500_000;
 #[allow(missing_docs)]
@@ -60,6 +77,8 @@ mod erc20 {
 }
 
 use erc20::IERC20;
+
+use IMasterBlueprintServiceManager::BlueprintDefinitionRecorded;
 
 /// Compute the gas limit to submit with: buffered estimate if available, else the
 /// caller-provided minimum. Always `>= min_gas_limit`.
@@ -344,8 +363,8 @@ pub struct LockInfo {
     pub amount: U256,
     /// Multiplier tier.
     pub multiplier: LockMultiplier,
-    /// Block when lock expires.
-    pub expiry_block: u64,
+    /// Unix timestamp when the lock expires (tnt-core 0.18: expiryTimestamp).
+    pub expiry_timestamp: u64,
 }
 
 /// Delegation info for a delegator.
@@ -458,6 +477,8 @@ pub struct TangleClient {
     latest_block: Arc<Mutex<Option<TangleEvent>>>,
     /// Current block subscription
     block_subscription: Arc<Mutex<Option<u64>>>,
+    /// Per-chain `eth_getLogs` block-span cap (see `resolve_max_getlogs_range`)
+    max_getlogs_range: u64,
 }
 
 #[allow(clippy::missing_fields_in_debug)] // provider/signer/subscription intentionally omitted
@@ -524,6 +545,7 @@ impl TangleClient {
             keystore: Arc::new(keystore),
             latest_block: Arc::new(Mutex::new(None)),
             block_subscription: Arc::new(Mutex::new(None)),
+            max_getlogs_range: resolve_max_getlogs_range(),
         })
     }
 
@@ -648,20 +670,25 @@ impl TangleClient {
                 continue;
             }
 
+            // Cap the scan to the RPC's `eth_getLogs` range limit. When catching
+            // up from a wide initial lookback, advance one bounded window per poll
+            // (the caller loops, so head is reached over successive calls).
+            let to_block = core::cmp::min(
+                from_block.saturating_add(self.max_getlogs_range.saturating_sub(1)),
+                current_block,
+            );
+
             // Get block info
-            let Some(block) = (match self
-                .get_block(BlockNumberOrTag::Number(current_block))
-                .await
-            {
+            let Some(block) = (match self.get_block(BlockNumberOrTag::Number(to_block)).await {
                 Ok(block) => block,
                 Err(err) => {
-                    tracing::warn!(error = %err, block = current_block, "Failed to fetch block");
+                    tracing::warn!(error = %err, block = to_block, "Failed to fetch block");
                     drop(last_block);
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             }) else {
-                tracing::warn!(block = current_block, "Latest block was unavailable");
+                tracing::warn!(block = to_block, "Latest block was unavailable");
                 drop(last_block);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
@@ -671,7 +698,7 @@ impl TangleClient {
             let filter = Filter::new()
                 .address(self.tangle_address)
                 .from_block(from_block)
-                .to_block(current_block);
+                .to_block(to_block);
 
             let logs = match self.get_logs(&filter).await {
                 Ok(logs) => logs,
@@ -679,7 +706,7 @@ impl TangleClient {
                     tracing::warn!(
                         error = %err,
                         from_block,
-                        to_block = current_block,
+                        to_block,
                         "Failed to fetch Tangle logs"
                     );
                     drop(last_block);
@@ -688,10 +715,10 @@ impl TangleClient {
                 }
             };
 
-            *last_block = Some(current_block);
+            *last_block = Some(to_block);
 
             let event = TangleEvent {
-                block_number: current_block,
+                block_number: to_block,
                 block_hash: block.header.hash,
                 timestamp: block.header.timestamp,
                 logs,
@@ -736,6 +763,24 @@ impl TangleClient {
         Ok(result)
     }
 
+    /// Get the live operator count for a blueprint.
+    ///
+    /// tnt-core v0.18.0 removed the stored `operatorCount` from the Blueprint
+    /// struct; `blueprintOperatorCount` derives it from the operator set.
+    pub async fn get_blueprint_operator_count(&self, blueprint_id: u64) -> Result<u32> {
+        let contract = self.tangle_contract();
+        let count = contract
+            .blueprintOperatorCount(blueprint_id)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        u32::try_from(count).map_err(|_| {
+            Error::Contract(format!(
+                "blueprintOperatorCount({blueprint_id}) = {count} exceeds u32"
+            ))
+        })
+    }
+
     /// Fetch the raw ABI-encoded blueprint definition bytes.
     pub async fn get_raw_blueprint_definition(&self, blueprint_id: u64) -> Result<Vec<u8>> {
         let mut data = Vec::with_capacity(4 + 32);
@@ -756,6 +801,78 @@ impl TangleClient {
             .map_err(Error::Transport)?;
 
         Ok(response.to_vec())
+    }
+
+    /// Fetch the raw ABI-encoded blueprint definition from the
+    /// `BlueprintDefinitionRecorded` event instead of Tangle-core storage.
+    ///
+    /// Tangle-core keeps schemas, sources, config, `metadata.name`,
+    /// `profilingData`, and `metadataUri` in storage, but the display prose
+    /// (job names/descriptions and the blueprint metadata strings) now lives
+    /// only in the event payload. This scans `eth_getLogs` for the event keyed
+    /// by `blueprintId`, takes the `encodedDefinition` bytes, and verifies
+    /// `keccak256(encodedDefinition) == blueprintDefinitionHash(blueprintId)`
+    /// so the log emitter is never trusted. The returned bytes are the same
+    /// `abi.encode(BlueprintDefinition)` layout as [`get_raw_blueprint_definition`],
+    /// so existing decoders apply unchanged.
+    ///
+    /// # Errors
+    /// Returns [`Error::Contract`] if no matching event is found, if the
+    /// on-chain integrity hash is unset, or if the payload hash does not match.
+    pub async fn get_raw_blueprint_definition_from_event(
+        &self,
+        blueprint_id: u64,
+    ) -> Result<Vec<u8>> {
+        let expected_hash = ITangleBlueprints::new(self.tangle_address, &self.provider)
+            .blueprintDefinitionHash(blueprint_id)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        if expected_hash == B256::ZERO {
+            return Err(Error::Contract(format!(
+                "blueprint {blueprint_id} has no recorded definition hash on-chain"
+            )));
+        }
+
+        // topic1 is the indexed `blueprintId`, left-padded to 32 bytes.
+        let mut id_topic = [0u8; 32];
+        id_topic[24..].copy_from_slice(&blueprint_id.to_be_bytes());
+        let id_topic = B256::from(id_topic);
+
+        let head = self.block_number().await?;
+        let mut to_block = head;
+        loop {
+            let from_block = to_block.saturating_sub(self.max_getlogs_range.saturating_sub(1));
+            let filter = Filter::new()
+                .event_signature(BlueprintDefinitionRecorded::SIGNATURE_HASH)
+                .topic1(id_topic)
+                .from_block(from_block)
+                .to_block(to_block);
+
+            let logs = self.get_logs(&filter).await?;
+            // Newest wins: the latest recording is the current definition.
+            for log in logs.iter().rev() {
+                // A log matching only topic0 could be emitted by another contract; a decode
+                // failure there must not abort the scan. Skip it — the keccak check below is
+                // the real integrity anchor, so a foreign/forged log can never be accepted.
+                let Ok(decoded) = BlueprintDefinitionRecorded::decode_log(&log.inner) else {
+                    continue;
+                };
+                let encoded = decoded.encodedDefinition.to_vec();
+                if keccak256(&encoded) == expected_hash {
+                    return Ok(encoded);
+                }
+            }
+
+            if from_block == 0 {
+                break;
+            }
+            to_block = from_block.saturating_sub(1);
+        }
+
+        Err(Error::Contract(format!(
+            "no BlueprintDefinitionRecorded event matching the on-chain hash for blueprint {blueprint_id}"
+        )))
     }
 
     /// Get blueprint configuration
@@ -1072,7 +1189,82 @@ impl TangleClient {
             .map_err(|e| Error::Contract(e.to_string()))
     }
 
+    /// Fetch the operator's current RPC endpoint for a blueprint from events.
+    ///
+    /// tnt-core v0.18.0 stopped persisting `rpcAddress` (getOperatorPreferences
+    /// always returns an empty string); the endpoint rides `OperatorRegistered` /
+    /// `OperatorPreferencesUpdated` in full on every change. This scans backward
+    /// from the chain head, filtered to the Tangle contract + `(blueprintId,
+    /// operator)` topics, and returns the newest event's `rpcAddress`.
+    ///
+    /// # Errors
+    /// Returns [`Error::Contract`] when no matching event exists in the scanned
+    /// history (unregistered operator, or a pruned non-archive RPC).
+    pub async fn get_operator_rpc_endpoint(
+        &self,
+        blueprint_id: u64,
+        operator: Address,
+    ) -> Result<String> {
+        use crate::contracts::ITangle::{OperatorPreferencesUpdated, OperatorRegistered};
+
+        let mut id_topic = [0u8; 32];
+        id_topic[24..].copy_from_slice(&blueprint_id.to_be_bytes());
+        let id_topic = B256::from(id_topic);
+
+        let head = self.block_number().await?;
+        let mut to_block = head;
+        loop {
+            let from_block = to_block.saturating_sub(self.max_getlogs_range.saturating_sub(1));
+            let filter = Filter::new()
+                .address(self.tangle_address)
+                .event_signature(vec![
+                    OperatorRegistered::SIGNATURE_HASH,
+                    OperatorPreferencesUpdated::SIGNATURE_HASH,
+                ])
+                .topic1(id_topic)
+                .topic2(operator.into_word())
+                .from_block(from_block)
+                .to_block(to_block);
+
+            let logs = self.get_logs(&filter).await?;
+            // Newest wins: the latest registration/update carries the live endpoint.
+            for log in logs.iter().rev() {
+                let topic0 = log.topic0().copied();
+                let rpc_address = if topic0 == Some(OperatorRegistered::SIGNATURE_HASH) {
+                    OperatorRegistered::decode_log(&log.inner)
+                        .map(|e| e.rpcAddress.clone())
+                        .ok()
+                } else if topic0 == Some(OperatorPreferencesUpdated::SIGNATURE_HASH) {
+                    OperatorPreferencesUpdated::decode_log(&log.inner)
+                        .map(|e| e.rpcAddress.clone())
+                        .ok()
+                } else {
+                    None
+                };
+                if let Some(rpc_address) = rpc_address {
+                    return Ok(rpc_address);
+                }
+            }
+
+            if from_block == 0 {
+                break;
+            }
+            to_block = from_block.saturating_sub(1);
+        }
+
+        Err(Error::Contract(format!(
+            "no OperatorRegistered/OperatorPreferencesUpdated event found for blueprint \
+             {blueprint_id} operator {operator} (unregistered, or logs pruned on this RPC)"
+        )))
+    }
+
     /// Fetch operator metadata (ECDSA public key + RPC endpoint) for a blueprint.
+    ///
+    /// `rpc_endpoint` is event-sourced (tnt-core v0.18.0 keeps storage empty).
+    /// When the event history is unavailable (pruned RPC), the endpoint degrades
+    /// to an empty string with a warning — key and restaking data still come
+    /// from storage. Use [`Self::get_operator_rpc_endpoint`] directly when a
+    /// missing endpoint must be a hard error.
     pub async fn get_operator_metadata(
         &self,
         blueprint_id: u64,
@@ -1091,9 +1283,21 @@ impl TangleClient {
             .await
             .map_err(|e| Error::Contract(format!("getOperatorMetadata failed: {e}")))?;
         let public_key = normalize_public_key(&prefs.ecdsaPublicKey.0)?;
+        let rpc_endpoint = match self.get_operator_rpc_endpoint(blueprint_id, operator).await {
+            Ok(endpoint) => endpoint,
+            Err(e) => {
+                tracing::warn!(
+                    blueprint_id,
+                    %operator,
+                    error = %e,
+                    "operator rpc endpoint unavailable from events; returning empty endpoint"
+                );
+                String::new()
+            }
+        };
         Ok(OperatorMetadata {
             public_key,
-            rpc_endpoint: prefs.rpcAddress.to_string(),
+            rpc_endpoint,
             restaking: RestakingMetadata {
                 stake: restaking_meta.stake,
                 delegation_count: restaking_meta.delegationCount,
@@ -1902,7 +2106,7 @@ impl TangleClient {
             .map(|lock| LockInfo {
                 amount: lock.amount,
                 multiplier: LockMultiplier::from(lock.multiplier),
-                expiry_block: lock.expiryBlock,
+                expiry_timestamp: lock.expiryTimestamp,
             })
             .collect())
     }
@@ -3174,5 +3378,70 @@ mod gas_fallback_tests {
         ] {
             assert!(min > 21_000, "gas floor {min} below 21k base tx cost");
         }
+    }
+}
+
+#[cfg(test)]
+mod definition_event_tests {
+    use super::BlueprintDefinitionRecorded;
+    use alloy_primitives::{Address, Bytes, LogData, U256, b256, keccak256};
+    use alloy_sol_types::{SolEvent, SolValue};
+
+    /// The event topic0 must equal the one emitted by the deployed
+    /// `MasterBlueprintServiceManager` (from the LocalTestnet broadcast). A
+    /// wrong signature string would silently match no logs.
+    #[test]
+    fn event_signature_hash_matches_deployed_topic() {
+        assert_eq!(
+            BlueprintDefinitionRecorded::SIGNATURE_HASH,
+            b256!("e0bc1e42405ffea94dcef03a915081f9674bc9eea38d46bad147b5cce7438e3e")
+        );
+    }
+
+    fn sample_log(blueprint_id: u64, encoded: &[u8]) -> LogData {
+        let mut id_topic = [0u8; 32];
+        id_topic[24..].copy_from_slice(&blueprint_id.to_be_bytes());
+        let owner = Address::repeat_byte(0x11);
+        let mut owner_topic = [0u8; 32];
+        owner_topic[12..].copy_from_slice(owner.as_slice());
+        // ABI-encode the single non-indexed `bytes` param as event data.
+        let data = Bytes::from(encoded.to_vec()).abi_encode();
+        LogData::new_unchecked(
+            vec![
+                BlueprintDefinitionRecorded::SIGNATURE_HASH,
+                id_topic.into(),
+                owner_topic.into(),
+            ],
+            data.into(),
+        )
+    }
+
+    /// The helper accepts a payload only when `keccak256(encodedDefinition)`
+    /// matches the on-chain hash; this proves the decode + integrity check that
+    /// makes trusting the log emitter unnecessary.
+    #[test]
+    fn decodes_payload_and_matches_integrity_hash() {
+        let encoded = U256::from(0xABCDu64).to_be_bytes::<32>().to_vec();
+        let log = sample_log(7, &encoded);
+
+        let decoded = BlueprintDefinitionRecorded::decode_log_data(&log).expect("decode event");
+        assert_eq!(decoded.encodedDefinition.as_ref(), encoded.as_slice());
+        assert_eq!(decoded.blueprintId, 7);
+
+        let expected = keccak256(&encoded);
+        assert_eq!(keccak256(decoded.encodedDefinition.as_ref()), expected);
+    }
+
+    /// A tampered payload must fail the integrity check the helper enforces.
+    #[test]
+    fn tampered_payload_fails_integrity_hash() {
+        let encoded = vec![1u8, 2, 3, 4];
+        let log = sample_log(7, &encoded);
+        let decoded = BlueprintDefinitionRecorded::decode_log_data(&log).expect("decode event");
+
+        let honest_hash = keccak256(&encoded);
+        let mut tampered = decoded.encodedDefinition.to_vec();
+        tampered[0] ^= 0xff;
+        assert_ne!(keccak256(&tampered), honest_hash);
     }
 }

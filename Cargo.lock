@@ -14364,9 +14364,9 @@ dependencies = [
 
 [[package]]
 name = "tnt-core-bindings"
-version = "0.17.1"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9638c85526f68b60d95bbe660f6f09ab116dfd06a4793f747374646278b82256"
+checksum = "c697c2729569879158d02242e573339e7bb6f031ba9688a801ca3cefd27c511a"
 dependencies = [
  "alloy",
  "alloy-contract",
@@ -14928,7 +14928,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba3beec919fbdf99d719de8eda6adae3281f8a5b71ae40431f44dc7423053d34"
 dependencies = [
  "loki-api",
- "reqwest 0.12.28",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "snap",

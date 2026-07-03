@@ -234,12 +234,15 @@ impl TangleClient {
     /// Get full blueprint information
     pub async fn get_blueprint_info(&self, blueprint_id: u64) -> Result<BlueprintInfo> {
         let result = self.get_blueprint(blueprint_id).await?;
+        // tnt-core v0.18.0 removed `operatorCount` from the Blueprint struct;
+        // the count is derived from the operator set via a dedicated getter.
+        let operator_count = self.get_blueprint_operator_count(blueprint_id).await?;
 
         Ok(BlueprintInfo {
             owner: result.owner,
             manager: result.manager,
             created_at: result.createdAt,
-            operator_count: result.operatorCount,
+            operator_count,
             membership: ITangleTypes::MembershipModel::from_underlying(result.membership).into(),
             pricing: ITangleTypes::PricingModel::from_underlying(result.pricing).into(),
             active: result.active,

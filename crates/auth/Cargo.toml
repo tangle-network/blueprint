@@ -77,7 +77,7 @@ tempfile = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "env-filter", "registry"] }
 openssl = { workspace = true, features = ["vendored"] }
 tokio-stream = { workspace = true }
-tonic = { workspace = true, features = ["codegen", "prost", "transport"] }
+tonic = { workspace = true, features = ["codegen", "prost", "transport", "router"] }
 tokio-rustls = { workspace = true }
 rustls = { workspace = true }
 rustls-pemfile = { workspace = true }

@@ -18,7 +18,16 @@ use url::Url;
 pub type Container = ContainerAsync<GenericImage>;
 
 pub const ANVIL_IMAGE: &str = "ghcr.io/foundry-rs/foundry";
-pub const ANVIL_TAG: &str = "nightly-5b7e4cb3c882b28f3c32ba580de27ce7381f415a";
+/// Anvil image for the current `localtestnet-state.json` snapshot. The dump was
+/// produced by anvil 1.7.x and includes full block/receipt history, which the
+/// event-sourced client paths (`eth_getLogs`) require the container to serve.
+pub const ANVIL_TAG: &str = "v1.7.1";
+/// Anvil image for the legacy environments: `data/state.json` is a pre-1.7
+/// dump newer anvil refuses to parse, and the empty testnet keeps this image
+/// because v1.7.1's server-side gas fill under-provisions contract-creation
+/// txs sent via `eth_sendTransaction` from filler-less alloy providers
+/// (observed: EigenLayer stack deploys OOG at the filled limit).
+pub const ANVIL_TAG_LEGACY: &str = "nightly-5b7e4cb3c882b28f3c32ba580de27ce7381f415a";
 
 pub struct AnvilTestnet {
     pub container: Container,
@@ -31,6 +40,23 @@ pub struct AnvilTestnet {
 /// Includes retry logic for transient Docker errors (e.g., image pull failures).
 #[allow(clippy::missing_panics_doc)] // TODO(serial): Return errors, not panics
 pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool) -> AnvilTestnet {
+    // No hardfork override: the current snapshot was dumped under the image's
+    // default hardfork. Forcing an older fork onto a newer-fork dump makes
+    // gas estimation and execution disagree (observed as spurious OutOfGas).
+    start_anvil_container_with_tag(ANVIL_TAG, None, state_json, include_logs).await
+}
+
+/// Start an Anvil container from a specific foundry image tag. The tag (and
+/// hardfork override, when set) must match the supplied state dump — dump
+/// formats are not forward compatible across anvil majors, so both travel
+/// with the state artifact.
+#[allow(clippy::missing_panics_doc)] // TODO(serial): Return errors, not panics
+pub async fn start_anvil_container_with_tag(
+    anvil_tag: &str,
+    hardfork: Option<&str>,
+    state_json: Option<&str>,
+    include_logs: bool,
+) -> AnvilTestnet {
     const MAX_RETRIES: u32 = 3;
     const RETRY_DELAY_MS: u64 = 2000;
 
@@ -41,56 +67,41 @@ pub async fn start_anvil_container(state_json: Option<&str>, include_logs: bool)
         fs::write(&state_path, json).expect("Failed to write state file");
     }
 
+    let mut cmd: Vec<String> = vec!["--host".into(), "0.0.0.0".into()];
+    if state_json.is_some() {
+        cmd.extend(["--load-state".into(), "/state.json".into()]);
+    }
+    cmd.extend([
+        "--base-fee".into(),
+        "0".into(),
+        "--gas-price".into(),
+        "0".into(),
+        "--gas-limit".into(),
+        "100000000".into(),
+        "--code-size-limit".into(),
+        "100000".into(),
+    ]);
+    if let Some(fork) = hardfork {
+        cmd.extend(["--hardfork".into(), fork.into()]);
+    }
+
     let mut last_error = String::new();
     for attempt in 1..=MAX_RETRIES {
+        let image = GenericImage::new(ANVIL_IMAGE, anvil_tag)
+            .with_wait_for(WaitFor::message_on_stdout("Listening on"))
+            .with_exposed_port(8545.tcp())
+            .with_entrypoint("anvil");
         let result = if state_json.is_some() {
-            GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
-                .with_wait_for(WaitFor::message_on_stdout("Listening on"))
-                .with_exposed_port(8545.tcp())
-                .with_entrypoint("anvil")
+            image
                 .with_mount(testcontainers::core::Mount::bind_mount(
                     state_path.to_str().unwrap(),
                     "/state.json",
                 ))
-                .with_cmd([
-                    "--host",
-                    "0.0.0.0",
-                    "--load-state",
-                    "/state.json",
-                    "--base-fee",
-                    "0",
-                    "--gas-price",
-                    "0",
-                    "--gas-limit",
-                    "100000000",
-                    "--code-size-limit",
-                    "100000",
-                    "--hardfork",
-                    "cancun",
-                ])
+                .with_cmd(cmd.clone())
                 .start()
                 .await
         } else {
-            GenericImage::new(ANVIL_IMAGE, ANVIL_TAG)
-                .with_wait_for(WaitFor::message_on_stdout("Listening on"))
-                .with_exposed_port(8545.tcp())
-                .with_entrypoint("anvil")
-                .with_cmd([
-                    "--host",
-                    "0.0.0.0",
-                    "--base-fee",
-                    "0",
-                    "--gas-price",
-                    "0",
-                    "--gas-limit",
-                    "100000000",
-                    "--code-size-limit",
-                    "100000",
-                    "--hardfork",
-                    "cancun",
-                ])
-                .start()
-                .await
+            image.with_cmd(cmd.clone()).start().await
         };
 
         match result {
@@ -164,19 +175,33 @@ pub async fn mine_anvil_blocks(container: &Container, n: u32) {
 /// # Arguments
 /// * `include_logs` - If true, testnet output will be printed to the console.
 pub async fn start_default_anvil_testnet(include_logs: bool) -> AnvilTestnet {
-    start_anvil_container(Some(get_default_state_json()), include_logs).await
+    // data/state.json is a legacy-format dump; newer anvil refuses to parse it,
+    // and it was built under cancun rules.
+    start_anvil_container_with_tag(
+        ANVIL_TAG_LEGACY,
+        Some("cancun"),
+        Some(get_default_state_json()),
+        include_logs,
+    )
+    .await
 }
 
-/// Starts an Anvil container for testing with the default state.
+/// Starts an empty Anvil container (funded default accounts, no seeded state).
+///
+/// Callers that need the seeded Tangle localtestnet go through
+/// `blueprint_anvil_testing_utils::TangleHarness`, which loads the snapshot
+/// explicitly. Booting the seeded chain here made fresh-deployment flows
+/// (e.g. the EigenLayer stack in client/manager tests) run on a dirty chain
+/// for no benefit.
+///
+/// Runs the legacy image: fresh-deployment flows built on filler-less alloy
+/// providers rely on server-side gas fill, which v1.7.1 under-provisions for
+/// creation txs (see [`ANVIL_TAG_LEGACY`]).
 ///
 /// # Arguments
 /// * `include_logs` - If true, testnet output will be printed to the console.
 pub async fn start_empty_anvil_testnet(include_logs: bool) -> AnvilTestnet {
-    if let Some(snapshot) = super::snapshot::snapshot_state_json() {
-        start_anvil_container(Some(snapshot.as_str()), include_logs).await
-    } else {
-        start_anvil_container(None, include_logs).await
-    }
+    start_anvil_container_with_tag(ANVIL_TAG_LEGACY, Some("cancun"), None, include_logs).await
 }
 
 /// Starts an Anvil container for testing with custom state.

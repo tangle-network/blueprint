@@ -33,9 +33,9 @@ pub(crate) const MANAGED_MARKER: &str = "# managed-by = \"cargo-tangle-dev\"";
 // blueprint-chain-setup-anvil. The same constants live (privately) in
 // crates/testing-utils/anvil/src/tangle.rs; if that crate ever exports them,
 // delete this block and import from there.
-const TANGLE_CONTRACT: &str = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
-const STAKING_CONTRACT: &str = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
-const STATUS_REGISTRY_CONTRACT: &str = "0x8f86403A4DE0bb5791fa46B8e795C547942fE4Cf";
+const TANGLE_CONTRACT: &str = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9";
+const STAKING_CONTRACT: &str = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
+const STATUS_REGISTRY_CONTRACT: &str = "0x5f3f1dBD7B74C6B46e8c44f98792A1dAf8d69154";
 const OPERATOR1_ADDRESS: &str = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const SERVICE_OWNER_PRIVATE_KEY: &str =
     "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";

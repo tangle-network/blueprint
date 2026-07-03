@@ -932,6 +932,8 @@ mod evm_listener_tests {
                     securityCommitments: vec![].into(),
                     resourceCommitments: vec![].into(),
                     confidentiality: 0u8,
+                    operation: 0u8, // QuoteOperation.Create — serviceId must be 0 on this flow
+                    serviceId: 0,
                 },
                 signature: Bytes::from(vec![0u8; 65]), // Invalid signature
                 operator: Address::ZERO,
@@ -1003,6 +1005,8 @@ mod evm_listener_tests {
                     securityCommitments: vec![].into(),
                     resourceCommitments: vec![].into(),
                     confidentiality: 0u8,
+                    operation: 0u8, // QuoteOperation.Create — serviceId must be 0 on this flow
+                    serviceId: 0,
                 },
                 signature: Bytes::from(vec![0u8; 65]),
                 operator: Address::ZERO,
@@ -1169,6 +1173,8 @@ mod evm_listener_tests {
                     securityCommitments: vec![].into(),
                     resourceCommitments: vec![].into(),
                     confidentiality: 0u8,
+                    operation: 0u8, // QuoteOperation.Create — serviceId must be 0 on this flow
+                    serviceId: 0,
                 },
                 signature: Bytes::from(vec![0u8; 65]),
                 operator: Address::ZERO,
@@ -1528,6 +1534,8 @@ mod evm_listener_tests {
             securityCommitments: security_commitments.into(),
             resourceCommitments: resource_commitments.into(),
             confidentiality: 0u8,
+            operation: 0u8, // QuoteOperation.Create — matches what the signer binds
+            serviceId: 0,
         };
 
         let operator_addr = Address::from_slice(&response.operator_id);
