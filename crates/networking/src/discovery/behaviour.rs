@@ -343,7 +343,7 @@ impl<K: KeyType> NetworkBehaviour for DiscoveryBehaviour<K> {
                             relay::Event::ReservationReqAccepted { src_peer_id, .. } => {
                                 debug!("Relay accepted reservation request from: {src_peer_id:#?}");
                             }
-                            relay::Event::ReservationReqDenied { src_peer_id } => {
+                            relay::Event::ReservationReqDenied { src_peer_id, .. } => {
                                 debug!("Reservation request was denied for: {src_peer_id:#?}");
                             }
                             relay::Event::ReservationTimedOut { src_peer_id } => {
