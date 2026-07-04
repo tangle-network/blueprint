@@ -97,7 +97,7 @@ testcontainers = { workspace = true }
 # TEE attestation tests: generate RSA keys + sign RS256 JWTs to verify against a
 # mock JWKS, and mint synthetic COSE/x509 material for the AWS Nitro verifier.
 rsa = { version = "0.9", features = ["sha2"] }
-jsonwebtoken = { version = "10.3" } # default features (use_pem) for test token signing
+jsonwebtoken = { version = "10.3", features = ["rust_crypto"] } # use_pem (default) + rust_crypto provider for test token signing
 p384 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
 coset = { version = "0.3" }
 ciborium = { version = "0.2" }
