@@ -123,10 +123,6 @@ manual_range_contains = "allow"
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
 
-# TEMP: local path until tnt-core-bindings 0.19.0 is published to crates.io — remove the [patch] then.
-[patch.crates-io]
-tnt-core-bindings = { path = "/home/drew/code/tnt-core/bindings" }
-
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.10", path = "./crates/sdk", default-features = false }
