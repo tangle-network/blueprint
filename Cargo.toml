@@ -123,16 +123,24 @@ manual_range_contains = "allow"
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
 
+# TEMP: local path until tnt-core-bindings 0.19.0 is published to crates.io — remove the [patch] then.
+[patch.crates-io]
+tnt-core-bindings = { path = "/home/drew/code/tnt-core/bindings" }
+
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.10", path = "./crates/sdk", default-features = false }
-# tnt-core 0.18 adds the event-sourced blueprint definition (blueprintDefinitionHash view +
-# BlueprintDefinitionRecorded event) on top of 0.17.0's subscription billing rearchitecture
-# (requestService + fundService flow), the payments facet split with
-# self-only distributePayment, RFQ replay / freshness / cumulative TTL
+# tnt-core 0.19 makes binary URIs event-only: `BinaryVersion` drops its
+# `binaryUri` field (the URI now lives solely on the `BinaryVersionPublished`
+# event), `onJobResult` takes `bytes32 inputsHash` instead of `bytes inputs`,
+# and `onBinaryVersionPublished` gains a trailing `string binaryUri`. This is on
+# top of 0.18's event-sourced blueprint definition (blueprintDefinitionHash view
+# + BlueprintDefinitionRecorded event) and 0.17.0's subscription billing
+# rearchitecture (requestService + fundService flow), the payments facet split
+# with self-only distributePayment, RFQ replay / freshness / cumulative TTL
 # hardening, the collapsed approveService(ApprovalParams) entry point,
-# claimRewards / claimRewardsAll griefing isolation, and O(1) operator
-tnt-core-bindings = "0.18"  # blueprintDefinitionHash view + BlueprintDefinitionRecorded event (0.18.0)
+# claimRewards / claimRewardsAll griefing isolation, and O(1) operator accounting.
+tnt-core-bindings = "0.19"  # BinaryVersion loses binaryUri (event-only); onJobResult inputsHash (0.19.0)
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.5", path = "crates/core", default-features = false }
