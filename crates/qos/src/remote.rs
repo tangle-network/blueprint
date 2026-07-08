@@ -124,7 +124,14 @@ impl RemoteMetricsProvider {
             let service_id = endpoint.service_id;
             let blueprint_id = endpoint.blueprint_id;
 
-            match QosMetricsClient::connect(endpoint.grpc_url.clone()).await {
+            // tonic's generated-client `connect(dst)` convenience constructor was
+            // removed; build the channel explicitly and wrap it.
+            let connected = match tonic::transport::Endpoint::from_shared(endpoint.grpc_url.clone())
+            {
+                Ok(ep) => ep.connect().await.map(QosMetricsClient::new),
+                Err(e) => Err(e),
+            };
+            match connected {
                 Ok(mut client) => {
                     if let Ok(response) = client
                         .get_resource_usage(GetResourceUsageRequest {

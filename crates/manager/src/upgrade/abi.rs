@@ -1,12 +1,13 @@
 //! Local Solidity ABI stubs for `BlueprintsBinaryVersions`.
 //!
 //! These mirror the views/events/mutators introduced in tnt-core's
-//! `src/core/BlueprintsBinaryVersions.sol`. They live here as a sidecar until
-//! `tnt-core-bindings` is bumped to a version that ships this surface
-//! (expected v0.18+); once that lands, this module is deleted and callers
-//! re-import the types from `blueprint_client_tangle::contracts`.
+//! `src/core/BlueprintsBinaryVersions.sol` (struct shape tracks tnt-core 0.19's
+//! `Types.BinaryVersion`). They live here as a sidecar until
+//! `tnt-core-bindings` ships this facet's typed interface directly; once that
+//! lands, this module is deleted and callers re-import the types from
+//! `blueprint_client_tangle::contracts`.
 //
-// TODO: replace with tnt-core-bindings v0.18+ types once published.
+// TODO: replace with tnt-core-bindings typed `IBlueprintBinaryVersions` once published.
 
 use alloy_sol_types::sol;
 
@@ -20,13 +21,19 @@ sol! {
     #[sol(rpc)]
     interface IBlueprintBinaryVersions {
         // ----- structs ------------------------------------------------------
+        // Mirrors tnt-core 0.19 `Types.BinaryVersion` (src/libraries/Types.sol).
+        // Field order is storage-packing sensitive on-chain and must match the
+        // canonical struct exactly for ABI-decode of the view returns to line up.
+        // NOTE: 0.19 removed `binaryUri` from this struct — the URI is now
+        // event-only, carried on `BinaryVersionPublished` below. `getBinaryVersion`
+        // / `effectiveBinaryVersion` no longer return a URI; callers must source it
+        // from the event log (see chain.rs::binary_uri_from_event).
         struct BinaryVersion {
             uint64 versionId;
-            bytes32 sha256Hash;
-            string binaryUri;
-            bytes32 attestationHash;
             uint64 publishedAt;
             bool deprecated;
+            bytes32 sha256Hash;
+            bytes32 attestationHash;
         }
 
         // ----- enums --------------------------------------------------------

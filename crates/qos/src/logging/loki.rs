@@ -33,11 +33,11 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
-use opentelemetry_031::KeyValue;
-use opentelemetry_031::trace::TracerProvider as _;
+use opentelemetry::KeyValue;
+use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::{Protocol, SpanExporter, WithExportConfig, WithHttpConfig};
-use opentelemetry_sdk_031::Resource;
-use opentelemetry_sdk_031::trace::SdkTracerProvider;
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 
 // Default values for LokiConfig
 const DEFAULT_LOKI_LABEL_SERVICE_KEY: &str = "service";

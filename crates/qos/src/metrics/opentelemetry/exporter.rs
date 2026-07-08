@@ -1,16 +1,16 @@
 // Std and common crates
 use std::fmt::Debug;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use opentelemetry_sdk::{
     Resource,
+    error::OTelSdkResult,
     metrics::reader::MetricReader,
-    metrics::{
-        InstrumentKind, MetricError, Pipeline, SdkMeterProvider, Temporality, data::ResourceMetrics,
-    },
+    metrics::{InstrumentKind, Pipeline, SdkMeterProvider, Temporality, data::ResourceMetrics},
 };
 
 use opentelemetry::metrics::MeterProvider;
@@ -37,16 +37,16 @@ impl MetricReader for ArcPrometheusReader {
         self.0.temporality(instrument_kind)
     }
 
-    fn collect(&self, rm: &mut ResourceMetrics) -> std::result::Result<(), MetricError> {
+    fn collect(&self, rm: &mut ResourceMetrics) -> OTelSdkResult {
         self.0.collect(rm)
     }
 
-    fn force_flush(&self) -> std::result::Result<(), opentelemetry_sdk::error::OTelSdkError> {
+    fn force_flush(&self) -> OTelSdkResult {
         self.0.force_flush()
     }
 
-    fn shutdown(&self) -> std::result::Result<(), opentelemetry_sdk::error::OTelSdkError> {
-        self.0.shutdown()
+    fn shutdown_with_timeout(&self, timeout: Duration) -> OTelSdkResult {
+        self.0.shutdown_with_timeout(timeout)
     }
 }
 

@@ -9,12 +9,16 @@
   "devDependencies": {
     "@types/node": "20.14.10",
     "prettier": "3.3.3",
-    "tsx": "4.16.2",
+    "tsx": "^4.23.0",
     "typescript": "5.5.3"
   },
   "dependencies": {
     "@polkadot/api": "^12.2.1",
     "tslib": "^2.6.3",
     "viem": "^2.17.4"
+  },
+  "resolutions": {
+    "ws": "^8.21.0",
+    "bn.js": "^5.2.3"
   }
 }

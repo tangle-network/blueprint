@@ -2227,13 +2227,16 @@ async fn main() -> Result<()> {
                 ServiceCommands::EffectiveVersion {
                     network,
                     service_id,
-                    blueprint_id: _,
+                    blueprint_id,
                     json,
                 } => {
                     let view = upgrade_view_ctx(&network, None)?;
-                    let v =
-                        cargo_tangle::command::upgrade::get_effective_version(&view, service_id)
-                            .await?;
+                    let v = cargo_tangle::command::upgrade::get_effective_version(
+                        &view,
+                        blueprint_id,
+                        service_id,
+                    )
+                    .await?;
                     cargo_tangle::command::upgrade::print_effective_version(service_id, &v, json);
                 }
                 ServiceCommands::UpgradeStatus {
@@ -2253,22 +2256,25 @@ async fn main() -> Result<()> {
                     let active =
                         cargo_tangle::command::upgrade::get_active_version_id(&view, blueprint_id)
                             .await?;
-                    let effective =
-                        cargo_tangle::command::upgrade::get_effective_version(&view, service_id)
-                            .await?;
+                    let effective = cargo_tangle::command::upgrade::get_effective_version(
+                        &view,
+                        blueprint_id,
+                        service_id,
+                    )
+                    .await?;
                     let versions =
                         cargo_tangle::command::upgrade::list_versions(&view, blueprint_id).await?;
                     let latest = versions
                         .last()
-                        .map(|v| v.versionId)
-                        .unwrap_or(effective.versionId);
-                    let up_to_date = effective.versionId == latest;
+                        .map(|v| v.version_id)
+                        .unwrap_or(effective.version_id);
+                    let up_to_date = effective.version_id == latest;
                     let status = cargo_tangle::command::upgrade::UpgradeStatus {
                         service_id,
                         policy,
                         acked_version_id: acked,
                         active_version_id: active,
-                        effective_version_id: effective.versionId,
+                        effective_version_id: effective.version_id,
                         latest_version_id: latest,
                         up_to_date,
                     };

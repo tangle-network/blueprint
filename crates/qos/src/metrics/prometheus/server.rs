@@ -156,27 +156,30 @@ async fn metrics_handler(State(state): State<ServerState>) -> Response {
         info!("    Help: {}", mf.help());
         info!("    Metrics ({}):", mf.get_metric().len());
         for m in mf.get_metric() {
-            if let Some(counter) = m.counter.as_ref() {
-                info!("      Counter Value: {}", counter.value.unwrap_or(0.0));
-            }
-            if let Some(gauge) = m.gauge.as_ref() {
-                info!("      Gauge Value: {}", gauge.value.unwrap_or(0.0));
-            }
-            if m.histogram.is_some() {
-                let hist = m.get_histogram();
-                info!(
-                    "      Histogram: Sum={}, Count={}",
-                    hist.get_sample_sum(),
-                    hist.get_sample_count()
-                );
-            }
-            if m.summary.is_some() {
-                let sum = m.get_summary();
-                info!(
-                    "      Summary: Sum={}, Count={}",
-                    sum.sample_sum(),
-                    sum.sample_count()
-                );
+            match mf.get_field_type() {
+                prometheus::proto::MetricType::COUNTER => {
+                    info!("      Counter Value: {}", m.get_counter().get_value());
+                }
+                prometheus::proto::MetricType::GAUGE => {
+                    info!("      Gauge Value: {}", m.get_gauge().get_value());
+                }
+                prometheus::proto::MetricType::HISTOGRAM => {
+                    let hist = m.get_histogram();
+                    info!(
+                        "      Histogram: Sum={}, Count={}",
+                        hist.get_sample_sum(),
+                        hist.get_sample_count()
+                    );
+                }
+                prometheus::proto::MetricType::SUMMARY => {
+                    let sum = m.get_summary();
+                    info!(
+                        "      Summary: Sum={}, Count={}",
+                        sum.sample_sum(),
+                        sum.sample_count()
+                    );
+                }
+                prometheus::proto::MetricType::UNTYPED => {}
             }
             let mut labels_str = String::new();
             for label_pair in m.get_label() {

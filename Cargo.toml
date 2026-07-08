@@ -126,13 +126,17 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.10", path = "./crates/sdk", default-features = false }
-# tnt-core 0.18 adds the event-sourced blueprint definition (blueprintDefinitionHash view +
-# BlueprintDefinitionRecorded event) on top of 0.17.0's subscription billing rearchitecture
-# (requestService + fundService flow), the payments facet split with
-# self-only distributePayment, RFQ replay / freshness / cumulative TTL
+# tnt-core 0.19 makes binary URIs event-only: `BinaryVersion` drops its
+# `binaryUri` field (the URI now lives solely on the `BinaryVersionPublished`
+# event), `onJobResult` takes `bytes32 inputsHash` instead of `bytes inputs`,
+# and `onBinaryVersionPublished` gains a trailing `string binaryUri`. This is on
+# top of 0.18's event-sourced blueprint definition (blueprintDefinitionHash view
+# + BlueprintDefinitionRecorded event) and 0.17.0's subscription billing
+# rearchitecture (requestService + fundService flow), the payments facet split
+# with self-only distributePayment, RFQ replay / freshness / cumulative TTL
 # hardening, the collapsed approveService(ApprovalParams) entry point,
-# claimRewards / claimRewardsAll griefing isolation, and O(1) operator
-tnt-core-bindings = "0.18"  # blueprintDefinitionHash view + BlueprintDefinitionRecorded event (0.18.0)
+# claimRewards / claimRewardsAll griefing isolation, and O(1) operator accounting.
+tnt-core-bindings = "0.19"  # BinaryVersion loses binaryUri (event-only); onJobResult inputsHash (0.19.0)
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.5", path = "crates/core", default-features = false }
@@ -290,7 +294,7 @@ bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.16.1", default-features = false }
 base64 = { version = "0.22.0", default-features = false }
 rust_decimal = { version = "1.37", default-features = false }
-jsonwebtoken = { version = "9", default-features = false }
+jsonwebtoken = { version = "10.3", default-features = false }
 pasetors = { version = "0.7.7", default-features = false }
 pem = { version = "3.0", default-features = false }
 # TEE remote attestation (COSE + x509 + ECDSA) — used only when a crate opts into
@@ -312,7 +316,7 @@ tracing-subscriber = { version = "0.3", default-features = false }
 jsonrpsee = { version = "0.24", default-features = false }
 jsonrpc-core = { version = "18.0.0", default-features = false }
 jsonrpc-http-server = { version = "18.0.0", default-features = false }
-libp2p = { version = "0.54.1", default-features = false }
+libp2p = { version = "0.56.0", default-features = false }
 reqwest = { version = "0.12.22", default-features = false }
 http = { version = "1.0.0", default-features = false }
 url = { version = "2.5.2", default-features = false }
@@ -385,21 +389,14 @@ tonic-web = { version = "0.14.5", default-features = false }
 
 # Quality of Service
 prometheus = { version = "0.14", default-features = false }
-opentelemetry = { version = "0.29", default-features = false }
-opentelemetry-prometheus = { version = "0.29", default-features = false }
-opentelemetry_sdk = { version = "0.29", default-features = false }
-# Trace export path. blueprint-qos already pulls opentelemetry/opentelemetry_sdk
-# 0.31 transitively via tracing-opentelemetry 0.32; the OTLP exporter and the
-# tracer provider it feeds must share that same 0.31 core, so these are pinned to
-# 0.31 (the metrics path above stays on 0.29 via opentelemetry-prometheus, which
-# has no 0.31 release in this toolchain's offline registry).
-opentelemetry-otlp = { version = "0.31", default-features = false }
-opentelemetry-031 = { package = "opentelemetry", version = "0.31", default-features = false }
-opentelemetry_sdk-031 = { package = "opentelemetry_sdk", version = "0.31", default-features = false }
-opentelemetry-semantic-conventions = { version = "0.29", default-features = false }
+opentelemetry = { version = "0.32", default-features = false }
+opentelemetry-prometheus = { version = "0.32", default-features = false }
+opentelemetry_sdk = { version = "0.32", default-features = false }
+opentelemetry-otlp = { version = "0.32", default-features = false }
+opentelemetry-semantic-conventions = { version = "0.32", default-features = false }
 opentelemetry_api = { version = "0.20", default-features = false }
 tracing-loki = { version = "0.2", default-features = false }
-tracing-opentelemetry = { version = "0.32", default-features = false }
+tracing-opentelemetry = { version = "0.33", default-features = false }
 urlencoding = { version = "2.1.3", default-features = false }
 
 # Testing

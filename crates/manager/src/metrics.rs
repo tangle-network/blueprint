@@ -751,7 +751,7 @@ mod tests {
 
         let family = find_family("tangle_service_discovery_total");
         let metric = find_metric_with_label_value(&family, tag);
-        let count = metric.get_counter().value() as u64;
+        let count = metric.get_counter().get_value() as u64;
         assert!(count >= 3, "expected >= 3 for '{tag}', got {count}");
     }
 
@@ -776,7 +776,7 @@ mod tests {
                     && m.get_label().iter().any(|l| l.value() == "success")
             })
             .expect("success metric not found");
-        assert!(success.get_counter().value() >= 1.0);
+        assert!(success.get_counter().get_value() >= 1.0);
 
         let fail = family
             .get_metric()
@@ -786,7 +786,7 @@ mod tests {
                     && m.get_label().iter().any(|l| l.value() == "failed_spawn")
             })
             .expect("failed_spawn metric not found");
-        assert!(fail.get_counter().value() >= 2.0);
+        assert!(fail.get_counter().get_value() >= 2.0);
     }
 
     #[test]
@@ -806,7 +806,7 @@ mod tests {
                     && m.get_label().iter().any(|l| l.value() == "success")
             })
             .expect("jobs success metric");
-        assert!(success.get_counter().value() >= 2.0);
+        assert!(success.get_counter().get_value() >= 2.0);
 
         let failed = family
             .get_metric()
@@ -816,7 +816,7 @@ mod tests {
                     && m.get_label().iter().any(|l| l.value() == "failed")
             })
             .expect("jobs failed metric");
-        assert!(failed.get_counter().value() >= 1.0);
+        assert!(failed.get_counter().get_value() >= 1.0);
     }
 
     // ── 7. IntGauge set / inc / dec ────────────────────────────────────
@@ -841,7 +841,7 @@ mod tests {
         // Verify through gathered output.
         let family = find_family("tangle_active_services");
         let metric = &family.get_metric()[0];
-        let val = metric.get_gauge().value() as i64;
+        let val = metric.get_gauge().get_value() as i64;
         assert_eq!(val, 9, "gathered gauge value should be 9");
     }
 }

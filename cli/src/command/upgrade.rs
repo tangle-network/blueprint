@@ -60,15 +60,18 @@ sol! {
         SELF_KIND,
     }
 
+    // Mirrors tnt-core 0.19 `Types.BinaryVersion` (src/libraries/Types.sol).
+    // 0.19 removed `binaryUri` from this struct (URI is now event-only, carried
+    // on `BinaryVersionPublished`) and the field order is storage-packing
+    // sensitive — it must match the canonical struct for view-return decode.
     #[allow(missing_docs)]
     #[derive(Debug)]
     struct BinaryVersion {
         uint64 versionId;
-        bytes32 sha256Hash;
-        string binaryUri;
-        bytes32 attestationHash;
         uint64 publishedAt;
         bool deprecated;
+        bytes32 sha256Hash;
+        bytes32 attestationHash;
     }
 
     #[allow(missing_docs)]
@@ -168,6 +171,17 @@ sol! {
 
     #[allow(missing_docs)]
     function getAuditor(address auditor) external view returns (AuditorRow memory);
+
+    // tnt-core 0.19 carries the binary URI on this event only (indexed
+    // blueprintId + versionId). Views no longer return it, so the CLI reads it
+    // back from the log for display.
+    #[allow(missing_docs)]
+    event BinaryVersionPublished(
+        uint64 indexed blueprintId,
+        uint64 indexed versionId,
+        bytes32 sha256Hash,
+        string binaryUri
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -628,7 +642,34 @@ pub async fn revoke_attestation(
 // Views
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub async fn list_versions(ctx: &ViewContext, blueprint_id: u64) -> Result<Vec<BinaryVersion>> {
+/// A resolved binary version as the CLI presents it: the on-chain
+/// `BinaryVersion` fields plus the `binaryUri` sourced from the
+/// `BinaryVersionPublished` event (tnt-core 0.19 dropped the URI from the view
+/// return, so it must be read back from the log).
+#[derive(Debug, Clone)]
+pub struct VersionView {
+    pub version_id: u64,
+    pub sha256_hash: B256,
+    pub binary_uri: String,
+    pub attestation_hash: B256,
+    pub published_at: u64,
+    pub deprecated: bool,
+}
+
+impl VersionView {
+    fn from_parts(v: &BinaryVersion, binary_uri: String) -> Self {
+        Self {
+            version_id: v.versionId,
+            sha256_hash: v.sha256Hash,
+            binary_uri,
+            attestation_hash: v.attestationHash,
+            published_at: v.publishedAt,
+            deprecated: v.deprecated,
+        }
+    }
+}
+
+pub async fn list_versions(ctx: &ViewContext, blueprint_id: u64) -> Result<Vec<VersionView>> {
     let count = call_view::<getBinaryVersionCountCall>(
         ctx,
         getBinaryVersionCountCall {
@@ -646,7 +687,12 @@ pub async fn list_versions(ctx: &ViewContext, blueprint_id: u64) -> Result<Vec<B
             },
         )
         .await?;
-        out.push(version);
+        // Listing must not abort if one version's publish log has been pruned;
+        // blank the URI for that row rather than failing the whole command.
+        let uri = binary_uri_from_event(ctx, blueprint_id, version.versionId)
+            .await?
+            .unwrap_or_default();
+        out.push(VersionView::from_parts(&version, uri));
     }
     Ok(out)
 }
@@ -655,15 +701,17 @@ pub async fn get_version(
     ctx: &ViewContext,
     blueprint_id: u64,
     version_id: u64,
-) -> Result<BinaryVersion> {
-    call_view::<getBinaryVersionCall>(
+) -> Result<VersionView> {
+    let version = call_view::<getBinaryVersionCall>(
         ctx,
         getBinaryVersionCall {
             blueprintId: blueprint_id,
             versionId: version_id,
         },
     )
-    .await
+    .await?;
+    let uri = require_binary_uri(ctx, blueprint_id, version.versionId).await?;
+    Ok(VersionView::from_parts(&version, uri))
 }
 
 pub async fn get_active_version_id(ctx: &ViewContext, blueprint_id: u64) -> Result<u64> {
@@ -698,14 +746,109 @@ pub async fn get_service_acked_version_id(ctx: &ViewContext, service_id: u64) ->
     .await
 }
 
-pub async fn get_effective_version(ctx: &ViewContext, service_id: u64) -> Result<BinaryVersion> {
-    call_view::<effectiveBinaryVersionCall>(
+pub async fn get_effective_version(
+    ctx: &ViewContext,
+    blueprint_id: u64,
+    service_id: u64,
+) -> Result<VersionView> {
+    let version = call_view::<effectiveBinaryVersionCall>(
         ctx,
         effectiveBinaryVersionCall {
             serviceId: service_id,
         },
     )
-    .await
+    .await?;
+    let uri = require_binary_uri(ctx, blueprint_id, version.versionId).await?;
+    Ok(VersionView::from_parts(&version, uri))
+}
+
+/// Read a version's `binaryUri` back from its `BinaryVersionPublished` event.
+///
+/// tnt-core 0.19 removed `binaryUri` from the `BinaryVersion` view return; the
+/// URI now lives solely on the publish event, indexed by `blueprintId` and
+/// `versionId`, so exactly one log matches. We scan newest-first in bounded
+/// block windows to stay under provider `eth_getLogs` span caps.
+///
+/// Returns `Ok(None)` when no matching log is found (e.g. the RPC provider has
+/// pruned that block range) so callers that merely list versions can tolerate a
+/// gap; callers that must have the URI to act (download/upgrade) convert `None`
+/// into an error themselves. Only genuine RPC failures yield `Err`.
+async fn binary_uri_from_event(
+    ctx: &ViewContext,
+    blueprint_id: u64,
+    version_id: u64,
+) -> Result<Option<String>> {
+    use alloy_rpc_types_eth::Filter;
+    use alloy_sol_types::SolEvent;
+
+    const GETLOGS_WINDOW: u64 = 10_000;
+
+    let provider = ProviderBuilder::new()
+        .connect(ctx.http_rpc_url.as_str())
+        .await
+        .map_err(|e| eyre!("connecting to RPC at {}: {e}", ctx.http_rpc_url))?;
+
+    let blueprint_topic = u64_topic(blueprint_id);
+    let version_topic = u64_topic(version_id);
+
+    let head = provider
+        .get_block_number()
+        .await
+        .map_err(|e| eyre!("eth_blockNumber: {e}"))?;
+
+    let mut to_block = head;
+    loop {
+        let from_block = to_block.saturating_sub(GETLOGS_WINDOW.saturating_sub(1));
+        let filter = Filter::new()
+            .address(ctx.tangle_contract)
+            .event_signature(BinaryVersionPublished::SIGNATURE_HASH)
+            .topic1(blueprint_topic)
+            .topic2(version_topic)
+            .from_block(from_block)
+            .to_block(to_block);
+
+        let logs = provider
+            .get_logs(&filter)
+            .await
+            .map_err(|e| eyre!("eth_getLogs (BinaryVersionPublished): {e}"))?;
+
+        for log in logs.iter().rev() {
+            if let Ok(decoded) = BinaryVersionPublished::decode_log(&log.inner) {
+                return Ok(Some(decoded.binaryUri.clone()));
+            }
+        }
+
+        if from_block == 0 {
+            break;
+        }
+        to_block = from_block.saturating_sub(1);
+    }
+
+    Ok(None)
+}
+
+/// `binary_uri_from_event`, erroring when the URI can't be resolved. Used by
+/// callers that need the URI to proceed (single-version view, download/upgrade).
+async fn require_binary_uri(
+    ctx: &ViewContext,
+    blueprint_id: u64,
+    version_id: u64,
+) -> Result<String> {
+    binary_uri_from_event(ctx, blueprint_id, version_id)
+        .await?
+        .ok_or_else(|| {
+            eyre!(
+                "no BinaryVersionPublished event for blueprint {blueprint_id} version {version_id}"
+            )
+        })
+}
+
+/// Encode a `uint64` indexed event argument as a 32-byte log topic
+/// (left-padded, big-endian) for `eth_getLogs` topic filtering.
+fn u64_topic(value: u64) -> B256 {
+    let mut topic = [0u8; 32];
+    topic[24..].copy_from_slice(&value.to_be_bytes());
+    B256::from(topic)
 }
 
 pub async fn list_attestations(
@@ -1092,14 +1235,14 @@ pub fn print_simple_tx(action: &str, tx: &SimpleTxResult, json_out: bool) {
 
 pub fn print_versions_table(
     blueprint_id: u64,
-    versions: &[BinaryVersion],
+    versions: &[VersionView],
     active: u64,
     json_out: bool,
 ) {
     if json_out {
         let rows: Vec<Value> = versions
             .iter()
-            .map(|v| version_to_json(v, v.versionId == active))
+            .map(|v| version_to_json(v, v.version_id == active))
             .collect();
         println!(
             "{}",
@@ -1127,18 +1270,18 @@ pub fn print_versions_table(
         "id", "sha256 (first 8B)", "deprec.", "published_at", "binary_uri"
     );
     for v in versions {
-        let mark = if v.versionId == active { "*" } else { " " };
-        let short = format!("{:#x}", v.sha256Hash);
+        let mark = if v.version_id == active { "*" } else { " " };
+        let short = format!("{:#x}", v.sha256_hash);
         let short = &short[..18.min(short.len())];
         println!(
             "  {}{:>2}  {:<18}  {:<7}  {:<12}  {}",
-            mark, v.versionId, short, v.deprecated, v.publishedAt, v.binaryUri
+            mark, v.version_id, short, v.deprecated, v.published_at, v.binary_uri
         );
     }
     println!("(* = currently active)");
 }
 
-pub fn print_version_detail(blueprint_id: u64, v: &BinaryVersion, json_out: bool) {
+pub fn print_version_detail(blueprint_id: u64, v: &VersionView, json_out: bool) {
     if json_out {
         println!(
             "{}",
@@ -1154,22 +1297,22 @@ pub fn print_version_detail(blueprint_id: u64, v: &BinaryVersion, json_out: bool
         "{} {}/{}",
         style("Version").cyan().bold(),
         blueprint_id,
-        v.versionId
+        v.version_id
     );
-    println!("  sha256_hash:      {:#x}", v.sha256Hash);
-    println!("  binary_uri:       {}", v.binaryUri);
-    println!("  attestation_hash: {:#x}", v.attestationHash);
-    println!("  published_at:     {}", v.publishedAt);
+    println!("  sha256_hash:      {:#x}", v.sha256_hash);
+    println!("  binary_uri:       {}", v.binary_uri);
+    println!("  attestation_hash: {:#x}", v.attestation_hash);
+    println!("  published_at:     {}", v.published_at);
     println!("  deprecated:       {}", v.deprecated);
 }
 
-fn version_to_json(v: &BinaryVersion, active: bool) -> Value {
+fn version_to_json(v: &VersionView, active: bool) -> Value {
     json!({
-        "version_id": v.versionId,
-        "sha256_hash": format!("{:#x}", v.sha256Hash),
-        "binary_uri": v.binaryUri,
-        "attestation_hash": format!("{:#x}", v.attestationHash),
-        "published_at": v.publishedAt,
+        "version_id": v.version_id,
+        "sha256_hash": format!("{:#x}", v.sha256_hash),
+        "binary_uri": v.binary_uri,
+        "attestation_hash": format!("{:#x}", v.attestation_hash),
+        "published_at": v.published_at,
         "deprecated": v.deprecated,
         "active": active,
     })
@@ -1279,7 +1422,7 @@ fn attestation_to_json(id: u64, row: &AttestationRow, now: u64) -> Value {
     })
 }
 
-pub fn print_effective_version(service_id: u64, v: &BinaryVersion, json_out: bool) {
+pub fn print_effective_version(service_id: u64, v: &VersionView, json_out: bool) {
     if json_out {
         println!(
             "{}",
@@ -1295,9 +1438,9 @@ pub fn print_effective_version(service_id: u64, v: &BinaryVersion, json_out: boo
         "{} service={} version_id={} sha256={:#x} uri={}",
         style("Effective").cyan().bold(),
         service_id,
-        v.versionId,
-        v.sha256Hash,
-        v.binaryUri
+        v.version_id,
+        v.sha256_hash,
+        v.binary_uri
     );
     if v.deprecated {
         println!(
