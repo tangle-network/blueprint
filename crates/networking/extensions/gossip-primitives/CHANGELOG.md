@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-gossip-primitives-v0.2.0-alpha.8...blueprint-gossip-primitives-v0.2.0-alpha.9) - 2026-07-08
+
+### Added
+
+- adopt tnt-core 0.19 bindings (draft — blocked on publishing tnt-core-bindings 0.19.0) (#1467)
+
 ## [0.2.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-gossip-primitives-v0.2.0-alpha.7...blueprint-gossip-primitives-v0.2.0-alpha.8) - 2026-06-13
 
 ### Other
