@@ -163,11 +163,9 @@ impl ChainView {
                 .from_block(from_block)
                 .to_block(to_block);
 
-            let logs = self
-                .client
-                .get_logs(&filter)
-                .await
-                .map_err(|e| UpgradeError::ChainRead(format!("BinaryVersionPublished logs: {e}")))?;
+            let logs = self.client.get_logs(&filter).await.map_err(|e| {
+                UpgradeError::ChainRead(format!("BinaryVersionPublished logs: {e}"))
+            })?;
 
             // Newest wins if a chain ever re-emitted (it shouldn't: versions are
             // immutable). Event signatures and indexed topics are global and

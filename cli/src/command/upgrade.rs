@@ -837,7 +837,9 @@ async fn require_binary_uri(
     binary_uri_from_event(ctx, blueprint_id, version_id)
         .await?
         .ok_or_else(|| {
-            eyre!("no BinaryVersionPublished event for blueprint {blueprint_id} version {version_id}")
+            eyre!(
+                "no BinaryVersionPublished event for blueprint {blueprint_id} version {version_id}"
+            )
         })
 }
 
