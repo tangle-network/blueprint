@@ -10,9 +10,7 @@ use opentelemetry_sdk::{
     Resource,
     error::OTelSdkResult,
     metrics::reader::MetricReader,
-    metrics::{
-        InstrumentKind, Pipeline, SdkMeterProvider, Temporality, data::ResourceMetrics,
-    },
+    metrics::{InstrumentKind, Pipeline, SdkMeterProvider, Temporality, data::ResourceMetrics},
 };
 
 use opentelemetry::metrics::MeterProvider;
