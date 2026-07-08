@@ -128,10 +128,14 @@ impl ChainView {
     /// contract emitted at publish time:
     /// `BinaryVersionPublished(blueprintId indexed, versionId indexed, sha256Hash, binaryUri)`.
     ///
-    /// Both `blueprintId` and `versionId` are indexed, so the filter is exact —
-    /// at most one matching log exists (versions are append-only and immutable).
-    /// We scan newest-first in bounded block windows so a provider's `eth_getLogs`
-    /// span cap can't reject the query, and stop at the first match.
+    /// The filter is scoped to the Tangle contract address (`self.tangle_address`)
+    /// AND the indexed `blueprintId`/`versionId` topics. The address scope is the
+    /// security boundary: event signatures and indexed topics are global, so
+    /// without it any contract could emit a matching event and inject a rogue URI.
+    /// With the address scope, at most one log matches (versions are append-only
+    /// and immutable). We scan newest-first in bounded block windows so a
+    /// provider's `eth_getLogs` span cap can't reject the query, and stop at the
+    /// first match.
     async fn binary_uri_from_event(&self, blueprint_id: u64, version_id: u64) -> Result<String> {
         // Bounded per-request span. Kept well under common provider caps
         // (Infura/Alchemy ~10k, many self-hosted nodes 100k). The doubly-indexed
@@ -152,6 +156,7 @@ impl ChainView {
         loop {
             let from_block = to_block.saturating_sub(GETLOGS_WINDOW.saturating_sub(1));
             let filter = Filter::new()
+                .address(self.tangle_address)
                 .event_signature(IBlueprintBinaryVersions::BinaryVersionPublished::SIGNATURE_HASH)
                 .topic1(blueprint_topic)
                 .topic2(version_topic)
@@ -165,9 +170,12 @@ impl ChainView {
                 .map_err(|e| UpgradeError::ChainRead(format!("BinaryVersionPublished logs: {e}")))?;
 
             // Newest wins if a chain ever re-emitted (it shouldn't: versions are
-            // immutable). A topic0-only collision from another contract can't
-            // survive the indexed blueprintId+versionId filter, but a decode
-            // failure must still be skipped rather than abort the scan.
+            // immutable). Event signatures and indexed topics are global and
+            // attacker-choosable, so the `.address(self.tangle_address)` scope
+            // above — NOT the blueprintId/versionId topics — is what stops another
+            // contract from spoofing a matching `BinaryVersionPublished` and
+            // feeding an attacker-controlled `binaryUri` into `download_and_verify`.
+            // A decode failure must still be skipped rather than abort the scan.
             for log in logs.iter().rev() {
                 if let Ok(decoded) =
                     IBlueprintBinaryVersions::BinaryVersionPublished::decode_log(&log.inner)

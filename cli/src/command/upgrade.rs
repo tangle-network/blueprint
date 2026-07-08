@@ -687,7 +687,11 @@ pub async fn list_versions(ctx: &ViewContext, blueprint_id: u64) -> Result<Vec<V
             },
         )
         .await?;
-        let uri = binary_uri_from_event(ctx, blueprint_id, version.versionId).await?;
+        // Listing must not abort if one version's publish log has been pruned;
+        // blank the URI for that row rather than failing the whole command.
+        let uri = binary_uri_from_event(ctx, blueprint_id, version.versionId)
+            .await?
+            .unwrap_or_default();
         out.push(VersionView::from_parts(&version, uri));
     }
     Ok(out)
@@ -706,7 +710,7 @@ pub async fn get_version(
         },
     )
     .await?;
-    let uri = binary_uri_from_event(ctx, blueprint_id, version.versionId).await?;
+    let uri = require_binary_uri(ctx, blueprint_id, version.versionId).await?;
     Ok(VersionView::from_parts(&version, uri))
 }
 
@@ -754,7 +758,7 @@ pub async fn get_effective_version(
         },
     )
     .await?;
-    let uri = binary_uri_from_event(ctx, blueprint_id, version.versionId).await?;
+    let uri = require_binary_uri(ctx, blueprint_id, version.versionId).await?;
     Ok(VersionView::from_parts(&version, uri))
 }
 
@@ -764,11 +768,16 @@ pub async fn get_effective_version(
 /// URI now lives solely on the publish event, indexed by `blueprintId` and
 /// `versionId`, so exactly one log matches. We scan newest-first in bounded
 /// block windows to stay under provider `eth_getLogs` span caps.
+///
+/// Returns `Ok(None)` when no matching log is found (e.g. the RPC provider has
+/// pruned that block range) so callers that merely list versions can tolerate a
+/// gap; callers that must have the URI to act (download/upgrade) convert `None`
+/// into an error themselves. Only genuine RPC failures yield `Err`.
 async fn binary_uri_from_event(
     ctx: &ViewContext,
     blueprint_id: u64,
     version_id: u64,
-) -> Result<String> {
+) -> Result<Option<String>> {
     use alloy_rpc_types_eth::Filter;
     use alloy_sol_types::SolEvent;
 
@@ -805,7 +814,7 @@ async fn binary_uri_from_event(
 
         for log in logs.iter().rev() {
             if let Ok(decoded) = BinaryVersionPublished::decode_log(&log.inner) {
-                return Ok(decoded.binaryUri.clone());
+                return Ok(Some(decoded.binaryUri.clone()));
             }
         }
 
@@ -815,9 +824,21 @@ async fn binary_uri_from_event(
         to_block = from_block.saturating_sub(1);
     }
 
-    Err(eyre!(
-        "no BinaryVersionPublished event for blueprint {blueprint_id} version {version_id}"
-    ))
+    Ok(None)
+}
+
+/// `binary_uri_from_event`, erroring when the URI can't be resolved. Used by
+/// callers that need the URI to proceed (single-version view, download/upgrade).
+async fn require_binary_uri(
+    ctx: &ViewContext,
+    blueprint_id: u64,
+    version_id: u64,
+) -> Result<String> {
+    binary_uri_from_event(ctx, blueprint_id, version_id)
+        .await?
+        .ok_or_else(|| {
+            eyre!("no BinaryVersionPublished event for blueprint {blueprint_id} version {version_id}")
+        })
 }
 
 /// Encode a `uint64` indexed event argument as a 32-byte log topic
