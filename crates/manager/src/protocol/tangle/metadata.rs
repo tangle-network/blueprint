@@ -1,4 +1,6 @@
-use alloy_sol_types::SolType;
+use alloy_primitives::{B256, keccak256};
+use alloy_rpc_types::Filter;
+use alloy_sol_types::{SolEvent, SolType, SolValue, sol};
 use blueprint_core::warn;
 use hex;
 use std::string::{String, ToString};
@@ -20,6 +22,71 @@ use blueprint_client_tangle::{
 };
 use serde::Deserialize;
 use serde_json;
+
+sol! {
+    // Signature-only stub for the `BlueprintSourcesRecorded` event emitted by
+    // tnt-core 0.19 `Base.sol::_writeBlueprintSources`. tnt-core-bindings 0.19
+    // does not surface it (it is declared in an abstract base, not an
+    // interface), so we mirror the canonical Solidity here to derive the exact
+    // `SIGNATURE_HASH` used as the `eth_getLogs` topic0 filter. The `sources`
+    // payload itself is decoded with the already-bound `ITangleTypes`
+    // structs (see `sources_from_event`), so this stub only needs the event
+    // declaration and the type tree its selector depends on. The struct/enum
+    // shapes must match `src/libraries/Types.sol` byte-for-byte or the derived
+    // topic0 will not match the on-chain event.
+    #[allow(missing_docs)]
+    enum BlueprintSourceKind { Container, Wasm, Native }
+    #[allow(missing_docs)]
+    enum BlueprintFetcherKind { None, Ipfs, Http, Github }
+    #[allow(missing_docs)]
+    enum WasmRuntime { Unknown, Wasmtime, Wasmer }
+    #[allow(missing_docs)]
+    enum BlueprintArchitecture {
+        Wasm32, Wasm64, Wasi32, Wasi64, Amd32, Amd64, Arm32, Arm64, RiscV32, RiscV64
+    }
+    #[allow(missing_docs)]
+    enum BlueprintOperatingSystem { Unknown, Linux, Windows, MacOS, BSD }
+    #[allow(missing_docs)]
+    struct ImageRegistrySource { string registry; string image; string tag; }
+    #[allow(missing_docs)]
+    struct WasmSource {
+        WasmRuntime runtime;
+        BlueprintFetcherKind fetcher;
+        string artifactUri;
+        string entrypoint;
+    }
+    #[allow(missing_docs)]
+    struct NativeSource {
+        BlueprintFetcherKind fetcher;
+        string artifactUri;
+        string entrypoint;
+    }
+    #[allow(missing_docs)]
+    struct TestingSource { string cargoPackage; string cargoBin; string basePath; }
+    #[allow(missing_docs)]
+    struct BlueprintBinaryDescriptor {
+        BlueprintArchitecture arch;
+        BlueprintOperatingSystem os;
+        string name;
+        bytes32 sha256;
+    }
+    #[allow(missing_docs)]
+    struct BlueprintSource {
+        BlueprintSourceKind kind;
+        ImageRegistrySource container;
+        WasmSource wasm;
+        NativeSource native;
+        TestingSource testing;
+        BlueprintBinaryDescriptor[] binaries;
+    }
+    #[allow(missing_docs)]
+    event BlueprintSourcesRecorded(
+        uint64 indexed blueprintId,
+        bytes32 indexed sourcesHash,
+        BlueprintSource[] sources
+    );
+}
+
 type OnChainBlueprintSource = <ITangleTypes::BlueprintSource as SolType>::RustType;
 type OnChainBlueprintBinary = <ITangleTypes::BlueprintBinary as SolType>::RustType;
 type OnChainBlueprintMetadata = <ITangleTypes::BlueprintMetadata as SolType>::RustType;
@@ -100,7 +167,18 @@ impl OnChainMetadataProvider {
         let blueprint_name = definition.metadata.name.clone().to_string();
         let (confidentiality_policy, gpu_requirements) =
             Self::resolve_execution_policies(&definition.metadata)?;
-        let onchain_sources = definition.sources;
+
+        // tnt-core 0.19 stopped storing the source array on-chain: the
+        // `getBlueprintDefinition` view returns an empty `sources` vec by design
+        // and only `_blueprintSourcesHash[id]` anchors them. The full set lives
+        // in the `BlueprintSourcesRecorded` event. Keep the view as the primary
+        // path (pre-0.19 chains still populate it) and fall back to the event
+        // log when it is empty. Mirrors `chain.rs::binary_uri_from_event`.
+        let onchain_sources = if definition.sources.is_empty() {
+            Self::sources_from_event(client, blueprint_id).await?
+        } else {
+            definition.sources
+        };
 
         let sources = Self::convert_sources(&onchain_sources);
 
@@ -117,6 +195,102 @@ impl OnChainMetadataProvider {
             sources,
             confidentiality_policy,
             gpu_requirements,
+        )))
+    }
+
+    /// Reconstruct a blueprint's sources from the `BlueprintSourcesRecorded`
+    /// event when the on-chain view returns an empty set (tnt-core 0.19+).
+    ///
+    /// The filter is scoped to the Tangle contract address AND the indexed
+    /// `blueprintId` topic. The address scope is the security boundary: event
+    /// signatures and indexed topics are global and attacker-choosable, so
+    /// without it any contract could emit a matching event and inject rogue
+    /// sources. A repoint (`setBlueprintSources`) re-fires the whole array with
+    /// a new `sourcesHash`, so the newest matching log is authoritative; we scan
+    /// newest-first in bounded windows and stop at the first decodable match.
+    /// The decoded `sources` are validated against the on-chain
+    /// `_blueprintSourcesHash[id]` anchor (`keccak256(abi.encode(sources))`) as
+    /// defense-in-depth before use. This mirrors `chain.rs::binary_uri_from_event`.
+    async fn sources_from_event(
+        client: &TangleProtocolClient,
+        blueprint_id: u64,
+    ) -> Result<Vec<OnChainBlueprintSource>> {
+        // Bounded per-request span, kept well under common provider caps.
+        const GETLOGS_WINDOW: u64 = 10_000;
+
+        let inner = client.client();
+        let tangle_address = inner.tangle_address();
+
+        // The on-chain anchor: `keccak256(abi.encode(sources))`. Used to reject
+        // any log that does not hash to the currently-anchored source set.
+        let expected_hash: B256 = inner
+            .tangle_contract()
+            .blueprintSourcesHash(blueprint_id)
+            .call()
+            .await
+            .map_err(|e| {
+                Error::Other(format!(
+                    "failed to read blueprintSourcesHash({blueprint_id}): {e}"
+                ))
+            })?;
+
+        // Indexed `uint64 blueprintId` topic: left-padded, big-endian.
+        let mut blueprint_topic = [0u8; 32];
+        blueprint_topic[24..].copy_from_slice(&blueprint_id.to_be_bytes());
+        let blueprint_topic = B256::from(blueprint_topic);
+
+        let head = client
+            .client()
+            .block_number()
+            .await
+            .map_err(|e| Error::Other(format!("block_number: {e}")))?;
+
+        let mut to_block = head;
+        loop {
+            let from_block = to_block.saturating_sub(GETLOGS_WINDOW.saturating_sub(1));
+            let filter = Filter::new()
+                .address(tangle_address)
+                .event_signature(BlueprintSourcesRecorded::SIGNATURE_HASH)
+                .topic1(blueprint_topic)
+                .from_block(from_block)
+                .to_block(to_block);
+
+            let logs = inner
+                .get_logs(&filter)
+                .await
+                .map_err(|e| Error::Other(format!("BlueprintSourcesRecorded logs: {e}")))?;
+
+            for log in logs.iter().rev() {
+                // The single non-indexed param is a dynamic `BlueprintSource[]`,
+                // so the log data section is `abi.encode(sources)` (offset-
+                // prefixed). Decode it with the bound `ITangleTypes` structs so
+                // `convert_sources` runs unchanged; a decode failure is skipped
+                // rather than aborting the scan.
+                let Ok(sources) = Vec::<OnChainBlueprintSource>::abi_decode(&log.data().data)
+                else {
+                    continue;
+                };
+
+                // Defense-in-depth: only accept a log whose payload matches the
+                // currently-anchored hash. `sourcesHash` is the second indexed
+                // topic, but recomputing from the decoded bytes also proves the
+                // decode itself is faithful.
+                let actual_hash = keccak256(sources.abi_encode());
+                if actual_hash != expected_hash {
+                    continue;
+                }
+
+                return Ok(sources);
+            }
+
+            if from_block == 0 {
+                break;
+            }
+            to_block = from_block.saturating_sub(1);
+        }
+
+        Err(Error::Other(format!(
+            "no BlueprintSourcesRecorded event matching anchored sourcesHash for blueprint {blueprint_id}"
         )))
     }
 
@@ -734,6 +908,92 @@ mod tests {
             parsed,
             ConfidentialityPolicy::Any,
             "empty payload should default to confidentiality=any"
+        );
+    }
+
+    /// Proves the event-fallback wire contract end-to-end without a live chain:
+    /// build the sources with the bound `ITangleTypes` structs, ABI-encode the
+    /// event's non-indexed data exactly as the contract's log would, then run
+    /// the manager's decode + anchor-hash check against those raw bytes. This
+    /// guards the offset/encoding semantics that `sources_from_event` relies on
+    /// (single dynamic-array param → offset-prefixed data section) and the
+    /// `keccak256(abi.encode(sources))` anchor equality against
+    /// `_writeBlueprintSources`.
+    #[test]
+    fn event_data_decodes_and_matches_anchor_hash() {
+        use alloy_primitives::keccak256;
+        use alloy_sol_types::{SolEvent, SolValue};
+
+        // Build a realistic source set with the BOUND ITangleTypes structs — the
+        // same type `convert_sources` consumes.
+        let mut container: OnChainBlueprintSource = Default::default();
+        container.kind = SOURCE_KIND_CONTAINER;
+        container.container = ITangleTypes::ImageRegistrySource {
+            registry: "ghcr.io".into(),
+            image: "demo/app".into(),
+            tag: "v1.0.0".into(),
+        };
+
+        let mut native: OnChainBlueprintSource = Default::default();
+        native.kind = SOURCE_KIND_NATIVE;
+        native.native.fetcher = FETCHER_KIND_HTTP;
+        native.native.artifactUri = json!({
+            "dist_url": "https://example.com/dist.json",
+            "archive_url": "https://example.com/archive.tar.xz",
+            "binaries": []
+        })
+        .to_string();
+        native.binaries = vec![ITangleTypes::BlueprintBinary {
+            arch: ITangleTypes::BlueprintArchitecture::from_underlying(5).into_underlying(),
+            os: ITangleTypes::BlueprintOperatingSystem::from_underlying(1).into_underlying(),
+            name: "demo".into(),
+            sha256: FixedBytes::<32>::from([0x22; 32]),
+        }];
+
+        let sources = vec![container, native];
+
+        // The contract anchor: keccak256(abi.encode(sources)) — must equal the
+        // hash the manager recomputes from the decoded bytes.
+        let anchor_hash = keccak256(sources.abi_encode());
+
+        // Encode the event exactly as the on-chain log would: the stub event's
+        // non-indexed `sources` param becomes the log data section. We encode
+        // through the stub `BlueprintSource[]` (structurally identical to the
+        // bound type) so the byte layout matches a real emitted log.
+        let stub_sources: Vec<BlueprintSource> =
+            Vec::<BlueprintSource>::abi_decode(&sources.abi_encode())
+                .expect("bound-encoded sources must decode into the stub type");
+        let event = BlueprintSourcesRecorded {
+            blueprintId: 0,
+            sourcesHash: anchor_hash,
+            sources: stub_sources,
+        };
+        let log_data = event.encode_log_data();
+
+        // Manager decode path: decode the data section into the BOUND type.
+        let decoded = Vec::<OnChainBlueprintSource>::abi_decode(&log_data.data)
+            .expect("event data must decode into ITangleTypes::BlueprintSource[]");
+
+        // Anchor check the manager enforces.
+        assert_eq!(
+            keccak256(decoded.abi_encode()),
+            anchor_hash,
+            "recomputed hash must match the on-chain anchor"
+        );
+
+        // And the decoded sources feed convert_sources unchanged.
+        let converted = OnChainMetadataProvider::convert_sources(&decoded);
+        assert!(
+            converted
+                .iter()
+                .any(|s| matches!(s, ManagerBlueprintSource::Container(_))),
+            "expected the container source to survive the event round-trip"
+        );
+        assert!(
+            converted
+                .iter()
+                .any(|s| matches!(s, ManagerBlueprintSource::Remote(_))),
+            "expected the native/remote source to survive the event round-trip"
         );
     }
 
