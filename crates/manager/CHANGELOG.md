@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.11...blueprint-manager-v0.4.0-alpha.12) - 2026-07-08
+
+### Added
+
+- adopt tnt-core 0.19 bindings (draft — blocked on publishing tnt-core-bindings 0.19.0) (#1467)
+
+### Fixed
+
+- *(manager)* event-source blueprint sources for tnt-core 0.19 (#1468)
+
 ## [0.4.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.10...blueprint-manager-v0.4.0-alpha.11) - 2026-07-03
 
 ### Other
