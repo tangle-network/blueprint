@@ -578,7 +578,14 @@ impl BlueprintManagerBridge for BridgeService {
 // TODO: Actually allocate a port to the VM
 #[expect(clippy::unused_async, reason = "This isn't actually setup yet")]
 async fn allocate_host_port(hint: u16) -> Result<u16, tonic::Status> {
+    // Try the caller's preferred port first, but fall back to an OS-assigned free
+    // port when it is already bound. Co-located services on the same host commonly
+    // hint the same base port (e.g. several ai-agent-sandbox operators all default
+    // to 9090); without this fallback the 2nd+ service fails port allocation with
+    // "Address already in use" and never boots. Binding `:0` lets the OS pick a
+    // distinct free port so every co-located service gets a bindable port.
     let listener = std::net::TcpListener::bind(format!("0.0.0.0:{hint}"))
+        .or_else(|_| std::net::TcpListener::bind("0.0.0.0:0"))
         .map_err(|e| tonic::Status::unavailable(e.to_string()))?;
     let port = listener
         .local_addr()
