@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-manager-bridge-v0.2.0-alpha.10...blueprint-manager-bridge-v0.2.0-alpha.11) - 2026-07-24
+
+### Fixed
+
+- *(manager)* fall back to OS-assigned free port when the hinted port is taken (#1469)
+
 ## [0.2.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-manager-bridge-v0.2.0-alpha.9...blueprint-manager-bridge-v0.2.0-alpha.10) - 2026-07-08
 
 ### Other
