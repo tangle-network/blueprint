@@ -56,14 +56,59 @@ jobs:
           cat release-output.json
 
       - name: Publish to crates.io
-        if: inputs.dry_run != 'true'
+        if: ${{ !inputs.dry_run }}
         run: |
           bash .github/scripts/batch-publish.sh release-output.json
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Dry run
-        if: inputs.dry_run == 'true'
+        if: ${{ inputs.dry_run }}
         run: |
-          echo "DRY RUN — would publish these crates:"
-          python3 -c "import json; [print(f'  {r[\"package_name\"]}') for r in json.load(open('release-output.json'))]"
+          # Report what a real run would publish, and pre-check the failure that
+          # actually kills a batch mid-flight: a crate whose target version is
+          # already on crates.io. `batch-publish.sh` publishes in topological
+          # order with a 60s post-burst delay, so a collision late in the list
+          # can strand the fleet half-published. A full `cargo publish
+          # --dry-run` per crate is NOT usable here — dry-run still resolves
+          # dependencies from the registry, so every crate that depends on a
+          # sibling being published in this same batch would fail spuriously.
+          python3 - <<'PY'
+          import json, urllib.request, subprocess, sys
+
+          UA = {"User-Agent": "tangle-blueprint-release (hello@tangle.tools)"}
+          meta = json.loads(subprocess.check_output(
+              ["cargo", "metadata", "--format-version", "1", "--no-deps"], text=True))
+          version = {p["name"]: p["version"] for p in meta["packages"]}
+          names = [r["package_name"] for r in json.load(open("release-output.json"))]
+
+          print(f"DRY RUN — would publish {len(names)} crate(s):")
+          collisions = []
+          for n in names:
+              v = version.get(n, "?")
+              try:
+                  req = urllib.request.Request(
+                      f"https://crates.io/api/v1/crates/{n}", headers=UA)
+                  with urllib.request.urlopen(req, timeout=20) as r:
+                      published = {x["num"] for x in json.load(r).get("versions", [])}
+              except Exception as e:            # unpublished crate / transient
+                  published = set()
+                  print(f"  {n} {v}  (registry lookup skipped: {e})")
+                  continue
+              if v in published:
+                  collisions.append((n, v))
+                  print(f"  {n} {v}  ALREADY PUBLISHED")
+              else:
+                  print(f"  {n} {v}  ok")
+
+          if collisions:
+              print()
+              print("These versions already exist on crates.io — a real run would fail "
+                    "on them and could leave the fleet half-published. Bump them (or "
+                    "drop them from the batch) before publishing:")
+              for n, v in collisions:
+                  print(f"  - {n} {v}")
+              sys.exit(1)
+          print()
+          print("No version collisions. A real run would proceed.")
+          PY
