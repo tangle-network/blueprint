@@ -3,8 +3,8 @@
 //! This module provides full integration with Azure Functions for executing blueprint jobs.
 
 use super::*;
-use azure_core::auth::TokenCredential;
-use azure_identity::{DefaultAzureCredential, TokenCredentialOptions};
+use azure_core::credentials::TokenCredential;
+use azure_identity::DeveloperToolsCredential;
 use blueprint_core::{JobCall, JobResult};
 use reqwest::Client;
 use serde::Deserialize;
@@ -42,7 +42,7 @@ pub struct AzureFunctionExecutor {
     resource_group: String,
     function_app_name: String,
     client: Client,
-    credential: Arc<DefaultAzureCredential>,
+    credential: Arc<DeveloperToolsCredential>,
 }
 
 impl AzureFunctionExecutor {
@@ -70,10 +70,9 @@ impl AzureFunctionExecutor {
             "Creating Azure Functions executor"
         );
 
-        let credential = DefaultAzureCredential::create(TokenCredentialOptions::default())
-            .map_err(|e| {
-                FaasError::InfrastructureError(format!("Failed to create Azure credentials: {}", e))
-            })?;
+        let credential = DeveloperToolsCredential::new(None).map_err(|e| {
+            FaasError::InfrastructureError(format!("Failed to create Azure credentials: {}", e))
+        })?;
 
         Ok(Self {
             subscription_id,
@@ -81,7 +80,7 @@ impl AzureFunctionExecutor {
             resource_group: format!("blueprint-rg-{}", region),
             function_app_name: format!("blueprint-functions-{}", region),
             client: Client::new(),
-            credential: Arc::new(credential),
+            credential,
         })
     }
 
@@ -107,7 +106,7 @@ impl AzureFunctionExecutor {
     async fn get_access_token(&self) -> Result<String, FaasError> {
         let token = self
             .credential
-            .get_token(&["https://management.azure.com/.default"])
+            .get_token(&["https://management.azure.com/.default"], None)
             .await
             .map_err(|e| {
                 FaasError::InfrastructureError(format!(
@@ -609,7 +608,7 @@ mod tests {
     #[test]
     fn test_function_naming() {
         // Create a credential without requiring actual authentication
-        let credential = DefaultAzureCredential::create(TokenCredentialOptions::default())
+        let credential = DeveloperToolsCredential::new(None)
             .expect("Failed to create test credential (this is expected in test environment)");
 
         let executor = AzureFunctionExecutor {
@@ -618,7 +617,7 @@ mod tests {
             resource_group: "test-rg".to_string(),
             function_app_name: "test-app".to_string(),
             client: Client::new(),
-            credential: Arc::new(credential),
+            credential,
         };
 
         assert_eq!(executor.function_name(0), "job0");

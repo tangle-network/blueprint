@@ -11,7 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 blueprint-std = { workspace = true }
-blueprint-keystore = { workspace = true, features = ["eigenlayer", "evm"] }
+blueprint-keystore = { workspace = true, features = ["bn254", "evm"] }
 blueprint-core-testing-utils = { workspace = true }
 blueprint-core = { workspace = true }
 alloy-contract = { workspace = true }

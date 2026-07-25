@@ -234,24 +234,6 @@ jobs:
           cargo test -p blueprint-manager container --lib -- --nocapture --test-threads=1
           cargo test -p blueprint-manager sources --lib -- --nocapture --test-threads=1
 
-  eigenlayer-integration:
-    name: EigenLayer Integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      RUST_LOG: info
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/free-disk-space
-      - uses: ./.github/actions/setup-build-env
-        with:
-          tnt-core: "false"
-
-      - name: Run EigenLayer tests
-        run: |
-          cargo test -p blueprint-client-eigenlayer --lib -- --nocapture
-          cargo test -p blueprint-runner --features eigenlayer --lib -- --nocapture
-
   testnet-smoke-test:
     name: Testnet Smoke Test
     runs-on: ubuntu-latest
@@ -274,3 +256,23 @@ jobs:
         if: env.TANGLE_RPC_URL != ''
         run: |
           ./target/release/cargo-tangle tangle blueprint list blueprints --network testnet || echo "Testnet query failed (expected if no testnet access)"
+
+  clippy-all-features:
+    name: cargo clippy (--all-features)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-disk-space
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tnt-core: "false"
+
+      # The `cargo clippy` job above runs `--workspace --tests --examples`, which
+      # never compiles optional-feature code. That blind spot let four separate
+      # breakages rot unnoticed while CI stayed green on those paths: blueprint-faas
+      # against azure_core/azure_identity 0.33 and a `default-features = false` zip,
+      # a blueprint-manager caller left behind when `on_service_initiated` gained two
+      # parameters, and two never-read fields. Compile everything, so feature-gated
+      # code cannot drift away from its dependencies again.
+      - name: Clippy (all features)
+        run: cargo clippy --workspace --all-features -- -D warnings

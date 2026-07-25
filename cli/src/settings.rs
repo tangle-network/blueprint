@@ -6,7 +6,6 @@ use std::str::FromStr;
 use alloy_primitives::Address;
 use blueprint_manager::config::SourceType;
 use blueprint_runner::config::{Protocol, ProtocolSettings};
-use blueprint_runner::eigenlayer::config::EigenlayerProtocolSettings;
 use blueprint_runner::error::ConfigError;
 use blueprint_runner::tangle::config::TangleProtocolSettings;
 use dotenv::from_path;
@@ -19,34 +18,6 @@ pub fn load_protocol_settings(
         .map_err(|e| ConfigError::Other(format!("Failed to load settings file: {e}").into()))?;
 
     match protocol {
-        Protocol::Eigenlayer => {
-            let addresses = EigenlayerProtocolSettings {
-                allocation_manager_address: env_var("ALLOCATION_MANAGER_ADDRESS")?,
-                registry_coordinator_address: env_var("REGISTRY_COORDINATOR_ADDRESS")?,
-                operator_state_retriever_address: env_var("OPERATOR_STATE_RETRIEVER_ADDRESS")?,
-                delegation_manager_address: env_var("DELEGATION_MANAGER_ADDRESS")?,
-                service_manager_address: env_var("SERVICE_MANAGER_ADDRESS")?,
-                stake_registry_address: env_var("STAKE_REGISTRY_ADDRESS")?,
-                strategy_manager_address: env_var("STRATEGY_MANAGER_ADDRESS")?,
-                strategy_address: env_var("STRATEGY_ADDRESS")?,
-                avs_directory_address: env_var("AVS_DIRECTORY_ADDRESS")?,
-                rewards_coordinator_address: env_var("REWARDS_COORDINATOR_ADDRESS")?,
-                permission_controller_address: env_var("PERMISSION_CONTROLLER_ADDRESS")?,
-                allocation_delay: env_var_default("ALLOCATION_DELAY", 0)?,
-                deposit_amount: env_var_default("DEPOSIT_AMOUNT", 5_000_000_000_000_000_000_000)?,
-                stake_amount: env_var_default("STAKE_AMOUNT", 1_000_000_000_000_000_000)?,
-                operator_sets: env_var_list("OPERATOR_SETS")
-                    .map(|sets| sets.into_iter().map(|v| v as u32).collect())
-                    .unwrap_or_else(|| vec![0]),
-                staker_opt_out_window_blocks: env_var_default(
-                    "STAKER_OPT_OUT_WINDOW_BLOCKS",
-                    50_400,
-                )?,
-                metadata_url: std::env::var("METADATA_URL")
-                    .unwrap_or_else(|_| "https://github.com/tangle-network/blueprint".to_string()),
-            };
-            Ok(ProtocolSettings::Eigenlayer(addresses))
-        }
         Protocol::Tangle => {
             let blueprint_id = std::env::var("BLUEPRINT_ID")
                 .map_err(|_| ConfigError::Other("Missing BLUEPRINT_ID".into()))?
@@ -75,22 +46,6 @@ fn env_var(name: &str) -> Result<Address, ConfigError> {
     let value =
         std::env::var(name).map_err(|_| ConfigError::Other(format!("Missing {name}").into()))?;
     Address::from_str(&value).map_err(|_| ConfigError::Other(format!("Invalid {name}").into()))
-}
-
-fn env_var_default<T>(name: &str, default: T) -> Result<T, ConfigError>
-where
-    T: FromStr + Copy,
-{
-    Ok(std::env::var(name)
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(default))
-}
-
-fn env_var_list(name: &str) -> Option<Vec<u64>> {
-    std::env::var(name)
-        .ok()
-        .map(|s| s.split(',').filter_map(|v| v.trim().parse().ok()).collect())
 }
 
 const PREFERRED_SOURCE_KEY: &str = "PREFERRED_SOURCE";

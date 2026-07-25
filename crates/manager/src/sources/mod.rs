@@ -99,7 +99,7 @@ pub struct BlueprintArgs {
     pub pretty: bool,
     pub verbose: u8,
     pub dry_run: bool,
-    /// Protocol-specific extra arguments (e.g., EigenLayer contract addresses)
+    /// Protocol-specific extra arguments
     pub extra_args: Vec<(String, String)>,
 }
 

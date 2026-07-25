@@ -118,6 +118,10 @@ fn spawn_watcher(
     mut msgs: UnboundedReceiver<(NetlinkMessage<RouteNetlinkMessage>, SocketAddr)>,
 ) {
     tokio::spawn(async move {
+        #[allow(
+            deprecated,
+            reason = "try_recv has a different return shape; swap is a behavior change, not a lint fix"
+        )]
         while let Ok(Some((msg, _))) = msgs.try_next() {
             let Some(inner) = pool.upgrade() else { break };
             let mut guard = inner.write().await;

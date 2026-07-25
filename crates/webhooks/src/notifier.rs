@@ -27,7 +27,6 @@
 //! ```
 
 use hmac::{Hmac, Mac};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::{HashMap, VecDeque};

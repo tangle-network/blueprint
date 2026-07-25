@@ -130,7 +130,7 @@ pub async fn estimate(opts: EstimateOptions) -> Result<()> {
                 opts.memory,
                 opts.gpu,
                 opts.spot,
-                &discovery_result,
+                discovery_result.as_ref(),
             )
             .await;
 
@@ -188,7 +188,7 @@ pub async fn estimate(opts: EstimateOptions) -> Result<()> {
             opts.memory,
             opts.gpu,
             opts.spot,
-            &discovery_result,
+            discovery_result.as_ref(),
         )
         .await;
 
@@ -394,7 +394,7 @@ async fn get_best_instance_and_price(
     memory: f32,
     gpu: Option<u32>,
     spot: bool,
-    discovery_result: &Option<(MachineTypeDiscovery, CloudCredentials)>,
+    discovery_result: Option<&(MachineTypeDiscovery, CloudCredentials)>,
 ) -> (String, f32) {
     use blueprint_remote_providers::core::remote::CloudProvider as RemoteCloudProvider;
 

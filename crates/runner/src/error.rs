@@ -78,9 +78,6 @@ pub enum RunnerError {
     /// [Eigenlayer] protocol errors
     ///
     /// [Eigenlayer]: https://eigenlayer.xyz
-    #[cfg(feature = "eigenlayer")]
-    #[error("EigenLayer error: {0}")]
-    Eigenlayer(#[from] crate::eigenlayer::error::EigenlayerError),
 
     #[error("{0}")]
     Other(#[from] Box<dyn core::error::Error + Send + Sync>),

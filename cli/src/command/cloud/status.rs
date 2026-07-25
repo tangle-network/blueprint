@@ -51,15 +51,15 @@ pub async fn show_status(deployment_id: Option<String>, watch: bool) -> Result<(
         // Watch mode - refresh every 5 seconds
         loop {
             print!("\x1B[2J\x1B[1;1H"); // Clear screen
-            display_status(&deployment_id).await?;
+            display_status(deployment_id.as_deref()).await?;
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     } else {
-        display_status(&deployment_id).await
+        display_status(deployment_id.as_deref()).await
     }
 }
 
-async fn display_status(deployment_id: &Option<String>) -> Result<()> {
+async fn display_status(deployment_id: Option<&str>) -> Result<()> {
     println!("📊 Cloud Deployment Status\n");
 
     if let Some(id) = deployment_id {

@@ -41,7 +41,7 @@ jobs:
           cargo metadata --format-version 1 --no-deps | python3 -c "
           import json, sys
           meta = json.load(sys.stdin)
-          skip = {'workspace-hack', 'hello-tangle-blueprint', 'incredible-squaring-blueprint-eigenlayer',
+          skip = {'workspace-hack', 'hello-tangle-blueprint', 
                   'incredible-squaring-blueprint-bin', 'incredible-squaring-blueprint-lib',
                   'apikey-blueprint-bin', 'apikey-blueprint-lib',
                   'oauth-blueprint-bin', 'oauth-blueprint-lib', 'x402-blueprint'}

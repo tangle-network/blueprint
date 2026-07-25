@@ -8,15 +8,12 @@ use serde::{Deserialize, Serialize};
 pub enum ProtocolType {
     /// Tangle Network
     Tangle,
-    /// EigenLayer AVS
-    Eigenlayer,
 }
 
 impl From<Protocol> for ProtocolType {
     fn from(protocol: Protocol) -> Self {
         match protocol {
             Protocol::Tangle => ProtocolType::Tangle,
-            Protocol::Eigenlayer => ProtocolType::Eigenlayer,
             _ => unreachable!("Protocol not supported"),
         }
     }
@@ -26,17 +23,13 @@ impl From<ProtocolType> for Protocol {
     fn from(protocol_type: ProtocolType) -> Self {
         match protocol_type {
             ProtocolType::Tangle => Protocol::Tangle,
-            ProtocolType::Eigenlayer => Protocol::Eigenlayer,
         }
     }
 }
 
 impl From<&ProtocolSettings> for ProtocolType {
-    fn from(settings: &ProtocolSettings) -> Self {
-        match settings {
-            ProtocolSettings::Eigenlayer(_) => ProtocolType::Eigenlayer,
-            _ => ProtocolType::Tangle,
-        }
+    fn from(_settings: &ProtocolSettings) -> Self {
+        ProtocolType::Tangle
     }
 }
 
@@ -48,8 +41,6 @@ impl From<&ProtocolSettings> for ProtocolType {
 pub enum ProtocolEvent {
     /// A Tangle network event
     Tangle(TangleProtocolEvent),
-    /// An EigenLayer event (new tasks, responses, etc.)
-    Eigenlayer(EigenlayerProtocolEvent),
 }
 
 /// Tangle-specific event data
@@ -67,34 +58,12 @@ pub struct TangleProtocolEvent {
     pub inner: TangleEvent,
 }
 
-/// EigenLayer-specific event data
-#[derive(Debug, Clone)]
-pub struct EigenlayerProtocolEvent {
-    /// Block number
-    pub block_number: u64,
-    /// Block hash
-    pub block_hash: Vec<u8>,
-    /// EVM logs for this block
-    pub logs: Vec<alloy_rpc_types::Log>,
-}
-
 impl ProtocolEvent {
     /// Extract Tangle event data if this is a Tangle event
     #[must_use]
     pub fn as_tangle(&self) -> Option<&TangleProtocolEvent> {
-        match self {
-            ProtocolEvent::Tangle(evt) => Some(evt),
-            _ => None,
-        }
-    }
-
-    /// Extract EigenLayer event data if this is an EigenLayer event
-    #[must_use]
-    pub fn as_eigenlayer(&self) -> Option<&EigenlayerProtocolEvent> {
-        match self {
-            ProtocolEvent::Eigenlayer(evt) => Some(evt),
-            _ => None,
-        }
+        let ProtocolEvent::Tangle(evt) = self;
+        Some(evt)
     }
 
     /// Get the block number for any protocol event
@@ -102,7 +71,6 @@ impl ProtocolEvent {
     pub fn block_number(&self) -> u64 {
         match self {
             ProtocolEvent::Tangle(evt) => evt.block_number,
-            ProtocolEvent::Eigenlayer(evt) => evt.block_number,
         }
     }
 }

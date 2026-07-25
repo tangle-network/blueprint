@@ -5,7 +5,6 @@ pub mod debug;
 pub mod delegator;
 pub mod deploy;
 pub mod dev;
-pub mod eigenlayer;
 pub mod harness;
 pub mod jobs;
 pub mod keys;

@@ -37,8 +37,6 @@ alloy-primitives = { workspace = true, optional = true }
 alloy-signer = { workspace = true, optional = true }
 alloy-signer-local = { workspace = true, optional = true, features = ["mnemonic"] }
 
-# Eigenlayer dependencies (optional)
-eigensdk = { workspace = true, features = ["signer", "crypto-bls", "crypto-bn254"], optional = true }
 ark-serialize = { workspace = true, optional = true }
 ark-bn254 = { workspace = true, optional = true }
 ark-ec = { workspace = true, optional = true }
@@ -102,14 +100,12 @@ evm = ["ecdsa", "dep:alloy-primitives", "dep:alloy-signer", "dep:alloy-signer-lo
 
 tangle = ["evm"]
 
-eigenlayer = ["evm", "dep:eigensdk", "dep:rust-bls-bn254", "bn254"]
 
 symbiotic = ["evm"]
 
 remote = []
 
 # Optional protocol crypto features
-eigenlayer-full = ["eigenlayer", "sr25519-schnorrkel", "zebra", "bls"]
 symbiotic-full = ["symbiotic", "sr25519-schnorrkel", "zebra", "bls", "bn254"]
 
 # Hardware/Cloud wallet support

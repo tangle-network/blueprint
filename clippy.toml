@@ -1,1 +1,1 @@
-doc-valid-idents = ["EigenLayer", "UpperCamelCase", ".."]
+doc-valid-idents = ["UpperCamelCase", ".."]

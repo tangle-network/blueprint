@@ -87,6 +87,10 @@ pub struct AuthenticatedProxyState {
     tls_envelope: TlsEnvelope,
     mtls_listener_address: Option<std::net::SocketAddr>,
     #[cfg(feature = "standalone")]
+    #[allow(
+        dead_code,
+        reason = "held to keep the spawned mTLS listener task owned for the proxy's lifetime"
+    )]
     mtls_listener_handle: Option<std::sync::Arc<tokio::task::JoinHandle<()>>>,
     tls_runtime: TlsListenerManager,
 }

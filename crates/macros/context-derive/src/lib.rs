@@ -13,8 +13,6 @@ use proc_macro::TokenStream;
 
 /// Field information for the configuration field.
 mod cfg;
-/// Eigenlayer context extension implementation.
-mod eigenlayer;
 /// EVM Provider context extension implementation.
 #[cfg(all(feature = "std", feature = "evm"))]
 mod evm;
@@ -49,20 +47,6 @@ pub fn derive_evm_provider_context(input: TokenStream) -> TokenStream {
     let result =
         cfg::find_config_field(&input.ident, &input.data, CONFIG_TAG_NAME, CONFIG_TAG_TYPE)
             .map(|config_field| evm::generate_context_impl(input, config_field));
-
-    match result {
-        Ok(expanded) => TokenStream::from(expanded),
-        Err(err) => TokenStream::from(err.to_compile_error()),
-    }
-}
-
-/// Derive macro for generating Context Extensions trait implementation for `EigenlayerContext`.
-#[proc_macro_derive(EigenlayerContext, attributes(config, call_id))]
-pub fn derive_eigenlayer_context(input: TokenStream) -> TokenStream {
-    let input = syn::parse_macro_input!(input as syn::DeriveInput);
-    let result =
-        cfg::find_config_field(&input.ident, &input.data, CONFIG_TAG_NAME, CONFIG_TAG_TYPE)
-            .map(|config_field| eigenlayer::generate_context_impl(input, config_field));
 
     match result {
         Ok(expanded) => TokenStream::from(expanded),

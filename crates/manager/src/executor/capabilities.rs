@@ -347,6 +347,10 @@ fn map_provider_instance(provider: &CloudProvider, spec: &ResourceSpec) -> Insta
     }
 }
 
+#[allow(
+    clippy::if_same_then_else,
+    reason = "distinct GPU models that happen to share a memory capacity; keep the branches explicit"
+)]
 fn estimate_vram_mib(instance_type: &str) -> u32 {
     let lower = instance_type.to_lowercase();
     if lower.contains("h200") {

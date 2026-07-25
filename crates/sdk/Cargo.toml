@@ -38,12 +38,9 @@ blueprint-context-derive = { workspace = true, optional = true }
 # Tangle-specific extras
 blueprint-tangle-extra = { workspace = true, optional = true }
 
-# Eigenlayer and EVM-specific extras
 blueprint-evm-extra = { workspace = true, optional = true }
-blueprint-eigenlayer-extra = { workspace = true, optional = true }
 alloy = { workspace = true, optional = true, features = ["full"] }
 alloy-json-abi = { workspace = true, optional = true, features = ["serde_json"] }
-eigensdk = { workspace = true, optional = true, features = ["full"] }
 
 # K, V Stores
 blueprint-stores = { workspace = true, optional = true }
@@ -104,7 +101,6 @@ std = [
     # Extras
     "blueprint-tangle-extra?/std",
     "blueprint-evm-extra?/std",
-    "blueprint-eigenlayer-extra?/std",
     "blueprint-chain-setup?/std",
 ]
 
@@ -159,17 +155,7 @@ tangle-p2p-aggregation = [
     "agg-sig-gossip",
 ]
 
-## Enable [Eigenlayer] support
 ##
-## [Eigenlayer]: https://eigenlayer.xyz
-eigenlayer = [
-    "dep:eigensdk",
-    "blueprint-contexts/eigenlayer",
-    "blueprint-clients/eigenlayer",
-    "blueprint-testing-utils?/eigenlayer",
-    "blueprint-eigenlayer-extra",
-    "evm",
-]
 
 ##! ### Networking Support
 
@@ -249,5 +235,5 @@ webhooks = ["dep:blueprint-webhooks"]
 tee = ["dep:blueprint-tee", "blueprint-runner/tee"]
 
 [package.metadata.docs.rs]
-features = ["tangle", "tangle-aggregation", "tangle-p2p-aggregation", "evm", "eigenlayer", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
+features = ["tangle", "tangle-aggregation", "tangle-p2p-aggregation", "evm", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
 rustdoc-args = ["--cfg", "docsrs"]
