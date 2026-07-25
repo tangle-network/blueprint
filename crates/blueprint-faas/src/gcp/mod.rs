@@ -200,7 +200,7 @@ impl CloudFunctionExecutor {
         let full_name = self.function_full_name(job_id);
         let token = self.get_access_token().await?;
 
-        let url = self.api_endpoint(&format!("{}", full_name));
+        let url = self.api_endpoint(&full_name);
 
         let response = self
             .client

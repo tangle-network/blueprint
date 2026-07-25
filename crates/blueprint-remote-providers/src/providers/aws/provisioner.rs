@@ -14,6 +14,10 @@ use blueprint_core::{info, warn};
 pub struct AwsProvisioner {
     pub(crate) ec2_client: aws_sdk_ec2::Client,
     #[cfg(feature = "aws-eks")]
+    #[allow(
+        dead_code,
+        reason = "constructed for EKS provisioning paths that are not yet wired up"
+    )]
     pub(crate) eks_client: Option<aws_sdk_eks::Client>,
 }
 
