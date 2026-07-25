@@ -13,7 +13,6 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-blueprint-client-eigenlayer = { workspace = true, optional = true }
 blueprint-client-evm = { workspace = true, optional = true }
 blueprint-client-tangle = { workspace = true, optional = true }
 blueprint-client-core = { workspace = true }
@@ -24,13 +23,11 @@ thiserror.workspace = true
 [features]
 default = ["std"]
 std = [
-	"blueprint-client-eigenlayer?/std",
 	"blueprint-client-evm?/std",
 	"blueprint-client-tangle?/std",
 	"blueprint-std/std",
 	"thiserror/std",
 ]
 
-eigenlayer = ["dep:blueprint-client-eigenlayer"]
 evm = ["dep:blueprint-client-evm"]
 tangle = ["dep:blueprint-client-tangle"]

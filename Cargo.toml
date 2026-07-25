@@ -11,7 +11,6 @@ members = [
     "examples/apikey-blueprint/apikey-blueprint-bin",
     "examples/incredible-squaring/incredible-squaring-lib",
     "examples/incredible-squaring/incredible-squaring-bin",
-    "examples/incredible-squaring-eigenlayer",
     "examples/hello-tangle",
     "examples/x402-blueprint",
     "workspace-hack",
@@ -146,7 +145,6 @@ blueprint-runner = { version = "0.2.0-alpha.12", path = "crates/runner", default
 # Extras
 blueprint-tangle-extra = { version = "0.2.0-alpha.11", path = "crates/tangle-extra", features = ["std"] }
 blueprint-evm-extra = { version = "0.2.0-alpha.6", path = "crates/evm-extra", default-features = false }
-blueprint-eigenlayer-extra = { version = "0.2.0-alpha.12", path = "crates/eigenlayer-extra", default-features = false }
 blueprint-producers-extra = { version = "0.2.0-alpha.5", path = "crates/producers-extra", default-features = false }
 blueprint-tangle-aggregation-svc = { version = "0.2.0-alpha.11", path = "crates/tangle-aggregation-svc", default-features = false }
 
@@ -179,7 +177,6 @@ blueprint-crypto = { version = "0.2.0-alpha.8", path = "./crates/crypto", defaul
 # Clients
 blueprint-clients = { version = "0.2.0-alpha.12", path = "./crates/clients", default-features = false }
 blueprint-client-core = { version = "0.2.0-alpha.5", path = "./crates/clients/core", default-features = false }
-blueprint-client-eigenlayer = { version = "0.2.0-alpha.12", path = "./crates/clients/eigenlayer", default-features = false }
 blueprint-client-evm = { version = "0.2.0-alpha.6", path = "./crates/clients/evm", default-features = false }
 blueprint-client-tangle = { version = "0.2.0-alpha.11", path = "./crates/clients/tangle", default-features = false, features = ["std"] }
 blueprint-contexts = { version = "0.2.0-alpha.12", path = "./crates/contexts", default-features = false }
@@ -222,7 +219,6 @@ blueprint-gossip-primitives = { version = "0.2.0-alpha.9", path = "./crates/netw
 blueprint-testing-utils = { version = "0.2.0-alpha.12", path = "./crates/testing-utils", default-features = false }
 blueprint-core-testing-utils = { version = "0.2.0-alpha.12", path = "./crates/testing-utils/core", default-features = false }
 blueprint-anvil-testing-utils = { version = "0.2.0-alpha.12", path = "./crates/testing-utils/anvil", default-features = false }
-blueprint-eigenlayer-testing-utils = { version = "0.2.0-alpha.12", path = "./crates/testing-utils/eigenlayer", default-features = false }
 
 # Metrics
 blueprint-metrics = { version = "0.2.0-alpha.5", path = "./crates/metrics", default-features = false }
@@ -357,7 +353,6 @@ nftables = { version = "0.6.3", default-features = false }
 
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
-eigenlayer-contract-deployer = { version = "0.4.0", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }
 docktopus = { version = "0.4.0-alpha.3", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
@@ -448,8 +443,6 @@ rayon = { version = "1", default-features = false }
 zeroize = { version = "1.8.1", default-features = false }
 zerocopy = { version = "0.8", default-features = false }
 
-# Eigenlayer
-eigensdk = { version = "2.0.0", default-features = false }
 rust-bls-bn254 = { version = "0.2.1", default-features = false }
 testcontainers = { version = "0.23.1", default-features = false }
 
@@ -478,7 +471,7 @@ azure_identity = { version = "0.33", default-features = false }
 
 # Additional dependencies
 openssl = { version = "0.10", default-features = false }
-zip = { version = "8.4", default-features = false }
+zip = { version = "8.4", default-features = false, features = ["deflate"] }
 warp = { version = "0.4.3", default-features = false, features = ["server"] }
 shell-escape = { version = "0.1", default-features = false }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc", "getrandom"] }

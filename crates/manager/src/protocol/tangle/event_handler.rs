@@ -1210,7 +1210,13 @@ impl TangleEventHandler {
         apply_gpu_limits(gpu, &mut limits);
         let resource_spec = resource_spec_from_limits(&limits);
         if let Err(e) = remote
-            .on_service_initiated(blueprint_id, service_id, Some(resource_spec))
+            .on_service_initiated(
+                blueprint_id,
+                service_id,
+                Some(resource_spec),
+                None,
+                std::collections::HashMap::new(),
+            )
             .await
         {
             warn!(

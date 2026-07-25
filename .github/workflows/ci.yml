@@ -234,24 +234,6 @@ jobs:
           cargo test -p blueprint-manager container --lib -- --nocapture --test-threads=1
           cargo test -p blueprint-manager sources --lib -- --nocapture --test-threads=1
 
-  eigenlayer-integration:
-    name: EigenLayer Integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      RUST_LOG: info
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/free-disk-space
-      - uses: ./.github/actions/setup-build-env
-        with:
-          tnt-core: "false"
-
-      - name: Run EigenLayer tests
-        run: |
-          cargo test -p blueprint-client-eigenlayer --lib -- --nocapture
-          cargo test -p blueprint-runner --features eigenlayer --lib -- --nocapture
-
   testnet-smoke-test:
     name: Testnet Smoke Test
     runs-on: ubuntu-latest

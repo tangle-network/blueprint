@@ -45,19 +45,11 @@ crossbeam-channel = { workspace = true, optional = true }
 blueprint-networking = { workspace = true, optional = true }
 libp2p = { workspace = true, optional = true }
 
-# Eigenlayer
 blueprint-evm-extra = { workspace = true, optional = true }
 alloy-contract = { workspace = true, optional = true }
 alloy-primitives = { workspace = true, features = ["serde"], optional = true }
 alloy-signer-local = { workspace = true, optional = true }
 alloy-signer = { workspace = true, optional = true }
-eigensdk = { workspace = true, features = [
-    "client-elcontracts",
-    "types",
-    "utils",
-    "client-avsregistry",
-    "crypto-bls",
-], optional = true }
 
 # Tangle EVM (v2)
 blueprint-client-tangle = { workspace = true, optional = true }
@@ -91,20 +83,7 @@ tls = ["dep:blueprint-auth"]
 
 #! ### Protocols
 
-## Enable [Eigenlayer] support
 ##
-## [Eigenlayer]: https://eigenlayer.xyz
-eigenlayer = [
-    "dep:blueprint-evm-extra",
-    "blueprint-keystore/bn254",
-    "blueprint-keystore/eigenlayer",
-    "dep:alloy-contract",
-    "dep:alloy-primitives",
-    "dep:alloy-signer-local",
-    "dep:alloy-signer",
-    "dep:eigensdk",
-    "std",                           # TODO: keystore access requires the std feature
-]
 
 ## Enable [Symbiotic] support **(CURRENTLY UNUSED)**
 ##

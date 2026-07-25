@@ -12,8 +12,6 @@ pub mod error;
 pub mod faas;
 pub mod metrics_server;
 
-#[cfg(feature = "eigenlayer")]
-pub mod eigenlayer;
 #[cfg(feature = "symbiotic")]
 mod symbiotic;
 #[cfg(feature = "tangle")]

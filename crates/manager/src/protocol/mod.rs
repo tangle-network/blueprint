@@ -1,7 +1,7 @@
 /// Protocol abstraction layer for blueprint manager
 ///
 /// This module provides a clean abstraction over different blockchain protocols
-/// (Tangle, EigenLayer, etc.) that the blueprint manager can execute on.
+/// (Tangle, etc.) that the blueprint manager can execute on.
 ///
 /// # Architecture
 ///
@@ -14,7 +14,6 @@ use crate::config::BlueprintManagerContext;
 use crate::error::Result;
 use blueprint_runner::config::BlueprintEnvironment;
 
-pub mod eigenlayer;
 pub mod tangle;
 pub mod types;
 
@@ -27,10 +26,6 @@ pub enum ProtocolManager {
     Tangle {
         client: tangle::TangleProtocolClient,
         handler: tangle::TangleEventHandler,
-    },
-    Eigenlayer {
-        client: eigenlayer::EigenlayerProtocolClient,
-        handler: eigenlayer::EigenlayerEventHandler,
     },
 }
 
@@ -54,11 +49,6 @@ impl ProtocolManager {
                 handler.init_remote_provider(ctx).await?;
                 Ok(Self::Tangle { client, handler })
             }
-            ProtocolType::Eigenlayer => {
-                let client = eigenlayer::EigenlayerProtocolClient::new(env, ctx).await?;
-                let handler = eigenlayer::EigenlayerEventHandler::new();
-                Ok(Self::Eigenlayer { client, handler })
-            }
         }
     }
 
@@ -79,11 +69,6 @@ impl ProtocolManager {
                     .initialize(client, env, ctx, active_blueprints)
                     .await
             }
-            Self::Eigenlayer { client, handler } => {
-                handler
-                    .initialize(client, env, ctx, active_blueprints)
-                    .await
-            }
         }
     }
 
@@ -91,7 +76,6 @@ impl ProtocolManager {
     pub async fn next_event(&mut self) -> Option<ProtocolEvent> {
         match self {
             Self::Tangle { client, .. } => client.next_event().await,
-            Self::Eigenlayer { client, .. } => client.next_event().await,
         }
     }
 
@@ -113,28 +97,15 @@ impl ProtocolManager {
                     .handle_event(client, event, env, ctx, active_blueprints)
                     .await
             }
-            Self::Eigenlayer { handler, .. } => {
-                handler
-                    .handle_event(event, env, ctx, active_blueprints)
-                    .await
-            }
         }
     }
 
-    /// Attach an [`UpgradePipeline`] to the underlying protocol handler when
-    /// running Tangle. EigenLayer ignores the pipeline today — the upgrade
-    /// flow is Tangle-protocol-specific.
+    /// Attach an [`UpgradePipeline`] to the underlying protocol handler.
     ///
     /// [`UpgradePipeline`]: crate::upgrade::UpgradePipeline
     pub fn with_upgrade_pipeline(&mut self, pipeline: crate::upgrade::UpgradePipeline) {
         match self {
             Self::Tangle { handler, .. } => handler.with_upgrade_pipeline(pipeline),
-            Self::Eigenlayer { .. } => {
-                blueprint_core::info!(
-                    target: "upgrade",
-                    "ignoring upgrade pipeline attachment: EigenLayer does not expose binary versions yet"
-                );
-            }
         }
     }
 
@@ -144,7 +115,6 @@ impl ProtocolManager {
     pub fn upgrade_api(&self) -> Option<crate::upgrade::UpgradeApi> {
         match self {
             Self::Tangle { handler, .. } => handler.upgrade_api(),
-            Self::Eigenlayer { .. } => None,
         }
     }
 
@@ -197,24 +167,5 @@ mod tests {
         let none_settings = ProtocolSettings::None;
         let protocol_type: ProtocolType = (&none_settings).into();
         assert!(matches!(protocol_type, ProtocolType::Tangle));
-    }
-
-    /// Test that `ProtocolEvent` correctly identifies its variant
-    #[test]
-    fn test_protocol_event_variant_checking() {
-        use crate::protocol::types::EigenlayerProtocolEvent;
-
-        let eigenlayer_event = ProtocolEvent::Eigenlayer(EigenlayerProtocolEvent {
-            block_number: 100,
-            block_hash: vec![0u8; 32],
-            logs: vec![],
-        });
-
-        // Should not be Tangle
-        assert!(eigenlayer_event.as_tangle().is_none());
-        // Should be EigenLayer
-        assert!(eigenlayer_event.as_eigenlayer().is_some());
-        // Block number should be preserved
-        assert_eq!(eigenlayer_event.block_number(), 100);
     }
 }

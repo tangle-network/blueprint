@@ -3,9 +3,6 @@ pub enum Error {
     #[error(transparent)]
     Core(#[from] blueprint_client_core::error::Error),
     #[error(transparent)]
-    #[cfg(feature = "eigenlayer")]
-    Eigenlayer(#[from] blueprint_client_eigenlayer::error::Error),
-    #[error(transparent)]
     #[cfg(feature = "evm")]
     Evm(#[from] blueprint_client_evm::error::Error),
 }

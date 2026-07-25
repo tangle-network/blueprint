@@ -128,16 +128,16 @@ pub mod macros {
 
 // == Protocol-specific utilities ==
 
-#[cfg(any(feature = "evm", feature = "eigenlayer", feature = "tangle"))]
+#[cfg(any(feature = "evm", feature = "tangle"))]
 pub use alloy;
 
-#[cfg(any(feature = "evm", feature = "eigenlayer"))]
+#[cfg(feature = "evm")]
 mod evm_feat {
     pub mod evm {
         pub use blueprint_evm_extra::*;
     }
 }
-#[cfg(any(feature = "evm", feature = "eigenlayer"))]
+#[cfg(feature = "evm")]
 pub use evm_feat::*;
 
 #[cfg(feature = "tangle")]
@@ -148,14 +148,6 @@ mod tangle_feat {
 }
 #[cfg(feature = "tangle")]
 pub use tangle_feat::*;
-
-#[cfg(feature = "eigenlayer")]
-pub use eigensdk;
-
-#[cfg(feature = "eigenlayer")]
-pub mod eigenlayer {
-    pub use blueprint_eigenlayer_extra::*;
-}
 
 // == Development utilities ==
 

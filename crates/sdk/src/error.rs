@@ -15,23 +15,16 @@ pub enum Error {
     Other(String),
 
     // EVM and EigenLayer
-    #[cfg(any(feature = "evm", feature = "eigenlayer"))]
+    #[cfg(feature = "evm")]
     #[error("EVM error: {0}")]
     Alloy(#[from] AlloyError),
-    #[cfg(feature = "eigenlayer")]
-    #[error("Eigenlayer error: {0}")]
-    Eigenlayer(#[from] eigensdk::types::avs::SignatureVerificationError),
 
     // Specific to Networking
     #[cfg(feature = "networking")]
     #[error("Networking error: {0}")]
     Networking(#[from] blueprint_networking::error::Error),
 
-    #[expect(
-        clippy::non_minimal_cfg,
-        reason = "More store types may be added in the future"
-    )]
-    #[cfg(any(feature = "local-store"))]
+    #[cfg(feature = "local-store")]
     #[error("Database error: {0}")]
     Stores(#[from] blueprint_stores::Error),
 }
@@ -43,7 +36,7 @@ impl From<blueprint_stores::local_database::Error> for Error {
     }
 }
 
-#[cfg(any(feature = "evm", feature = "eigenlayer"))]
+#[cfg(feature = "evm")]
 #[derive(thiserror::Error, Debug)]
 pub enum AlloyError {
     #[error("Alloy signer error: {0}")]
@@ -67,10 +60,9 @@ macro_rules! implement_client_error {
         }
     };
 }
-implement_client_error!("eigenlayer", blueprint_clients::eigenlayer::error::Error);
 implement_client_error!("evm", blueprint_clients::evm::error::Error);
 
-#[cfg(any(feature = "evm", feature = "eigenlayer"))]
+#[cfg(feature = "evm")]
 macro_rules! implement_from_alloy_error {
     ($($path:ident)::+, $variant:ident) => {
         impl From<alloy::$($path)::+> for Error {
@@ -80,11 +72,11 @@ macro_rules! implement_from_alloy_error {
         }
     };
 }
-#[cfg(any(feature = "evm", feature = "eigenlayer"))]
+#[cfg(feature = "evm")]
 implement_from_alloy_error!(signers::Error, Signer);
-#[cfg(any(feature = "evm", feature = "eigenlayer"))]
+#[cfg(feature = "evm")]
 implement_from_alloy_error!(contract::Error, Contract);
-#[cfg(any(feature = "evm", feature = "eigenlayer"))]
+#[cfg(feature = "evm")]
 implement_from_alloy_error!(rpc::types::transaction::ConversionError, Conversion);
-#[cfg(any(feature = "evm", feature = "eigenlayer"))]
+#[cfg(feature = "evm")]
 implement_from_alloy_error!(signers::local::LocalSignerError, LocalSigner);

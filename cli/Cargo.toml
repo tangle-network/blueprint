@@ -14,13 +14,12 @@ workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
-blueprint-runner = { workspace = true, features = ["networking", "tangle", "eigenlayer"] }
+blueprint-runner = { workspace = true, features = ["networking", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
 blueprint-chain-setup = { workspace = true, features = ["anvil", "std"] }
-blueprint-testing-utils = { workspace = true, features = ["anvil", "eigenlayer"] }
-blueprint-eigenlayer-extra = { workspace = true }
+blueprint-testing-utils = { workspace = true, features = ["anvil"] }
 blueprint-contexts = { workspace = true }
-blueprint-clients = { workspace = true, features = ["tangle", "eigenlayer", "evm", "std"] }
+blueprint-clients = { workspace = true, features = ["tangle", "evm", "std"] }
 blueprint-client-tangle = { workspace = true, features = ["std"] }
 blueprint-remote-providers = { workspace = true, optional = true }
 blueprint-crypto = { workspace = true, features = [
@@ -29,7 +28,14 @@ blueprint-crypto = { workspace = true, features = [
     "bn254",
 ] }
 blueprint-crypto-core = { workspace = true, features = ["clap"] }
-blueprint-keystore = { workspace = true, features = ["eigenlayer-full", "evm", "std"] }
+blueprint-keystore = { workspace = true, features = [
+    "bls",
+    "bn254",
+    "evm",
+    "sr25519-schnorrkel",
+    "std",
+    "zebra",
+] }
 blueprint-manager = { workspace = true, features = ["containers", "tee"] }
 
 anyhow = { workspace = true }
@@ -54,7 +60,6 @@ rustls = { workspace = true }
 toml = { workspace = true }
 indicatif = { workspace = true }
 dialoguer = { workspace = true, default-features = true }
-eigensdk = { workspace = true }
 blueprint-evm-extra = { workspace = true }
 testcontainers = { workspace = true }
 tempfile = { workspace = true }
@@ -82,7 +87,7 @@ dirs = { workspace = true }
 # Cargo strips path-only dev-deps from published manifests.
 blueprint-keystore = { path = "../crates/keystore", features = ["bn254"] }
 tempfile = { workspace = true }
-blueprint-testing-utils = { path = "../crates/testing-utils", features = ["anvil", "eigenlayer"] }
+blueprint-testing-utils = { path = "../crates/testing-utils", features = ["anvil"] }
 alloy-contract = { workspace = true }
 assert_cmd = "2.0"
 

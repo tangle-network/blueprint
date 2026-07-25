@@ -4,7 +4,7 @@ pub use crate::command::create::types::BlueprintType;
 use crate::foundry::FoundryToolchain;
 use clap::Args;
 use std::collections::HashMap;
-use types::{BlueprintVariant, EigenlayerVariant};
+use types::BlueprintVariant;
 
 pub mod error;
 pub mod source;
@@ -12,18 +12,6 @@ pub mod types;
 
 /// Required template keys for Tangle templates
 const TANGLE_REQUIRED_KEYS: [&str; 2] = ["project-description", "project-authors"];
-
-/// Required template keys for EigenLayer templates (more complex)
-const EIGENLAYER_REQUIRED_KEYS: [&str; 6] = [
-    "gh-username",
-    "gh-repo",
-    "gh-organization",
-    "project-description",
-    "project-homepage",
-    "container",
-];
-
-const CONTAINER_TEMPLATE_KEYS: [&str; 2] = ["base-image", "container-registry"];
 
 #[derive(Debug, Clone, Default, Args)]
 pub struct TemplateVariables {
@@ -113,28 +101,13 @@ fn ensure_default_bool(define: &mut Vec<String>, key: &str, default: bool) {
     define.push(format!("{key}={}", default));
 }
 
-fn missing_required_template_variables(define: &[String], is_tangle: bool) -> Vec<&'static str> {
+fn missing_required_template_variables(define: &[String]) -> Vec<&'static str> {
     let provided = build_define_map(define);
     let mut missing = Vec::new();
 
-    let required_keys: &[&str] = if is_tangle {
-        &TANGLE_REQUIRED_KEYS
-    } else {
-        &EIGENLAYER_REQUIRED_KEYS
-    };
-
-    for key in required_keys {
+    for key in &TANGLE_REQUIRED_KEYS {
         if !provided.contains_key(*key) {
             missing.push(*key);
-        }
-    }
-
-    // Container fields only required for EigenLayer templates
-    if !is_tangle && container_fields_required(&provided) {
-        for key in CONTAINER_TEMPLATE_KEYS {
-            if !provided.contains_key(key) {
-                missing.push(key);
-            }
         }
     }
 
@@ -151,15 +124,6 @@ fn build_define_map(define: &[String]) -> HashMap<String, String> {
     map
 }
 
-fn container_fields_required(provided: &HashMap<String, String>) -> bool {
-    provided.get("container").is_none_or(|value| {
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "true" | "1" | "yes"
-        )
-    })
-}
-
 /// Generate a new blueprint from a template
 ///
 /// # Errors
@@ -170,7 +134,7 @@ fn container_fields_required(provided: &HashMap<String, String>) -> bool {
 ///
 /// * `name` - The name of the blueprint
 /// * `source` - Optional source information (repo, branch, path)
-/// * `blueprint_type` - Optional blueprint type (Tangle or Eigenlayer)
+/// * `blueprint_type` - Optional blueprint type (Tangle)
 /// * `define` - Template variable definitions (key=value pairs)
 /// * `template_variables` - Typed template variable overrides supplied via CLI flags
 /// * `template_values_file` - Optional path to a file containing template values
@@ -196,12 +160,6 @@ pub fn new_blueprint(
             Some(BlueprintVariant::Tangle) | None => {
                 "https://github.com/tangle-network/blueprint-template".into()
             }
-            Some(BlueprintVariant::Eigenlayer(EigenlayerVariant::BLS)) => {
-                "https://github.com/tangle-network/eigenlayer-bls-template".into()
-            }
-            Some(BlueprintVariant::Eigenlayer(EigenlayerVariant::ECDSA)) => {
-                "https://github.com/tangle-network/eigenlayer-ecdsa-template".into()
-            }
         };
 
         cargo_generate::TemplatePath {
@@ -212,7 +170,6 @@ pub fn new_blueprint(
     });
 
     // Determine if this is a Tangle template (simpler requirements)
-    let is_tangle = matches!(blueprint_variant, None | Some(BlueprintVariant::Tangle));
 
     template_variables.merge_into(&mut define);
     ensure_default_bool(&mut define, "flakes", true);
@@ -224,7 +181,7 @@ pub fn new_blueprint(
         println!(
             "Skipping prompts; all template variables must be provided via CLI flags when using --skip-prompts."
         );
-        let missing = missing_required_template_variables(&define, is_tangle);
+        let missing = missing_required_template_variables(&define);
         if !missing.is_empty() {
             let missing_list = missing.join(", ");
             return Err(Error::MissingTemplateVariables(missing_list));

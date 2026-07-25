@@ -11,12 +11,11 @@ use blueprint_client_tangle::{
 use blueprint_crypto::k256::K256Ecdsa;
 use blueprint_keystore::{Keystore, KeystoreConfig, backends::Backend};
 use blueprint_manager::config::SourceType;
-use blueprint_runner::config::{BlueprintEnvironment, Protocol, SupportedChains};
+use blueprint_runner::config::{BlueprintEnvironment, Protocol};
 use blueprint_runner::error::ConfigError;
 use cargo_tangle::command::create::{BlueprintType, TemplateVariables, new_blueprint};
 use cargo_tangle::command::debug::{self, DebugCommands};
 use cargo_tangle::command::delegator;
-use cargo_tangle::command::deploy::eigenlayer::deploy_eigenlayer;
 use cargo_tangle::command::deploy::tangle as deploy_tangle;
 use cargo_tangle::command::dev::{self, DevCommands};
 use cargo_tangle::command::jobs::{
@@ -33,7 +32,6 @@ use cargo_tangle::command::keys::{
 };
 use cargo_tangle::command::list;
 use cargo_tangle::command::operator;
-use cargo_tangle::command::run::run_eigenlayer_avs;
 use cargo_tangle::command::run::tangle::{RunOpts, run_blueprint};
 use cargo_tangle::command::service::{
     approve_service, approve_service_with_commitments, build_request_params, join_service,
@@ -184,7 +182,7 @@ enum BlueprintCommands {
         skip_prompts: bool,
     },
 
-    /// Deploy a blueprint to a protocol (Tangle or Eigenlayer).
+    /// Deploy a blueprint to a protocol.
     ///
     /// One-time per blueprint: compiles and registers your blueprint on-chain,
     /// returning a new `blueprintId`. For shipping subsequent binary versions
@@ -201,7 +199,7 @@ enum BlueprintCommands {
     /// Requires keys in the keystore and protocol settings in settings.env.
     #[command(visible_alias = "r")]
     Run {
-        /// Target protocol: tangle or eigenlayer.
+        /// Target protocol: tangle.
         #[arg(short = 'p', long, value_enum, default_value = "tangle")]
         protocol: Protocol,
         /// HTTP RPC endpoint for the EVM chain.
@@ -251,7 +249,7 @@ enum BlueprintCommands {
     /// for this blueprint. Useful for offline signing workflows.
     #[command(visible_alias = "pre")]
     Preregister {
-        /// Target protocol: tangle or eigenlayer.
+        /// Target protocol: tangle.
         #[arg(short = 'p', long, value_enum, default_value = "tangle")]
         protocol: Protocol,
         /// HTTP RPC endpoint for the EVM chain.
@@ -1526,29 +1524,6 @@ enum DelegationModeArg {
 
 #[derive(Subcommand, Debug)]
 enum DeployTarget {
-    /// Deploy to Eigenlayer AVS registry.
-    ///
-    /// Registers your blueprint as an Eigenlayer AVS (Actively Validated Service).
-    Eigenlayer {
-        /// RPC endpoint URL (required unless --devnet is set).
-        #[arg(long, value_name = "URL", env, required_unless_present = "devnet")]
-        rpc_url: Option<String>,
-        /// Path to compiled contract artifacts.
-        #[arg(long)]
-        contracts_path: Option<String>,
-        /// Deploy contracts in dependency order.
-        #[arg(long)]
-        ordered_deployment: bool,
-        /// Network name: local, testnet, or mainnet.
-        #[arg(short = 'w', long, default_value = "local")]
-        network: String,
-        /// Use built-in devnet configuration.
-        #[arg(long)]
-        devnet: bool,
-        /// Path to keystore directory containing operator keys.
-        #[arg(short = 'k', long)]
-        keystore_path: Option<PathBuf>,
-    },
     /// Deploy to Tangle EVM protocol.
     ///
     /// Registers your blueprint in the Tangle contract registry.
@@ -1586,24 +1561,6 @@ async fn main() -> Result<()> {
                 )?;
             }
             BlueprintCommands::Deploy { target } => match target {
-                DeployTarget::Eigenlayer {
-                    rpc_url,
-                    contracts_path,
-                    ordered_deployment,
-                    network,
-                    devnet,
-                    keystore_path,
-                } => {
-                    deploy_eigenlayer(
-                        rpc_url,
-                        contracts_path,
-                        ordered_deployment,
-                        network,
-                        devnet,
-                        keystore_path,
-                    )
-                    .await?;
-                }
                 DeployTarget::Tangle(args) => {
                     deploy_tangle::execute(args).await?;
                 }
@@ -1661,19 +1618,7 @@ async fn main() -> Result<()> {
                 config.protocol_settings = protocol_settings.clone();
                 config.test_mode = network == "local";
 
-                let chain = parse_supported_chain(&network, &http_rpc_url)?;
-
                 match protocol {
-                    Protocol::Eigenlayer => {
-                        run_eigenlayer_avs(
-                            config,
-                            chain,
-                            None,
-                            data_dir,
-                            allow_unchecked_attestations,
-                        )
-                        .await?;
-                    }
                     Protocol::Tangle => {
                         let settings = protocol_settings.tangle().map_err(|e| eyre!("{e}"))?;
 
@@ -3810,23 +3755,6 @@ fn ensure_keys(path: &PathBuf, required: &[SupportedKey]) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn parse_supported_chain(network: &str, rpc_url: &Url) -> Result<SupportedChains, ConfigError> {
-    match network.to_lowercase().as_str() {
-        "local" => Ok(SupportedChains::LocalTestnet),
-        "testnet" => Ok(SupportedChains::Testnet),
-        "mainnet" => {
-            if rpc_url.as_str().contains("127.0.0.1") || rpc_url.as_str().contains("localhost") {
-                Ok(SupportedChains::LocalMainnet)
-            } else {
-                Ok(SupportedChains::Mainnet)
-            }
-        }
-        other => Err(ConfigError::Other(
-            format!("Invalid network: {other}").into(),
-        )),
-    }
 }
 
 fn init_tracing_subscriber() {

@@ -28,7 +28,6 @@ default = ["std", "keystore"]
 std = ["blueprint-runner/std", "blueprint-std/std", "blueprint-clients/std", "blueprint-keystore?/std", "blueprint-networking?/std", "blueprint-client-tangle?/std"]
 
 evm = ["blueprint-clients/evm"]
-eigenlayer = ["blueprint-clients/eigenlayer"]
 networking = ["dep:blueprint-networking", "dep:proc-macro2"]
 keystore = ["dep:blueprint-keystore"]
 tangle = ["dep:blueprint-client-tangle", "blueprint-runner/tangle", "keystore"]

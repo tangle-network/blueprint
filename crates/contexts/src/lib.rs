@@ -1,5 +1,3 @@
-#[cfg(feature = "eigenlayer")]
-pub mod eigenlayer;
 #[cfg(feature = "evm")]
 pub mod instrumented_evm_client;
 #[cfg(feature = "keystore")]
