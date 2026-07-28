@@ -158,10 +158,10 @@ async fn metrics_handler(State(state): State<ServerState>) -> Response {
         for m in mf.get_metric() {
             match mf.get_field_type() {
                 prometheus::proto::MetricType::COUNTER => {
-                    info!("      Counter Value: {}", m.get_counter().get_value());
+                    info!("      Counter Value: {}", m.get_counter().value());
                 }
                 prometheus::proto::MetricType::GAUGE => {
-                    info!("      Gauge Value: {}", m.get_gauge().get_value());
+                    info!("      Gauge Value: {}", m.get_gauge().value());
                 }
                 prometheus::proto::MetricType::HISTOGRAM => {
                     let hist = m.get_histogram();

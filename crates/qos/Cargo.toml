@@ -30,7 +30,7 @@ tonic = { workspace = true, features = ["transport", "codegen", "prost", "router
 prost = { workspace = true, features = ["prost-derive"] }
 sysinfo = { workspace = true, features = ["system", "disk", "network"] }
 rand = { workspace = true }
-prometheus = { workspace = true, features = ["process"] }
+prometheus = { workspace = true, features = ["process", "protobuf"] }
 opentelemetry = { workspace = true, features = ["metrics"] }
 opentelemetry-prometheus = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true, features = ["semconv_experimental"] }
