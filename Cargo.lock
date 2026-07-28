@@ -2955,7 +2955,7 @@ dependencies = [
  "tonic 0.13.1",
  "tonic-build",
  "tower 0.5.3",
- "tower-http 0.6.11",
+ "tower-http 0.7.0",
  "tracing",
  "tracing-subscriber 0.3.23",
  "uuid 1.23.1",
@@ -3669,7 +3669,7 @@ dependencies = [
  "tonic 0.13.1",
  "tonic-build",
  "tonic-web",
- "tower-http 0.6.11",
+ "tower-http 0.7.0",
  "tracing-subscriber 0.3.23",
  "url",
  "urlencoding",
@@ -3980,7 +3980,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tower 0.5.3",
- "tower-http 0.6.11",
+ "tower-http 0.7.0",
  "tracing",
 ]
 
@@ -4124,7 +4124,7 @@ dependencies = [
  "tokio",
  "toml 1.1.2+spec-1.1.0",
  "tower 0.5.3",
- "tower-http 0.6.11",
+ "tower-http 0.7.0",
  "tracing",
  "url",
  "x402-axum",
@@ -13462,6 +13462,23 @@ dependencies = [
  "tower-service",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b11f75e912b0c2be01b63d8cf8057b8c3f97cf34abb3d431a3a4c8675498e233"
+dependencies = [
+ "bitflags 2.11.1",
+ "bytes",
+ "http 1.4.0",
+ "http-body 1.0.1",
+ "percent-encoding",
+ "pin-project-lite",
+ "tower-layer",
+ "tower-service",
+ "tracing",
  "uuid 1.23.1",
 ]
 
