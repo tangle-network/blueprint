@@ -289,48 +289,49 @@ impl FaasExecutor for DigitalOceanExecutor {
             .send()
             .await;
 
-        let function_url =
-            if update_response.is_ok() && update_response.as_ref().unwrap().status().is_success() {
-                info!(function = %function_name, "Updated existing function");
-                update_response
-                    .unwrap()
-                    .json::<FunctionResponse>()
-                    .await
-                    .map_err(|e| FaasError::SerializationError(e.to_string()))?
-                    .trigger
-                    .url
-            } else {
-                // Create new function
-                debug!(function = %function_name, "Creating new function");
+        let updated_ok = match update_response {
+            Ok(resp) if resp.status().is_success() => Some(resp),
+            _ => None,
+        };
+        let function_url = if let Some(resp) = updated_ok {
+            info!(function = %function_name, "Updated existing function");
+            resp.json::<FunctionResponse>()
+                .await
+                .map_err(|e| FaasError::SerializationError(e.to_string()))?
+                .trigger
+                .url
+        } else {
+            // Create new function
+            debug!(function = %function_name, "Creating new function");
 
-                let create_url = self.api_endpoint("triggers");
-                let response = self
-                    .client
-                    .post(&create_url)
-                    .bearer_auth(&self.api_token)
-                    .json(&function_spec)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        FaasError::InfrastructureError(format!("Failed to create function: {}", e))
-                    })?;
+            let create_url = self.api_endpoint("triggers");
+            let response = self
+                .client
+                .post(&create_url)
+                .bearer_auth(&self.api_token)
+                .json(&function_spec)
+                .send()
+                .await
+                .map_err(|e| {
+                    FaasError::InfrastructureError(format!("Failed to create function: {}", e))
+                })?;
 
-                if !response.status().is_success() {
-                    let error_text = response.text().await.unwrap_or_default();
-                    return Err(FaasError::InfrastructureError(format!(
-                        "Failed to create function: {}",
-                        error_text
-                    )));
-                }
+            if !response.status().is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                return Err(FaasError::InfrastructureError(format!(
+                    "Failed to create function: {}",
+                    error_text
+                )));
+            }
 
-                let data: FunctionResponse = response
-                    .json()
-                    .await
-                    .map_err(|e| FaasError::SerializationError(e.to_string()))?;
+            let data: FunctionResponse = response
+                .json()
+                .await
+                .map_err(|e| FaasError::SerializationError(e.to_string()))?;
 
-                info!(function = %function_name, "Created new function");
-                data.trigger.url
-            };
+            info!(function = %function_name, "Created new function");
+            data.trigger.url
+        };
 
         Ok(FaasDeployment {
             function_id: function_name.clone(),
