@@ -22,7 +22,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://tangle.tools"
 repository = "https://github.com/tangle-network/blueprint"
-rust-version = "1.91"
+rust-version = "1.93"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
@@ -252,7 +252,7 @@ tower-http = { version = "0.7", default-features = false }
 async-stream = { version = "0.3.6", default-features = false }
 
 # CLI & Configuration
-cargo-generate = { version = "0.23.7", default-features = false }
+cargo-generate = { version = "0.23.12", default-features = false }
 clap = { version = "4.5.60", features = ["derive", "env"] }
 clap-cargo = { version = "0.18", default-features = false }
 toml = { version = "1.0", default-features = false, features = ["parse", "display", "serde"] }

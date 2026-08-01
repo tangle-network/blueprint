@@ -505,13 +505,11 @@ async fn grpc_only_allows_proxy_injected_headers() {
         let response = client.echo(request).await;
         // Note: These headers should be allowed at the gRPC level
         // The real security check happens in our proxy header processing
-        if response.is_ok() {
-            println!("Header {header_name} was allowed at gRPC level");
-        } else {
-            println!(
-                "Header {header_name} was rejected at gRPC level: {:?}",
-                response.unwrap_err()
-            );
+        match response {
+            Ok(_) => println!("Header {header_name} was allowed at gRPC level"),
+            Err(err) => {
+                println!("Header {header_name} was rejected at gRPC level: {err:?}")
+            }
         }
     }
 
