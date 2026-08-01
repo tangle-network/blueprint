@@ -226,7 +226,7 @@ blueprint-metrics-rpc-calls = { version = "0.2.0-alpha.5", path = "./crates/metr
 
 cargo-tangle = { version = "0.5.0-alpha.13", path = "./cli", default-features = false }
 cargo_metadata = { version = "0.18.1" }
-bollard = { version = "0.18.0", features = ["ssl"] }
+bollard = { version = "0.20", features = ["ssl"] }
 
 # Round-based networking
 round-based = { version = "0.4.1", default-features = false }
@@ -354,7 +354,7 @@ nftables = { version = "0.6.3", default-features = false }
 # Development & Testing
 auto_impl = { version = "1.2.1", default-features = false }
 cargo_toml = { version = "0.21.0", default-features = false }
-docktopus = { version = "0.4.0-alpha.3", default-features = false }
+docktopus = { version = "0.5.0-alpha.2", default-features = false }
 itertools = { version = "0.14.0", default-features = false }
 paste = { version = "1.0.15", default-features = false }
 proc-macro2 = { version = "1.0", default-features = false }
@@ -444,7 +444,7 @@ zeroize = { version = "1.8.1", default-features = false }
 zerocopy = { version = "0.8", default-features = false }
 
 rust-bls-bn254 = { version = "0.2.1", default-features = false }
-testcontainers = { version = "0.23.1", default-features = false }
+testcontainers = { version = "0.27.3", default-features = false }
 
 # Metrics
 metrics = { version = "0.24.6", default-features = false }

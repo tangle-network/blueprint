@@ -1,13 +1,15 @@
 use blueprint_core::{debug, error, info, warn};
 use bollard::{
     Docker,
-    container::{
-        Config, CreateContainerOptions, ListContainersOptions, LogsOptions, RemoveContainerOptions,
-        StartContainerOptions, StopContainerOptions,
+    models::{
+        ContainerCreateBody, HealthConfig, HealthStatusEnum, HostConfig, NetworkConnectRequest,
+        NetworkCreateRequest, PortBinding,
     },
-    image::CreateImageOptions,
-    models::{HealthConfig, HealthStatusEnum, HostConfig, PortBinding},
-    network::{ConnectNetworkOptions, CreateNetworkOptions, InspectNetworkOptions},
+    query_parameters::{
+        CreateContainerOptionsBuilder, CreateImageOptionsBuilder, InspectContainerOptions,
+        InspectNetworkOptions, ListContainersOptions, LogsOptionsBuilder,
+        RemoveContainerOptionsBuilder, StartContainerOptions, StopContainerOptions,
+    },
 };
 use futures::StreamExt;
 use std::{collections::HashMap, default::Default};
@@ -67,10 +69,7 @@ impl DockerManager {
         }
 
         info!("Pulling image '{}'...", image);
-        let options = Some(CreateImageOptions {
-            from_image: image,
-            ..Default::default()
-        });
+        let options = Some(CreateImageOptionsBuilder::new().from_image(image).build());
 
         let mut stream = self.docker.create_image(options, None, None);
         while let Some(pull_result) = stream.next().await {
@@ -158,23 +157,17 @@ impl DockerManager {
             start_interval: Some(1_000_000_000),
         });
 
-        let cmd_slices: Option<Vec<&str>> =
-            cmd.as_ref().map(|v| v.iter().map(AsRef::as_ref).collect());
-
-        let config = Config {
-            image: Some(image),
-            env: Some(env.iter().map(AsRef::as_ref).collect()),
+        let config = ContainerCreateBody {
+            image: Some(image.to_string()),
+            env: Some(env),
             host_config: Some(host_config),
             healthcheck: health_config,
-            cmd: cmd_slices,
+            cmd,
             ..Default::default()
         };
 
         info!("Creating container '{}' from image '{}'", name, image);
-        let options = Some(CreateContainerOptions {
-            name: name.to_string(),
-            platform: None,
-        });
+        let options = Some(CreateContainerOptionsBuilder::new().name(name).build());
 
         let container_id = match self.docker.create_container(options, config).await {
             Ok(response) => response.id,
@@ -188,7 +181,7 @@ impl DockerManager {
         info!("Starting container '{}' (ID: {})", name, &container_id);
         if let Err(e) = self
             .docker
-            .start_container(&container_id, None::<StartContainerOptions<String>>)
+            .start_container(&container_id, None::<StartContainerOptions>)
             .await
         {
             let err_msg = format!("Failed to start container '{}': {}", name, e);
@@ -209,7 +202,7 @@ impl DockerManager {
     ///
     /// Returns an error if the container cannot be cleaned up
     async fn cleanup_container_by_name(&self, name: &str) -> Result<()> {
-        let list_options = ListContainersOptions::<String>::default();
+        let list_options = ListContainersOptions::default();
 
         let containers = self
             .docker
@@ -262,10 +255,7 @@ impl DockerManager {
         self.docker
             .remove_container(
                 container_id,
-                Some(RemoveContainerOptions {
-                    force: true,
-                    ..Default::default()
-                }),
+                Some(RemoveContainerOptionsBuilder::new().force(true).build()),
             )
             .await
             .map_err(|e| {
@@ -285,7 +275,7 @@ impl DockerManager {
     pub async fn create_network(&self, network_name: &str) -> Result<()> {
         match self
             .docker
-            .inspect_network(network_name, None::<InspectNetworkOptions<String>>)
+            .inspect_network(network_name, None::<InspectNetworkOptions>)
             .await
         {
             Ok(_) => {
@@ -296,8 +286,8 @@ impl DockerManager {
                 status_code: 404, ..
             }) => {
                 info!("Creating Docker network: '{}'", network_name);
-                let options = CreateNetworkOptions {
-                    name: network_name,
+                let options = NetworkCreateRequest {
+                    name: network_name.to_string(),
                     ..Default::default()
                 };
                 self.docker
@@ -325,8 +315,8 @@ impl DockerManager {
             "Connecting container '{}' to network '{}'",
             container_name, network_name
         );
-        let options = ConnectNetworkOptions {
-            container: container_name,
+        let options = NetworkConnectRequest {
+            container: container_name.to_string(),
             ..Default::default()
         };
         self.docker
@@ -343,7 +333,7 @@ impl DockerManager {
     pub async fn is_container_running(&self, container_id: &str) -> Result<bool> {
         let container = self
             .docker
-            .inspect_container(container_id, None)
+            .inspect_container(container_id, None::<InspectContainerOptions>)
             .await
             .map_err(|e| Error::DockerOperation(e.to_string()))?;
 
@@ -356,12 +346,13 @@ impl DockerManager {
     ///
     /// Returns an error if the container is not healthy within the timeout period
     pub async fn dump_container_logs(&self, container_id: &str) {
-        let options = Some(LogsOptions {
-            stdout: true,
-            stderr: true,
-            tail: "all".to_string(),
-            ..Default::default()
-        });
+        let options = Some(
+            LogsOptionsBuilder::new()
+                .stdout(true)
+                .stderr(true)
+                .tail("all")
+                .build(),
+        );
         error!("Dumping logs for container {}:", container_id);
         let mut logs_stream = self.docker.logs(container_id, options);
         while let Some(log_result) = logs_stream.next().await {
@@ -401,7 +392,10 @@ impl DockerManager {
         let start = Instant::now();
 
         while start.elapsed() < timeout {
-            let inspect_result = self.docker.inspect_container(container_id, None).await;
+            let inspect_result = self
+                .docker
+                .inspect_container(container_id, None::<InspectContainerOptions>)
+                .await;
 
             match inspect_result {
                 Ok(container) => {
