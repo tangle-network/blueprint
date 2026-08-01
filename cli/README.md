@@ -94,9 +94,9 @@ The runner expects RPC URLs, a keystore, and the EVM contract coordinates. You c
 ```bash
 BLUEPRINT_ID=0 \
 SERVICE_ID=0 \
-TANGLE_CONTRACT=0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 \
-STAKING_CONTRACT=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 \
-STATUS_REGISTRY_CONTRACT=0x5f3f1dBD7B74C6B46e8c44f98792A1dAf8d69154 \
+TANGLE_CONTRACT=0x0165878A594ca255338adfa4d48449f69242Eb8F \
+STAKING_CONTRACT=0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 \
+STATUS_REGISTRY_CONTRACT=0x2bdCC0de6bE1f7D2ee689a0342D76F52E8EFABa3 \
 cargo tangle blueprint run \
   --protocol tangle \
   --http-rpc-url http://127.0.0.1:8545 \
@@ -124,9 +124,9 @@ cargo tangle blueprint register-tangle \
   --http-rpc-url https://rpc.tangle.tools \
   --ws-rpc-url wss://rpc.tangle.tools \
   --keystore-path ./keystore \
-  --tangle-contract 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 \
-  --staking-contract 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 \
-  --status-registry-contract 0x5f3f1dBD7B74C6B46e8c44f98792A1dAf8d69154 \
+  --tangle-contract 0x0165878A594ca255338adfa4d48449f69242Eb8F \
+  --staking-contract 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 \
+  --status-registry-contract 0x2bdCC0de6bE1f7D2ee689a0342D76F52E8EFABa3 \
   --blueprint-id 0 \
   --registration-inputs ./registration.tlv
 ```
