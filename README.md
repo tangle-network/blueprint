@@ -14,7 +14,7 @@
 
 ## Overview
 
-The Blueprint SDK is a modular Rust toolkit for building decentralized services—called Blueprints—that run across networks like [Tangle], EigenLayer, and standard EVM chains.
+The Blueprint SDK is a modular Rust toolkit for building decentralized services—called Blueprints—that run across networks like [Tangle] and standard EVM chains.
 
 Blueprints turn complex on-chain and off-chain infrastructure into reproducible, deployable units of logic—think Infrastructure-as-Code for crypto systems.
 With one SDK, you can design anything from oracles and MPC networks to agent-based AI services or zk-proof markets, and deploy them seamlessly.
@@ -23,7 +23,7 @@ The SDK unifies:
 - Job orchestration and routing across async, event-driven systems
 - P2P networking with secure message handling and round-based protocol support
 - Cryptographic primitives and keystore management for signing, verification, and MPC
-- EVM and EigenLayer extensions for direct smart contract and restaking integrations
+- EVM extensions for direct smart contract integrations
 - Testing and benchmarking utilities for reproducible environments and performance tuning
 
 In short, Blueprints let developers move from concept to distributed protocol with minimal friction.
@@ -40,10 +40,9 @@ tools for networking and testing.
 * [`blueprint-build-utils`] - Utilities for simplifying build-time tasks (e.g., building contracts, installing dependencies)
 * [`blueprint-chain-setup`] - (**Meta-crate**) Utilities for setting local testnets
     * [`blueprint-chain-setup-anvil`] - Utilities for setting up [Anvil] testnets
-* [`blueprint-clients`] - (**Meta-crate**) Clients for interacting with [Tangle], [Eigenlayer], and other networks
+* [`blueprint-clients`] - (**Meta-crate**) Clients for interacting with [Tangle] and other networks
     * [`blueprint-client-core`] - Core client primitives and traits
     * [`blueprint-client-tangle`] - Client for interacting with the [Tangle] EVM contracts
-    * [`blueprint-client-eigenlayer`] - Client for interacting with the [Eigenlayer] Network
     * [`blueprint-client-evm`] - Client for interacting with the EVM Network
 * [`blueprint-contexts`] - Extensions for adding functionality to custom blueprint context types
 * [`blueprint-context-derive`] - Derive macros for implementing context extension traits
@@ -79,13 +78,11 @@ tools for networking and testing.
 * [`blueprint-tangle-aggregation-svc`] - Tangle aggregation service for BLS signature aggregation
 * [`blueprint-tangle-extra`] - Tangle-specific producers, consumers, and extractors
 * [`blueprint-evm-extra`] - EVM specific extensions for blueprints
-* [`blueprint-eigenlayer-extra`] - Eigenlayer specific extensions for blueprints
 * [`blueprint-faas`] - FaaS (Function-as-a-Service) execution support
 * [`blueprint-auth`] - Authentication and authorization utilities
 * [`blueprint-testing-utils`] - (**Meta-crate**) Utilities for testing blueprints
     * [`blueprint-core-testing-utils`] - Core testing utility primitives
     * [`blueprint-anvil-testing-utils`] - Utilities for creating and interacting with Anvil testnets
-    * [`blueprint-eigenlayer-testing-utils`] - Utilities for creating end-to-end tests for Eigenlayer blueprints
 
 [`blueprint-sdk`]: https://docs.rs/blueprint-sdk
 [`blueprint-benchmarking`]: https://docs.rs/blueprint-benchmarking
@@ -95,7 +92,6 @@ tools for networking and testing.
 [`blueprint-clients`]: https://docs.rs/blueprint-clients
 [`blueprint-client-core`]: https://docs.rs/blueprint-client-core
 [`blueprint-client-tangle`]: https://docs.rs/blueprint-client-tangle
-[`blueprint-client-eigenlayer`]: https://docs.rs/blueprint-client-eigenlayer
 [`blueprint-client-evm`]: https://docs.rs/blueprint-client-evm
 [`blueprint-contexts`]: https://docs.rs/blueprint-contexts
 [`blueprint-context-derive`]: https://docs.rs/blueprint-context-derive
@@ -129,7 +125,6 @@ tools for networking and testing.
 [`blueprint-store-local-database`]: https://docs.rs/blueprint-store-local-database
 [`blueprint-tangle-extra`]: https://docs.rs/blueprint-tangle-extra
 [`blueprint-evm-extra`]: https://docs.rs/blueprint-evm-extra
-[`blueprint-eigenlayer-extra`]: https://docs.rs/blueprint-eigenlayer-extra
 [`blueprint-faas`]: https://docs.rs/blueprint-faas
 [`blueprint-auth`]: https://docs.rs/blueprint-auth
 [`blueprint-remote-providers`]: https://docs.rs/blueprint-remote-providers
@@ -138,7 +133,6 @@ tools for networking and testing.
 [`blueprint-testing-utils`]: https://docs.rs/blueprint-testing-utils
 [`blueprint-core-testing-utils`]: https://docs.rs/blueprint-core-testing-utils
 [`blueprint-anvil-testing-utils`]: https://docs.rs/blueprint-anvil-testing-utils
-[`blueprint-eigenlayer-testing-utils`]: https://docs.rs/blueprint-eigenlayer-testing-utils
 
 
 ## 🚀 Getting Started
@@ -364,7 +358,10 @@ Install cargo-tangle (`cargo install cargo-tangle`), scaffold a project with `ca
 Count-based thresholds (N-of-M operators must agree) and stake-weighted thresholds (percentage of total stake must sign). Both use BLS signature aggregation.
 
 **Does Blueprint SDK support EigenLayer?**
-Yes. Full EigenLayer AVS integration with operator registration, BLS aggregation, and contract deployment via the `eigenlayer` feature flag.
+No. EigenLayer support was removed from the SDK. The `blueprint-client-eigenlayer`,
+`blueprint-eigenlayer-extra`, and `blueprint-eigenlayer-testing-utils` crates remain on
+crates.io at their final published versions but are no longer maintained or built here.
+Blueprints target [Tangle] and standard EVM chains.
 
 ## 📜 License
 
@@ -396,7 +393,6 @@ dual licensed as above, without any additional terms or conditions.
 [Rust]: https://www.rust-lang.org/tools/install
 [Tangle]: https://tangle.tools
 [Tangle Network]: https://tangle.tools
-[Eigenlayer]: https://eigenlayer.xyz
 [secp256k1]: https://en.bitcoin.it/wiki/Secp256k1
 [round-based]: https://crates.io/crates/round-based
 [anvil]: https://book.getfoundry.sh/reference/anvil/
