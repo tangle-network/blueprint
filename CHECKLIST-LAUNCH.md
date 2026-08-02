@@ -9,6 +9,6 @@ Readiness: **0%** (0 ready, 0 partial, 9 missing out of 9 items). Alpha state.
 - [ ] Benchmark suite (throughput, latency, deploy time per blueprint shape)
 - [ ] Blueprint CLI polish (`cli/` in workspace)
 - [ ] Reference blueprint with real economics (fee flow, bond, worst-case loss)
-- [ ] Multi-chain deploy proof (Tangle + Tempo + Arc + Robinhood from same source)
+- [ ] Multi-chain deploy proof (same Tangle contracts deployed to Base + Tempo + Arc + Robinhood)
 - [ ] Slashing condition spec published
 - [ ] Security audit of SDK crate surface
