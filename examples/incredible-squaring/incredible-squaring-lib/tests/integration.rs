@@ -614,14 +614,15 @@ async fn test_duplicate_submission_handling() -> Result<()> {
     // The service should either:
     // - Reject the duplicate (error), OR
     // - Accept but not double-count (signatures_collected still 1)
-    if response2.is_ok() {
-        assert_eq!(
-            status.signatures_collected, 1,
-            "Duplicate should not be double-counted"
-        );
-        println!("  Duplicate was accepted but not double-counted");
-    } else {
-        println!("  Duplicate was rejected: {:?}", response2.unwrap_err());
+    match response2 {
+        Ok(_) => {
+            assert_eq!(
+                status.signatures_collected, 1,
+                "Duplicate should not be double-counted"
+            );
+            println!("  Duplicate was accepted but not double-counted");
+        }
+        Err(err) => println!("  Duplicate was rejected: {err:?}"),
     }
 
     // Verify bitmap only has operator 0 once
