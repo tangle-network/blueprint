@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.5](https://github.com/tangle-network/blueprint/compare/blueprint-context-derive-v0.2.0-alpha.4...blueprint-context-derive-v0.2.0-alpha.5) - 2026-08-02
+
+### Other
+
+- remove EigenLayer support and fix two pre-existing build breakages (#1479)
+
 ## [0.1.0-alpha.13](https://github.com/tangle-network/blueprint/compare/blueprint-context-derive-v0.1.0-alpha.12...blueprint-context-derive-v0.1.0-alpha.13) - 2025-11-03
 
 ### Other

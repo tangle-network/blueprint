@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.11...blueprint-pricing-engine-v0.3.0-alpha.12) - 2026-08-02
+
+### Fixed
+
+- *(deps)* clear the gix advisories via cargo-generate; MSRV 1.91 -> 1.93 (#1484)
+
 ## [0.3.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.10...blueprint-pricing-engine-v0.3.0-alpha.11) - 2026-07-24
 
 ### Other

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.2.0-alpha.11...blueprint-tangle-extra-v0.2.0-alpha.12) - 2026-08-02
+
+### Other
+
+- updated the following local packages: blueprint-std, blueprint-keystore, blueprint-tangle-aggregation-svc, blueprint-crypto-core, blueprint-crypto-bn254, blueprint-crypto, blueprint-client-tangle, blueprint-networking, blueprint-networking-agg-sig-gossip-extension
+
 ## [0.2.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.2.0-alpha.10...blueprint-tangle-extra-v0.2.0-alpha.11) - 2026-07-08
 
 ### Other

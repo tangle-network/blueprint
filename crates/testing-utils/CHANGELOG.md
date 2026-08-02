@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.13](https://github.com/tangle-network/blueprint/compare/blueprint-testing-utils-v0.2.0-alpha.12...blueprint-testing-utils-v0.2.0-alpha.13) - 2026-08-02
+
+### Fixed
+
+- *(testing)* regenerate the LocalTestnet Anvil fixture at tnt-core 0.19 (#1483)
+
+### Other
+
+- remove EigenLayer support and fix two pre-existing build breakages (#1479)
+
 ## [0.2.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-testing-utils-v0.2.0-alpha.11...blueprint-testing-utils-v0.2.0-alpha.12) - 2026-07-24
 
 ### Other
