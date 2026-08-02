@@ -14,7 +14,7 @@
 
 ## Overview
 
-The Blueprint SDK is a modular Rust toolkit for building decentralized services—called Blueprints—that run across networks like [Tangle] and standard EVM chains.
+The Blueprint SDK is a modular Rust toolkit for building decentralized services—called Blueprints—that run against [Tangle], an EVM protocol deployed on EVM chains.
 
 Blueprints turn complex on-chain and off-chain infrastructure into reproducible, deployable units of logic—think Infrastructure-as-Code for crypto systems.
 With one SDK, you can design anything from oracles and MPC networks to agent-based AI services or zk-proof markets, and deploy them seamlessly.
@@ -57,7 +57,7 @@ tools for networking and testing.
     * [`blueprint-crypto-sr25519`] - Utilities for working with sr25519 signatures and keys
 * [`blueprint-keystore`] - Flexible keystore implementation, supporting local and remote signers
 * [`blueprint-macros`] - Utility macros for simplifying blueprint development
-* [`blueprint-manager`] - A program executor that connects to the [Tangle] network and runs protocols dynamically on the fly
+* [`blueprint-manager`] - A program executor that connects to a [Tangle] deployment and runs protocols dynamically on the fly
     * [`blueprint-manager-bridge`] - IPC bridge for manager-blueprint communication
 * [`blueprint-metrics`] (**Meta-crate**) Utilities for collecting metrics
     * [`blueprint-metrics-rpc-calls`] - Utilities for collecting metrics from RPC calls
@@ -253,7 +253,7 @@ rendering.
 
 ### Deploying to Testnet/Mainnet
 
-When targeting real [Tangle] networks, provide a blueprint definition manifest that mirrors the on-chain schema. The file can be JSON, YAML, or TOML and must describe the blueprint metadata, jobs, and artifact sources (container images or native binaries). Once authored, pass it via `--definition`:
+When targeting a live [Tangle] deployment, provide a blueprint definition manifest that mirrors the on-chain schema. The file can be JSON, YAML, or TOML and must describe the blueprint metadata, jobs, and artifact sources (container images or native binaries). Once authored, pass it via `--definition`:
 
 ```bash
 cargo tangle blueprint deploy tangle \
