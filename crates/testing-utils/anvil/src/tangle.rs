@@ -35,9 +35,15 @@ use url::Url;
 pub const LOCAL_BLUEPRINT_ID: u64 = 0;
 pub const LOCAL_SERVICE_ID: u64 = 0;
 
-const TANGLE_ADDRESS: &str = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9";
-const RESTAKING_ADDRESS: &str = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
-const STATUS_REGISTRY_ADDRESS: &str = "0x5f3f1dBD7B74C6B46e8c44f98792A1dAf8d69154";
+// CREATE addresses of the LocalTestnet deployer, fixed by its nonce order in the
+// bundled broadcast/snapshot. They move whenever the deploy sequence changes:
+// tnt-core 0.19 links three external libraries (ServiceFeeDistributorLib,
+// ValidatorPodManagerLib, ServiceValidationLib) instead of one, so every
+// subsequent deployment shifted two nonces. Re-read them from
+// `snapshots/localtestnet-broadcast.json` whenever the fixture is regenerated.
+const TANGLE_ADDRESS: &str = "0x0165878A594ca255338adfa4d48449f69242Eb8F";
+const RESTAKING_ADDRESS: &str = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9";
+const STATUS_REGISTRY_ADDRESS: &str = "0x2bdCC0de6bE1f7D2ee689a0342D76F52E8EFABa3";
 const DEFAULT_FEE_WEI: u128 = 1;
 const ANVIL_BLOCK_GAS_LIMIT: u64 = 100_000_000;
 const OPERATOR1_PRIVATE_KEY: &str =

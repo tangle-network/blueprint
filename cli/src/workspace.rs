@@ -13,9 +13,9 @@
 //! [networks.local]
 //! http_rpc_url = "http://127.0.0.1:8545"
 //! ws_rpc_url = "ws://127.0.0.1:8545"
-//! tangle_contract = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
-//! staking_contract = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-//! status_registry_contract = "0x5f3f1dBD7B74C6B46e8c44f98792A1dAf8d69154"
+//! tangle_contract = "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+//! staking_contract = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+//! status_registry_contract = "0x2bdCC0de6bE1f7D2ee689a0342D76F52E8EFABa3"
 //! chain_id = 31337
 //!
 //! [defaults]
@@ -228,9 +228,9 @@ network = "local"
 [networks.local]
 http_rpc_url = "http://127.0.0.1:8545"
 ws_rpc_url   = "ws://127.0.0.1:8545"
-tangle_contract          = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
-staking_contract       = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-status_registry_contract = "0x5f3f1dBD7B74C6B46e8c44f98792A1dAf8d69154"
+tangle_contract          = "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+staking_contract       = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+status_registry_contract = "0x2bdCC0de6bE1f7D2ee689a0342D76F52E8EFABa3"
 chain_id = 31337
 
 [defaults]
@@ -250,7 +250,7 @@ service_id   = 0
         assert_eq!(net.chain_id, Some(31337));
         assert_eq!(
             net.tangle_contract.to_string().to_lowercase(),
-            "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9"
+            "0x0165878a594ca255338adfa4d48449f69242eb8f"
         );
         assert_eq!(ws.defaults.blueprint_id, Some(0));
     }
