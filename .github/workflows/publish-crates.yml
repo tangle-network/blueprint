@@ -65,14 +65,15 @@ jobs:
       - name: Dry run
         if: ${{ inputs.dry_run }}
         run: |
-          # Report what a real run would publish, and pre-check the failure that
-          # actually kills a batch mid-flight: a crate whose target version is
-          # already on crates.io. `batch-publish.sh` publishes in topological
-          # order with a 60s post-burst delay, so a collision late in the list
-          # can strand the fleet half-published. A full `cargo publish
-          # --dry-run` per crate is NOT usable here — dry-run still resolves
-          # dependencies from the registry, so every crate that depends on a
-          # sibling being published in this same batch would fail spuriously.
+          # Report the publish plan: which crates a real run would publish and
+          # which it would skip. `batch-publish.sh` checks the sparse index per
+          # crate and skips any version already live, so an already-published
+          # version is NOT a failure — release-plz bumps only what changed while
+          # this workflow enumerates every publishable workspace member, so a
+          # partial overlap is the normal case. A full `cargo publish --dry-run`
+          # per crate is NOT usable here: dry-run still resolves dependencies
+          # from the registry, so every crate depending on a sibling published in
+          # this same batch would fail spuriously.
           python3 - <<'PY'
           import json, urllib.request, subprocess, sys
 
@@ -101,14 +102,16 @@ jobs:
               else:
                   print(f"  {n} {v}  ok")
 
-          if collisions:
-              print()
-              print("These versions already exist on crates.io — a real run would fail "
-                    "on them and could leave the fleet half-published. Bump them (or "
-                    "drop them from the batch) before publishing:")
-              for n, v in collisions:
-                  print(f"  - {n} {v}")
-              sys.exit(1)
           print()
-          print("No version collisions. A real run would proceed.")
+          if collisions:
+              print(f"{len(collisions)} crate(s) are already at their target version and "
+                    "will be SKIPPED by batch-publish.sh (it checks the sparse index "
+                    "before publishing each crate). This is normal: release-plz only "
+                    "bumps crates that changed, while this workflow enumerates every "
+                    "publishable workspace member.")
+              for n, v in collisions:
+                  print(f"  skip: {n} {v}")
+              print()
+          print(f"A real run would publish {len(names) - len(collisions)} crate(s) and "
+                f"skip {len(collisions)}.")
           PY
