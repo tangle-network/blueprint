@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-keystore-v0.2.0-alpha.9...blueprint-keystore-v0.2.0-alpha.10) - 2026-08-02
+
+### Fixed
+
+- *(deps)* clear the gix advisories via cargo-generate; MSRV 1.91 -> 1.93 (#1484)
+
+### Other
+
+- remove EigenLayer support and fix two pre-existing build breakages (#1479)
+
 ## [0.2.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-keystore-v0.2.0-alpha.8...blueprint-keystore-v0.2.0-alpha.9) - 2026-06-13
 
 ### Other

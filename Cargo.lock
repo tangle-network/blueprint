@@ -2890,7 +2890,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-anvil-testing-utils"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "alloy-consensus 1.8.3",
  "alloy-eips 2.0.5",
@@ -2927,7 +2927,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-auth"
-version = "0.2.0-alpha.10"
+version = "0.2.0-alpha.11"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2980,7 +2980,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-benchmarking"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-std",
  "sysinfo 0.38.4",
@@ -2989,21 +2989,21 @@ dependencies = [
 
 [[package]]
 name = "blueprint-build-utils"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-std",
 ]
 
 [[package]]
 name = "blueprint-chain-setup"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "blueprint-chain-setup-anvil",
 ]
 
 [[package]]
 name = "blueprint-chain-setup-anvil"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "alloy-contract",
  "alloy-provider",
@@ -3024,7 +3024,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-core"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "auto_impl",
  "blueprint-std",
@@ -3033,7 +3033,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-evm"
-version = "0.2.0-alpha.6"
+version = "0.2.0-alpha.7"
 dependencies = [
  "alloy-consensus 1.8.3",
  "alloy-json-rpc 1.8.3",
@@ -3064,7 +3064,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-client-tangle"
-version = "0.2.0-alpha.11"
+version = "0.2.0-alpha.12"
 dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
@@ -3098,7 +3098,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-clients"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "blueprint-client-core",
  "blueprint-client-evm",
@@ -3109,7 +3109,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-context-derive"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-provider",
@@ -3126,7 +3126,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-contexts"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "blueprint-client-tangle",
  "blueprint-clients",
@@ -3155,7 +3155,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-core-testing-utils"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "blueprint-auth",
  "blueprint-clients",
@@ -3174,7 +3174,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto"
-version = "0.2.0-alpha.8"
+version = "0.2.0-alpha.9"
 dependencies = [
  "blueprint-crypto-bls",
  "blueprint-crypto-bn254",
@@ -3188,7 +3188,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto-bls"
-version = "0.2.0-alpha.8"
+version = "0.2.0-alpha.9"
 dependencies = [
  "ark-serialize 0.5.0",
  "blueprint-crypto-core",
@@ -3207,7 +3207,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto-bn254"
-version = "0.2.0-alpha.8"
+version = "0.2.0-alpha.9"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-ec 0.6.0",
@@ -3229,7 +3229,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto-core"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-std",
  "clap",
@@ -3239,7 +3239,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto-ed25519"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-crypto-core",
  "blueprint-std",
@@ -3254,7 +3254,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto-hashing"
-version = "0.2.0-alpha.6"
+version = "0.2.0-alpha.7"
 dependencies = [
  "argon2",
  "blake3",
@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto-k256"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "alloy-primitives",
  "alloy-signer-local",
@@ -3283,7 +3283,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-crypto-sr25519"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-crypto-core",
  "blueprint-std",
@@ -3298,7 +3298,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-evm-extra"
-version = "0.2.0-alpha.6"
+version = "0.2.0-alpha.7"
 dependencies = [
  "alloy-consensus 1.8.3",
  "alloy-network 1.8.3",
@@ -3329,7 +3329,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-faas"
-version = "0.2.0-alpha.6"
+version = "0.2.0-alpha.7"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -3357,7 +3357,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-gossip-primitives"
-version = "0.2.0-alpha.9"
+version = "0.2.0-alpha.10"
 dependencies = [
  "async-trait",
  "bincode",
@@ -3379,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-keystore"
-version = "0.2.0-alpha.9"
+version = "0.2.0-alpha.10"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
@@ -3432,7 +3432,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager"
-version = "0.4.0-alpha.12"
+version = "0.4.0-alpha.13"
 dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
@@ -3519,7 +3519,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager-bridge"
-version = "0.2.0-alpha.11"
+version = "0.2.0-alpha.12"
 dependencies = [
  "blueprint-auth",
  "blueprint-core",
@@ -3551,7 +3551,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-networking"
-version = "0.2.0-alpha.9"
+version = "0.2.0-alpha.10"
 dependencies = [
  "alloy-primitives",
  "bincode",
@@ -3577,7 +3577,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-networking-agg-sig-gossip-extension"
-version = "0.2.0-alpha.9"
+version = "0.2.0-alpha.10"
 dependencies = [
  "bincode",
  "bitvec",
@@ -3606,7 +3606,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-networking-round-based-extension"
-version = "0.2.0-alpha.9"
+version = "0.2.0-alpha.10"
 dependencies = [
  "blueprint-core",
  "blueprint-crypto",
@@ -3634,7 +3634,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-pricing-engine"
-version = "0.3.0-alpha.11"
+version = "0.3.0-alpha.12"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
@@ -3722,7 +3722,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-qos"
-version = "0.2.0-alpha.13"
+version = "0.2.0-alpha.14"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",
@@ -3773,7 +3773,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-remote-providers"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3856,7 +3856,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-runner"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "alloy-contract",
  "alloy-primitives",
@@ -3899,7 +3899,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-sdk"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "alloy",
  "alloy-json-abi",
@@ -3940,7 +3940,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-std"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "colored",
  "num-traits",
@@ -3951,7 +3951,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-store-local-database"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-std",
  "serde",
@@ -3962,7 +3962,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-stores"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "blueprint-store-local-database",
  "document-features",
@@ -3971,7 +3971,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-aggregation-svc"
-version = "0.2.0-alpha.11"
+version = "0.2.0-alpha.12"
 dependencies = [
  "alloy-contract",
  "alloy-network 1.8.3",
@@ -4002,7 +4002,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tangle-extra"
-version = "0.2.0-alpha.11"
+version = "0.2.0-alpha.12"
 dependencies = [
  "alloy",
  "alloy-network 1.8.3",
@@ -4044,7 +4044,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-tee"
-version = "0.2.0-alpha.8"
+version = "0.2.0-alpha.9"
 dependencies = [
  "aws-config",
  "aws-sdk-ec2",
@@ -4080,7 +4080,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-testing-utils"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "blueprint-anvil-testing-utils",
  "blueprint-core-testing-utils",
@@ -4088,7 +4088,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-webhooks"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "axum",
  "blueprint-core",
@@ -4115,7 +4115,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-x402"
-version = "0.2.0-alpha.12"
+version = "0.2.0-alpha.13"
 dependencies = [
  "alloy-primitives",
  "alloy-provider",
@@ -4430,7 +4430,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.5.0-alpha.13"
+version = "0.5.0-alpha.14"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",

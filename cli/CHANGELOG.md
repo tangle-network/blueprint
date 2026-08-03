@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.14](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.13...cargo-tangle-v0.5.0-alpha.14) - 2026-08-02
+
+### Fixed
+
+- *(testing)* regenerate the LocalTestnet Anvil fixture at tnt-core 0.19 (#1483)
+
+### Other
+
+- remove EigenLayer support and fix two pre-existing build breakages (#1479)
+
 ## [0.5.0-alpha.13](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.12...cargo-tangle-v0.5.0-alpha.13) - 2026-07-24
 
 ### Other

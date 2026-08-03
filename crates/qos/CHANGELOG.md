@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.14](https://github.com/tangle-network/blueprint/compare/blueprint-qos-v0.2.0-alpha.13...blueprint-qos-v0.2.0-alpha.14) - 2026-08-02
+
+### Fixed
+
+- *(deps)* bollard 0.20 + testcontainers 0.27.3 to clear the tokio-tar advisory (#1482)
+- *(qos)* compile with Prometheus protobuf metrics (#1480)
+
 ## [0.2.0-alpha.13](https://github.com/tangle-network/blueprint/compare/blueprint-qos-v0.2.0-alpha.12...blueprint-qos-v0.2.0-alpha.13) - 2026-07-24
 
 ### Other
