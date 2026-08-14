@@ -50,6 +50,8 @@ pub struct ServiceConfig {
     pub cleanup_interval: Option<Duration>,
     /// Whether to auto-cleanup submitted tasks
     pub auto_cleanup_submitted: bool,
+    /// How long submitted tasks remain observable before cleanup
+    pub submitted_task_retention: Duration,
 }
 
 impl Default for ServiceConfig {
@@ -60,6 +62,7 @@ impl Default for ServiceConfig {
             default_task_ttl: Some(Duration::from_secs(3600)), // 1 hour default
             cleanup_interval: Some(Duration::from_secs(60)),   // Cleanup every minute
             auto_cleanup_submitted: true,
+            submitted_task_retention: Duration::from_secs(120),
         }
     }
 }
@@ -73,6 +76,7 @@ impl ServiceConfig {
             default_task_ttl: None,
             cleanup_interval: None,
             auto_cleanup_submitted: false,
+            submitted_task_retention: Duration::ZERO,
         }
     }
 }
@@ -201,9 +205,13 @@ impl AggregationService {
         let _guard = self.mutation_lock.lock();
         let before = self.snapshot()?;
         let removed = match kind {
-            CleanupKind::All => self.state.cleanup(),
+            CleanupKind::All => self
+                .state
+                .cleanup_with_submitted_retention(self.config.submitted_task_retention),
             CleanupKind::Expired => self.state.cleanup_expired(),
-            CleanupKind::Submitted => self.state.cleanup_submitted(),
+            CleanupKind::Submitted => self
+                .state
+                .cleanup_submitted_after(self.config.submitted_task_retention),
         };
         if removed == 0 {
             return Ok(0);
@@ -761,6 +769,7 @@ mod tests {
         assert!(config.default_task_ttl.is_some());
         assert!(config.cleanup_interval.is_some());
         assert!(config.auto_cleanup_submitted);
+        assert_eq!(config.submitted_task_retention, Duration::from_secs(120));
     }
 
     #[test]
@@ -771,6 +780,7 @@ mod tests {
         assert!(config.default_task_ttl.is_none());
         assert!(config.cleanup_interval.is_none());
         assert!(!config.auto_cleanup_submitted);
+        assert_eq!(config.submitted_task_retention, Duration::ZERO);
     }
 
     #[test]
@@ -872,6 +882,18 @@ mod tests {
 
         let status = service.get_status(1, 100);
         assert!(status.submitted);
+    }
+
+    #[test]
+    fn submitted_cleanup_honors_observation_retention() {
+        let mut config = ServiceConfig::minimal();
+        config.submitted_task_retention = Duration::from_secs(60);
+        let service = AggregationService::new(config);
+        service.init_task(1, 100, vec![], 1, 1).unwrap();
+        service.mark_submitted(1, 100).unwrap();
+
+        assert_eq!(service.cleanup_submitted(), 0);
+        assert!(service.get_status(1, 100).submitted);
     }
 
     #[test]

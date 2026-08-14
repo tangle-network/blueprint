@@ -55,7 +55,7 @@ pub mod state;
 pub mod types;
 
 #[cfg(feature = "client")]
-pub use client::{AggregationServiceClient, ClientError};
+pub use client::{AggregationServiceClient, ClientError, ThresholdWaitResult};
 pub use persistence::{
     FilePersistence, NoPersistence, PersistedTaskState, PersistedThresholdType, PersistenceBackend,
     PersistenceError,

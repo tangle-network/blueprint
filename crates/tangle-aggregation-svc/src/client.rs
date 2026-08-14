@@ -56,6 +56,18 @@ pub enum ClientError {
     /// Threshold not met
     #[error("Threshold not met: {collected}/{required}")]
     ThresholdNotMet { collected: usize, required: usize },
+    /// Another operator already submitted this task to the chain.
+    #[error("Aggregation task was already submitted to the chain")]
+    AlreadySubmitted,
+}
+
+/// Outcome of waiting for an aggregation task.
+#[derive(Debug)]
+pub enum ThresholdWaitResult {
+    /// The caller can submit this aggregate to the chain.
+    Aggregated(AggregatedResultResponse),
+    /// Another operator already submitted the task.
+    Submitted,
 }
 
 /// HTTP client for the aggregation service
@@ -242,6 +254,27 @@ impl AggregationServiceClient {
         Ok(result)
     }
 
+    /// Return an aggregate or learn that another operator submitted it.
+    pub async fn get_aggregated_or_submitted(
+        &self,
+        service_id: u64,
+        call_id: u64,
+    ) -> Result<ThresholdWaitResult, ClientError> {
+        if let Some(result) = self.get_aggregated(service_id, call_id).await? {
+            return Ok(ThresholdWaitResult::Aggregated(result));
+        }
+
+        let status = self.get_status(service_id, call_id).await?;
+        if status.submitted {
+            return Ok(ThresholdWaitResult::Submitted);
+        }
+
+        Err(ClientError::ThresholdNotMet {
+            collected: status.signatures_collected,
+            required: status.threshold_required,
+        })
+    }
+
     /// Mark a task as submitted to the chain
     pub async fn mark_submitted(&self, service_id: u64, call_id: u64) -> Result<(), ClientError> {
         let url = format!("{}/v1/tasks/mark-submitted", self.base_url);
@@ -291,12 +324,36 @@ impl AggregationServiceClient {
         poll_interval: Duration,
         timeout: Duration,
     ) -> Result<AggregatedResultResponse, ClientError> {
+        match self
+            .wait_for_threshold_or_submitted(service_id, call_id, poll_interval, timeout)
+            .await?
+        {
+            ThresholdWaitResult::Aggregated(result) => Ok(result),
+            ThresholdWaitResult::Submitted => Err(ClientError::AlreadySubmitted),
+        }
+    }
+
+    /// Wait for an aggregate or learn that another operator submitted it.
+    ///
+    /// A submitted task no longer exposes aggregate bytes. Waiting only on the
+    /// aggregate endpoint would therefore wait until timeout after a successful
+    /// submission by another operator.
+    pub async fn wait_for_threshold_or_submitted(
+        &self,
+        service_id: u64,
+        call_id: u64,
+        poll_interval: Duration,
+        timeout: Duration,
+    ) -> Result<ThresholdWaitResult, ClientError> {
         let start = std::time::Instant::now();
 
         loop {
             if start.elapsed() > timeout {
                 // Get current status for error message
                 let status = self.get_status(service_id, call_id).await?;
+                if status.submitted {
+                    return Ok(ThresholdWaitResult::Submitted);
+                }
                 return Err(ClientError::ThresholdNotMet {
                     collected: status.signatures_collected,
                     required: status.threshold_required,
@@ -305,7 +362,12 @@ impl AggregationServiceClient {
 
             // Check if aggregated result is available
             if let Some(result) = self.get_aggregated(service_id, call_id).await? {
-                return Ok(result);
+                return Ok(ThresholdWaitResult::Aggregated(result));
+            }
+
+            let status = self.get_status(service_id, call_id).await?;
+            if status.submitted {
+                return Ok(ThresholdWaitResult::Submitted);
             }
 
             // Wait before next poll
@@ -317,6 +379,8 @@ impl AggregationServiceClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{api, AggregationService, ServiceConfig};
+    use std::sync::Arc;
 
     #[test]
     fn test_client_url_normalization() {
@@ -325,5 +389,41 @@ mod tests {
 
         let client = AggregationServiceClient::new("http://localhost:8080");
         assert_eq!(client.base_url, "http://localhost:8080");
+    }
+
+    #[tokio::test]
+    async fn waiting_operator_observes_submitted_task_without_aggregate_replay() {
+        let service = Arc::new(AggregationService::new(ServiceConfig::default()));
+        service.init_task(1, 1, vec![1], 2, 2).unwrap();
+        service.mark_submitted(1, 1).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, api::router(service)).await.unwrap();
+        });
+
+        let client = AggregationServiceClient::new(format!("http://{address}"));
+        assert!(matches!(
+            client.get_aggregated_or_submitted(1, 1).await.unwrap(),
+            ThresholdWaitResult::Submitted
+        ));
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(250),
+            client.wait_for_threshold_or_submitted(
+                1,
+                1,
+                Duration::from_millis(5),
+                Duration::from_secs(30),
+            ),
+        )
+        .await
+        .expect("submitted state should complete promptly")
+        .unwrap();
+
+        assert!(matches!(result, ThresholdWaitResult::Submitted));
+        server.abort();
+        let _ = server.await;
     }
 }

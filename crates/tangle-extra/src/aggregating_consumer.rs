@@ -36,7 +36,7 @@ use blueprint_std::sync::{Arc, Mutex};
 use blueprint_std::time::Duration;
 use blueprint_std::vec::Vec;
 #[cfg(feature = "aggregation")]
-use blueprint_tangle_aggregation_svc::{OperatorStake, ThresholdConfig};
+use blueprint_tangle_aggregation_svc::{OperatorStake, ThresholdConfig, ThresholdWaitResult};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use futures_util::Sink;
@@ -1033,6 +1033,15 @@ async fn submit_aggregated_result(
 
         // Try to get result from any service
         let result = wait_for_threshold_any_service(&agg, service_id, call_id).await?;
+        let ThresholdWaitResult::Aggregated(result) = result else {
+            blueprint_core::debug!(
+                target: "tangle-aggregating-consumer",
+                service_id,
+                call_id,
+                "Another operator already submitted the aggregated result"
+            );
+            return Ok(());
+        };
 
         // Try to submit to chain (race with other operators)
         match submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result)
@@ -1060,7 +1069,7 @@ async fn wait_for_threshold_any_service(
     agg: &AggregationServiceConfig,
     service_id: u64,
     call_id: u64,
-) -> Result<blueprint_tangle_aggregation_svc::AggregatedResultResponse, AggregatingConsumerError> {
+) -> Result<ThresholdWaitResult, AggregatingConsumerError> {
     use blueprint_std::time::Instant;
 
     let start = Instant::now();
@@ -1072,7 +1081,7 @@ async fn wait_for_threshold_any_service(
         for client in &agg.clients {
             match client.get_aggregated(service_id, call_id).await {
                 Ok(Some(result)) => {
-                    return Ok(result);
+                    return Ok(ThresholdWaitResult::Aggregated(result));
                 }
                 Ok(None) => {
                     // Threshold not yet met on this service
@@ -1085,9 +1094,41 @@ async fn wait_for_threshold_any_service(
                     );
                 }
             }
+
+            match client.get_status(service_id, call_id).await {
+                Ok(status) if status.submitted => {
+                    return Ok(ThresholdWaitResult::Submitted);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    blueprint_core::trace!(
+                        target: "tangle-aggregating-consumer",
+                        "Error polling aggregation status: {}",
+                        e
+                    );
+                }
+            }
         }
 
         tokio::time::sleep(poll_interval).await;
+    }
+
+    // A submission can race with the final loop condition. Check completion
+    // once more before reporting a timeout.
+    for client in &agg.clients {
+        match client.get_status(service_id, call_id).await {
+            Ok(status) if status.submitted => {
+                return Ok(ThresholdWaitResult::Submitted);
+            }
+            Ok(_) => {}
+            Err(e) => {
+                blueprint_core::trace!(
+                    target: "tangle-aggregating-consumer",
+                    "Error polling final aggregation status: {}",
+                    e
+                );
+            }
+        }
     }
 
     Err(AggregatingConsumerError::Client(
@@ -1105,11 +1146,18 @@ async fn try_submit_aggregated_to_chain(
 ) -> Result<(), AggregatingConsumerError> {
     // Try to get result from any service
     for service_client in &agg.clients {
-        if let Ok(Some(result)) = service_client.get_aggregated(service_id, call_id).await {
-            return submit_aggregated_to_chain_with_result(
-                client, agg, service_id, call_id, result,
-            )
-            .await;
+        match service_client
+            .get_aggregated_or_submitted(service_id, call_id)
+            .await
+        {
+            Ok(ThresholdWaitResult::Submitted) => return Ok(()),
+            Ok(ThresholdWaitResult::Aggregated(result)) => {
+                return submit_aggregated_to_chain_with_result(
+                    client, agg, service_id, call_id, result,
+                )
+                .await;
+            }
+            Err(_) => {}
         }
     }
 
@@ -1445,6 +1493,49 @@ mod tests {
         assert!(super::is_job_already_completed(&by_selector));
         assert!(super::is_job_already_completed(&by_name));
         assert!(!super::is_job_already_completed(&pubkey_mismatch));
+    }
+
+    #[cfg(feature = "aggregation")]
+    #[tokio::test]
+    async fn wait_for_threshold_checks_submission_at_deadline() {
+        use blueprint_crypto_bn254::ArkBlsBn254;
+        use blueprint_crypto_core::KeyType;
+        use blueprint_tangle_aggregation_svc::{
+            AggregationService, ServiceConfig, ThresholdWaitResult, api,
+        };
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        let service = Arc::new(AggregationService::new(ServiceConfig::minimal()));
+        service.init_task(1, 1, vec![1], 2, 2).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server_service = Arc::clone(&service);
+        let server = tokio::spawn(async move {
+            axum::serve(listener, api::router(server_service))
+                .await
+                .unwrap();
+        });
+
+        let submitter = Arc::clone(&service);
+        let marker = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            submitter.mark_submitted(1, 1).unwrap();
+        });
+
+        let secret = ArkBlsBn254::generate_with_seed(Some(&[1u8; 32])).unwrap();
+        let mut config =
+            super::AggregationServiceConfig::new(format!("http://{address}"), secret, 0);
+        config.threshold_timeout = Duration::from_millis(50);
+        config.poll_interval = Duration::from_millis(75);
+
+        let result = super::wait_for_threshold_any_service(&config, 1, 1).await;
+        assert!(matches!(result, Ok(ThresholdWaitResult::Submitted)));
+
+        marker.await.unwrap();
+        server.abort();
+        let _ = server.await;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
