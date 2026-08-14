@@ -91,6 +91,25 @@ impl State {
     fn is_waiting(&self) -> bool {
         matches!(self, State::WaitingForResult)
     }
+
+    fn poll_submission(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), AggregatingConsumerError>> {
+        let State::ProcessingSubmission(future) = self else {
+            return Poll::Ready(Ok(()));
+        };
+
+        match future.as_mut().poll(cx) {
+            Poll::Ready(result) => {
+                // A completed future must never remain in the state machine. The
+                // next flush poll would otherwise poll it again and panic.
+                *self = State::WaitingForResult;
+                Poll::Ready(result)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }
 
 /// Configuration for the aggregation service
@@ -641,10 +660,8 @@ impl Sink<JobResult> for AggregatingConsumer {
 
                     *state = State::ProcessingSubmission(fut);
                 }
-                State::ProcessingSubmission(future) => match future.as_mut().poll(cx) {
-                    Poll::Ready(Ok(())) => {
-                        *state = State::WaitingForResult;
-                    }
+                State::ProcessingSubmission(_) => match state.poll_submission(cx) {
+                    Poll::Ready(Ok(())) => {}
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(e.into())),
                     Poll::Pending => return Poll::Pending,
                 },
@@ -1304,7 +1321,9 @@ pub mod integration {
 #[cfg(test)]
 mod tests {
     use super::integration::*;
+    use super::{AggregatingConsumerError, State};
     use blueprint_client_tangle::ThresholdType;
+    use core::task::{Context, Poll};
 
     // ═══════════════════════════════════════════════════════════════════════════
     // create_signing_message tests
@@ -1354,6 +1373,29 @@ mod tests {
     fn test_create_signing_message_empty_output() {
         let msg = create_signing_message(1, 2, b"");
         assert_eq!(msg.len(), 48);
+    }
+
+    #[test]
+    fn failed_submission_resets_state_for_next_job() {
+        let waker = futures_util::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        let mut state = State::ProcessingSubmission(Box::pin(async {
+            Err(AggregatingConsumerError::Client("duplicate".to_string()))
+        }));
+
+        assert!(matches!(
+            state.poll_submission(&mut cx),
+            Poll::Ready(Err(AggregatingConsumerError::Client(message)))
+                if message == "duplicate"
+        ));
+        assert!(state.is_waiting());
+
+        state = State::ProcessingSubmission(Box::pin(async { Ok(()) }));
+        assert!(matches!(
+            state.poll_submission(&mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert!(state.is_waiting());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
