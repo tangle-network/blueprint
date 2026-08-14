@@ -1012,14 +1012,17 @@ async fn submit_aggregated_result(
 
     if response.threshold_met {
         // Threshold already met, try to submit immediately
-        if let Err(e) =
-            try_submit_aggregated_to_chain(client.clone(), &agg, service_id, call_id).await
-        {
-            blueprint_core::debug!(
-                target: "tangle-aggregating-consumer",
-                "Failed to submit aggregated result (likely already submitted): {}",
-                e
-            );
+        match try_submit_aggregated_to_chain(client.clone(), &agg, service_id, call_id).await {
+            Ok(()) => {}
+            Err(error) if is_job_already_completed(&error) => {
+                blueprint_core::debug!(
+                    target: "tangle-aggregating-consumer",
+                    service_id,
+                    call_id,
+                    "Aggregated result was already submitted by another operator"
+                );
+            }
+            Err(error) => return Err(error),
         }
     } else if agg.wait_for_threshold {
         // Wait for threshold to be met, then submit
@@ -1032,14 +1035,19 @@ async fn submit_aggregated_result(
         let result = wait_for_threshold_any_service(&agg, service_id, call_id).await?;
 
         // Try to submit to chain (race with other operators)
-        if let Err(e) =
-            submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result).await
+        match submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result)
+            .await
         {
-            blueprint_core::debug!(
-                target: "tangle-aggregating-consumer",
-                "Failed to submit aggregated result (likely already submitted by another operator): {}",
-                e
-            );
+            Ok(()) => {}
+            Err(error) if is_job_already_completed(&error) => {
+                blueprint_core::debug!(
+                    target: "tangle-aggregating-consumer",
+                    service_id,
+                    call_id,
+                    "Aggregated result was already submitted by another operator"
+                );
+            }
+            Err(error) => return Err(error),
         }
     }
 
@@ -1087,7 +1095,7 @@ async fn wait_for_threshold_any_service(
     ))
 }
 
-/// Try to submit the aggregated result to chain, handling "already submitted" gracefully
+/// Try to submit the aggregated result to chain.
 #[cfg(feature = "aggregation")]
 async fn try_submit_aggregated_to_chain(
     client: Arc<TangleClient>,
@@ -1108,6 +1116,21 @@ async fn try_submit_aggregated_to_chain(
     Err(AggregatingConsumerError::Client(
         "Aggregated result not available from any service".to_string(),
     ))
+}
+
+/// Return true only for the idempotent aggregate-submission race.
+///
+/// The RPC provider may expose the Solidity custom error by name or only by
+/// selector. All other submission failures must reach the caller.
+#[cfg(feature = "aggregation")]
+const JOB_ALREADY_COMPLETED_SELECTOR: &str = "0x0a55512f";
+
+#[cfg(feature = "aggregation")]
+fn is_job_already_completed(error: &AggregatingConsumerError) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("jobalreadycompleted")
+        || message.contains("job already completed")
+        || message.contains(JOB_ALREADY_COMPLETED_SELECTOR)
 }
 
 /// Submit the aggregated result to the blockchain with a pre-fetched result
@@ -1396,6 +1419,30 @@ mod tests {
             Poll::Ready(Ok(()))
         ));
         assert!(state.is_waiting());
+    }
+
+    #[cfg(feature = "aggregation")]
+    #[test]
+    fn only_job_already_completed_is_an_idempotent_aggregate_submission_error() {
+        let by_selector = AggregatingConsumerError::Aggregation(
+            crate::aggregation::AggregationError::ContractError(
+                "execution reverted: custom error 0x0a55512f".to_string(),
+            ),
+        );
+        let by_name = AggregatingConsumerError::Aggregation(
+            crate::aggregation::AggregationError::ContractError(
+                "execution reverted: JobAlreadyCompleted".to_string(),
+            ),
+        );
+        let pubkey_mismatch = AggregatingConsumerError::Aggregation(
+            crate::aggregation::AggregationError::ContractError(
+                "execution reverted: custom error 0x437f07c7".to_string(),
+            ),
+        );
+
+        assert!(super::is_job_already_completed(&by_selector));
+        assert!(super::is_job_already_completed(&by_name));
+        assert!(!super::is_job_already_completed(&pubkey_mismatch));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
