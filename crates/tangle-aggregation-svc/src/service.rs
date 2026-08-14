@@ -1,11 +1,13 @@
 //! Main aggregation service logic
 
+use crate::persistence::{NoPersistence, PersistedTaskState, PersistenceBackend, PersistenceError};
 use crate::state::{AggregationState, TaskConfig, ThresholdType};
 use crate::types::*;
 use alloy_primitives::U256;
 use ark_serialize::CanonicalDeserialize;
 use blueprint_crypto_bn254::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Signature};
 use blueprint_crypto_core::{aggregation::AggregatableSignature, KeyType};
+use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -76,10 +78,29 @@ impl ServiceConfig {
 }
 
 /// The main aggregation service
-#[derive(Debug)]
 pub struct AggregationService {
     state: AggregationState,
     config: ServiceConfig,
+    persistence: Arc<dyn PersistenceBackend>,
+    mutation_lock: Mutex<()>,
+}
+
+impl std::fmt::Debug for AggregationService {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AggregationService")
+            .field("state", &self.state)
+            .field("config", &self.config)
+            .field("persistence", &"configured")
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CleanupKind {
+    All,
+    Expired,
+    Submitted,
 }
 
 impl AggregationService {
@@ -88,12 +109,138 @@ impl AggregationService {
         Self {
             state: AggregationState::new(),
             config,
+            persistence: Arc::new(NoPersistence),
+            mutation_lock: Mutex::new(()),
         }
+    }
+
+    /// Create a service backed by a persistence implementation.
+    ///
+    /// Existing tasks are loaded before the service is returned. A malformed
+    /// or unreadable store fails construction instead of silently starting
+    /// with an empty task set.
+    pub fn with_persistence<P>(config: ServiceConfig, persistence: P) -> Result<Self, ServiceError>
+    where
+        P: PersistenceBackend + 'static,
+    {
+        let persistence = Arc::new(persistence);
+        let state = AggregationState::new();
+        let persisted = persistence
+            .load_all_tasks()
+            .map_err(Self::persistence_error)?;
+        state.restore(persisted).map_err(Self::persistence_error)?;
+
+        Ok(Self {
+            state,
+            config,
+            persistence,
+            mutation_lock: Mutex::new(()),
+        })
     }
 
     /// Create a new aggregation service wrapped in Arc
     pub fn new_shared(config: ServiceConfig) -> Arc<Self> {
         Arc::new(Self::new(config))
+    }
+
+    fn persistence_error(error: PersistenceError) -> ServiceError {
+        ServiceError::Other(format!("persistence error: {error}"))
+    }
+
+    fn snapshot(&self) -> Result<Vec<PersistedTaskState>, ServiceError> {
+        self.state.snapshot().map_err(Self::persistence_error)
+    }
+
+    fn persist_task(&self, service_id: u64, call_id: u64) -> Result<(), ServiceError> {
+        let task = self
+            .snapshot()?
+            .into_iter()
+            .find(|task| task.service_id == service_id && task.call_id == call_id)
+            .ok_or(ServiceError::TaskNotFound)?;
+        self.persistence
+            .save_task(&task)
+            .map_err(Self::persistence_error)?;
+        self.persistence.flush().map_err(Self::persistence_error)
+    }
+
+    fn restore_persisted_task(&self, before: &[PersistedTaskState], task_id: &TaskId) {
+        let result = match before
+            .iter()
+            .find(|task| task.service_id == task_id.service_id && task.call_id == task_id.call_id)
+        {
+            Some(task) => self.persistence.save_task(task),
+            None => self.persistence.delete_task(task_id),
+        };
+        if let Err(error) = result {
+            warn!(%error, service_id = task_id.service_id, call_id = task_id.call_id, "failed to restore persisted aggregation task");
+            return;
+        }
+        if let Err(error) = self.persistence.flush() {
+            warn!(%error, service_id = task_id.service_id, call_id = task_id.call_id, "failed to flush restored aggregation task");
+        }
+    }
+
+    fn restore_persisted_tasks(&self, tasks: &[PersistedTaskState]) {
+        for task in tasks {
+            if let Err(error) = self.persistence.save_task(task) {
+                warn!(%error, service_id = task.service_id, call_id = task.call_id, "failed to restore persisted aggregation task");
+            }
+        }
+        if let Err(error) = self.persistence.flush() {
+            warn!(%error, "failed to flush restored aggregation tasks");
+        }
+    }
+
+    fn restore_snapshot(&self, snapshot: Vec<PersistedTaskState>) {
+        if let Err(error) = self.state.restore(snapshot) {
+            warn!(%error, "failed to restore in-memory aggregation state after persistence error");
+        }
+    }
+
+    fn cleanup_with_persistence(&self, kind: CleanupKind) -> Result<usize, ServiceError> {
+        let _guard = self.mutation_lock.lock();
+        let before = self.snapshot()?;
+        let removed = match kind {
+            CleanupKind::All => self.state.cleanup(),
+            CleanupKind::Expired => self.state.cleanup_expired(),
+            CleanupKind::Submitted => self.state.cleanup_submitted(),
+        };
+        if removed == 0 {
+            return Ok(0);
+        }
+
+        let after = match self.snapshot() {
+            Ok(after) => after,
+            Err(error) => {
+                self.restore_snapshot(before);
+                return Err(error);
+            }
+        };
+        let remaining = after
+            .iter()
+            .map(|task| (task.service_id, task.call_id))
+            .collect::<std::collections::HashSet<_>>();
+        let removed_tasks: Vec<_> = before
+            .iter()
+            .filter(|task| !remaining.contains(&(task.service_id, task.call_id)))
+            .cloned()
+            .collect();
+        for (index, task) in removed_tasks.iter().enumerate() {
+            if let Err(error) = self
+                .persistence
+                .delete_task(&TaskId::new(task.service_id, task.call_id))
+            {
+                self.restore_persisted_tasks(&removed_tasks[..=index]);
+                self.restore_snapshot(before);
+                return Err(Self::persistence_error(error));
+            }
+        }
+        if let Err(error) = self.persistence.flush() {
+            self.restore_persisted_tasks(&removed_tasks);
+            self.restore_snapshot(before);
+            return Err(Self::persistence_error(error));
+        }
+        Ok(removed)
     }
 
     /// Start the background cleanup worker
@@ -110,13 +257,17 @@ impl AggregationService {
             loop {
                 tokio::select! {
                     _ = interval_timer.tick() => {
-                        let removed = if service.config.auto_cleanup_submitted {
-                            service.state.cleanup()
+                        let result = if service.config.auto_cleanup_submitted {
+                            service.cleanup_with_persistence(CleanupKind::All)
                         } else {
-                            service.state.cleanup_expired()
+                            service.cleanup_with_persistence(CleanupKind::Expired)
                         };
-                        if removed > 0 {
+                        match result {
+                            Ok(removed) if removed > 0 => {
                             debug!(removed, "Cleaned up tasks");
+                            }
+                            Ok(_) => {}
+                            Err(error) => warn!(%error, "failed to persist aggregation cleanup"),
                         }
                     }
                     _ = shutdown_rx.changed() => {
@@ -199,7 +350,10 @@ impl AggregationService {
             "Initializing aggregation task"
         );
 
-        self.state
+        let _guard = self.mutation_lock.lock();
+        let before = self.snapshot()?;
+        let result = self
+            .state
             .init_task_with_message_config(
                 service_id,
                 call_id,
@@ -209,7 +363,14 @@ impl AggregationService {
                 operator_count,
                 config,
             )
-            .map_err(|e| ServiceError::Other(e.to_string()))
+            .map_err(|e| ServiceError::Other(e.to_string()));
+        result?;
+        if let Err(error) = self.persist_task(service_id, call_id) {
+            self.restore_persisted_task(&before, &TaskId::new(service_id, call_id));
+            self.restore_snapshot(before);
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Submit a signature for aggregation
@@ -217,6 +378,8 @@ impl AggregationService {
         &self,
         req: SubmitSignatureRequest,
     ) -> Result<SubmitSignatureResponse, ServiceError> {
+        let _guard = self.mutation_lock.lock();
+        let before = self.snapshot()?;
         debug!(
             service_id = req.service_id,
             call_id = req.call_id,
@@ -301,6 +464,12 @@ impl AggregationService {
                 public_key,
             )
             .map_err(|e| ServiceError::Other(e.to_string()))?;
+
+        if let Err(error) = self.persist_task(req.service_id, req.call_id) {
+            self.restore_persisted_task(&before, &TaskId::new(req.service_id, req.call_id));
+            self.restore_snapshot(before);
+            return Err(error);
+        }
 
         info!(
             service_id = req.service_id,
@@ -397,13 +566,44 @@ impl AggregationService {
 
     /// Mark a task as submitted to chain
     pub fn mark_submitted(&self, service_id: u64, call_id: u64) -> Result<(), ServiceError> {
+        let _guard = self.mutation_lock.lock();
+        let before = self.snapshot()?;
         self.state
             .mark_submitted(service_id, call_id)
-            .map_err(|e| ServiceError::Other(e.to_string()))
+            .map_err(|e| ServiceError::Other(e.to_string()))?;
+        if let Err(error) = self.persist_task(service_id, call_id) {
+            self.restore_persisted_task(&before, &TaskId::new(service_id, call_id));
+            self.restore_snapshot(before);
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Remove a task
     pub fn remove_task(&self, service_id: u64, call_id: u64) -> bool {
+        let _guard = self.mutation_lock.lock();
+        let before = match self.snapshot() {
+            Ok(before) => before,
+            Err(error) => {
+                warn!(%error, service_id, call_id, "failed to snapshot aggregation task before removal");
+                return false;
+            }
+        };
+        let exists = self.state.get_status(service_id, call_id).is_some();
+        if !exists {
+            return false;
+        }
+        let task_id = TaskId::new(service_id, call_id);
+        if let Err(error) = self.persistence.delete_task(&task_id) {
+            self.restore_persisted_task(&before, &task_id);
+            warn!(%error, service_id, call_id, "failed to remove persisted aggregation task");
+            return false;
+        }
+        if let Err(error) = self.persistence.flush() {
+            self.restore_persisted_task(&before, &task_id);
+            warn!(%error, service_id, call_id, "failed to flush removed aggregation task");
+            return false;
+        }
         self.state.remove_task(service_id, call_id)
     }
 
@@ -421,17 +621,35 @@ impl AggregationService {
 
     /// Manually trigger cleanup
     pub fn cleanup(&self) -> usize {
-        self.state.cleanup()
+        match self.cleanup_with_persistence(CleanupKind::All) {
+            Ok(removed) => removed,
+            Err(error) => {
+                warn!(%error, "failed to persist aggregation cleanup");
+                0
+            }
+        }
     }
 
     /// Cleanup only expired tasks
     pub fn cleanup_expired(&self) -> usize {
-        self.state.cleanup_expired()
+        match self.cleanup_with_persistence(CleanupKind::Expired) {
+            Ok(removed) => removed,
+            Err(error) => {
+                warn!(%error, "failed to persist expired aggregation cleanup");
+                0
+            }
+        }
     }
 
     /// Cleanup only submitted tasks
     pub fn cleanup_submitted(&self) -> usize {
-        self.state.cleanup_submitted()
+        match self.cleanup_with_persistence(CleanupKind::Submitted) {
+            Ok(removed) => removed,
+            Err(error) => {
+                warn!(%error, "failed to persist submitted aggregation cleanup");
+                0
+            }
+        }
     }
 }
 
@@ -483,8 +701,10 @@ pub struct ServiceStats {
 mod tests {
     use super::*;
     use alloy_primitives::keccak256;
+    use ark_ec::AffineRepr;
     use ark_serialize::CanonicalSerialize;
     use blueprint_crypto_core::KeyType;
+    use tempfile::tempdir;
 
     fn serialize_point(point: &impl CanonicalSerialize) -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -703,5 +923,91 @@ mod tests {
         assert!(service.get_status(1, 100).exists);
         assert!(service.remove_task(1, 100));
         assert!(!service.get_status(1, 100).exists);
+    }
+
+    #[test]
+    fn file_persistence_recovers_pending_signatures_after_restart() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("aggregation.json");
+        let config = ServiceConfig::minimal();
+        let signature = ArkBlsBn254Signature(ark_bn254::G1Affine::generator());
+        let public_key = ArkBlsBn254Public(ark_bn254::G2Affine::generator());
+
+        let service = AggregationService::with_persistence(
+            config.clone(),
+            crate::persistence::FilePersistence::new(&path),
+        )
+        .unwrap();
+        service.init_task(7, 11, vec![1, 2, 3], 2, 1).unwrap();
+        service
+            .submit_signature(SubmitSignatureRequest {
+                service_id: 7,
+                call_id: 11,
+                operator_index: 0,
+                output: vec![9, 9],
+                signature: serialize_point(&signature.0),
+                public_key: serialize_point(&public_key.0),
+            })
+            .unwrap();
+        drop(service);
+
+        let recovered = AggregationService::with_persistence(
+            config,
+            crate::persistence::FilePersistence::new(&path),
+        )
+        .unwrap();
+        let status = recovered.get_status(7, 11);
+        assert!(status.exists);
+        assert_eq!(status.signatures_collected, 1);
+        assert!(status.threshold_met);
+        assert!(recovered.get_aggregated_result(7, 11).is_some());
+    }
+
+    #[test]
+    fn file_persistence_records_submit_and_remove_mutations() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("aggregation.json");
+        let config = ServiceConfig::minimal();
+        let service = AggregationService::with_persistence(
+            config.clone(),
+            crate::persistence::FilePersistence::new(&path),
+        )
+        .unwrap();
+        service.init_task(9, 13, vec![], 1, 1).unwrap();
+        service.mark_submitted(9, 13).unwrap();
+        drop(service);
+
+        let recovered = AggregationService::with_persistence(
+            config.clone(),
+            crate::persistence::FilePersistence::new(&path),
+        )
+        .unwrap();
+        assert!(recovered.get_status(9, 13).submitted);
+        assert!(recovered.remove_task(9, 13));
+        drop(recovered);
+
+        let final_service = AggregationService::with_persistence(
+            config,
+            crate::persistence::FilePersistence::new(&path),
+        )
+        .unwrap();
+        assert!(!final_service.get_status(9, 13).exists);
+    }
+
+    #[test]
+    fn file_persistence_rejects_corrupt_state_on_startup() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("aggregation.json");
+        std::fs::write(&path, b"not-json").unwrap();
+
+        let result = AggregationService::with_persistence(
+            ServiceConfig::minimal(),
+            crate::persistence::FilePersistence::new(path),
+        );
+
+        assert!(matches!(
+            result,
+            Err(ServiceError::Other(message)) if message.contains("persistence error")
+        ));
     }
 }
