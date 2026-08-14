@@ -1269,7 +1269,8 @@ pub mod integration {
             if total == 0 {
                 return 1;
             }
-            let mut required = (total as u64 * threshold_bps as u64) / 10000;
+            let product = total as u64 * threshold_bps as u64;
+            let mut required = product / 10000 + u64::from(product % 10000 != 0);
             if required == 0 {
                 required = 1;
             }
@@ -1290,7 +1291,9 @@ pub mod integration {
                         return count_based(total_operators, threshold_bps);
                     }
 
-                    let mut required_stake = (total_stake * threshold_bps as u128) / 10000u128;
+                    let product = total_stake * threshold_bps as u128;
+                    let mut required_stake =
+                        product / 10000u128 + u128::from(product % 10000u128 != 0);
                     if required_stake == 0 {
                         required_stake = 1;
                     }
@@ -1404,8 +1407,15 @@ mod tests {
 
     #[test]
     fn test_calculate_required_signers_count_based_67_percent() {
-        // 67% of 3 operators = 2.01 -> 2
+        // 67% of 3 operators = 2.01 -> 3
         let required = calculate_required_signers(3, 6700, ThresholdType::CountBased, None);
+        assert_eq!(required, 3);
+    }
+
+    #[test]
+    fn test_calculate_required_signers_count_based_67_percent_two_operators() {
+        // 67% of 2 operators = 1.34 -> 2, matching the chain's ceiling division.
+        let required = calculate_required_signers(2, 6700, ThresholdType::CountBased, None);
         assert_eq!(required, 2);
     }
 
@@ -1452,17 +1462,17 @@ mod tests {
     fn test_calculate_required_signers_stake_weighted_no_stakes() {
         // Without stakes, should fall back to count-based
         let required = calculate_required_signers(3, 6700, ThresholdType::StakeWeighted, None);
-        assert_eq!(required, 2);
+        assert_eq!(required, 3);
     }
 
     #[test]
     fn test_calculate_required_signers_stake_weighted_equal_stakes() {
         // 3 operators with equal stakes (10 each), 67% threshold
-        // Total stake = 30, required = 20.1, avg = 10, required signers = 2
+        // Total stake = 30, required = 20.1, so all 3 signers are required.
         let stakes = [10u64, 10, 10];
         let required =
             calculate_required_signers(3, 6700, ThresholdType::StakeWeighted, Some(&stakes));
-        assert_eq!(required, 2);
+        assert_eq!(required, 3);
     }
 
     #[test]
