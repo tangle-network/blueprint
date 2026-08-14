@@ -71,6 +71,8 @@ pub struct TaskState {
     pub total_stake: u64,
     /// Whether this task has been submitted to chain
     pub submitted: bool,
+    /// When this task was submitted to chain
+    pub submitted_at: Option<Instant>,
     /// When this task was created
     pub created_at: Instant,
     /// When this task expires (None = never)
@@ -161,6 +163,7 @@ impl TaskState {
             operator_stakes: stakes,
             total_stake,
             submitted: false,
+            submitted_at: None,
             created_at: now,
             expires_at,
         }
@@ -540,6 +543,7 @@ impl AggregationState {
 
         let task = tasks.get_mut(&task_id).ok_or("Task not found")?;
         task.submitted = true;
+        task.submitted_at = Some(Instant::now());
         Ok(())
     }
 
@@ -561,18 +565,39 @@ impl AggregationState {
     /// Cleanup submitted tasks
     /// Returns the number of tasks removed
     pub fn cleanup_submitted(&self) -> usize {
+        self.cleanup_submitted_after(Duration::ZERO)
+    }
+
+    /// Cleanup submitted tasks after they have been observable for a grace period.
+    pub fn cleanup_submitted_after(&self, retention: Duration) -> usize {
         let mut tasks = self.tasks.write();
         let before = tasks.len();
-        tasks.retain(|_, task| !task.submitted);
+        tasks.retain(|_, task| {
+            !task.submitted
+                || task
+                    .submitted_at
+                    .is_some_and(|submitted_at| submitted_at.elapsed() < retention)
+        });
         before - tasks.len()
     }
 
     /// Cleanup both expired and submitted tasks
     /// Returns the number of tasks removed
     pub fn cleanup(&self) -> usize {
+        self.cleanup_with_submitted_retention(Duration::ZERO)
+    }
+
+    /// Cleanup expired tasks and submitted tasks past their observation grace period.
+    pub fn cleanup_with_submitted_retention(&self, retention: Duration) -> usize {
         let mut tasks = self.tasks.write();
         let before = tasks.len();
-        tasks.retain(|_, task| !task.is_expired() && !task.submitted);
+        tasks.retain(|_, task| {
+            !task.is_expired()
+                && (!task.submitted
+                    || task
+                        .submitted_at
+                        .is_some_and(|submitted_at| submitted_at.elapsed() < retention))
+        });
         before - tasks.len()
     }
 
@@ -1056,6 +1081,22 @@ mod tests {
         assert_eq!(removed, 1);
         assert_eq!(state.task_count(), 1);
         assert!(state.get_status(1, 101).is_some());
+    }
+
+    #[test]
+    fn test_submitted_task_remains_observable_during_retention() {
+        let state = AggregationState::new();
+
+        state.init_task(1, 100, vec![], 1, 1).unwrap();
+        state.mark_submitted(1, 100).unwrap();
+
+        assert_eq!(state.cleanup_submitted_after(Duration::from_secs(60)), 0);
+        assert!(state
+            .get_status(1, 100)
+            .is_some_and(|status| status.submitted));
+
+        assert_eq!(state.cleanup_submitted_after(Duration::ZERO), 1);
+        assert!(state.get_status(1, 100).is_none());
     }
 
     #[test]

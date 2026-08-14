@@ -80,6 +80,9 @@ pub struct PersistedTaskState {
     pub total_stake: u64,
     /// Whether this task has been submitted to chain
     pub submitted: bool,
+    /// When this task was submitted to chain (unix timestamp millis)
+    #[serde(default)]
+    pub submitted_at_ms: Option<u64>,
     /// When this task was created (unix timestamp millis)
     pub created_at_ms: u64,
     /// When this task expires (unix timestamp millis, None = never)
@@ -140,6 +143,7 @@ impl TryFrom<&TaskState> for PersistedTaskState {
             operator_stakes: task.operator_stakes.clone(),
             total_stake: task.total_stake,
             submitted: task.submitted,
+            submitted_at_ms: task.submitted_at.map(instant_to_millis),
             created_at_ms: instant_to_millis(task.created_at),
             expires_at_ms: task.expires_at.map(instant_to_millis),
         })
@@ -205,6 +209,10 @@ impl TryFrom<PersistedTaskState> for TaskState {
         }
 
         task.submitted = persisted.submitted;
+        task.submitted_at = persisted
+            .submitted_at_ms
+            .map(millis_to_instant)
+            .or_else(|| task.submitted.then_some(Instant::now()));
         task.created_at = millis_to_instant(persisted.created_at_ms);
         task.expires_at = persisted.expires_at_ms.map(millis_to_instant);
         Ok(task)
@@ -488,6 +496,7 @@ mod tests {
             operator_stakes: HashMap::from([(0, 100), (1, 100), (2, 100), (3, 100), (4, 100)]),
             total_stake: 500,
             submitted: false,
+            submitted_at_ms: None,
             created_at_ms: 1700000000000,
             expires_at_ms: Some(1700001000000),
         }
