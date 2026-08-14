@@ -71,6 +71,11 @@ jobs:
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/dist
+          # The `build-global-artifacts` and `host` jobs download this binary in
+          # the same run. No later run reads it, and the installer step above
+          # makes it again. Keep it 1 day to stay inside the Actions storage
+          # allowance. Add this line again after you run `dist generate`.
+          retention-days: 1
       # sure would be cool if github gave us proper conditionals...
       # so here's a doubly-nested ternary-via-truthiness to try to provide the best possible
       # functionality based on whether this is a pull_request, and whether it's from a fork.
