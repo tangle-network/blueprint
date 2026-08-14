@@ -1,6 +1,6 @@
 use super::*;
 use crate::{ArkBlsBn254, ArkBlsBn254Public, ArkBlsBn254Secret, ArkBlsBn254Signature};
-use ark_ff::UniformRand;
+use ark_ff::{BigInteger, UniformRand};
 use blueprint_crypto_core::{KeyType, aggregation::AggregatableSignature};
 use blueprint_crypto_hashing::keccak_256;
 use blueprint_std::string::ToString;
@@ -193,6 +193,38 @@ fn test_hash_to_curve_edge_cases() {
     // Verify different inputs produce different points
     assert_ne!(point_empty, point_large);
     assert_ne!(point_zeros, point_ones);
+}
+
+#[test]
+fn tangle_hash_matches_tnt_core_vector() {
+    let point = hash_to_curve_tangle(b"tangle-contract-vector").unwrap();
+    let x = BigUint::from_bytes_be(&point.x.into_bigint().to_bytes_be());
+    let y = BigUint::from_bytes_be(&point.y.into_bigint().to_bytes_be());
+
+    assert_eq!(
+        x.to_string(),
+        "8630366872340651833967109127856105872559859851806905963807929583534657100522"
+    );
+    assert_eq!(
+        y.to_string(),
+        "5551485564850950662282219342050295766753172156192689017209662521169626690927"
+    );
+}
+
+#[test]
+fn tangle_signatures_use_the_contract_algorithm_only() {
+    let secret = ArkBlsBn254::generate_with_seed(Some(b"tangle-signing-vector")).unwrap();
+    let public = ArkBlsBn254::public_from_secret(&secret);
+    let message = b"contract-domain-message";
+    let signature = ArkBlsBn254::sign_tangle_with_secret(&secret, message).unwrap();
+
+    assert!(ArkBlsBn254::verify_tangle(&public, message, &signature));
+    assert!(!ArkBlsBn254::verify(&public, message, &signature));
+    assert!(!ArkBlsBn254::verify_tangle(
+        &public,
+        b"different-message",
+        &signature
+    ));
 }
 
 #[test]

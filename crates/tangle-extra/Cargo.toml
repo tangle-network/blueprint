@@ -19,6 +19,9 @@ blueprint-client-tangle.workspace = true
 blueprint-tangle-aggregation-svc = { workspace = true, features = ["client"], optional = true }
 blueprint-crypto-bn254 = { workspace = true, optional = true }
 blueprint-crypto-core = { workspace = true, optional = true }
+ark-bn254 = { workspace = true, optional = true }
+ark-ff = { workspace = true, optional = true }
+ark-serialize = { workspace = true, optional = true }
 
 # P2P aggregation dependencies
 blueprint-networking = { workspace = true, optional = true }
@@ -33,6 +36,7 @@ alloy = { workspace = true, features = ["sol-types", "contract", "provider-http"
 alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
 alloy-rpc-types = { workspace = true }
+alloy-provider = { workspace = true, optional = true }
 
 bytes.workspace = true
 futures-core.workspace = true
@@ -70,7 +74,15 @@ std = [
     "blueprint-std/std",
     "blueprint-client-tangle/std",
 ]
-aggregation = ["blueprint-tangle-aggregation-svc", "blueprint-crypto-bn254", "blueprint-crypto-core"]
+aggregation = [
+    "blueprint-tangle-aggregation-svc",
+    "blueprint-crypto-bn254",
+    "blueprint-crypto-core",
+    "ark-bn254",
+    "ark-ff",
+    "ark-serialize",
+    "alloy-provider",
+]
 p2p-aggregation = [
     "blueprint-networking",
     "blueprint-networking-agg-sig-gossip-extension",

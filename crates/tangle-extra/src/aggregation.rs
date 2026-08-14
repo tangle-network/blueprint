@@ -28,12 +28,43 @@
 //! result.submit(&client).await?;
 //! ```
 
-use alloy_primitives::{Bytes, U256};
+use alloy_primitives::{Address, Bytes, U256, keccak256};
+use alloy_sol_types::{SolType, SolValue, sol_data};
 use blueprint_client_tangle::TangleClient;
 use blueprint_std::format;
 use blueprint_std::string::String;
 use blueprint_std::sync::Arc;
 use thiserror::Error;
+
+/// Build the exact message verified by TNT core v0.19 `JobsAggregation`.
+pub fn tangle_signing_message(
+    chain_id: u64,
+    tangle_address: Address,
+    service_id: u64,
+    call_id: u64,
+    operators: &[Address],
+    output: &[u8],
+) -> Vec<u8> {
+    type Message = (
+        sol_data::String,
+        sol_data::Uint<256>,
+        sol_data::Address,
+        sol_data::Uint<64>,
+        sol_data::Uint<64>,
+        sol_data::FixedBytes<32>,
+        sol_data::FixedBytes<32>,
+    );
+
+    Message::abi_encode(&(
+        "TANGLE_BLS_AGG_v1".to_owned(),
+        U256::from(chain_id),
+        tangle_address,
+        service_id,
+        call_id,
+        keccak256(operators.abi_encode()),
+        keccak256(output),
+    ))
+}
 
 /// Error types for aggregation operations
 #[derive(Debug, Error)]
@@ -270,6 +301,42 @@ pub const JOB_INDEX_KEY: &str = "tangle.job_index";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tangle_message_binds_every_contract_domain_field() {
+        let tangle = Address::repeat_byte(0x11);
+        let operators = [Address::repeat_byte(0x22), Address::repeat_byte(0x33)];
+        let baseline = tangle_signing_message(1, tangle, 2, 3, &operators, b"output");
+
+        assert_eq!(
+            baseline,
+            tangle_signing_message(1, tangle, 2, 3, &operators, b"output")
+        );
+        assert_ne!(
+            baseline,
+            tangle_signing_message(2, tangle, 2, 3, &operators, b"output")
+        );
+        assert_ne!(
+            baseline,
+            tangle_signing_message(1, Address::repeat_byte(0x12), 2, 3, &operators, b"output")
+        );
+        assert_ne!(
+            baseline,
+            tangle_signing_message(1, tangle, 4, 3, &operators, b"output")
+        );
+        assert_ne!(
+            baseline,
+            tangle_signing_message(1, tangle, 2, 4, &operators, b"output")
+        );
+        assert_ne!(
+            baseline,
+            tangle_signing_message(1, tangle, 2, 3, &operators[..1], b"output")
+        );
+        assert_ne!(
+            baseline,
+            tangle_signing_message(1, tangle, 2, 3, &operators, b"different")
+        );
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // SignerBitmap tests

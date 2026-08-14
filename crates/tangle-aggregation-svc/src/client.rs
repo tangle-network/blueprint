@@ -103,6 +103,31 @@ impl AggregationServiceClient {
         operator_count: u32,
         threshold: ThresholdConfig,
     ) -> Result<(), ClientError> {
+        let message = crate::service::create_signing_message(service_id, call_id, output);
+        self.init_task_with_message(
+            service_id,
+            call_id,
+            output,
+            &message,
+            Bn254SignatureScheme::ArkworksSha256,
+            operator_count,
+            threshold,
+        )
+        .await
+    }
+
+    /// Initialize a task with an explicit signed message and algorithm.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn init_task_with_message(
+        &self,
+        service_id: u64,
+        call_id: u64,
+        output: &[u8],
+        message: &[u8],
+        signature_scheme: Bn254SignatureScheme,
+        operator_count: u32,
+        threshold: ThresholdConfig,
+    ) -> Result<(), ClientError> {
         let url = format!("{}/v1/tasks/init", self.base_url);
         let request = InitTaskRequest {
             service_id,
@@ -110,6 +135,8 @@ impl AggregationServiceClient {
             operator_count,
             threshold,
             output: output.to_vec(),
+            message: message.to_vec(),
+            signature_scheme,
         };
 
         let response: InitTaskResponse = self
