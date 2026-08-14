@@ -1270,7 +1270,7 @@ pub mod integration {
                 return 1;
             }
             let product = total as u64 * threshold_bps as u64;
-            let mut required = product / 10000 + u64::from(product % 10000 != 0);
+            let mut required = product.div_ceil(10_000);
             if required == 0 {
                 required = 1;
             }
@@ -1292,8 +1292,7 @@ pub mod integration {
                     }
 
                     let product = total_stake * threshold_bps as u128;
-                    let mut required_stake =
-                        product / 10000u128 + u128::from(product % 10000u128 != 0);
+                    let mut required_stake = product.div_ceil(10_000u128);
                     if required_stake == 0 {
                         required_stake = 1;
                     }
