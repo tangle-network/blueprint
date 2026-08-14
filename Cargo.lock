@@ -3223,6 +3223,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "sha2 0.10.9",
+ "sha3 0.10.9",
  "thiserror 2.0.18",
  "zeroize",
 ]
@@ -4012,6 +4013,9 @@ dependencies = [
  "alloy-signer-local",
  "alloy-sol-types",
  "anyhow",
+ "ark-bn254 0.6.0",
+ "ark-ff 0.6.0",
+ "ark-serialize 0.6.0",
  "blueprint-anvil-testing-utils",
  "blueprint-chain-setup-anvil",
  "blueprint-client-tangle",

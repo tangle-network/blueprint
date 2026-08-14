@@ -1,6 +1,6 @@
 //! In-memory aggregation state management
 
-use crate::types::TaskId;
+use crate::types::{Bn254SignatureScheme, TaskId};
 use alloy_primitives::U256;
 use blueprint_crypto_bn254::{ArkBlsBn254Public, ArkBlsBn254Signature};
 use parking_lot::RwLock;
@@ -50,6 +50,10 @@ pub struct TaskState {
     pub call_id: u64,
     /// The output being signed
     pub output: Vec<u8>,
+    /// Exact bytes signed by every operator.
+    pub message: Vec<u8>,
+    /// Hash-to-curve algorithm for the message.
+    pub signature_scheme: Bn254SignatureScheme,
     /// Number of operators in the service
     pub operator_count: u32,
     /// Threshold type and value
@@ -102,6 +106,32 @@ impl TaskState {
         operator_stakes: Option<HashMap<u32, u64>>,
         ttl: Option<Duration>,
     ) -> Self {
+        Self::with_message_config(
+            service_id,
+            call_id,
+            output.clone(),
+            output,
+            Bn254SignatureScheme::ArkworksSha256,
+            operator_count,
+            threshold_type,
+            operator_stakes,
+            ttl,
+        )
+    }
+
+    /// Create task state with an explicit signed message and algorithm.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_message_config(
+        service_id: u64,
+        call_id: u64,
+        output: Vec<u8>,
+        message: Vec<u8>,
+        signature_scheme: Bn254SignatureScheme,
+        operator_count: u32,
+        threshold_type: ThresholdType,
+        operator_stakes: Option<HashMap<u32, u64>>,
+        ttl: Option<Duration>,
+    ) -> Self {
         let now = Instant::now();
         let expires_at = ttl.map(|d| now + d);
 
@@ -120,6 +150,8 @@ impl TaskState {
             service_id,
             call_id,
             output,
+            message,
+            signature_scheme,
             operator_count,
             threshold_type,
             signer_bitmap: U256::ZERO,
@@ -348,11 +380,58 @@ impl AggregationState {
         Ok(())
     }
 
+    /// Initialize a task with an explicit signed message and algorithm.
+    #[allow(clippy::too_many_arguments)]
+    pub fn init_task_with_message_config(
+        &self,
+        service_id: u64,
+        call_id: u64,
+        output: Vec<u8>,
+        message: Vec<u8>,
+        signature_scheme: Bn254SignatureScheme,
+        operator_count: u32,
+        config: TaskConfig,
+    ) -> Result<(), &'static str> {
+        let task_id = TaskId::new(service_id, call_id);
+        let mut tasks = self.tasks.write();
+
+        if tasks.contains_key(&task_id) {
+            return Err("Task already exists");
+        }
+
+        let state = TaskState::with_message_config(
+            service_id,
+            call_id,
+            output,
+            message,
+            signature_scheme,
+            operator_count,
+            config.threshold_type,
+            config.operator_stakes,
+            config.ttl,
+        );
+        tasks.insert(task_id, state);
+        Ok(())
+    }
+
     /// Get the expected output for a task (for validation)
     pub fn get_task_output(&self, service_id: u64, call_id: u64) -> Option<Vec<u8>> {
         let task_id = TaskId::new(service_id, call_id);
         let tasks = self.tasks.read();
         tasks.get(&task_id).map(|t| t.output.clone())
+    }
+
+    /// Get the exact signed message and algorithm for a task.
+    pub fn get_task_signature_context(
+        &self,
+        service_id: u64,
+        call_id: u64,
+    ) -> Option<(Vec<u8>, Bn254SignatureScheme)> {
+        let task_id = TaskId::new(service_id, call_id);
+        let tasks = self.tasks.read();
+        tasks
+            .get(&task_id)
+            .map(|task| (task.message.clone(), task.signature_scheme))
     }
 
     /// Submit a signature for a task

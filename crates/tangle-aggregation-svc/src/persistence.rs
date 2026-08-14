@@ -17,7 +17,7 @@
 //! ```
 
 use crate::state::ThresholdType;
-use crate::types::TaskId;
+use crate::types::{Bn254SignatureScheme, TaskId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -52,6 +52,12 @@ pub struct PersistedTaskState {
     /// The output being signed
     #[serde(with = "hex_bytes")]
     pub output: Vec<u8>,
+    /// Exact signed message.
+    #[serde(default, with = "hex_bytes")]
+    pub message: Vec<u8>,
+    /// Hash-to-curve algorithm for the signed message.
+    #[serde(default)]
+    pub signature_scheme: Bn254SignatureScheme,
     /// Number of operators in the service
     pub operator_count: u32,
     /// Threshold type
@@ -299,6 +305,8 @@ mod tests {
             service_id: 1,
             call_id: 100,
             output: vec![1, 2, 3, 4],
+            message: vec![5, 6, 7, 8],
+            signature_scheme: Bn254SignatureScheme::TangleKeccak256,
             operator_count: 5,
             threshold_type: PersistedThresholdType::Count(3),
             signer_bitmap: "0x7".to_string(), // operators 0, 1, 2 signed

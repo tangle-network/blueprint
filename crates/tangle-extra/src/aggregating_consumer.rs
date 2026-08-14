@@ -22,6 +22,8 @@
 use crate::aggregation::AggregationError;
 use crate::extract;
 use alloy_primitives::{Address, Bytes};
+#[cfg(feature = "aggregation")]
+use alloy_provider::Provider;
 use blueprint_client_tangle::{AggregationConfig, OperatorMetadata, TangleClient, ThresholdType};
 use blueprint_core::JobResult;
 use blueprint_core::error::BoxError;
@@ -702,6 +704,7 @@ async fn submit_job_result(
 struct AggregationTaskInit {
     operator_count: u32,
     threshold: ThresholdConfig,
+    operators: Vec<Address>,
 }
 
 #[cfg(feature = "aggregation")]
@@ -810,6 +813,7 @@ async fn prepare_aggregation_task(
     Ok(AggregationTaskInit {
         operator_count,
         threshold,
+        operators: operators.operators,
     })
 }
 
@@ -860,8 +864,8 @@ async fn submit_aggregated_result(
     agg: AggregationServiceConfig,
 ) -> Result<(), AggregatingConsumerError> {
     use blueprint_crypto_bn254::ArkBlsBn254;
-    use blueprint_crypto_core::{BytesEncoding, KeyType};
-    use blueprint_tangle_aggregation_svc::{SubmitSignatureRequest, create_signing_message};
+    use blueprint_crypto_core::BytesEncoding;
+    use blueprint_tangle_aggregation_svc::SubmitSignatureRequest;
 
     let task_init =
         prepare_aggregation_task(&cache, &client, service_id, job_index, &config).await?;
@@ -884,12 +888,21 @@ async fn submit_aggregated_result(
         call_id
     );
 
-    // Create the message to sign
-    let message = create_signing_message(service_id, call_id, &output);
+    let chain_id = client
+        .provider()
+        .get_chain_id()
+        .await
+        .map_err(|error| AggregatingConsumerError::Client(error.to_string()))?;
+    let message = crate::aggregation::tangle_signing_message(
+        chain_id,
+        client.tangle_address(),
+        service_id,
+        call_id,
+        &task_init.operators,
+        &output,
+    );
 
-    // Sign with BLS key - we need a mutable clone since sign_with_secret takes &mut
-    let mut secret_clone = (*agg.bls_secret).clone();
-    let signature = ArkBlsBn254::sign_with_secret(&mut secret_clone, &message)
+    let signature = ArkBlsBn254::sign_tangle_with_secret(&agg.bls_secret, &message)
         .map_err(|e| AggregatingConsumerError::Bls(e.to_string()))?;
 
     // Get public key and signature bytes using BytesEncoding trait
@@ -913,10 +926,12 @@ async fn submit_aggregated_result(
     for (idx, service_client) in agg.clients.iter().enumerate() {
         // Try to initialize the task (may already exist from another operator)
         let _ = service_client
-            .init_task(
+            .init_task_with_message(
                 service_id,
                 call_id,
                 output.as_ref(),
+                &message,
+                blueprint_tangle_aggregation_svc::Bn254SignatureScheme::TangleKeccak256,
                 task_init.operator_count,
                 task_init.threshold.clone(),
             )
@@ -1078,6 +1093,9 @@ async fn submit_aggregated_to_chain_with_result(
     result: blueprint_tangle_aggregation_svc::AggregatedResultResponse,
 ) -> Result<(), AggregatingConsumerError> {
     use crate::aggregation::{AggregatedResult, G1Point, G2Point, SignerBitmap};
+    use ark_bn254::{G1Affine, G2Affine};
+    use ark_ff::{BigInteger, PrimeField};
+    use ark_serialize::CanonicalDeserialize;
 
     if client.config.dry_run {
         blueprint_core::info!(
@@ -1096,11 +1114,23 @@ async fn submit_aggregated_to_chain_with_result(
         call_id
     );
 
-    // Parse the signature and pubkey from the response
-    let signature = G1Point::from_bytes(&result.aggregated_signature)
-        .ok_or_else(|| AggregatingConsumerError::Bls("Invalid aggregated signature".to_string()))?;
-    let pubkey = G2Point::from_bytes(&result.aggregated_pubkey)
-        .ok_or_else(|| AggregatingConsumerError::Bls("Invalid aggregated pubkey".to_string()))?;
+    let signature = G1Affine::deserialize_compressed(&mut result.aggregated_signature.as_slice())
+        .map_err(|_| {
+        AggregatingConsumerError::Bls("Invalid aggregated signature".to_string())
+    })?;
+    let pubkey = G2Affine::deserialize_compressed(&mut result.aggregated_pubkey.as_slice())
+        .map_err(|_| AggregatingConsumerError::Bls("Invalid aggregated pubkey".to_string()))?;
+    let field_to_u256 = |field: &ark_bn254::Fq| {
+        alloy_primitives::U256::from_be_slice(&field.into_bigint().to_bytes_be())
+    };
+    let signature = G1Point::new(field_to_u256(&signature.x), field_to_u256(&signature.y));
+    // EIP-197 encodes Fp2 coordinates in c1,c0 order.
+    let pubkey = G2Point::new(
+        field_to_u256(&pubkey.x.c1),
+        field_to_u256(&pubkey.x.c0),
+        field_to_u256(&pubkey.y.c1),
+        field_to_u256(&pubkey.y.c0),
+    );
 
     let aggregated = AggregatedResult::new(
         service_id,

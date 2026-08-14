@@ -58,13 +58,27 @@ async fn init_task(
         ..Default::default()
     };
 
-    match service.init_task_with_config(
-        req.service_id,
-        req.call_id,
-        req.output,
-        req.operator_count,
-        config,
-    ) {
+    let result = if req.message.is_empty() {
+        service.init_task_with_config(
+            req.service_id,
+            req.call_id,
+            req.output,
+            req.operator_count,
+            config,
+        )
+    } else {
+        service.init_task_with_message_config(
+            req.service_id,
+            req.call_id,
+            req.output,
+            req.message,
+            req.signature_scheme,
+            req.operator_count,
+            config,
+        )
+    };
+
+    match result {
         Ok(()) => Json(InitTaskResponse {
             success: true,
             error: None,

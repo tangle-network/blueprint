@@ -166,16 +166,49 @@ impl AggregationService {
         operator_count: u32,
         config: TaskConfig,
     ) -> Result<(), ServiceError> {
+        let message = create_signing_message(service_id, call_id, &output);
+        self.init_task_with_message_config(
+            service_id,
+            call_id,
+            output,
+            message,
+            Bn254SignatureScheme::ArkworksSha256,
+            operator_count,
+            config,
+        )
+    }
+
+    /// Initialize a task with an explicit signed message and algorithm.
+    #[allow(clippy::too_many_arguments)]
+    pub fn init_task_with_message_config(
+        &self,
+        service_id: u64,
+        call_id: u64,
+        output: Vec<u8>,
+        message: Vec<u8>,
+        signature_scheme: Bn254SignatureScheme,
+        operator_count: u32,
+        config: TaskConfig,
+    ) -> Result<(), ServiceError> {
         info!(
             service_id,
             call_id,
             operator_count,
+            ?signature_scheme,
             ?config.threshold_type,
             "Initializing aggregation task"
         );
 
         self.state
-            .init_task_with_config(service_id, call_id, output, operator_count, config)
+            .init_task_with_message_config(
+                service_id,
+                call_id,
+                output,
+                message,
+                signature_scheme,
+                operator_count,
+                config,
+            )
             .map_err(|e| ServiceError::Other(e.to_string()))
     }
 
@@ -223,10 +256,20 @@ impl AggregationService {
 
         // Optionally verify the signature
         if self.config.verify_on_submit {
-            // Create the message that should have been signed
-            let message = create_signing_message(req.service_id, req.call_id, &req.output);
+            let (message, signature_scheme) = self
+                .state
+                .get_task_signature_context(req.service_id, req.call_id)
+                .ok_or(ServiceError::TaskNotFound)?;
+            let verified = match signature_scheme {
+                Bn254SignatureScheme::ArkworksSha256 => {
+                    ArkBlsBn254::verify(&public_key, &message, &signature)
+                }
+                Bn254SignatureScheme::TangleKeccak256 => {
+                    ArkBlsBn254::verify_tangle(&public_key, &message, &signature)
+                }
+            };
 
-            if !ArkBlsBn254::verify(&public_key, &message, &signature) {
+            if !verified {
                 warn!(
                     service_id = req.service_id,
                     call_id = req.call_id,
@@ -392,9 +435,9 @@ impl AggregationService {
     }
 }
 
-/// Create the message that operators sign
+/// Create the historical message used by direct aggregation-service callers.
 ///
-/// Format: serviceId (8 bytes BE) || callId (8 bytes BE) || keccak256(output)
+/// Tangle consumers use their complete contract domain message instead.
 pub fn create_signing_message(service_id: u64, call_id: u64, output: &[u8]) -> Vec<u8> {
     use alloy_primitives::keccak256;
 
@@ -440,6 +483,14 @@ pub struct ServiceStats {
 mod tests {
     use super::*;
     use alloy_primitives::keccak256;
+    use ark_serialize::CanonicalSerialize;
+    use blueprint_crypto_core::KeyType;
+
+    fn serialize_point(point: &impl CanonicalSerialize) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        point.serialize_compressed(&mut bytes).unwrap();
+        bytes
+    }
 
     #[test]
     fn test_create_signing_message() {
@@ -500,6 +551,64 @@ mod tests {
         assert!(config.default_task_ttl.is_none());
         assert!(config.cleanup_interval.is_none());
         assert!(!config.auto_cleanup_submitted);
+    }
+
+    #[test]
+    fn default_service_verifies_only_the_declared_tangle_scheme() {
+        let service = AggregationService::default();
+        let output = vec![1, 2, 3];
+        let message = b"TANGLE_BLS_AGG_v1 test domain".to_vec();
+        service
+            .init_task_with_message_config(
+                1,
+                100,
+                output.clone(),
+                message.clone(),
+                Bn254SignatureScheme::TangleKeccak256,
+                1,
+                TaskConfig::default(),
+            )
+            .unwrap();
+
+        let secret = ArkBlsBn254::generate_with_seed(Some(b"tangle-sidecar-test")).unwrap();
+        let public = ArkBlsBn254::public_from_secret(&secret);
+        let signature = ArkBlsBn254::sign_tangle_with_secret(&secret, &message).unwrap();
+        let response = service
+            .submit_signature(SubmitSignatureRequest {
+                service_id: 1,
+                call_id: 100,
+                operator_index: 0,
+                output: output.clone(),
+                signature: serialize_point(&signature.0),
+                public_key: serialize_point(&public.0),
+            })
+            .unwrap();
+        assert!(response.threshold_met);
+
+        service
+            .init_task_with_message_config(
+                1,
+                101,
+                output.clone(),
+                message.clone(),
+                Bn254SignatureScheme::TangleKeccak256,
+                1,
+                TaskConfig::default(),
+            )
+            .unwrap();
+        let mut legacy_secret = secret.clone();
+        let legacy_signature = ArkBlsBn254::sign_with_secret(&mut legacy_secret, &message).unwrap();
+        let error = service
+            .submit_signature(SubmitSignatureRequest {
+                service_id: 1,
+                call_id: 101,
+                operator_index: 0,
+                output,
+                signature: serialize_point(&legacy_signature.0),
+                public_key: serialize_point(&public.0),
+            })
+            .unwrap_err();
+        assert!(matches!(error, ServiceError::VerificationFailed));
     }
 
     #[test]

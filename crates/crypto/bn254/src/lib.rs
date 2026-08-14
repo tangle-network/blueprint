@@ -24,6 +24,7 @@ use blueprint_std::{
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use sha3::Keccak256;
 
 /// Serialize this to a vector of bytes.
 pub fn to_bytes<T: CanonicalSerialize>(elt: T) -> Vec<u8> {
@@ -74,6 +75,65 @@ fn hash_to_curve(digest: &[u8]) -> G1Affine {
         // x = x + 1
         x += one;
     }
+}
+
+/// Map a Tangle contract message to G1 with the TNT core algorithm.
+///
+/// TNT core uses Keccak-256, then tries at most 256 consecutive x values.
+/// Its modular square root selects a specific y coordinate, so Arkworks'
+/// canonical `sqrt` result is not interchangeable here.
+fn hash_to_curve_tangle(message: &[u8]) -> Result<G1Affine> {
+    let one = Fq::one();
+    let three = Fq::from(3u64);
+    let digest = Keccak256::digest(message);
+    let mut x = Fq::from_be_bytes_mod_order(&digest);
+
+    // (P_MOD + 1) / 4 in little-endian 64-bit limbs.
+    const SQRT_EXPONENT: [u64; 4] = [
+        0x4f08_2305_b61f_3f52,
+        0x65e0_5aa4_5a1c_72a3,
+        0x6e14_116d_a060_5617,
+        0x0c19_139c_b84c_680a,
+    ];
+
+    for _ in 0..256 {
+        let mut y_squared = x;
+        y_squared.square_in_place();
+        y_squared *= x;
+        y_squared += three;
+
+        let y = y_squared.pow(SQRT_EXPONENT);
+        if y * y == y_squared {
+            return Ok(G1Projective::new(x, y, Fq::one()).into_affine());
+        }
+        x += one;
+    }
+
+    Err(Bn254Error::HashToPointFailed)
+}
+
+/// Sign the exact byte message verified by TNT core's BN254 library.
+pub fn sign_tangle(sk: Fr, message: &[u8]) -> Result<G1Affine> {
+    let point = hash_to_curve_tangle(message)?;
+    let signature = point.mul_bigint(BigInteger256::from(sk)).into_affine();
+
+    if !signature.is_on_curve() || !signature.is_in_correct_subgroup_assuming_on_curve() {
+        return Err(Bn254Error::SignatureNotInSubgroup);
+    }
+
+    Ok(signature)
+}
+
+/// Verify a signature with the exact TNT core BN254 hash-to-curve algorithm.
+pub fn verify_tangle(public_key: G2Affine, message: &[u8], signature: G1Affine) -> bool {
+    if !signature.is_in_correct_subgroup_assuming_on_curve() || !signature.is_on_curve() {
+        return false;
+    }
+
+    let Ok(point) = hash_to_curve_tangle(message) else {
+        return false;
+    };
+    Bn254::pairing(point, public_key) == Bn254::pairing(signature, G2Affine::generator())
 }
 
 pub fn sign(sk: Fr, message: &[u8]) -> Result<G1Affine> {
@@ -165,6 +225,25 @@ macro_rules! impl_ark_serde {
 impl_ark_serde!(ArkBlsBn254Public, G2Affine);
 impl_ark_serde!(ArkBlsBn254Secret, Fr);
 impl_ark_serde!(ArkBlsBn254Signature, G1Affine);
+
+impl ArkBlsBn254 {
+    /// Sign a message for TNT core contracts without changing the key format.
+    pub fn sign_tangle_with_secret(
+        secret: &ArkBlsBn254Secret,
+        message: &[u8],
+    ) -> Result<ArkBlsBn254Signature> {
+        sign_tangle(secret.0, message).map(ArkBlsBn254Signature)
+    }
+
+    /// Verify a signature with TNT core's contract-compatible algorithm.
+    pub fn verify_tangle(
+        public_key: &ArkBlsBn254Public,
+        message: &[u8],
+        signature: &ArkBlsBn254Signature,
+    ) -> bool {
+        verify_tangle(public_key.0, message, signature.0)
+    }
+}
 
 impl zeroize::Zeroize for ArkBlsBn254Secret {
     fn zeroize(&mut self) {
