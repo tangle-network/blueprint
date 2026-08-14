@@ -7,20 +7,26 @@
 //! ## Usage
 //!
 //! ```rust,ignore
-//! use blueprint_tangle_aggregation_svc::persistence::{PersistenceBackend, FilePersistence};
+//! use blueprint_tangle_aggregation_svc::{
+//!     persistence::{FilePersistence, PersistenceBackend},
+//!     AggregationService,
+//! };
 //!
 //! // Create file-based persistence
 //! let persistence = FilePersistence::new("/var/lib/aggregation/state.json");
 //!
 //! // Create service with persistence
-//! let service = AggregationService::with_persistence(config, persistence);
+//! let service = AggregationService::with_persistence(config, persistence)?;
 //! ```
 
-use crate::state::ThresholdType;
+use crate::state::{TaskState, ThresholdType};
 use crate::types::{Bn254SignatureScheme, TaskId};
+use alloy_primitives::U256;
+use ark_bn254::{G1Affine, G2Affine};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Error type for persistence operations
 #[derive(Debug, thiserror::Error)]
@@ -102,6 +108,165 @@ impl From<PersistedThresholdType> for ThresholdType {
             PersistedThresholdType::Count(n) => ThresholdType::Count(n),
             PersistedThresholdType::StakeWeighted(n) => ThresholdType::StakeWeighted(n),
         }
+    }
+}
+
+impl TryFrom<&TaskState> for PersistedTaskState {
+    type Error = PersistenceError;
+
+    fn try_from(task: &TaskState) -> Result<Self> {
+        let signatures = task
+            .signatures
+            .iter()
+            .map(|(index, signature)| Ok((*index, encode_point(&signature.0)?)))
+            .collect::<Result<HashMap<_, _>>>()?;
+        let public_keys = task
+            .public_keys
+            .iter()
+            .map(|(index, public_key)| Ok((*index, encode_point(&public_key.0)?)))
+            .collect::<Result<HashMap<_, _>>>()?;
+
+        Ok(Self {
+            service_id: task.service_id,
+            call_id: task.call_id,
+            output: task.output.clone(),
+            message: task.message.clone(),
+            signature_scheme: task.signature_scheme,
+            operator_count: task.operator_count,
+            threshold_type: task.threshold_type.into(),
+            signer_bitmap: format!("{:#x}", task.signer_bitmap),
+            signatures,
+            public_keys,
+            operator_stakes: task.operator_stakes.clone(),
+            total_stake: task.total_stake,
+            submitted: task.submitted,
+            created_at_ms: instant_to_millis(task.created_at),
+            expires_at_ms: task.expires_at.map(instant_to_millis),
+        })
+    }
+}
+
+impl TryFrom<PersistedTaskState> for TaskState {
+    type Error = PersistenceError;
+
+    fn try_from(persisted: PersistedTaskState) -> Result<Self> {
+        let signer_bitmap = parse_u256(&persisted.signer_bitmap)?;
+        let threshold_type = persisted.threshold_type.into();
+        let mut task = TaskState::with_message_config(
+            persisted.service_id,
+            persisted.call_id,
+            persisted.output,
+            persisted.message,
+            persisted.signature_scheme,
+            persisted.operator_count,
+            threshold_type,
+            Some(persisted.operator_stakes.clone()),
+            None,
+        );
+
+        if task.total_stake != persisted.total_stake {
+            return Err(PersistenceError::Serialization(format!(
+                "task {}:{} has inconsistent total stake",
+                task.service_id, task.call_id
+            )));
+        }
+
+        if persisted.signatures.len() != persisted.public_keys.len() {
+            return Err(PersistenceError::Serialization(format!(
+                "task {}:{} has an incomplete signature/public-key pair",
+                task.service_id, task.call_id
+            )));
+        }
+
+        let mut indices: Vec<_> = persisted.signatures.keys().copied().collect();
+        indices.sort_unstable();
+        for index in indices {
+            let signature = decode_signature(
+                persisted
+                    .signatures
+                    .get(&index)
+                    .ok_or_else(|| missing_entry("signature", index))?,
+            )?;
+            let public_key = decode_public_key(
+                persisted
+                    .public_keys
+                    .get(&index)
+                    .ok_or_else(|| missing_entry("public key", index))?,
+            )?;
+            task.add_signature(index, signature, public_key)
+                .map_err(|error| PersistenceError::Serialization(error.to_string()))?;
+        }
+
+        if task.signer_bitmap != signer_bitmap {
+            return Err(PersistenceError::Serialization(format!(
+                "task {}:{} has an inconsistent signer bitmap",
+                task.service_id, task.call_id
+            )));
+        }
+
+        task.submitted = persisted.submitted;
+        task.created_at = millis_to_instant(persisted.created_at_ms);
+        task.expires_at = persisted.expires_at_ms.map(millis_to_instant);
+        Ok(task)
+    }
+}
+
+fn encode_point(point: &impl CanonicalSerialize) -> Result<String> {
+    let mut bytes = Vec::new();
+    point
+        .serialize_compressed(&mut bytes)
+        .map_err(|error| PersistenceError::Serialization(error.to_string()))?;
+    Ok(format!("0x{}", hex::encode(bytes)))
+}
+
+fn decode_bytes(value: &str) -> Result<Vec<u8>> {
+    let value = value.strip_prefix("0x").unwrap_or(value);
+    hex::decode(value).map_err(|error| PersistenceError::Serialization(error.to_string()))
+}
+
+fn decode_signature(value: &str) -> Result<blueprint_crypto_bn254::ArkBlsBn254Signature> {
+    Ok(blueprint_crypto_bn254::ArkBlsBn254Signature(
+        G1Affine::deserialize_compressed(&*decode_bytes(value)?)
+            .map_err(|error| PersistenceError::Serialization(error.to_string()))?,
+    ))
+}
+
+fn decode_public_key(value: &str) -> Result<blueprint_crypto_bn254::ArkBlsBn254Public> {
+    Ok(blueprint_crypto_bn254::ArkBlsBn254Public(
+        G2Affine::deserialize_compressed(&*decode_bytes(value)?)
+            .map_err(|error| PersistenceError::Serialization(error.to_string()))?,
+    ))
+}
+
+fn parse_u256(value: &str) -> Result<U256> {
+    let value = value.strip_prefix("0x").unwrap_or(value);
+    U256::from_str_radix(value, 16)
+        .map_err(|error| PersistenceError::Serialization(error.to_string()))
+}
+
+fn missing_entry(kind: &str, index: u32) -> PersistenceError {
+    PersistenceError::Serialization(format!("missing {kind} for operator {index}"))
+}
+
+fn instant_to_millis(instant: Instant) -> u64 {
+    let now = Instant::now();
+    let now_ms = now_millis();
+    if instant >= now {
+        now_ms.saturating_add(instant.duration_since(now).as_millis() as u64)
+    } else {
+        now_ms.saturating_sub(now.duration_since(instant).as_millis() as u64)
+    }
+}
+
+fn millis_to_instant(timestamp_ms: u64) -> Instant {
+    let now = Instant::now();
+    let now_ms = now_millis();
+    if timestamp_ms >= now_ms {
+        now.checked_add(Duration::from_millis(timestamp_ms - now_ms))
+            .unwrap_or(now)
+    } else {
+        now.checked_sub(Duration::from_millis(now_ms - timestamp_ms))
+            .unwrap_or(now)
     }
 }
 

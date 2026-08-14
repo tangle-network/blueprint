@@ -1,5 +1,6 @@
 //! In-memory aggregation state management
 
+use crate::persistence::{PersistedTaskState, PersistenceError};
 use crate::types::{Bn254SignatureScheme, TaskId};
 use alloy_primitives::U256;
 use blueprint_crypto_bn254::{ArkBlsBn254Public, ArkBlsBn254Signature};
@@ -328,6 +329,33 @@ impl AggregationState {
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    pub(crate) fn snapshot(&self) -> Result<Vec<PersistedTaskState>, PersistenceError> {
+        self.tasks
+            .read()
+            .values()
+            .map(PersistedTaskState::try_from)
+            .collect()
+    }
+
+    pub(crate) fn restore(
+        &self,
+        persisted: Vec<PersistedTaskState>,
+    ) -> Result<(), PersistenceError> {
+        let mut recovered = HashMap::with_capacity(persisted.len());
+        for persisted in persisted {
+            let task = TaskState::try_from(persisted)?;
+            let task_id = TaskId::new(task.service_id, task.call_id);
+            if recovered.insert(task_id, task).is_some() {
+                return Err(PersistenceError::Serialization(format!(
+                    "duplicate persisted task {}/{}",
+                    task_id.service_id, task_id.call_id
+                )));
+            }
+        }
+        *self.tasks.write() = recovered;
+        Ok(())
     }
 
     /// Initialize a new aggregation task (simple API)
