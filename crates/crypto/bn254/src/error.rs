@@ -13,6 +13,8 @@ pub enum Bn254Error {
     InvalidInput(String),
     #[error("Tangle hash-to-curve did not find a point within 256 attempts")]
     HashToPointFailed,
+    #[error("Tangle signatures and public keys must not be identity points")]
+    DegeneratePoint,
 }
 
 pub type Result<T> = blueprint_std::result::Result<T, Bn254Error>;

@@ -617,9 +617,8 @@ mod tests {
 
         assert!(service.init_task(1, 100, vec![1, 2, 3], 5, 3).is_ok());
 
-        // Duplicate should fail
-        let result = service.init_task(1, 100, vec![1, 2, 3], 5, 3);
-        assert!(result.is_err());
+        assert!(service.init_task(1, 100, vec![1, 2, 3], 5, 3).is_ok());
+        assert!(service.init_task(1, 100, vec![1, 2, 4], 5, 3).is_err());
     }
 
     #[test]
