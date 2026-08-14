@@ -592,11 +592,12 @@ impl AggregationState {
         let mut tasks = self.tasks.write();
         let before = tasks.len();
         tasks.retain(|_, task| {
-            !task.is_expired()
-                && (!task.submitted
-                    || task
-                        .submitted_at
-                        .is_some_and(|submitted_at| submitted_at.elapsed() < retention))
+            if task.submitted {
+                task.submitted_at
+                    .is_some_and(|submitted_at| submitted_at.elapsed() < retention)
+            } else {
+                !task.is_expired()
+            }
         });
         before - tasks.len()
     }
@@ -1097,6 +1098,32 @@ mod tests {
 
         assert_eq!(state.cleanup_submitted_after(Duration::ZERO), 1);
         assert!(state.get_status(1, 100).is_none());
+    }
+
+    #[test]
+    fn submitted_retention_overrides_task_expiry() {
+        let state = AggregationState::new();
+        state
+            .init_task_with_config(
+                1,
+                100,
+                vec![],
+                1,
+                TaskConfig {
+                    ttl: Some(Duration::ZERO),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        state.mark_submitted(1, 100).unwrap();
+
+        assert_eq!(
+            state.cleanup_with_submitted_retention(Duration::from_secs(60)),
+            0
+        );
+        assert!(state
+            .get_status(1, 100)
+            .is_some_and(|status| status.submitted));
     }
 
     #[test]
