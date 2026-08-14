@@ -1113,6 +1113,24 @@ async fn wait_for_threshold_any_service(
         tokio::time::sleep(poll_interval).await;
     }
 
+    // A submission can race with the final loop condition. Check completion
+    // once more before reporting a timeout.
+    for client in &agg.clients {
+        match client.get_status(service_id, call_id).await {
+            Ok(status) if status.submitted => {
+                return Ok(ThresholdWaitResult::Submitted);
+            }
+            Ok(_) => {}
+            Err(e) => {
+                blueprint_core::trace!(
+                    target: "tangle-aggregating-consumer",
+                    "Error polling final aggregation status: {}",
+                    e
+                );
+            }
+        }
+    }
+
     Err(AggregatingConsumerError::Client(
         "Timeout waiting for aggregation threshold".to_string(),
     ))
@@ -1475,6 +1493,49 @@ mod tests {
         assert!(super::is_job_already_completed(&by_selector));
         assert!(super::is_job_already_completed(&by_name));
         assert!(!super::is_job_already_completed(&pubkey_mismatch));
+    }
+
+    #[cfg(feature = "aggregation")]
+    #[tokio::test]
+    async fn wait_for_threshold_checks_submission_at_deadline() {
+        use blueprint_crypto_bn254::ArkBlsBn254;
+        use blueprint_crypto_core::KeyType;
+        use blueprint_tangle_aggregation_svc::{
+            AggregationService, ServiceConfig, ThresholdWaitResult, api,
+        };
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        let service = Arc::new(AggregationService::new(ServiceConfig::minimal()));
+        service.init_task(1, 1, vec![1], 2, 2).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server_service = Arc::clone(&service);
+        let server = tokio::spawn(async move {
+            axum::serve(listener, api::router(server_service))
+                .await
+                .unwrap();
+        });
+
+        let submitter = Arc::clone(&service);
+        let marker = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            submitter.mark_submitted(1, 1).unwrap();
+        });
+
+        let secret = ArkBlsBn254::generate_with_seed(Some(&[1u8; 32])).unwrap();
+        let mut config =
+            super::AggregationServiceConfig::new(format!("http://{address}"), secret, 0);
+        config.threshold_timeout = Duration::from_millis(50);
+        config.poll_interval = Duration::from_millis(75);
+
+        let result = super::wait_for_threshold_any_service(&config, 1, 1).await;
+        assert!(matches!(result, Ok(ThresholdWaitResult::Submitted)));
+
+        marker.await.unwrap();
+        server.abort();
+        let _ = server.await;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

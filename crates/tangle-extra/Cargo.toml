@@ -49,6 +49,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+axum = { workspace = true, features = ["json", "tokio", "http1", "http2"] }
 alloy-provider = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-network = { workspace = true }

@@ -4017,6 +4017,7 @@ dependencies = [
  "ark-bn254 0.6.0",
  "ark-ff 0.6.0",
  "ark-serialize 0.6.0",
+ "axum",
  "blueprint-anvil-testing-utils",
  "blueprint-chain-setup-anvil",
  "blueprint-client-tangle",

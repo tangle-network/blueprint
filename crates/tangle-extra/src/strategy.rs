@@ -320,6 +320,7 @@ pub enum StrategyError {
     Timeout,
 
     /// Another operator already submitted this task to the chain.
+    /// Treat this as an idempotent no-op and do not submit the aggregate again.
     #[error("Aggregation task was already submitted to the chain")]
     AlreadySubmitted,
 
