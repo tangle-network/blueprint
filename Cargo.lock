@@ -3087,6 +3087,7 @@ dependencies = [
  "futures-core",
  "hex",
  "k256",
+ "mockito",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

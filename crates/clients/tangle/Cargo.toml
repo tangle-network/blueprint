@@ -59,6 +59,7 @@ blueprint-chain-setup-anvil = { path = "../../chain-setup/anvil" }
 blueprint-anvil-testing-utils = { path = "../../testing-utils/anvil" }
 anyhow = { workspace = true }
 hex = { workspace = true }
+mockito = { workspace = true }
 
 [features]
 default = ["std"]

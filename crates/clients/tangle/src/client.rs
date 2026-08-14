@@ -2677,6 +2677,8 @@ impl TangleClient {
     ///
     /// Queries the blueprint's service manager contract to determine if the specified
     /// job index requires aggregated BLS signatures instead of individual results.
+    /// A failed manager call is returned as an error so callers cannot submit through
+    /// the wrong path when the aggregation policy is unavailable.
     pub async fn requires_aggregation(&self, service_id: u64, job_index: u8) -> Result<bool> {
         let manager = match self.get_blueprint_manager(service_id).await? {
             Some(m) => m,
@@ -2684,10 +2686,10 @@ impl TangleClient {
         };
 
         let bsm = IBlueprintServiceManager::new(manager, Arc::clone(&self.provider));
-        match bsm.requiresAggregation(service_id, job_index).call().await {
-            Ok(required) => Ok(required),
-            Err(_) => Ok(false), // If call fails, assume no aggregation required
-        }
+        bsm.requiresAggregation(service_id, job_index)
+            .call()
+            .await
+            .map_err(|e| Error::Contract(e.to_string()))
     }
 
     /// Get the aggregation threshold configuration for a job
@@ -2695,6 +2697,8 @@ impl TangleClient {
     /// Returns (threshold_bps, threshold_type) where:
     /// - threshold_bps: Threshold in basis points (e.g., 6700 = 67%)
     /// - threshold_type: 0 = CountBased (% of operators), 1 = StakeWeighted (% of stake)
+    ///
+    /// A failed manager call is returned as an error instead of guessing a threshold.
     pub async fn get_aggregation_threshold(
         &self,
         service_id: u64,
@@ -2706,14 +2710,12 @@ impl TangleClient {
         };
 
         let bsm = IBlueprintServiceManager::new(manager, Arc::clone(&self.provider));
-        match bsm
+        let result = bsm
             .getAggregationThreshold(service_id, job_index)
             .call()
             .await
-        {
-            Ok(result) => Ok((result.thresholdBps, result.thresholdType)),
-            Err(_) => Ok((6700, 0)), // Default if call fails
-        }
+            .map_err(|e| Error::Contract(e.to_string()))?;
+        Ok((result.thresholdBps, result.thresholdType))
     }
 
     /// Get the aggregation configuration for a specific job
