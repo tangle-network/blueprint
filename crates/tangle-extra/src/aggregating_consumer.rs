@@ -36,7 +36,7 @@ use blueprint_std::sync::{Arc, Mutex};
 use blueprint_std::time::Duration;
 use blueprint_std::vec::Vec;
 #[cfg(feature = "aggregation")]
-use blueprint_tangle_aggregation_svc::{OperatorStake, ThresholdConfig};
+use blueprint_tangle_aggregation_svc::{OperatorStake, ThresholdConfig, ThresholdWaitResult};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use futures_util::Sink;
@@ -1033,6 +1033,15 @@ async fn submit_aggregated_result(
 
         // Try to get result from any service
         let result = wait_for_threshold_any_service(&agg, service_id, call_id).await?;
+        let ThresholdWaitResult::Aggregated(result) = result else {
+            blueprint_core::debug!(
+                target: "tangle-aggregating-consumer",
+                service_id,
+                call_id,
+                "Another operator already submitted the aggregated result"
+            );
+            return Ok(());
+        };
 
         // Try to submit to chain (race with other operators)
         match submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result)
@@ -1060,7 +1069,7 @@ async fn wait_for_threshold_any_service(
     agg: &AggregationServiceConfig,
     service_id: u64,
     call_id: u64,
-) -> Result<blueprint_tangle_aggregation_svc::AggregatedResultResponse, AggregatingConsumerError> {
+) -> Result<ThresholdWaitResult, AggregatingConsumerError> {
     use blueprint_std::time::Instant;
 
     let start = Instant::now();
@@ -1072,7 +1081,7 @@ async fn wait_for_threshold_any_service(
         for client in &agg.clients {
             match client.get_aggregated(service_id, call_id).await {
                 Ok(Some(result)) => {
-                    return Ok(result);
+                    return Ok(ThresholdWaitResult::Aggregated(result));
                 }
                 Ok(None) => {
                     // Threshold not yet met on this service
@@ -1081,6 +1090,20 @@ async fn wait_for_threshold_any_service(
                     blueprint_core::trace!(
                         target: "tangle-aggregating-consumer",
                         "Error polling aggregation service: {}",
+                        e
+                    );
+                }
+            }
+
+            match client.get_status(service_id, call_id).await {
+                Ok(status) if status.submitted => {
+                    return Ok(ThresholdWaitResult::Submitted);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    blueprint_core::trace!(
+                        target: "tangle-aggregating-consumer",
+                        "Error polling aggregation status: {}",
                         e
                     );
                 }
@@ -1105,11 +1128,18 @@ async fn try_submit_aggregated_to_chain(
 ) -> Result<(), AggregatingConsumerError> {
     // Try to get result from any service
     for service_client in &agg.clients {
-        if let Ok(Some(result)) = service_client.get_aggregated(service_id, call_id).await {
-            return submit_aggregated_to_chain_with_result(
-                client, agg, service_id, call_id, result,
-            )
-            .await;
+        match service_client
+            .get_aggregated_or_submitted(service_id, call_id)
+            .await
+        {
+            Ok(ThresholdWaitResult::Submitted) => return Ok(()),
+            Ok(ThresholdWaitResult::Aggregated(result)) => {
+                return submit_aggregated_to_chain_with_result(
+                    client, agg, service_id, call_id, result,
+                )
+                .await;
+            }
+            Err(_) => {}
         }
     }
 
