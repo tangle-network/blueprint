@@ -28,12 +28,12 @@ still succeed and decode into the wrong fields — e.g. tnt-core 0.19 reordered
 read under 0.19.1 bindings reports every job as never completed. Regenerate the
 fixtures in the same change as any `tnt-core-bindings` bump.
 
-- Current fixture: tnt-core `f173dce`, matching `tnt-core-bindings` 0.19.1
-  (whose `TNT_CORE_VERSION` is `7cdda757…`, the ABI `f173dce` still ships).
+- Current fixture: tnt-core `674403de` (the merged G2 coordinate-order fix), matching
+  `tnt-core-bindings` 0.19.1 plus the corrected aggregation bytecode.
 - The broadcast's top-level `commit` field records the tnt-core commit it was
   generated from — check it first when a Tangle e2e test decodes nonsense.
 - Regenerate by running `script/sh/update-localtestnet-fixtures.sh` in a tnt-core
-  checkout and copying both files here. As of `f173dce` that script needs
+  checkout and copying both files here. As of `674403de` that script needs
   `FOUNDRY_CODE_SIZE_LIMIT` raised to ~1000000: `LocalTestnetSetup`'s initcode is
   ~595 KB and forge caps initcode at twice the code-size limit.
 - Deployment addresses are CREATE addresses derived from the deployer's nonce
