@@ -924,8 +924,9 @@ async fn submit_aggregated_result(
     let mut last_response = None;
 
     for (idx, service_client) in agg.clients.iter().enumerate() {
-        // Try to initialize the task (may already exist from another operator)
-        let _ = service_client
+        // Exact duplicate initialization is idempotent. A conflicting context is
+        // rejected before this operator sends a signature to that service.
+        if let Err(error) = service_client
             .init_task_with_message(
                 service_id,
                 call_id,
@@ -935,7 +936,16 @@ async fn submit_aggregated_result(
                 task_init.operator_count,
                 task_init.threshold.clone(),
             )
-            .await;
+            .await
+        {
+            blueprint_core::warn!(
+                target: "tangle-aggregating-consumer",
+                "Failed to initialize aggregation service {}: {}",
+                idx,
+                error
+            );
+            continue;
+        }
 
         // Submit our signature
         match service_client

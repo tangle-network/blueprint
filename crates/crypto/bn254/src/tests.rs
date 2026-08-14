@@ -228,6 +228,38 @@ fn tangle_signatures_use_the_contract_algorithm_only() {
 }
 
 #[test]
+fn tangle_signatures_reject_identity_points_and_zero_secrets() {
+    let secret = ArkBlsBn254::generate_with_seed(Some(b"tangle-identity-test")).unwrap();
+    let public = ArkBlsBn254::public_from_secret(&secret);
+    let message = b"identity-points-must-fail";
+    let signature = ArkBlsBn254::sign_tangle_with_secret(&secret, message).unwrap();
+    let identity_signature = ArkBlsBn254Signature(G1Affine::zero());
+    let identity_public = ArkBlsBn254Public(G2Affine::zero());
+
+    assert!(!ArkBlsBn254::verify_tangle(
+        &public,
+        message,
+        &identity_signature
+    ));
+    assert!(!ArkBlsBn254::verify_tangle(
+        &identity_public,
+        message,
+        &signature
+    ));
+    assert!(!ArkBlsBn254::verify_tangle(
+        &identity_public,
+        message,
+        &identity_signature
+    ));
+
+    let zero_secret = ArkBlsBn254Secret(Fr::from(0u64));
+    assert!(matches!(
+        ArkBlsBn254::sign_tangle_with_secret(&zero_secret, message),
+        Err(Bn254Error::DegeneratePoint)
+    ));
+}
+
+#[test]
 fn test_serialization_edge_cases() {
     // Test serialization with edge case keys
     let seed = "serialization_edge";

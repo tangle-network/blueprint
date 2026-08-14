@@ -360,24 +360,15 @@ impl AggregationState {
         operator_count: u32,
         config: TaskConfig,
     ) -> Result<(), &'static str> {
-        let task_id = TaskId::new(service_id, call_id);
-        let mut tasks = self.tasks.write();
-
-        if tasks.contains_key(&task_id) {
-            return Err("Task already exists");
-        }
-
-        let state = TaskState::with_config(
+        self.init_task_with_message_config(
             service_id,
             call_id,
+            output.clone(),
             output,
+            Bn254SignatureScheme::ArkworksSha256,
             operator_count,
-            config.threshold_type,
-            config.operator_stakes,
-            config.ttl,
-        );
-        tasks.insert(task_id, state);
-        Ok(())
+            config,
+        )
     }
 
     /// Initialize a task with an explicit signed message and algorithm.
@@ -395,10 +386,6 @@ impl AggregationState {
         let task_id = TaskId::new(service_id, call_id);
         let mut tasks = self.tasks.write();
 
-        if tasks.contains_key(&task_id) {
-            return Err("Task already exists");
-        }
-
         let state = TaskState::with_message_config(
             service_id,
             call_id,
@@ -410,6 +397,21 @@ impl AggregationState {
             config.operator_stakes,
             config.ttl,
         );
+
+        if let Some(existing) = tasks.get(&task_id) {
+            let same_context = existing.output == state.output
+                && existing.message == state.message
+                && existing.signature_scheme == state.signature_scheme
+                && existing.operator_count == state.operator_count
+                && existing.threshold_type == state.threshold_type
+                && existing.operator_stakes == state.operator_stakes;
+            return if same_context {
+                Ok(())
+            } else {
+                Err("Task initialization conflicts with existing context")
+            };
+        }
+
         tasks.insert(task_id, state);
         Ok(())
     }
@@ -828,10 +830,15 @@ mod tests {
 
         assert!(state.init_task(1, 100, vec![1, 2, 3], 5, 3).is_ok());
 
-        // Duplicate should fail
-        let result = state.init_task(1, 100, vec![1, 2, 3], 5, 3);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Task already exists");
+        // An exact duplicate is safe when another operator won the init race.
+        assert!(state.init_task(1, 100, vec![1, 2, 3], 5, 3).is_ok());
+
+        // The same task ID cannot change any signed context.
+        let result = state.init_task(1, 100, vec![1, 2, 4], 5, 3);
+        assert_eq!(
+            result.unwrap_err(),
+            "Task initialization conflicts with existing context"
+        );
     }
 
     #[test]

@@ -117,6 +117,9 @@ pub fn sign_tangle(sk: Fr, message: &[u8]) -> Result<G1Affine> {
     let point = hash_to_curve_tangle(message)?;
     let signature = point.mul_bigint(BigInteger256::from(sk)).into_affine();
 
+    if signature.is_zero() {
+        return Err(Bn254Error::DegeneratePoint);
+    }
     if !signature.is_on_curve() || !signature.is_in_correct_subgroup_assuming_on_curve() {
         return Err(Bn254Error::SignatureNotInSubgroup);
     }
@@ -126,7 +129,14 @@ pub fn sign_tangle(sk: Fr, message: &[u8]) -> Result<G1Affine> {
 
 /// Verify a signature with the exact TNT core BN254 hash-to-curve algorithm.
 pub fn verify_tangle(public_key: G2Affine, message: &[u8], signature: G1Affine) -> bool {
-    if !signature.is_in_correct_subgroup_assuming_on_curve() || !signature.is_on_curve() {
+    if signature.is_zero() || public_key.is_zero() {
+        return false;
+    }
+    if !signature.is_on_curve()
+        || !signature.is_in_correct_subgroup_assuming_on_curve()
+        || !public_key.is_on_curve()
+        || !public_key.is_in_correct_subgroup_assuming_on_curve()
+    {
         return false;
     }
 
