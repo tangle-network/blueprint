@@ -2984,6 +2984,7 @@ impl TangleClient {
         use alloy_sol_types::SolCall;
 
         let wallet = self.wallet()?;
+        let from_address = wallet.default_signer().address();
         let provider = ProviderBuilder::new()
             .wallet(wallet)
             .connect(self.config.http_rpc_endpoint.as_str())
@@ -3004,15 +3005,13 @@ impl TangleClient {
             .to(self.tangle_address)
             .input(calldata.into());
 
-        let pending_tx = provider
-            .send_transaction(tx_request)
-            .await
-            .map_err(Error::Transport)?;
-
-        let receipt = pending_tx
-            .get_receipt()
-            .await
-            .map_err(Error::PendingTransaction)?;
+        let receipt = send_transaction_with_fallback_gas(
+            &provider,
+            from_address,
+            tx_request,
+            SUBMIT_RESULT_MIN_GAS_LIMIT,
+        )
+        .await?;
 
         Ok(TransactionResult {
             tx_hash: receipt.transaction_hash,
@@ -3356,6 +3355,17 @@ mod gas_fallback_tests {
         assert_eq!(
             buffered_gas_limit(Some(21_000), ERC20_APPROVE_MIN_GAS_LIMIT),
             ERC20_APPROVE_MIN_GAS_LIMIT
+        );
+    }
+
+    #[test]
+    fn aggregate_result_floor_rejects_underestimated_hook_path() {
+        // Tempo's manager hook can make aggregate-result estimation understate the
+        // transaction limit. The shared result floor must win in that case.
+        let underestimated_hook_path = 1_885_516;
+        assert_eq!(
+            buffered_gas_limit(Some(underestimated_hook_path), SUBMIT_RESULT_MIN_GAS_LIMIT),
+            SUBMIT_RESULT_MIN_GAS_LIMIT
         );
     }
 
