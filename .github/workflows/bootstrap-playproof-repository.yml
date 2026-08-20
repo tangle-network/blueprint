@@ -1,0 +1,160 @@
+name: Bootstrap Playproof repository
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/bootstrap-playproof-repository.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bootstrap-playproof-repository
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Generate organization GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.WEBB_SPIDER_APP_ID }}
+          private-key: ${{ secrets.WEBB_SPIDER_PRIV_KEY }}
+          owner: tangle-network
+
+      - name: Check out exact standalone Playproof tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tangle-network/agent-lab
+          ref: standalone/playproof-v0.1.0
+          token: ${{ steps.app-token.outputs.token }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Export tree without agent-lab history
+        run: |
+          set -euo pipefail
+          mkdir release
+          git -C source archive HEAD | tar -x -C release
+          rm -f release/.github/workflows/bootstrap-lock.yml
+          test ! -e release/.git
+          test "$(node -p "require('./release/package.json').name")" = '@tangle-network/playproof'
+          test "$(node -p "require('./release/package.json').version")" = '0.1.0'
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.17.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Generate immutable dependency lock
+        working-directory: release
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+
+      - name: Install exact dependencies
+        working-directory: release
+        run: pnpm install --frozen-lockfile
+
+      - name: Compile Python workers
+        working-directory: release
+        run: python -m compileall -q desktop native pyboy
+
+      - name: Run package release gates
+        working-directory: release
+        run: pnpm ci
+
+      - name: Build and verify pinned real PyBoy/Tetris target
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pyboy==2.6.0
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bison flex libpng-dev pkg-config
+          git clone --filter=blob:none https://github.com/gbdev/rgbds.git /tmp/rgbds
+          git -C /tmp/rgbds checkout 9d993d84e85eeb8dd304e48463d89865795e97ed
+          test "$(git -C /tmp/rgbds rev-parse HEAD)" = 9d993d84e85eeb8dd304e48463d89865795e97ed
+          make -C /tmp/rgbds -j2
+          sudo make -C /tmp/rgbds install
+          git clone --filter=blob:none https://github.com/alexsteb/tetris_disassembly.git /tmp/tetris
+          git -C /tmp/tetris checkout b4bbceb3cc086121ab4fe9bf4dad6752fe956ec0
+          test "$(git -C /tmp/tetris rev-parse HEAD)" = b4bbceb3cc086121ab4fe9bf4dad6752fe956ec0
+          cd /tmp/tetris
+          rgbasm -o main.o main.asm
+          rgblink -o Tetris.gb main.o
+          rgbfix -v -p 0 Tetris.gb
+          expected=$(node -p "JSON.parse(require('fs').readFileSync('$GITHUB_WORKSPACE/release/pyboy/reference-tetris.json','utf8')).romMd5")
+          echo "$expected  Tetris.gb" | md5sum --check --strict
+          cd "$GITHUB_WORKSPACE/release"
+          PLAYPROOF_ROM=/tmp/tetris/Tetris.gb PLAYPROOF_PYTHON=python pnpm test:pyboy
+
+      - name: Create fresh root commit
+        working-directory: release
+        run: |
+          set -euo pipefail
+          git init -b main
+          git config user.name tangletools
+          git config user.email 254741087+tangletools@users.noreply.github.com
+          git add -A
+          git commit -m 'feat: initial Playproof open-source release'
+          test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 1
+          git tag -a v0.1.0 -m 'Playproof 0.1.0'
+
+      - name: Create public repository and push clean history
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        working-directory: release
+        run: |
+          set -euo pipefail
+          status=$(curl -sS -o /tmp/playproof-repo.json -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            https://api.github.com/repos/tangle-network/playproof)
+          if [ "$status" = 404 ]; then
+            curl --fail-with-body -sS -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              https://api.github.com/orgs/tangle-network/repos \
+              -d '{"name":"playproof","description":"Turn games into verifiable, cost-aware benchmarks for any agent.","homepage":"https://www.npmjs.com/package/@tangle-network/playproof","private":false,"has_issues":true,"has_projects":false,"has_wiki":false,"has_discussions":true,"auto_init":false,"allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":true,"delete_branch_on_merge":true}' \
+              > /tmp/playproof-created.json
+          elif [ "$status" != 200 ]; then
+            cat /tmp/playproof-repo.json
+            exit 1
+          fi
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/tangle-network/playproof.git"
+          if git ls-remote --exit-code origin refs/heads/main >/dev/null 2>&1; then
+            remote_sha=$(git ls-remote origin refs/heads/main | cut -f1)
+            echo "::error::tangle-network/playproof already has main at $remote_sha; refusing to overwrite"
+            exit 1
+          fi
+          git push -u origin main
+          git push origin v0.1.0
+          gh api --method PUT repos/tangle-network/playproof/topics \
+            -f 'names[]=agents' -f 'names[]=benchmarks' -f 'names[]=evaluation' \
+            -f 'names[]=games' -f 'names[]=ai-agents' -f 'names[]=emulators'
+
+      - name: Verify public identity and clean root
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          visibility=$(gh api repos/tangle-network/playproof --jq .visibility)
+          default_branch=$(gh api repos/tangle-network/playproof --jq .default_branch)
+          root_sha=$(gh api repos/tangle-network/playproof/commits/main --jq .sha)
+          parent_count=$(gh api repos/tangle-network/playproof/commits/$root_sha --jq '.parents | length')
+          test "$visibility" = public
+          test "$default_branch" = main
+          test "$parent_count" -eq 0
+          echo "Playproof public root: $root_sha"
