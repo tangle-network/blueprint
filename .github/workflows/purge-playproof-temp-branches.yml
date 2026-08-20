@@ -1,0 +1,36 @@
+name: Purge temporary Playproof branches
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/purge-playproof-temp-branches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Delete every temporary Playproof branch, including this one
+        env:
+          TARGETS: |
+            cleanup/remove-playproof-bootstrap
+            ops/bootstrap-playproof-repository
+            ops/diagnose-playproof-bootstrap
+        run: |
+          set -euo pipefail
+          while IFS= read -r branch; do
+            [ -n "$branch" ] || continue
+            if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+              git push origin --delete "$branch"
+            fi
+          done <<< "$TARGETS"
+          git push origin --delete "$GITHUB_HEAD_REF"
