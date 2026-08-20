@@ -9,10 +9,11 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: bootstrap-playproof-repository
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   bootstrap:
@@ -158,3 +159,15 @@ jobs:
           test "$default_branch" = main
           test "$parent_count" -eq 0
           echo "Playproof public root: $root_sha"
+
+      - name: Publish inspectable run receipt
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          gh issue create --repo tangle-network/blueprint \
+            --title "Playproof bootstrap ${JOB_STATUS}: run ${RUN_ID}.${RUN_ATTEMPT}" \
+            --body "Bootstrap status: **${JOB_STATUS}**\n\nRun: https://github.com/tangle-network/blueprint/actions/runs/${RUN_ID}/attempts/${RUN_ATTEMPT}\n\nCommit: ${GITHUB_SHA}\n\nThis receipt is generated even when an earlier bootstrap step fails."
