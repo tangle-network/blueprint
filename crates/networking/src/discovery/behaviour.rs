@@ -296,11 +296,11 @@ impl<K: KeyType> NetworkBehaviour for DiscoveryBehaviour<K> {
 
                         DerivedDiscoveryBehaviourEvent::Autonat(_) => {}
                         DerivedDiscoveryBehaviourEvent::Upnp(ev) => match ev {
-                            upnp::Event::NewExternalAddr(addr) => {
-                                info!("UPnP NewExternalAddr: {addr}");
+                            upnp::Event::NewExternalAddr { external_addr, .. } => {
+                                info!("UPnP NewExternalAddr: {external_addr}");
                             }
-                            upnp::Event::ExpiredExternalAddr(addr) => {
-                                info!("UPnP ExpiredExternalAddr: {addr}");
+                            upnp::Event::ExpiredExternalAddr { external_addr, .. } => {
+                                info!("UPnP ExpiredExternalAddr: {external_addr}");
                             }
                             upnp::Event::GatewayNotFound => {
                                 info!("UPnP GatewayNotFound");
