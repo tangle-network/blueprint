@@ -312,7 +312,8 @@ tracing-subscriber = { version = "0.3", default-features = false }
 jsonrpsee = { version = "0.24", default-features = false }
 jsonrpc-core = { version = "18.0.0", default-features = false }
 jsonrpc-http-server = { version = "18.0.0", default-features = false }
-libp2p = { git = "https://github.com/libp2p/rust-libp2p", rev = "67669858e2ab5448575a2ee26797dccc7b8c2c17", package = "libp2p", default-features = false }
+# rust-libp2p#6493 removes the vulnerable yamux 0.12 compatibility path.
+libp2p = { git = "https://github.com/libp2p/rust-libp2p", rev = "efc2bfc156b592838c7d469dab345714069619d6", package = "libp2p", default-features = false }
 reqwest = { version = "0.12.22", default-features = false }
 http = { version = "1.0.0", default-features = false }
 url = { version = "2.5.2", default-features = false }
