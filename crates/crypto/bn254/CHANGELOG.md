@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-bn254-v0.2.0-alpha.9...blueprint-crypto-bn254-v0.2.0-alpha.10) - 2026-09-02
+
+### Fixed
+
+- *(tangle)* reject degenerate aggregation contexts (#1496)
+- *(tangle)* align BLS aggregation with TNT 0.19 (#1495)
+
 ## [0.2.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-bn254-v0.2.0-alpha.8...blueprint-crypto-bn254-v0.2.0-alpha.9) - 2026-08-02
 
 ### Other
