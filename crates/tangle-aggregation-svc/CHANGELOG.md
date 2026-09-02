@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.13](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-aggregation-svc-v0.2.0-alpha.12...blueprint-tangle-aggregation-svc-v0.2.0-alpha.13) - 2026-09-02
+
+### Fixed
+
+- *(aggregation)* release waiting operators after submission (#1503)
+- *(aggregation-svc)* persist task state across restarts (#1500)
+- *(tangle)* reject degenerate aggregation contexts (#1496)
+- *(tangle)* align BLS aggregation with TNT 0.19 (#1495)
+
 ## [0.2.0-alpha.12](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-aggregation-svc-v0.2.0-alpha.11...blueprint-tangle-aggregation-svc-v0.2.0-alpha.12) - 2026-08-02
 
 ### Other
