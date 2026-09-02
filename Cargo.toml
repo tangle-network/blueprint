@@ -290,7 +290,7 @@ bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.16.1", default-features = false }
 base64 = { version = "0.22.0", default-features = false }
 rust_decimal = { version = "1.37", default-features = false }
-jsonwebtoken = { version = "10.3", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.3", default-features = false, features = ["aws_lc_rs"] }
 pasetors = { version = "0.7.7", default-features = false }
 pem = { version = "3.0", default-features = false }
 # TEE remote attestation (COSE + x509 + ECDSA) — used only when a crate opts into
