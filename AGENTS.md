@@ -1,20 +1,45 @@
-# Repository Guidelines
+# Blueprint SDK
 
-## Project Structure & Module Organization
-The workspace is anchored by the root `Cargo.toml`, `dist-workspace.toml`, and `workspace-hack/` helper crate. Core runtime crates live in `crates/`, grouped by capability (`core/`, `networking/`, `manager/`, `stores/`, `testing-utils/`, etc.), and should keep public APIs surfaced through `crates/sdk/`. The `cli/` directory hosts the `cargo-tangle` binary with integration coverage in `cli/tests/`. Starter blueprints live in `examples/` and must remain buildable against the latest SDK. Long-form specifications and operator guides are under `docs/`. Use `docker-compose.yml` only when you need optional external services; it is not exercised in CI.
+This Rust workspace provides the Blueprint SDK and the `cargo-tangle` CLI.
+The workspace manifest owns package membership and dependency selection.
+Public SDK exports live in `crates/sdk/`; crate README files and source documentation own their interfaces.
+Read the affected crate's instructions and README before changing a contract.
+Inspect the directory and source exports instead of maintaining generated directory or API catalogs in instruction files.
 
-## Build, Test, and Development Commands
-- `cargo fmt --all`: Format Rust sources using the shared `rustfmt.toml` rules.
-- `cargo clippy --workspace --all-targets --all-features -D warnings`: Enforce lint cleanliness across every crate.
-- `cargo test --workspace --all-features`: Run unit, doc, and integration tests; prefer `cargo test -p <crate>` for focused runs.
-- `cargo build --workspace --all-features`: Compile everything locally before publishing a crate or tagging a release.
-- `cargo run -p blueprint-manager -- --help`: Smoke-check runtime binaries after changes to orchestration crates.
+## Build and test
 
-## Coding Style & Naming Conventions
-Rust files use the pinned stable toolchain 1.88 (managed via `rust-toolchain.toml`) with 4-space indentation. Follow idiomatic naming: modules and functions in `snake_case`, types and traits in `PascalCase`, constants in `SCREAMING_SNAKE_CASE`. Keep public exports centralized in each crate’s `lib.rs`, re-exporting from submodules instead of deep relative paths. Format documentation comments thoughtfully—`rustfmt` is configured to wrap doc examples—and order imports with standard/prelude/external grouping. For manifest updates, run `taplo fmt` to honor `taplo.toml`.
+Use [rust-toolchain.toml](rust-toolchain.toml), the workspace manifests, and [.github/workflows/ci.yml](.github/workflows/ci.yml) for current toolchain and check configuration.
+Rustfmt uses the toolchain selected by CI, which can differ from the compiler toolchain.
+Read features from the affected manifest; preserve supported `no_std` and optional-feature builds.
+Use `cargo fmt --all` for formatting and `taplo fmt` for manifest formatting under the repository configuration.
 
-## Testing Guidelines
-Write async tests with `tokio::test` where network or time-based behavior is exercised, and mirror fixtures in `crates/testing-utils/` when possible. Place integration suites in each crate’s `tests/` directory or under `cli/tests/` for CLI flows, naming files with the feature under test (`manager_failover.rs`, `router_happy_path.rs`). Maintain edge-case coverage for multi-node scenarios and include negative-path assertions. Before opening a PR, run `cargo test --workspace --all-features` and document any intentionally skipped targets.
+Start with crate-scoped checks, then run the broader checks required by the change and CI.
+Do not infer workspace coverage from an unqualified `cargo test` command or a feature-gated suite that skipped its cases.
+CI owns the list of packages that require serial execution.
+Use [.config/nextest.toml](.config/nextest.toml)'s serial profile or `--test-threads=1` for those packages and resource-sharing tests.
+Keep network, environment, Docker, and process state isolated across tests.
+Build prerequisites and external fixtures must be available before claiming their integration tests passed.
 
-## Commit & Pull Request Guidelines
-Adopt Conventional Commits (`feat(router):`, `fix(cli):`, etc.) and align branches with the `feature/`, `fix/`, or `docs/` prefixes already in use. Each PR description should summarize behavior changes, list the verification commands you ran, and link any tracked issues. Attach logs or terminal snippets when altering CLI UX, and update `docs/` or examples when interfaces shift. Ensure CI is green, request a maintainer review, and keep PRs scoped to a single logical change set.
+For nontrivial behavior changes, follow [the engineering playbook](docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md) and [specification](docs/engineering/HARNESS_ENGINEERING_SPEC.md).
+Define the behavior and invariants, reproduce the affected user path, and check invalid input and failure recovery.
+Update examples and operator documentation when their contracts change.
+
+## Publishing dependencies
+
+A versioned workspace dev-dependency can create a publish-time cycle when its target reaches back to the publishing crate.
+For such test-only dependencies, use a path-only dev-dependency instead of `workspace = true`.
+For example, a crate can test through the SDK umbrella locally without requiring that umbrella's new release to exist first.
+Delete a dev-dependency that the tests do not use.
+
+Before publishing, inspect the dependency graph and the manifests Cargo will package.
+Confirm production dependencies remain declared and path-only test dependencies do not introduce a published cycle.
+A missing registry version can also mean an unpublished dependency or registry delay; diagnose the actual graph and registry state.
+Do not treat every resolution failure as a cycle or remove production version constraints to make it pass.
+
+## Pull requests
+
+Use [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) and the current [quality policy](.github/pr-quality-gate.toml).
+The [validation script](.github/scripts/validate_pr_body.py) owns required sections, change classes, and documentation-only classification.
+Read the [workflow](.github/workflows/pr-quality-gate.yml) when diagnosing how the PR body reaches validation.
+A rerun can reuse the original event payload, so verify that a corrected body reached the check before claiming it passed.
+Include changed behavior, relevant test evidence, risk, and rollback in the PR.
