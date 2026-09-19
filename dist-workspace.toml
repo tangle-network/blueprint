@@ -8,6 +8,17 @@ ci = "github"
 # Whether dist should create a Github Release or use an existing draft
 create-release = false
 github-build-setup = "build-setup.yml"
+# `release.yml` carries one edit that `dist` cannot express through config: a
+# `retention-days` limit on the `cargo-dist-cache` upload. Without that limit
+# the artifact holds most of the organization Actions storage allowance.
+# `github-build-setup` reaches the build jobs only, not the `plan` job that
+# makes the upload, so the edit must stay in `release.yml`.
+#
+# `dist plan` compares `release.yml` against its generated form and stops with
+# exit 255 when they differ. This key tells it to accept the difference.
+# Compare `release.yml` against `dist generate` output by hand after you change
+# `cargo-dist-version`, because this key stops the automatic comparison.
+allow-dirty = ["ci"]
 # The installers to generate for each app
 installers = ["shell"]
 # Target platforms to build apps for (Rust target-triple syntax).

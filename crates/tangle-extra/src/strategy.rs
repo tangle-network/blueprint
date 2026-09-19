@@ -319,6 +319,11 @@ pub enum StrategyError {
     #[error("Aggregation timed out")]
     Timeout,
 
+    /// Another operator already submitted this task to the chain.
+    /// Treat this as an idempotent no-op and do not submit the aggregate again.
+    #[error("Aggregation task was already submitted to the chain")]
+    AlreadySubmitted,
+
     /// Serialization error
     #[error("Serialization error: {0}")]
     Serialization(String),
@@ -403,7 +408,7 @@ async fn aggregate_via_http(
 ) -> Result<AggregatedSignatureResult, StrategyError> {
     use blueprint_crypto_core::{BytesEncoding, KeyType};
     use blueprint_tangle_aggregation_svc::{
-        SubmitSignatureRequest, ThresholdConfig, create_signing_message,
+        SubmitSignatureRequest, ThresholdConfig, ThresholdWaitResult, create_signing_message,
     };
 
     blueprint_core::debug!(
@@ -461,29 +466,28 @@ async fn aggregate_via_http(
 
     // Wait for threshold if configured
     let result = if config.wait_for_threshold {
-        if response.threshold_met {
-            config
-                .client
-                .get_aggregated(service_id, call_id)
-                .await?
-                .ok_or_else(|| StrategyError::Bls("Aggregated result not available".into()))?
-        } else {
-            config
-                .client
-                .wait_for_threshold(
-                    service_id,
-                    call_id,
-                    config.poll_interval,
-                    config.threshold_timeout,
-                )
-                .await?
+        match config
+            .client
+            .wait_for_threshold_or_submitted(
+                service_id,
+                call_id,
+                config.poll_interval,
+                config.threshold_timeout,
+            )
+            .await?
+        {
+            ThresholdWaitResult::Aggregated(result) => result,
+            ThresholdWaitResult::Submitted => return Err(StrategyError::AlreadySubmitted),
         }
     } else if response.threshold_met {
-        config
+        match config
             .client
-            .get_aggregated(service_id, call_id)
+            .get_aggregated_or_submitted(service_id, call_id)
             .await?
-            .ok_or_else(|| StrategyError::Bls("Aggregated result not available".into()))?
+        {
+            ThresholdWaitResult::Aggregated(result) => result,
+            ThresholdWaitResult::Submitted => return Err(StrategyError::AlreadySubmitted),
+        }
     } else {
         // Return early - threshold not met and not waiting
         return Err(StrategyError::ThresholdNotMet {

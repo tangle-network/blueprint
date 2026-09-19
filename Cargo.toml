@@ -290,7 +290,7 @@ bytes = { version = "1.10.1", default-features = false }
 hashbrown = { version = "0.16.1", default-features = false }
 base64 = { version = "0.22.0", default-features = false }
 rust_decimal = { version = "1.37", default-features = false }
-jsonwebtoken = { version = "10.3", default-features = false }
+jsonwebtoken = { version = "10.3", default-features = false, features = ["aws_lc_rs"] }
 pasetors = { version = "0.7.7", default-features = false }
 pem = { version = "3.0", default-features = false }
 # TEE remote attestation (COSE + x509 + ECDSA) — used only when a crate opts into
@@ -312,7 +312,8 @@ tracing-subscriber = { version = "0.3", default-features = false }
 jsonrpsee = { version = "0.24", default-features = false }
 jsonrpc-core = { version = "18.0.0", default-features = false }
 jsonrpc-http-server = { version = "18.0.0", default-features = false }
-libp2p = { version = "0.56.0", default-features = false }
+# rust-libp2p#6493 removes the vulnerable yamux 0.12 compatibility path.
+libp2p = { git = "https://github.com/libp2p/rust-libp2p", rev = "efc2bfc156b592838c7d469dab345714069619d6", package = "libp2p", default-features = false }
 reqwest = { version = "0.12.22", default-features = false }
 http = { version = "1.0.0", default-features = false }
 url = { version = "2.5.2", default-features = false }
@@ -510,4 +511,3 @@ debug = true
 [profile.dist]
 inherits = "release"
 lto = "thin"
-

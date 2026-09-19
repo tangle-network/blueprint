@@ -43,6 +43,22 @@ pub struct OperatorStake {
     pub stake: u64,
 }
 
+/// BN254 hash-to-curve algorithm used for a task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Bn254SignatureScheme {
+    /// The historical Arkworks SHA-256 implementation.
+    ArkworksSha256,
+    /// The Keccak try-and-increment algorithm in TNT core.
+    TangleKeccak256,
+}
+
+impl Default for Bn254SignatureScheme {
+    fn default() -> Self {
+        Self::ArkworksSha256
+    }
+}
+
 /// Request to submit a signature for aggregation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitSignatureRequest {
@@ -124,6 +140,12 @@ pub struct InitTaskRequest {
     /// The output to be signed
     #[serde(with = "hex_bytes")]
     pub output: Vec<u8>,
+    /// Exact bytes every operator must sign.
+    #[serde(default, with = "hex_bytes")]
+    pub message: Vec<u8>,
+    /// Hash-to-curve algorithm for the message.
+    #[serde(default)]
+    pub signature_scheme: Bn254SignatureScheme,
 }
 
 /// Response after initializing a task
@@ -170,5 +192,24 @@ mod hex_bytes {
         let s = String::deserialize(deserializer)?;
         let s = s.strip_prefix("0x").unwrap_or(&s);
         hex::decode(s).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_init_request_uses_legacy_signature_defaults() {
+        let request: InitTaskRequest = serde_json::from_str(
+            r#"{"service_id":1,"call_id":2,"operator_count":1,"threshold":{"type":"count","required_signers":1},"output":"0x0102"}"#,
+        )
+        .unwrap();
+
+        assert!(request.message.is_empty());
+        assert_eq!(
+            request.signature_scheme,
+            Bn254SignatureScheme::ArkworksSha256
+        );
     }
 }

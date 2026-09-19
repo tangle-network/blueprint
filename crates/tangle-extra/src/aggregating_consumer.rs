@@ -22,6 +22,8 @@
 use crate::aggregation::AggregationError;
 use crate::extract;
 use alloy_primitives::{Address, Bytes};
+#[cfg(feature = "aggregation")]
+use alloy_provider::Provider;
 use blueprint_client_tangle::{AggregationConfig, OperatorMetadata, TangleClient, ThresholdType};
 use blueprint_core::JobResult;
 use blueprint_core::error::BoxError;
@@ -34,7 +36,7 @@ use blueprint_std::sync::{Arc, Mutex};
 use blueprint_std::time::Duration;
 use blueprint_std::vec::Vec;
 #[cfg(feature = "aggregation")]
-use blueprint_tangle_aggregation_svc::{OperatorStake, ThresholdConfig};
+use blueprint_tangle_aggregation_svc::{OperatorStake, ThresholdConfig, ThresholdWaitResult};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use futures_util::Sink;
@@ -88,6 +90,25 @@ enum State {
 impl State {
     fn is_waiting(&self) -> bool {
         matches!(self, State::WaitingForResult)
+    }
+
+    fn poll_submission(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), AggregatingConsumerError>> {
+        let State::ProcessingSubmission(future) = self else {
+            return Poll::Ready(Ok(()));
+        };
+
+        match future.as_mut().poll(cx) {
+            Poll::Ready(result) => {
+                // A completed future must never remain in the state machine. The
+                // next flush poll would otherwise poll it again and panic.
+                *self = State::WaitingForResult;
+                Poll::Ready(result)
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
@@ -639,10 +660,8 @@ impl Sink<JobResult> for AggregatingConsumer {
 
                     *state = State::ProcessingSubmission(fut);
                 }
-                State::ProcessingSubmission(future) => match future.as_mut().poll(cx) {
-                    Poll::Ready(Ok(())) => {
-                        *state = State::WaitingForResult;
-                    }
+                State::ProcessingSubmission(_) => match state.poll_submission(cx) {
+                    Poll::Ready(Ok(())) => {}
                     Poll::Ready(Err(e)) => return Poll::Ready(Err(e.into())),
                     Poll::Pending => return Poll::Pending,
                 },
@@ -702,6 +721,7 @@ async fn submit_job_result(
 struct AggregationTaskInit {
     operator_count: u32,
     threshold: ThresholdConfig,
+    operators: Vec<Address>,
 }
 
 #[cfg(feature = "aggregation")]
@@ -810,6 +830,7 @@ async fn prepare_aggregation_task(
     Ok(AggregationTaskInit {
         operator_count,
         threshold,
+        operators: operators.operators,
     })
 }
 
@@ -860,8 +881,8 @@ async fn submit_aggregated_result(
     agg: AggregationServiceConfig,
 ) -> Result<(), AggregatingConsumerError> {
     use blueprint_crypto_bn254::ArkBlsBn254;
-    use blueprint_crypto_core::{BytesEncoding, KeyType};
-    use blueprint_tangle_aggregation_svc::{SubmitSignatureRequest, create_signing_message};
+    use blueprint_crypto_core::BytesEncoding;
+    use blueprint_tangle_aggregation_svc::SubmitSignatureRequest;
 
     let task_init =
         prepare_aggregation_task(&cache, &client, service_id, job_index, &config).await?;
@@ -884,12 +905,21 @@ async fn submit_aggregated_result(
         call_id
     );
 
-    // Create the message to sign
-    let message = create_signing_message(service_id, call_id, &output);
+    let chain_id = client
+        .provider()
+        .get_chain_id()
+        .await
+        .map_err(|error| AggregatingConsumerError::Client(error.to_string()))?;
+    let message = crate::aggregation::tangle_signing_message(
+        chain_id,
+        client.tangle_address(),
+        service_id,
+        call_id,
+        &task_init.operators,
+        &output,
+    );
 
-    // Sign with BLS key - we need a mutable clone since sign_with_secret takes &mut
-    let mut secret_clone = (*agg.bls_secret).clone();
-    let signature = ArkBlsBn254::sign_with_secret(&mut secret_clone, &message)
+    let signature = ArkBlsBn254::sign_tangle_with_secret(&agg.bls_secret, &message)
         .map_err(|e| AggregatingConsumerError::Bls(e.to_string()))?;
 
     // Get public key and signature bytes using BytesEncoding trait
@@ -911,16 +941,28 @@ async fn submit_aggregated_result(
     let mut last_response = None;
 
     for (idx, service_client) in agg.clients.iter().enumerate() {
-        // Try to initialize the task (may already exist from another operator)
-        let _ = service_client
-            .init_task(
+        // Exact duplicate initialization is idempotent. A conflicting context is
+        // rejected before this operator sends a signature to that service.
+        if let Err(error) = service_client
+            .init_task_with_message(
                 service_id,
                 call_id,
                 output.as_ref(),
+                &message,
+                blueprint_tangle_aggregation_svc::Bn254SignatureScheme::TangleKeccak256,
                 task_init.operator_count,
                 task_init.threshold.clone(),
             )
-            .await;
+            .await
+        {
+            blueprint_core::warn!(
+                target: "tangle-aggregating-consumer",
+                "Failed to initialize aggregation service {}: {}",
+                idx,
+                error
+            );
+            continue;
+        }
 
         // Submit our signature
         match service_client
@@ -970,14 +1012,17 @@ async fn submit_aggregated_result(
 
     if response.threshold_met {
         // Threshold already met, try to submit immediately
-        if let Err(e) =
-            try_submit_aggregated_to_chain(client.clone(), &agg, service_id, call_id).await
-        {
-            blueprint_core::debug!(
-                target: "tangle-aggregating-consumer",
-                "Failed to submit aggregated result (likely already submitted): {}",
-                e
-            );
+        match try_submit_aggregated_to_chain(client.clone(), &agg, service_id, call_id).await {
+            Ok(()) => {}
+            Err(error) if is_job_already_completed(&error) => {
+                blueprint_core::debug!(
+                    target: "tangle-aggregating-consumer",
+                    service_id,
+                    call_id,
+                    "Aggregated result was already submitted by another operator"
+                );
+            }
+            Err(error) => return Err(error),
         }
     } else if agg.wait_for_threshold {
         // Wait for threshold to be met, then submit
@@ -988,16 +1033,30 @@ async fn submit_aggregated_result(
 
         // Try to get result from any service
         let result = wait_for_threshold_any_service(&agg, service_id, call_id).await?;
-
-        // Try to submit to chain (race with other operators)
-        if let Err(e) =
-            submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result).await
-        {
+        let ThresholdWaitResult::Aggregated(result) = result else {
             blueprint_core::debug!(
                 target: "tangle-aggregating-consumer",
-                "Failed to submit aggregated result (likely already submitted by another operator): {}",
-                e
+                service_id,
+                call_id,
+                "Another operator already submitted the aggregated result"
             );
+            return Ok(());
+        };
+
+        // Try to submit to chain (race with other operators)
+        match submit_aggregated_to_chain_with_result(client, &agg, service_id, call_id, result)
+            .await
+        {
+            Ok(()) => {}
+            Err(error) if is_job_already_completed(&error) => {
+                blueprint_core::debug!(
+                    target: "tangle-aggregating-consumer",
+                    service_id,
+                    call_id,
+                    "Aggregated result was already submitted by another operator"
+                );
+            }
+            Err(error) => return Err(error),
         }
     }
 
@@ -1010,7 +1069,7 @@ async fn wait_for_threshold_any_service(
     agg: &AggregationServiceConfig,
     service_id: u64,
     call_id: u64,
-) -> Result<blueprint_tangle_aggregation_svc::AggregatedResultResponse, AggregatingConsumerError> {
+) -> Result<ThresholdWaitResult, AggregatingConsumerError> {
     use blueprint_std::time::Instant;
 
     let start = Instant::now();
@@ -1022,7 +1081,7 @@ async fn wait_for_threshold_any_service(
         for client in &agg.clients {
             match client.get_aggregated(service_id, call_id).await {
                 Ok(Some(result)) => {
-                    return Ok(result);
+                    return Ok(ThresholdWaitResult::Aggregated(result));
                 }
                 Ok(None) => {
                     // Threshold not yet met on this service
@@ -1035,9 +1094,41 @@ async fn wait_for_threshold_any_service(
                     );
                 }
             }
+
+            match client.get_status(service_id, call_id).await {
+                Ok(status) if status.submitted => {
+                    return Ok(ThresholdWaitResult::Submitted);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    blueprint_core::trace!(
+                        target: "tangle-aggregating-consumer",
+                        "Error polling aggregation status: {}",
+                        e
+                    );
+                }
+            }
         }
 
         tokio::time::sleep(poll_interval).await;
+    }
+
+    // A submission can race with the final loop condition. Check completion
+    // once more before reporting a timeout.
+    for client in &agg.clients {
+        match client.get_status(service_id, call_id).await {
+            Ok(status) if status.submitted => {
+                return Ok(ThresholdWaitResult::Submitted);
+            }
+            Ok(_) => {}
+            Err(e) => {
+                blueprint_core::trace!(
+                    target: "tangle-aggregating-consumer",
+                    "Error polling final aggregation status: {}",
+                    e
+                );
+            }
+        }
     }
 
     Err(AggregatingConsumerError::Client(
@@ -1045,7 +1136,7 @@ async fn wait_for_threshold_any_service(
     ))
 }
 
-/// Try to submit the aggregated result to chain, handling "already submitted" gracefully
+/// Try to submit the aggregated result to chain.
 #[cfg(feature = "aggregation")]
 async fn try_submit_aggregated_to_chain(
     client: Arc<TangleClient>,
@@ -1055,17 +1146,39 @@ async fn try_submit_aggregated_to_chain(
 ) -> Result<(), AggregatingConsumerError> {
     // Try to get result from any service
     for service_client in &agg.clients {
-        if let Ok(Some(result)) = service_client.get_aggregated(service_id, call_id).await {
-            return submit_aggregated_to_chain_with_result(
-                client, agg, service_id, call_id, result,
-            )
-            .await;
+        match service_client
+            .get_aggregated_or_submitted(service_id, call_id)
+            .await
+        {
+            Ok(ThresholdWaitResult::Submitted) => return Ok(()),
+            Ok(ThresholdWaitResult::Aggregated(result)) => {
+                return submit_aggregated_to_chain_with_result(
+                    client, agg, service_id, call_id, result,
+                )
+                .await;
+            }
+            Err(_) => {}
         }
     }
 
     Err(AggregatingConsumerError::Client(
         "Aggregated result not available from any service".to_string(),
     ))
+}
+
+/// Return true only for the idempotent aggregate-submission race.
+///
+/// The RPC provider may expose the Solidity custom error by name or only by
+/// selector. All other submission failures must reach the caller.
+#[cfg(feature = "aggregation")]
+const JOB_ALREADY_COMPLETED_SELECTOR: &str = "0x0a55512f";
+
+#[cfg(feature = "aggregation")]
+fn is_job_already_completed(error: &AggregatingConsumerError) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("jobalreadycompleted")
+        || message.contains("job already completed")
+        || message.contains(JOB_ALREADY_COMPLETED_SELECTOR)
 }
 
 /// Submit the aggregated result to the blockchain with a pre-fetched result
@@ -1078,6 +1191,9 @@ async fn submit_aggregated_to_chain_with_result(
     result: blueprint_tangle_aggregation_svc::AggregatedResultResponse,
 ) -> Result<(), AggregatingConsumerError> {
     use crate::aggregation::{AggregatedResult, G1Point, G2Point, SignerBitmap};
+    use ark_bn254::{G1Affine, G2Affine};
+    use ark_ff::{BigInteger, PrimeField};
+    use ark_serialize::CanonicalDeserialize;
 
     if client.config.dry_run {
         blueprint_core::info!(
@@ -1096,11 +1212,23 @@ async fn submit_aggregated_to_chain_with_result(
         call_id
     );
 
-    // Parse the signature and pubkey from the response
-    let signature = G1Point::from_bytes(&result.aggregated_signature)
-        .ok_or_else(|| AggregatingConsumerError::Bls("Invalid aggregated signature".to_string()))?;
-    let pubkey = G2Point::from_bytes(&result.aggregated_pubkey)
-        .ok_or_else(|| AggregatingConsumerError::Bls("Invalid aggregated pubkey".to_string()))?;
+    let signature = G1Affine::deserialize_compressed(&mut result.aggregated_signature.as_slice())
+        .map_err(|_| {
+        AggregatingConsumerError::Bls("Invalid aggregated signature".to_string())
+    })?;
+    let pubkey = G2Affine::deserialize_compressed(&mut result.aggregated_pubkey.as_slice())
+        .map_err(|_| AggregatingConsumerError::Bls("Invalid aggregated pubkey".to_string()))?;
+    let field_to_u256 = |field: &ark_bn254::Fq| {
+        alloy_primitives::U256::from_be_slice(&field.into_bigint().to_bytes_be())
+    };
+    let signature = G1Point::new(field_to_u256(&signature.x), field_to_u256(&signature.y));
+    // EIP-197 encodes Fp2 coordinates in c1,c0 order.
+    let pubkey = G2Point::new(
+        field_to_u256(&pubkey.x.c1),
+        field_to_u256(&pubkey.x.c0),
+        field_to_u256(&pubkey.y.c1),
+        field_to_u256(&pubkey.y.c0),
+    );
 
     let aggregated = AggregatedResult::new(
         service_id,
@@ -1212,7 +1340,8 @@ pub mod integration {
             if total == 0 {
                 return 1;
             }
-            let mut required = (total as u64 * threshold_bps as u64) / 10000;
+            let product = total as u64 * threshold_bps as u64;
+            let mut required = product.div_ceil(10_000);
             if required == 0 {
                 required = 1;
             }
@@ -1233,7 +1362,8 @@ pub mod integration {
                         return count_based(total_operators, threshold_bps);
                     }
 
-                    let mut required_stake = (total_stake * threshold_bps as u128) / 10000u128;
+                    let product = total_stake * threshold_bps as u128;
+                    let mut required_stake = product.div_ceil(10_000u128);
                     if required_stake == 0 {
                         required_stake = 1;
                     }
@@ -1264,7 +1394,9 @@ pub mod integration {
 #[cfg(test)]
 mod tests {
     use super::integration::*;
+    use super::{AggregatingConsumerError, State};
     use blueprint_client_tangle::ThresholdType;
+    use core::task::{Context, Poll};
 
     // ═══════════════════════════════════════════════════════════════════════════
     // create_signing_message tests
@@ -1316,14 +1448,111 @@ mod tests {
         assert_eq!(msg.len(), 48);
     }
 
+    #[test]
+    fn failed_submission_resets_state_for_next_job() {
+        let waker = futures_util::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        let mut state = State::ProcessingSubmission(Box::pin(async {
+            Err(AggregatingConsumerError::Client("duplicate".to_string()))
+        }));
+
+        assert!(matches!(
+            state.poll_submission(&mut cx),
+            Poll::Ready(Err(AggregatingConsumerError::Client(message)))
+                if message == "duplicate"
+        ));
+        assert!(state.is_waiting());
+
+        state = State::ProcessingSubmission(Box::pin(async { Ok(()) }));
+        assert!(matches!(
+            state.poll_submission(&mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert!(state.is_waiting());
+    }
+
+    #[cfg(feature = "aggregation")]
+    #[test]
+    fn only_job_already_completed_is_an_idempotent_aggregate_submission_error() {
+        let by_selector = AggregatingConsumerError::Aggregation(
+            crate::aggregation::AggregationError::ContractError(
+                "execution reverted: custom error 0x0a55512f".to_string(),
+            ),
+        );
+        let by_name = AggregatingConsumerError::Aggregation(
+            crate::aggregation::AggregationError::ContractError(
+                "execution reverted: JobAlreadyCompleted".to_string(),
+            ),
+        );
+        let pubkey_mismatch = AggregatingConsumerError::Aggregation(
+            crate::aggregation::AggregationError::ContractError(
+                "execution reverted: custom error 0x437f07c7".to_string(),
+            ),
+        );
+
+        assert!(super::is_job_already_completed(&by_selector));
+        assert!(super::is_job_already_completed(&by_name));
+        assert!(!super::is_job_already_completed(&pubkey_mismatch));
+    }
+
+    #[cfg(feature = "aggregation")]
+    #[tokio::test]
+    async fn wait_for_threshold_checks_submission_at_deadline() {
+        use blueprint_crypto_bn254::ArkBlsBn254;
+        use blueprint_crypto_core::KeyType;
+        use blueprint_tangle_aggregation_svc::{
+            AggregationService, ServiceConfig, ThresholdWaitResult, api,
+        };
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        let service = Arc::new(AggregationService::new(ServiceConfig::minimal()));
+        service.init_task(1, 1, vec![1], 2, 2).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server_service = Arc::clone(&service);
+        let server = tokio::spawn(async move {
+            axum::serve(listener, api::router(server_service))
+                .await
+                .unwrap();
+        });
+
+        let submitter = Arc::clone(&service);
+        let marker = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            submitter.mark_submitted(1, 1).unwrap();
+        });
+
+        let secret = ArkBlsBn254::generate_with_seed(Some(&[1u8; 32])).unwrap();
+        let mut config =
+            super::AggregationServiceConfig::new(format!("http://{address}"), secret, 0);
+        config.threshold_timeout = Duration::from_millis(50);
+        config.poll_interval = Duration::from_millis(75);
+
+        let result = super::wait_for_threshold_any_service(&config, 1, 1).await;
+        assert!(matches!(result, Ok(ThresholdWaitResult::Submitted)));
+
+        marker.await.unwrap();
+        server.abort();
+        let _ = server.await;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // calculate_required_signers tests - Count Based
     // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_calculate_required_signers_count_based_67_percent() {
-        // 67% of 3 operators = 2.01 -> 2
+        // 67% of 3 operators = 2.01 -> 3
         let required = calculate_required_signers(3, 6700, ThresholdType::CountBased, None);
+        assert_eq!(required, 3);
+    }
+
+    #[test]
+    fn test_calculate_required_signers_count_based_67_percent_two_operators() {
+        // 67% of 2 operators = 1.34 -> 2, matching the chain's ceiling division.
+        let required = calculate_required_signers(2, 6700, ThresholdType::CountBased, None);
         assert_eq!(required, 2);
     }
 
@@ -1370,17 +1599,17 @@ mod tests {
     fn test_calculate_required_signers_stake_weighted_no_stakes() {
         // Without stakes, should fall back to count-based
         let required = calculate_required_signers(3, 6700, ThresholdType::StakeWeighted, None);
-        assert_eq!(required, 2);
+        assert_eq!(required, 3);
     }
 
     #[test]
     fn test_calculate_required_signers_stake_weighted_equal_stakes() {
         // 3 operators with equal stakes (10 each), 67% threshold
-        // Total stake = 30, required = 20.1, avg = 10, required signers = 2
+        // Total stake = 30, required = 20.1, so all 3 signers are required.
         let stakes = [10u64, 10, 10];
         let required =
             calculate_required_signers(3, 6700, ThresholdType::StakeWeighted, Some(&stakes));
-        assert_eq!(required, 2);
+        assert_eq!(required, 3);
     }
 
     #[test]

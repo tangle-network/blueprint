@@ -1,6 +1,7 @@
 //! In-memory aggregation state management
 
-use crate::types::TaskId;
+use crate::persistence::{PersistedTaskState, PersistenceError};
+use crate::types::{Bn254SignatureScheme, TaskId};
 use alloy_primitives::U256;
 use blueprint_crypto_bn254::{ArkBlsBn254Public, ArkBlsBn254Signature};
 use parking_lot::RwLock;
@@ -50,6 +51,10 @@ pub struct TaskState {
     pub call_id: u64,
     /// The output being signed
     pub output: Vec<u8>,
+    /// Exact bytes signed by every operator.
+    pub message: Vec<u8>,
+    /// Hash-to-curve algorithm for the message.
+    pub signature_scheme: Bn254SignatureScheme,
     /// Number of operators in the service
     pub operator_count: u32,
     /// Threshold type and value
@@ -66,6 +71,8 @@ pub struct TaskState {
     pub total_stake: u64,
     /// Whether this task has been submitted to chain
     pub submitted: bool,
+    /// When this task was submitted to chain
+    pub submitted_at: Option<Instant>,
     /// When this task was created
     pub created_at: Instant,
     /// When this task expires (None = never)
@@ -102,6 +109,32 @@ impl TaskState {
         operator_stakes: Option<HashMap<u32, u64>>,
         ttl: Option<Duration>,
     ) -> Self {
+        Self::with_message_config(
+            service_id,
+            call_id,
+            output.clone(),
+            output,
+            Bn254SignatureScheme::ArkworksSha256,
+            operator_count,
+            threshold_type,
+            operator_stakes,
+            ttl,
+        )
+    }
+
+    /// Create task state with an explicit signed message and algorithm.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_message_config(
+        service_id: u64,
+        call_id: u64,
+        output: Vec<u8>,
+        message: Vec<u8>,
+        signature_scheme: Bn254SignatureScheme,
+        operator_count: u32,
+        threshold_type: ThresholdType,
+        operator_stakes: Option<HashMap<u32, u64>>,
+        ttl: Option<Duration>,
+    ) -> Self {
         let now = Instant::now();
         let expires_at = ttl.map(|d| now + d);
 
@@ -120,6 +153,8 @@ impl TaskState {
             service_id,
             call_id,
             output,
+            message,
+            signature_scheme,
             operator_count,
             threshold_type,
             signer_bitmap: U256::ZERO,
@@ -128,6 +163,7 @@ impl TaskState {
             operator_stakes: stakes,
             total_stake,
             submitted: false,
+            submitted_at: None,
             created_at: now,
             expires_at,
         }
@@ -298,6 +334,33 @@ impl AggregationState {
         }
     }
 
+    pub(crate) fn snapshot(&self) -> Result<Vec<PersistedTaskState>, PersistenceError> {
+        self.tasks
+            .read()
+            .values()
+            .map(PersistedTaskState::try_from)
+            .collect()
+    }
+
+    pub(crate) fn restore(
+        &self,
+        persisted: Vec<PersistedTaskState>,
+    ) -> Result<(), PersistenceError> {
+        let mut recovered = HashMap::with_capacity(persisted.len());
+        for persisted in persisted {
+            let task = TaskState::try_from(persisted)?;
+            let task_id = TaskId::new(task.service_id, task.call_id);
+            if recovered.insert(task_id, task).is_some() {
+                return Err(PersistenceError::Serialization(format!(
+                    "duplicate persisted task {}/{}",
+                    task_id.service_id, task_id.call_id
+                )));
+            }
+        }
+        *self.tasks.write() = recovered;
+        Ok(())
+    }
+
     /// Initialize a new aggregation task (simple API)
     pub fn init_task(
         &self,
@@ -328,22 +391,58 @@ impl AggregationState {
         operator_count: u32,
         config: TaskConfig,
     ) -> Result<(), &'static str> {
+        self.init_task_with_message_config(
+            service_id,
+            call_id,
+            output.clone(),
+            output,
+            Bn254SignatureScheme::ArkworksSha256,
+            operator_count,
+            config,
+        )
+    }
+
+    /// Initialize a task with an explicit signed message and algorithm.
+    #[allow(clippy::too_many_arguments)]
+    pub fn init_task_with_message_config(
+        &self,
+        service_id: u64,
+        call_id: u64,
+        output: Vec<u8>,
+        message: Vec<u8>,
+        signature_scheme: Bn254SignatureScheme,
+        operator_count: u32,
+        config: TaskConfig,
+    ) -> Result<(), &'static str> {
         let task_id = TaskId::new(service_id, call_id);
         let mut tasks = self.tasks.write();
 
-        if tasks.contains_key(&task_id) {
-            return Err("Task already exists");
-        }
-
-        let state = TaskState::with_config(
+        let state = TaskState::with_message_config(
             service_id,
             call_id,
             output,
+            message,
+            signature_scheme,
             operator_count,
             config.threshold_type,
             config.operator_stakes,
             config.ttl,
         );
+
+        if let Some(existing) = tasks.get(&task_id) {
+            let same_context = existing.output == state.output
+                && existing.message == state.message
+                && existing.signature_scheme == state.signature_scheme
+                && existing.operator_count == state.operator_count
+                && existing.threshold_type == state.threshold_type
+                && existing.operator_stakes == state.operator_stakes;
+            return if same_context {
+                Ok(())
+            } else {
+                Err("Task initialization conflicts with existing context")
+            };
+        }
+
         tasks.insert(task_id, state);
         Ok(())
     }
@@ -353,6 +452,19 @@ impl AggregationState {
         let task_id = TaskId::new(service_id, call_id);
         let tasks = self.tasks.read();
         tasks.get(&task_id).map(|t| t.output.clone())
+    }
+
+    /// Get the exact signed message and algorithm for a task.
+    pub fn get_task_signature_context(
+        &self,
+        service_id: u64,
+        call_id: u64,
+    ) -> Option<(Vec<u8>, Bn254SignatureScheme)> {
+        let task_id = TaskId::new(service_id, call_id);
+        let tasks = self.tasks.read();
+        tasks
+            .get(&task_id)
+            .map(|task| (task.message.clone(), task.signature_scheme))
     }
 
     /// Submit a signature for a task
@@ -431,6 +543,7 @@ impl AggregationState {
 
         let task = tasks.get_mut(&task_id).ok_or("Task not found")?;
         task.submitted = true;
+        task.submitted_at = Some(Instant::now());
         Ok(())
     }
 
@@ -452,18 +565,40 @@ impl AggregationState {
     /// Cleanup submitted tasks
     /// Returns the number of tasks removed
     pub fn cleanup_submitted(&self) -> usize {
+        self.cleanup_submitted_after(Duration::ZERO)
+    }
+
+    /// Cleanup submitted tasks after they have been observable for a grace period.
+    pub fn cleanup_submitted_after(&self, retention: Duration) -> usize {
         let mut tasks = self.tasks.write();
         let before = tasks.len();
-        tasks.retain(|_, task| !task.submitted);
+        tasks.retain(|_, task| {
+            !task.submitted
+                || task
+                    .submitted_at
+                    .is_some_and(|submitted_at| submitted_at.elapsed() < retention)
+        });
         before - tasks.len()
     }
 
     /// Cleanup both expired and submitted tasks
     /// Returns the number of tasks removed
     pub fn cleanup(&self) -> usize {
+        self.cleanup_with_submitted_retention(Duration::ZERO)
+    }
+
+    /// Cleanup expired tasks and submitted tasks past their observation grace period.
+    pub fn cleanup_with_submitted_retention(&self, retention: Duration) -> usize {
         let mut tasks = self.tasks.write();
         let before = tasks.len();
-        tasks.retain(|_, task| !task.is_expired() && !task.submitted);
+        tasks.retain(|_, task| {
+            if task.submitted {
+                task.submitted_at
+                    .is_some_and(|submitted_at| submitted_at.elapsed() < retention)
+            } else {
+                !task.is_expired()
+            }
+        });
         before - tasks.len()
     }
 
@@ -749,10 +884,15 @@ mod tests {
 
         assert!(state.init_task(1, 100, vec![1, 2, 3], 5, 3).is_ok());
 
-        // Duplicate should fail
-        let result = state.init_task(1, 100, vec![1, 2, 3], 5, 3);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Task already exists");
+        // An exact duplicate is safe when another operator won the init race.
+        assert!(state.init_task(1, 100, vec![1, 2, 3], 5, 3).is_ok());
+
+        // The same task ID cannot change any signed context.
+        let result = state.init_task(1, 100, vec![1, 2, 4], 5, 3);
+        assert_eq!(
+            result.unwrap_err(),
+            "Task initialization conflicts with existing context"
+        );
     }
 
     #[test]
@@ -942,6 +1082,48 @@ mod tests {
         assert_eq!(removed, 1);
         assert_eq!(state.task_count(), 1);
         assert!(state.get_status(1, 101).is_some());
+    }
+
+    #[test]
+    fn test_submitted_task_remains_observable_during_retention() {
+        let state = AggregationState::new();
+
+        state.init_task(1, 100, vec![], 1, 1).unwrap();
+        state.mark_submitted(1, 100).unwrap();
+
+        assert_eq!(state.cleanup_submitted_after(Duration::from_secs(60)), 0);
+        assert!(state
+            .get_status(1, 100)
+            .is_some_and(|status| status.submitted));
+
+        assert_eq!(state.cleanup_submitted_after(Duration::ZERO), 1);
+        assert!(state.get_status(1, 100).is_none());
+    }
+
+    #[test]
+    fn submitted_retention_overrides_task_expiry() {
+        let state = AggregationState::new();
+        state
+            .init_task_with_config(
+                1,
+                100,
+                vec![],
+                1,
+                TaskConfig {
+                    ttl: Some(Duration::ZERO),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        state.mark_submitted(1, 100).unwrap();
+
+        assert_eq!(
+            state.cleanup_with_submitted_retention(Duration::from_secs(60)),
+            0
+        );
+        assert!(state
+            .get_status(1, 100)
+            .is_some_and(|status| status.submitted));
     }
 
     #[test]

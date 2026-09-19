@@ -22,6 +22,7 @@ thiserror = { workspace = true }
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
 sha2 = { workspace = true }
+sha3 = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
 zeroize = { workspace = true }
 
@@ -43,6 +44,7 @@ std = [
 	"num-bigint/std",
 	"num-traits/std",
 	"sha2/std",
+	"sha3/std",
 ]
 aggregation = []
 
