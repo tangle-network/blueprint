@@ -295,7 +295,7 @@ pasetors = { version = "0.7.7", default-features = false }
 pem = { version = "3.0", default-features = false }
 # TEE remote attestation (COSE + x509 + ECDSA) — used only when a crate opts into
 # the `tee-attestation` feature; kept out of the default build.
-coset = { version = "0.3", default-features = false }
+coset = { version = "0.4", default-features = false }
 ciborium = { version = "0.2", default-features = false }
 p384 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8"] }
 
