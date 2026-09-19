@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-crypto-bls"
-version = "0.2.0-alpha.9"
+version = "0.2.0-alpha.10"
 description = "tnt-bls crypto primitives for Tangle Blueprints"
 authors.workspace = true
 edition.workspace = true
