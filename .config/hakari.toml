@@ -7,3 +7,7 @@ platforms = [
     "aarch64-apple-darwin",
 ]
 
+[traversal-excludes]
+third-party = [
+    { name = "eigensdk" },
+]

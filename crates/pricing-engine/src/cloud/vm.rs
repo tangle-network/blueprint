@@ -551,7 +551,8 @@ mod tests {
             .await;
 
         // May succeed or fail depending on network
-        if let Ok(instance) = result {
+        if result.is_ok() {
+            let instance = result.unwrap();
             assert!(instance.hourly_price <= 0.10);
             assert!(instance.vcpus >= 2.0);
             assert!(instance.memory_gb >= 4.0);
@@ -566,7 +567,8 @@ mod tests {
         let result = fetcher.fetch_aws_instances("us-east-1").await;
 
         // Should succeed with public API
-        if let Ok(instances) = result {
+        if result.is_ok() {
+            let instances = result.unwrap();
             assert!(!instances.is_empty());
             // Verify we got actual pricing data
             assert!(instances.iter().any(|i| i.hourly_price > 0.0));
