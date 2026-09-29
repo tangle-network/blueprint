@@ -40,7 +40,7 @@ pub enum Error {
     InvalidHexDecoding,
     /// Failed to deserialize key
     #[error("Failed to deserialize key: {0}")]
-    KeyDeserialization(#[from] serde::de::value::Error),
+    KeyDeserialization(#[cfg_attr(feature = "std", source)] serde::de::value::Error),
     /// Invalid seed
     #[error("Invalid seed: {0}")]
     InvalidSeed(String),
@@ -119,6 +119,11 @@ macro_rules! impl_from_for_boxed_error {
     };
 }
 
+impl From<serde::de::value::Error> for Error {
+    fn from(error: serde::de::value::Error) -> Self {
+        Self::KeyDeserialization(error)
+    }
+}
 impl_from_for_boxed_error!(blueprint_std::io::Error, Io);
 impl_from_for_boxed_error!(serde::de::value::Error, KeyDeserialization);
 impl_from_for_boxed_error!(blueprint_crypto::CryptoCoreError, Crypto);

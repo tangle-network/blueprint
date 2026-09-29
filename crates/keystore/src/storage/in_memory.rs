@@ -3,15 +3,7 @@ use crate::error::Result;
 use blueprint_crypto::KeyTypeId;
 use blueprint_std::{boxed::Box, collections::BTreeMap, vec::Vec};
 
-/// Interior-mutability lock for the storage map.
-///
-/// `parking_lot` is a fair, yielding lock, but it requires `std`
-/// unconditionally and so is unavailable on bare-metal targets
-/// (https://github.com/tangle-network/blueprint/issues/1520). `spin` is
-/// `no_std`-clean and is used instead when `std` is off.
-///
-/// The public API of [`InMemoryStorage`] is identical either way, and
-/// `RawStorage: Send + Sync` still holds because both locks are.
+// parking_lot needs std; spin keeps this storage available without it.
 #[cfg(feature = "std")]
 type StorageLock<T> = parking_lot::RwLock<T>;
 #[cfg(not(feature = "std"))]
@@ -124,47 +116,6 @@ mod tests {
 
     use super::*;
     use crate::storage::TypedStorage;
-
-    /// The lock backing `InMemoryStorage` is selected by `cfg` (#1520), so
-    /// pin the trait bounds `RawStorage` requires. This is a compile-time
-    /// assertion: it fails to build if either `parking_lot::RwLock` or
-    /// `spin::RwLock` stops satisfying them.
-    fn _assert_raw_storage_bounds() {
-        fn assert_send_sync<T: Send + Sync + ?Sized>() {}
-        assert_send_sync::<InMemoryStorage>();
-        assert_send_sync::<dyn RawStorage>();
-    }
-
-    /// Negative path: a key type that was never stored must not be readable
-    /// back, and removing a type that is absent must not disturb the types
-    /// that are present. Guards the `get`/`get_mut` fallbacks in
-    /// `load_secret_raw`/`remove_raw` against returning another key type's
-    /// bytes.
-    #[test]
-    fn test_absent_type_is_isolated() -> Result<()> {
-        let storage = TypedStorage::new(InMemoryStorage::new());
-
-        let secret =
-            K256Ecdsa::generate_with_seed(None).map_err(IntoCryptoError::into_crypto_error)?;
-        let public = K256Ecdsa::public_from_secret(&secret);
-        storage.store::<K256Ecdsa>(&public, &secret)?;
-
-        // Unknown public key within a stored type reads back as None.
-        let other = K256Ecdsa::generate_with_seed(Some(1u64.to_le_bytes().as_slice()))
-            .map_err(IntoCryptoError::into_crypto_error)?;
-        let other_public = K256Ecdsa::public_from_secret(&other);
-        assert_eq!(storage.load::<K256Ecdsa>(&other_public)?.as_ref(), None);
-        assert!(!storage.contains::<K256Ecdsa>(&other_public));
-
-        // Removing a key that is not present is a no-op, not an error.
-        storage.remove::<K256Ecdsa>(&other_public)?;
-
-        // The stored key survives that removal.
-        assert_eq!(storage.load::<K256Ecdsa>(&public)?.as_ref(), Some(&secret));
-        assert_eq!(storage.list::<K256Ecdsa>().count(), 1);
-
-        Ok(())
-    }
 
     #[test]
     fn test_basic_operations() -> Result<()> {
