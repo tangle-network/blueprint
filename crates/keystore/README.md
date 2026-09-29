@@ -9,7 +9,7 @@ A flexible and secure keystore implementation supporting multiple key types, sto
 - `std` - Standard library support (default enabled)
   - Enables std-dependent functionality across all enabled features
   - Required for filesystem storage and remote signing
-- `no_std` - No standard library support (not yet working)
+- `--no-default-features` - Core keystore and in-memory storage work on bare-metal targets. Filesystem and remote signers require `std`.
 
 ### Cryptographic Primitives
 

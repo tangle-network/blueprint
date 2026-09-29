@@ -2,13 +2,18 @@ use super::RawStorage;
 use crate::error::Result;
 use blueprint_crypto::KeyTypeId;
 use blueprint_std::{boxed::Box, collections::BTreeMap, vec::Vec};
-use parking_lot::RwLock;
+
+// parking_lot needs std; spin keeps this storage available without it.
+#[cfg(feature = "std")]
+type StorageLock<T> = parking_lot::RwLock<T>;
+#[cfg(not(feature = "std"))]
+type StorageLock<T> = spin::RwLock<T>;
 
 type StorageMap = BTreeMap<KeyTypeId, BTreeMap<Vec<u8>, Vec<u8>>>;
 
 /// A memory-backed local storage
 pub struct InMemoryStorage {
-    data: RwLock<StorageMap>,
+    data: StorageLock<StorageMap>,
 }
 
 impl InMemoryStorage {
@@ -40,7 +45,7 @@ impl InMemoryStorage {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            data: RwLock::new(BTreeMap::new()),
+            data: StorageLock::new(BTreeMap::new()),
         }
     }
 }
