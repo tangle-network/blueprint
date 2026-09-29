@@ -8,9 +8,10 @@ ci = "github"
 # Whether dist should create a Github Release or use an existing draft
 create-release = false
 github-build-setup = "build-setup.yml"
-# `release.yml` carries one edit that `dist` cannot express through config: a
+# `release.yml` carries two edits that `dist` cannot express through config: a
 # `retention-days` limit on the `cargo-dist-cache` upload. Without that limit
 # the artifact holds most of the organization Actions storage allowance.
+# The second edit limits distribution to cargo-tangle tags while release-plz owns libraries.
 # `github-build-setup` reaches the build jobs only, not the `plan` job that
 # makes the upload, so the edit must stay in `release.yml`.
 #

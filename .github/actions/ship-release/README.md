@@ -60,7 +60,7 @@ never appear in the action's input log):
 
 ## Example workflow
 
-See [`.github/workflows/example-release.yml`](../../workflows/example-release.yml)
+See [`.github/examples/ship-release.yml`](../../examples/ship-release.yml)
 in this repository for a full end-to-end example wired to GitHub Releases.
 
 ```yaml
