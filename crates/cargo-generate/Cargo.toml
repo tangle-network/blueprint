@@ -12,7 +12,8 @@
 [package]
 edition = "2021"
 name = "blueprint-cargo-generate"
-version = "0.1.0"
+version = "0.1.1"
+rust-version = "1.93"
 authors = ["Ashley Williams <ashley666ashley@gmail.com>"]
 build = false
 include = [
@@ -105,6 +106,10 @@ features = ["serde"]
 
 [dependencies.indicatif]
 version = "~0.18"
+
+[dependencies.kstring]
+# gix-config permits 2.0.5, which requires Rust 1.96. Keep the CLI at its 1.93 MSRV.
+version = "=2.0.2"
 
 [dependencies.liquid]
 version = "~0.26"

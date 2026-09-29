@@ -2996,7 +2996,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-cargo-generate"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anstyle",
  "anyhow",
@@ -3018,6 +3018,7 @@ dependencies = [
  "indexmap 2.14.0",
  "indicatif",
  "indoc",
+ "kstring",
  "liquid",
  "liquid-core",
  "liquid-derive",
@@ -4441,18 +4442,23 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.5.0-alpha.16"
+version = "0.5.0-alpha.17"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
+ "alloy-eips 2.0.5",
  "alloy-json-abi",
+ "alloy-json-rpc 2.0.5",
  "alloy-network 1.8.3",
  "alloy-primitives",
  "alloy-provider",
+ "alloy-rpc-client 2.0.5",
  "alloy-rpc-types-eth 1.8.3",
  "alloy-signer-local",
  "alloy-sol-types",
  "alloy-transport 1.8.3",
+ "alloy-transport 2.0.5",
+ "alloy-transport-http 2.0.5",
  "anyhow",
  "assert_cmd",
  "bip39",
