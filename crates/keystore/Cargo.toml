@@ -16,7 +16,12 @@ workspace = true
 # Core dependencies (always included)
 blueprint-crypto = { workspace = true, default-features = false }
 blueprint-std.workspace = true
-parking_lot.workspace = true
+# `parking_lot` requires `std` unconditionally, so it is gated behind the
+# `std` feature and `spin` is used for `no_std` builds instead. `spin` is
+# therefore non-optional: `--no-default-features` has to resolve a lock
+# without a feature to enable it behind. It is a small, dependency-free crate.
+parking_lot = { workspace = true, optional = true }
+spin.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
 serde = { workspace = true, features = ["derive"] }
@@ -65,6 +70,7 @@ default = ["std", "tangle", "all-remote-signers"]
 std = [
     # Basic std dependencies
     "dep:serde_json",
+    "dep:parking_lot",
     "serde/std",
     "serde_bytes/std",
     "hex/std",
