@@ -24,10 +24,10 @@ jobs:
         id: check
         run: |
           if grep -q "^release = false" release-plz.toml 2>/dev/null; then
-            echo "enabled=false" >> $GITHUB_OUTPUT
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "Releases disabled in release-plz.toml"
           else
-            echo "enabled=true" >> $GITHUB_OUTPUT
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "Releases enabled"
           fi
 
@@ -36,6 +36,8 @@ jobs:
     needs: check-release-enabled
     if: needs.check-release-enabled.outputs.enabled == 'true'
     runs-on: ubuntu-22.04
+    # Bound a stalled publish run while leaving room for registry rate limits.
+    timeout-minutes: 90
     steps:
       # Generating a GitHub token, so that PRs and tags created by
       # the release-plz-action can trigger actions workflows.
@@ -83,3 +85,7 @@ jobs:
           ./.github/scripts/batch-publish.sh release-output.json
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Verify every released crate is on crates.io
+        if: always() && !cancelled()
+        run: python3 .github/scripts/verify_release_tags.py release-output.json
