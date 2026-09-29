@@ -142,11 +142,6 @@
       "tag": "blueprint-profiling-v0.2.0-alpha.6"
     },
     {
-      "package_name": "cargo-tangle",
-      "version": "0.5.0-alpha.15",
-      "tag": "cargo-tangle-v0.5.0-alpha.15"
-    },
-    {
       "package_name": "blueprint-build-utils",
       "version": "0.2.0-alpha.7",
       "tag": "blueprint-build-utils-v0.2.0-alpha.7"
