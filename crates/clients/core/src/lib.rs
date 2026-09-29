@@ -1,9 +1,13 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+use blueprint_std::collections::BTreeMap;
+use blueprint_std::hash::Hash;
+use blueprint_std::string::ToString;
+
 pub mod error;
 use error::Error;
 
-use blueprint_std::hash::Hash;
-
-pub type OperatorSet<K, V> = std::collections::BTreeMap<K, V>;
+pub type OperatorSet<K, V> = BTreeMap<K, V>;
 
 #[auto_impl::auto_impl(&, Arc)]
 pub trait BlueprintServicesClient: Send + Sync + 'static {
