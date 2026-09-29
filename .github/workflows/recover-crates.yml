@@ -1,0 +1,57 @@
+name: Recover tagged crate release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          ref: 3a0d1a8cf52a9ca71cab7daef3b0848bdbf198e6
+          path: prior-release
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hakari
+      - uses: ./.github/actions/free-disk-space
+      - name: Prepare prior tagged source
+        working-directory: prior-release
+        run: |
+          cp ../.github/scripts/batch-publish.sh .github/scripts/
+          cp ../.github/scripts/crate-publish-plan.py .github/scripts/
+          cp ../.github/scripts/verify_release_tags.py .github/scripts/
+          cargo hakari disable
+          cargo hakari remove-deps -y
+          python3 .github/scripts/crate-publish-plan.py ../.github/release-manifests/3a0d1a8-prerequisites.json --verify-tags --check-external
+      - name: Publish missing prior prerequisites
+        working-directory: prior-release
+        run: .github/scripts/batch-publish.sh ../.github/release-manifests/3a0d1a8-prerequisites.json --verify-tags
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Verify prior prerequisites
+        if: always() && !cancelled()
+        working-directory: prior-release
+        run: python3 .github/scripts/verify_release_tags.py ../.github/release-manifests/3a0d1a8-prerequisites.json
+      - name: Prepare current tagged source
+        run: |
+          cargo hakari disable
+          cargo hakari remove-deps -y
+          python3 .github/scripts/crate-publish-plan.py .github/release-manifests/36556002501.json --verify-tags --check-external
+      - name: Publish missing current release versions
+        run: .github/scripts/batch-publish.sh .github/release-manifests/36556002501.json --verify-tags
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Verify current release versions
+        if: always() && !cancelled()
+        run: python3 .github/scripts/verify_release_tags.py .github/release-manifests/36556002501.json

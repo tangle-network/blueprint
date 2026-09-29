@@ -1,0 +1,195 @@
+{
+  "source_sha": "8d6d838b7b0d90a237864358fb0bf9756acda0d8",
+  "releases": [
+    {
+      "package_name": "blueprint-core",
+      "version": "0.2.0-alpha.6",
+      "tag": "blueprint-core-v0.2.0-alpha.6"
+    },
+    {
+      "package_name": "blueprint-std",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-std-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-crypto-core",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-crypto-core-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-crypto-bls",
+      "version": "0.2.0-alpha.10",
+      "tag": "blueprint-crypto-bls-v0.2.0-alpha.10"
+    },
+    {
+      "package_name": "blueprint-crypto-bn254",
+      "version": "0.2.0-alpha.10",
+      "tag": "blueprint-crypto-bn254-v0.2.0-alpha.10"
+    },
+    {
+      "package_name": "blueprint-crypto-ed25519",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-crypto-ed25519-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-crypto-hashing",
+      "version": "0.2.0-alpha.8",
+      "tag": "blueprint-crypto-hashing-v0.2.0-alpha.8"
+    },
+    {
+      "package_name": "blueprint-crypto-k256",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-crypto-k256-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-crypto-sr25519",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-crypto-sr25519-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-crypto",
+      "version": "0.2.0-alpha.10",
+      "tag": "blueprint-crypto-v0.2.0-alpha.10"
+    },
+    {
+      "package_name": "blueprint-auth",
+      "version": "0.2.0-alpha.12",
+      "tag": "blueprint-auth-v0.2.0-alpha.12"
+    },
+    {
+      "package_name": "blueprint-client-core",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-client-core-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-metrics-rpc-calls",
+      "version": "0.2.0-alpha.6",
+      "tag": "blueprint-metrics-rpc-calls-v0.2.0-alpha.6"
+    },
+    {
+      "package_name": "blueprint-client-evm",
+      "version": "0.2.0-alpha.8",
+      "tag": "blueprint-client-evm-v0.2.0-alpha.8"
+    },
+    {
+      "package_name": "blueprint-keystore",
+      "version": "0.2.0-alpha.11",
+      "tag": "blueprint-keystore-v0.2.0-alpha.11"
+    },
+    {
+      "package_name": "blueprint-client-tangle",
+      "version": "0.2.0-alpha.13",
+      "tag": "blueprint-client-tangle-v0.2.0-alpha.13"
+    },
+    {
+      "package_name": "blueprint-clients",
+      "version": "0.2.0-alpha.14",
+      "tag": "blueprint-clients-v0.2.0-alpha.14"
+    },
+    {
+      "package_name": "blueprint-manager-bridge",
+      "version": "0.2.0-alpha.13",
+      "tag": "blueprint-manager-bridge-v0.2.0-alpha.13"
+    },
+    {
+      "package_name": "blueprint-networking",
+      "version": "0.2.0-alpha.11",
+      "tag": "blueprint-networking-v0.2.0-alpha.11"
+    },
+    {
+      "package_name": "blueprint-gossip-primitives",
+      "version": "0.2.0-alpha.11",
+      "tag": "blueprint-gossip-primitives-v0.2.0-alpha.11"
+    },
+    {
+      "package_name": "blueprint-networking-agg-sig-gossip-extension",
+      "version": "0.2.0-alpha.11",
+      "tag": "blueprint-networking-agg-sig-gossip-extension-v0.2.0-alpha.11"
+    },
+    {
+      "package_name": "blueprint-tangle-aggregation-svc",
+      "version": "0.2.0-alpha.13",
+      "tag": "blueprint-tangle-aggregation-svc-v0.2.0-alpha.13"
+    },
+    {
+      "package_name": "blueprint-tangle-extra",
+      "version": "0.2.0-alpha.13",
+      "tag": "blueprint-tangle-extra-v0.2.0-alpha.13"
+    },
+    {
+      "package_name": "blueprint-tee",
+      "version": "0.2.0-alpha.10",
+      "tag": "blueprint-tee-v0.2.0-alpha.10"
+    },
+    {
+      "package_name": "blueprint-router",
+      "version": "0.2.0-alpha.6",
+      "tag": "blueprint-router-v0.2.0-alpha.6"
+    },
+    {
+      "package_name": "blueprint-evm-extra",
+      "version": "0.2.0-alpha.8",
+      "tag": "blueprint-evm-extra-v0.2.0-alpha.8"
+    },
+    {
+      "package_name": "blueprint-faas",
+      "version": "0.2.0-alpha.8",
+      "tag": "blueprint-faas-v0.2.0-alpha.8"
+    },
+    {
+      "package_name": "blueprint-profiling",
+      "version": "0.2.0-alpha.6",
+      "tag": "blueprint-profiling-v0.2.0-alpha.6"
+    },
+    {
+      "package_name": "cargo-tangle",
+      "version": "0.5.0-alpha.15",
+      "tag": "cargo-tangle-v0.5.0-alpha.15"
+    },
+    {
+      "package_name": "blueprint-build-utils",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-build-utils-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-context-derive",
+      "version": "0.2.0-alpha.6",
+      "tag": "blueprint-context-derive-v0.2.0-alpha.6"
+    },
+    {
+      "package_name": "blueprint-macros",
+      "version": "0.2.0-alpha.5",
+      "tag": "blueprint-macros-v0.2.0-alpha.5"
+    },
+    {
+      "package_name": "blueprint-networking-round-based-extension",
+      "version": "0.2.0-alpha.11",
+      "tag": "blueprint-networking-round-based-extension-v0.2.0-alpha.11"
+    },
+    {
+      "package_name": "blueprint-producers-extra",
+      "version": "0.2.0-alpha.6",
+      "tag": "blueprint-producers-extra-v0.2.0-alpha.6"
+    },
+    {
+      "package_name": "blueprint-store-local-database",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-store-local-database-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-stores",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-stores-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-benchmarking",
+      "version": "0.2.0-alpha.7",
+      "tag": "blueprint-benchmarking-v0.2.0-alpha.7"
+    },
+    {
+      "package_name": "blueprint-metrics",
+      "version": "0.2.0-alpha.6",
+      "tag": "blueprint-metrics-v0.2.0-alpha.6"
+    }
+  ]
+}

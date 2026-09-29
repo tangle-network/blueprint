@@ -26,7 +26,10 @@ jobs:
       - name: Check release-plz.toml
         id: check
         run: |
-          if grep -q "^release = false" release-plz.toml 2>/dev/null; then
+          if git log -1 --format=%s | grep -Fq "[skip release-plz]"; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Explicit release recovery hold in merge subject"
+          elif grep -q "^release = false" release-plz.toml 2>/dev/null; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "Releases disabled in release-plz.toml"
           else
