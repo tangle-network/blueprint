@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-std-v0.2.0-alpha.6...blueprint-std-v0.2.0-alpha.7) - 2026-09-29
+
+### Fixed
+
+- *(std)* gate `colored` behind `print-trace` so `no_std` consumers build (#1530)
+
+### Other
+
+- *(agents)* remove generated maps and preserve local contracts (#1513)
+
 ## [0.2.0-alpha.6](https://github.com/tangle-network/blueprint/compare/blueprint-std-v0.2.0-alpha.5...blueprint-std-v0.2.0-alpha.6) - 2026-08-02
 
 ### Other
