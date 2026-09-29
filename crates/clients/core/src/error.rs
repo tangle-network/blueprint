@@ -1,5 +1,5 @@
-use alloc::format;
-use alloc::string::String;
+use blueprint_std::format;
+use blueprint_std::string::String;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
