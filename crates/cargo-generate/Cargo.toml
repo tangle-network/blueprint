@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "blueprint-cargo-generate"
-version = "0.1.1"
+version = "0.23.12"
 rust-version = "1.93"
 authors = ["Ashley Williams <ashley666ashley@gmail.com>"]
 build = false

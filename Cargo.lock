@@ -2996,7 +2996,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-cargo-generate"
-version = "0.1.1"
+version = "0.23.12"
 dependencies = [
  "anstyle",
  "anyhow",
@@ -4442,7 +4442,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.5.0-alpha.17"
+version = "0.5.0-alpha.18"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
