@@ -94,9 +94,10 @@ def workspace_versions() -> dict[str, str]:
 def release_names(path: str) -> list[str]:
     with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
+    releases = payload["releases"] if isinstance(payload, dict) else payload
     return [
         release["package_name"]
-        for release in payload
+        for release in releases
         if isinstance(release, dict) and release.get("package_name")
     ]
 
