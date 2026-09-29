@@ -1,9 +1,15 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::string::ToString;
+
 pub mod error;
 use error::Error;
 
 use blueprint_std::hash::Hash;
 
-pub type OperatorSet<K, V> = std::collections::BTreeMap<K, V>;
+pub type OperatorSet<K, V> = alloc::collections::BTreeMap<K, V>;
 
 #[auto_impl::auto_impl(&, Arc)]
 pub trait BlueprintServicesClient: Send + Sync + 'static {

@@ -1,3 +1,6 @@
+use alloc::format;
+use alloc::string::String;
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Eigenlayer error: `{0}`")]
