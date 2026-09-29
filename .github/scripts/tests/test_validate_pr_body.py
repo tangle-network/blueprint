@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import tempfile
 import unittest
@@ -14,6 +15,49 @@ SPEC.loader.exec_module(MODULE)
 
 
 class ValidatePrBodyTests(unittest.TestCase):
+    def test_release_pr_exemption_requires_bot_branch_title_and_repository(self) -> None:
+        pull_request = {
+            "title": "chore: release",
+            "user": {"login": "webb-spider[bot]", "type": "Bot"},
+            "head": {
+                "ref": "release-plz-2026-08-03T05-25-35Z",
+                "repo": {"full_name": "tangle-network/blueprint"},
+            },
+            "base": {
+                "ref": "main",
+                "repo": {"full_name": "tangle-network/blueprint"},
+            },
+        }
+        self.assertTrue(MODULE.is_generated_release_plz_pr(pull_request))
+
+        for key, value in [
+            ("user", {"login": "webb-spider[bot]", "type": "User"}),
+            ("user", {"login": "alice", "type": "Bot"}),
+            (
+                "head",
+                {
+                    "ref": "feature/release",
+                    "repo": {"full_name": "tangle-network/blueprint"},
+                },
+            ),
+            (
+                "head",
+                {
+                    "ref": "release-plz-2026-08-03T05-25-35Z",
+                    "repo": {"full_name": "alice/blueprint"},
+                },
+            ),
+            ("title", "feat: release tooling"),
+            ("base", {"ref": "main", "repo": {"full_name": "alice/blueprint"}}),
+        ]:
+            candidate = copy.deepcopy(pull_request)
+            candidate[key] = value
+            self.assertFalse(MODULE.is_generated_release_plz_pr(candidate))
+
+        candidate = copy.deepcopy(pull_request)
+        candidate["base"]["ref"] = "develop"
+        self.assertFalse(MODULE.is_generated_release_plz_pr(candidate))
+
     def test_infer_class_a_for_docs_only_changes(self) -> None:
         changed = ["docs/engineering/HARNESS_ENGINEERING_SPEC.md", "README.md", ".github/workflows/ci.yml"]
         policy = MODULE.load_policy_config(None)
