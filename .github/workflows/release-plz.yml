@@ -8,6 +8,9 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - dist-workspace.toml
+      - .github/**
 
 env:
   RELEASE_PLZ_LOG: TRACE
