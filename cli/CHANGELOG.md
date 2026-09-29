@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.18](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.17...cargo-tangle-v0.5.0-alpha.18) - 2026-09-29
+
+### Fixed
+
+- *(cargo-tangle)* retain template generator version contract
+
 ## [0.5.0-alpha.15](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.14...cargo-tangle-v0.5.0-alpha.15) - 2026-09-29
 
 ### Other
