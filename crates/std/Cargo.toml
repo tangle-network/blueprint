@@ -17,7 +17,11 @@ rand = { workspace = true, features = ["std_rng"] }
 rayon = { workspace = true, optional = true }
 num-traits.workspace = true
 thiserror.workspace = true
-colored = { workspace = true }
+# `colored` has no `no_std` support, and it is only referenced from
+# `perf_trace`, which is gated behind `print-trace` (itself `std`-only).
+# Keeping it non-optional here pulls `std` into every `no_std` consumer of
+# this crate through the unconditional dependency edge.
+colored = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["std"] }
@@ -26,5 +30,5 @@ rand = { workspace = true, features = ["std"] }
 default = ["std"]
 std = ["thiserror/std", "getrandom"]
 parallel = ["dep:rayon", "std"]
-print-trace = ["std"]
+print-trace = ["std", "dep:colored"]
 getrandom = ["rand/std"]
