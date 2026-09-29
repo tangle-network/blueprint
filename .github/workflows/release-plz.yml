@@ -93,5 +93,5 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Verify every released crate is on crates.io
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.release-plz.outputs.releases_created == 'true'
         run: python3 .github/scripts/verify_release_tags.py release-output.json
