@@ -3429,7 +3429,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-keystore"
-version = "0.2.0-alpha.11"
+version = "0.2.0-alpha.12"
 dependencies = [
  "alloy-network 1.8.3",
  "alloy-primitives",

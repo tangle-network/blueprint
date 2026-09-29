@@ -206,7 +206,7 @@ blueprint-store-local-database = { version = "0.2.0-alpha.7", path = "./crates/s
 rocksdb = { version = "0.21.0", default-features = false }
 
 # SDK
-blueprint-keystore = { version = "0.2.0-alpha.11", path = "./crates/keystore", default-features = false }
+blueprint-keystore = { version = "0.2.0-alpha.12", path = "./crates/keystore", default-features = false }
 blueprint-std = { version = "0.2.0-alpha.7", path = "./crates/std", default-features = false }
 
 # P2P
