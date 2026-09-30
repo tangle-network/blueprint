@@ -46,7 +46,7 @@ macro_rules! impl_w3f_serde {
         }
 
         impl blueprint_std::hash::Hash for $name {
-            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+            fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
                 self.to_bytes().hash(state);
             }
         }
@@ -108,7 +108,13 @@ macro_rules! define_bls_key {
                 use crate::error::{BlsError, Result};
                 use crate::from_bytes;
                 use blueprint_crypto_core::{KeyType, KeyTypeId, BytesEncoding};
-                use blueprint_std::{UniformRand, string::{String, ToString}};
+                use blueprint_std::{
+                    hash::Hash,
+                    string::{String, ToString},
+                    vec::Vec,
+                };
+                #[cfg(feature = "std")]
+                use blueprint_std::UniformRand;
                 use tnt_bls::{Message, PublicKey, SecretKey, SerializableToBytes, Signature, [<Tiny $ty:upper>]};
 
                 #[doc = $ty:upper]
