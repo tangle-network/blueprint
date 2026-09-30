@@ -206,7 +206,10 @@ def extract_change_class(change_class_section: str) -> str | None:
     match = re.search(r"selected class:\s*(.+)$", change_class_section, flags=re.IGNORECASE | re.MULTILINE)
     if not match:
         return None
-    return match.group(1).strip().lower()
+    # The template encourages `- Selected class: **Class B**`, and that bold
+    # marker used to be captured into the value, making a correct class look
+    # invalid. Strip surrounding emphasis so both forms parse.
+    return match.group(1).strip().strip("*_` ").lower()
 
 
 def parse_change_class_rank(selected_class: str | None) -> int | None:
