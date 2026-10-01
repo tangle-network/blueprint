@@ -35,6 +35,21 @@ impl Default for CratePath {
 /// Only the `crate` key is recognised; any other key is an error so a typo
 /// surfaces at compile time instead of silently resolving to the default.
 pub fn parse_crate_path(attrs: &[Attribute]) -> Result<CratePath> {
+    // A second `#[context(...)]` silently winning or losing to the first is
+    // exactly the kind of typo that must surface at compile time. The main
+    // loop returns at the first matching attribute, so duplicates must be
+    // detected before it runs.
+    let mut context_attrs = attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident(CRATE_ATTR_NAME));
+    let _first = context_attrs.next();
+    if let Some(duplicate) = context_attrs.next() {
+        return Err(Error::new_spanned(
+            duplicate,
+            format!("duplicate `{CRATE_ATTR_NAME}` attribute: only one is allowed"),
+        ));
+    }
+
     for attr in attrs {
         if !attr.path().is_ident(CRATE_ATTR_NAME) {
             continue;
@@ -52,6 +67,10 @@ pub fn parse_crate_path(attrs: &[Attribute]) -> Result<CratePath> {
                 return Err(meta.error(format!(
                     "unsupported `{CRATE_ATTR_NAME}` key `{key}`, expected `crate`"
                 )));
+            }
+
+            if path.is_some() {
+                return Err(meta.error("duplicate `crate` key"));
             }
 
             let value: LitStr = meta.value()?.parse()?;

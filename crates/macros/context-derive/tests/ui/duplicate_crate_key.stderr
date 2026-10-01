@@ -1,0 +1,5 @@
+error: duplicate `crate` key
+ --> tests/ui/duplicate_crate_key.rs:5:36
+  |
+5 | #[context(crate = "blueprint_sdk", crate = "also_blueprint_sdk")]
+  |                                    ^^^^^
