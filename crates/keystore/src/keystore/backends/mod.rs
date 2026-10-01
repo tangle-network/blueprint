@@ -12,6 +12,7 @@ cfg_remote! {
 use super::LocalStorageEntry;
 use crate::error::Result;
 use crate::storage::RawStorage;
+use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::IntoCryptoError;
 use blueprint_crypto::KeyType;
 use blueprint_std::{boxed::Box, vec::Vec};
@@ -83,12 +84,55 @@ pub trait Backend: Send + Sync {
 
     /// Get whichever key of the given type that occurs first in local storage
     ///
+    /// The order is the lexicographic order of the public keys, which is not a
+    /// property an operator can see or predict. When the keystore holds more
+    /// than one key of the type, this silently picks one; for operator identity
+    /// and signing paths, prefer [`Backend::sole_local`], which refuses to
+    /// guess.
+    ///
     /// # Errors
     ///
     /// Depending on the backend, this may error when attempting to open and/or read the keystore.
     fn first_local<T: KeyType>(&self) -> Result<T::Public>
     where
         T::Public: DeserializeOwned;
+
+    /// Get the sole key of the given type in local storage
+    ///
+    /// A keystore may legitimately hold more than one key of a type (`import`
+    /// inserts without replacing), and [`Backend::first_local`] resolves that
+    /// ambiguity by silently picking the lexicographically-first key. For
+    /// operator identity and signing paths that is a silent, on-chain identity
+    /// mistake, so this method fails closed: it returns the key only when
+    /// exactly one exists, and otherwise errors, naming the candidates.
+    ///
+    /// # Errors
+    ///
+    /// - [`crate::error::Error::KeyNotFound`] when the keystore holds no key of the type
+    /// - [`crate::error::Error::Other`] when it holds more than one, listing the candidate public keys
+    /// - storage errors from listing, depending on the backend
+    fn sole_local<T: KeyType>(&self) -> Result<T::Public>
+    where
+        T::Public: DeserializeOwned,
+    {
+        let mut keys = self.list_local::<T>()?;
+        match keys.len() {
+            0 => Err(crate::error::Error::KeyNotFound),
+            1 => Ok(keys.remove(0)),
+            count => {
+                let candidates = keys
+                    .iter()
+                    .map(|public| hex::encode(public.to_bytes()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(crate::error::Error::Other(blueprint_std::format!(
+                    "keystore holds {count} keys of this type and the caller cannot tell \
+                     which one to use; refusing to guess. Candidates: {candidates}. \
+                     Keep only the intended key, or select explicitly"
+                )))
+            }
+        }
+    }
 
     /// Get a public key from either local
     ///

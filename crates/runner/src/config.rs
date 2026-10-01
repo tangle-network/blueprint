@@ -554,7 +554,7 @@ impl BlueprintEnvironment {
 
         let keystore_config = blueprint_keystore::KeystoreConfig::new().fs_root(&self.keystore_uri);
         let keystore = blueprint_keystore::Keystore::new(keystore_config)?;
-        let ed25519_pub_key = keystore.first_local::<LibP2PKeyType>()?;
+        let ed25519_pub_key = keystore.sole_local::<LibP2PKeyType>()?;
         let ed25519_pair = keystore.get_secret::<LibP2PKeyType>(&ed25519_pub_key)?;
 
         let network_identity = {
@@ -563,7 +563,7 @@ impl BlueprintEnvironment {
             libp2p::identity::Keypair::ed25519_from_bytes(bytes).expect("should be valid")
         };
 
-        let ecdsa_pub_key = keystore.first_local::<K>()?;
+        let ecdsa_pub_key = keystore.sole_local::<K>()?;
         let ecdsa_pair = keystore.get_secret::<K>(&ecdsa_pub_key)?;
 
         let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", self.network_bind_port)
