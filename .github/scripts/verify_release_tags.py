@@ -114,6 +114,23 @@ def tagged_workspace_names(versions: dict[str, str]) -> list[str]:
     ]
 
 
+def audited_names(names: list[str], versions: dict[str, str]) -> list[str]:
+    """Union the manifest's releases with every tagged workspace crate.
+
+    release-plz skips a crate whose tag already exists and reports it as
+    "Already published - Tag <tag>" without listing it, so a tag that exists
+    with no matching index entry never reaches `names`. On 2026-07-03 that
+    left 19 tagged crates off crates.io while the run went green.
+    """
+    combined = list(names)
+    seen = set(names)
+    for name in tagged_workspace_names(versions):
+        if name not in seen:
+            seen.add(name)
+            combined.append(name)
+    return combined
+
+
 def verify(
     names: list[str], versions: dict[str, str]
 ) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
@@ -192,8 +209,7 @@ def main(argv: list[str] | None = None) -> int:
             names = release_names(args.release_json)
         else:
             names = []
-        if not names:
-            names = tagged_workspace_names(versions)
+        names = audited_names(names, versions)
         if not names:
             print("No tagged workspace releases, nothing to verify")
             return 0
