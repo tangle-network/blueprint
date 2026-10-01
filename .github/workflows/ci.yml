@@ -238,22 +238,22 @@ jobs:
     name: Testnet Smoke Test
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch'
     env:
       RUST_LOG: info
+      TANGLE_RPC_URL: ${{ secrets.TANGLE_TESTNET_RPC_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-build-env
+        if: env.TANGLE_RPC_URL != '' && github.event_name == 'workflow_dispatch'
         with:
           foundry: "false"
 
       - name: Build CLI
+        if: env.TANGLE_RPC_URL != '' && github.event_name == 'workflow_dispatch'
         run: cargo build -p cargo-tangle --release
 
       - name: Smoke test
-        env:
-          TANGLE_RPC_URL: ${{ secrets.TANGLE_TESTNET_RPC_URL }}
-        if: env.TANGLE_RPC_URL != ''
+        if: env.TANGLE_RPC_URL != '' && github.event_name == 'workflow_dispatch'
         run: |
           ./target/release/cargo-tangle tangle blueprint list blueprints --network testnet || echo "Testnet query failed (expected if no testnet access)"
 
