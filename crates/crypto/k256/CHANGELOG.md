@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-k256-v0.2.0-alpha.7...blueprint-crypto-k256-v0.2.0-alpha.8) - 2026-10-01
+
+### Fixed
+
+- *(std)* gate `alloy-signer-local` behind `std` so `blueprint-crypto-k256` builds `no_std` (#1543)
+
 ## [0.2.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-crypto-k256-v0.2.0-alpha.6...blueprint-crypto-k256-v0.2.0-alpha.7) - 2026-09-29
 
 ### Other

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.20](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.19...cargo-tangle-v0.5.0-alpha.20) - 2026-10-01
+
+### Fixed
+
+- *(harness)* kill operator subprocesses when the harness test run ends (#1554)
+- *(cargo-tangle)* fail closed when the keystore holds multiple ECDSA keys (#1549)
+
 ## [0.5.0-alpha.19](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.18...cargo-tangle-v0.5.0-alpha.19) - 2026-09-29
 
 ### Other
