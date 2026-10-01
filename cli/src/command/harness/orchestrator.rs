@@ -125,7 +125,7 @@ impl Orchestrator {
                 .map(|p| p.to_path_buf())
                 .unwrap_or_else(|| self_exe.clone());
 
-            let mut cmd = Command::new(&binary);
+            let mut cmd = operator_command(&binary);
 
             // Operator binaries built with BlueprintRunner expect a `run` subcommand
             // (from ContextConfig::parse() which defines the clap structure).
@@ -334,6 +334,21 @@ impl Orchestrator {
         println!("Harness stopped.");
         Ok(())
     }
+}
+
+/// Build the command that launches one blueprint operator subprocess.
+///
+/// `kill_on_drop` is load-bearing, not defensive. `harness test` shuts down by
+/// dropping the [`Orchestrator`] rather than calling
+/// [`Orchestrator::run_until_shutdown`], so the `Child` handle is the only
+/// thing that can stop these processes. tokio leaves a dropped `Child`
+/// running by default, which orphans one operator per blueprint entry,
+/// still bound to its port. `harness up` only gets away with it because
+/// `run_until_shutdown` kills explicitly before returning.
+fn operator_command(binary: &std::path::Path) -> Command {
+    let mut cmd = Command::new(binary);
+    cmd.kill_on_drop(true);
+    cmd
 }
 
 /// Write a settings.env file for one blueprint subprocess.
@@ -560,4 +575,122 @@ async fn register_with_router(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::operator_command;
+    use std::path::Path;
+    use std::time::{Duration, Instant};
+
+    /// True only while the pid is a process that can still do work.
+    ///
+    /// Signal 0 is not enough on its own: a child that has been killed but
+    /// not yet reaped is a zombie, and a zombie still answers signal 0 while
+    /// holding a pid slot. A zombie is stopped for our purposes, so on Linux
+    /// the state field from `/proc/<pid>/stat` decides, and signal 0 is the
+    /// fallback where `/proc` is absent.
+    #[cfg(unix)]
+    fn process_alive(pid: u32) -> bool {
+        if let Some(state) = proc_state(pid) {
+            return state != 'Z' && state != 'X';
+        }
+        matches!(
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None),
+            Ok(())
+        )
+    }
+
+    /// The third field of `/proc/<pid>/stat` is the single-letter process
+    /// state. The second field is the comm name in parentheses and may itself
+    /// contain spaces or parens, so the scan starts after the last `)`.
+    #[cfg(target_os = "linux")]
+    fn proc_state(pid: u32) -> Option<char> {
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        let after_comm = &stat[stat.rfind(')')? + 1..];
+        after_comm.trim_start().chars().next()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn proc_state(_pid: u32) -> Option<char> {
+        None
+    }
+
+    #[cfg(unix)]
+    fn force_kill(pid: u32) {
+        let _ = nix::sys::signal::kill(
+            nix::unistd::Pid::from_raw(pid as i32),
+            Some(nix::sys::signal::Signal::SIGKILL),
+        );
+    }
+
+    /// Yields to the runtime between polls rather than blocking the thread:
+    /// the current-thread runtime is also what drives tokio's child reaper, so
+    /// a blocking sleep here would starve the very task that clears the
+    /// zombie and the wait could never succeed.
+    #[cfg(unix)]
+    async fn wait_until_gone(pid: u32, within: Duration) -> bool {
+        let start = Instant::now();
+        while start.elapsed() < within {
+            if !process_alive(pid) {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        !process_alive(pid)
+    }
+
+    /// The defect: dropping the `Child` handle (what `harness test` does via
+    /// `drop(orchestrator)`) left the operator running, so each run orphaned
+    /// one process per blueprint.
+    ///
+    /// The assertion is on the observed process state, not on the
+    /// `kill_on_drop` flag, so a stub or a no-op spawn cannot pass it.
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn dropping_the_handle_stops_the_operator() {
+        let mut cmd = operator_command(Path::new("/bin/sh"));
+        cmd.args(["-c", "sleep 30"]);
+
+        let pid = {
+            let child = cmd.spawn().expect("spawn operator stand-in");
+            let pid = child.id().expect("child reports a pid");
+            // Sanity: it is running now, otherwise the test proves nothing.
+            assert!(
+                process_alive(pid),
+                "stand-in operator should be alive before the drop"
+            );
+            pid
+            // `child` drops here, which is exactly what `harness test` does.
+        };
+
+        assert!(
+            wait_until_gone(pid, Duration::from_secs(5)).await,
+            "operator pid {pid} survived the drop; harness test would orphan it"
+        );
+    }
+
+    /// Control: the default is to leave the process running. If this ever
+    /// starts failing, tokio changed its default and the fix above is no
+    /// longer load-bearing, which is worth knowing.
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn default_command_leaves_the_process_running() {
+        let child = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "sleep 30"])
+            .spawn()
+            .expect("spawn control");
+        let pid = child.id().expect("child reports a pid");
+
+        drop(child);
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            process_alive(pid),
+            "tokio's default should still leave the process running"
+        );
+
+        // Do not leak the control's own stand-in.
+        force_kill(pid);
+    }
 }
