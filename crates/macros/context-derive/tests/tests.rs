@@ -11,5 +11,9 @@ mod tests {
         t.compile_fail("tests/ui/missing_config_attr.rs");
         t.compile_fail("tests/ui/not_a_struct.rs");
         t.compile_fail("tests/ui/unit_struct.rs");
+        // `custom_crate_path` pins the override to a nonexistent path: it only
+        // fails to compile while the derives still honour the attribute.
+        t.compile_fail("tests/ui/custom_crate_path.rs");
+        t.compile_fail("tests/ui/unknown_crate_key.rs");
     }
 }

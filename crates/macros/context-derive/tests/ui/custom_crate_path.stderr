@@ -1,0 +1,19 @@
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `sdk_path_that_does_not_exist`
+  --> tests/ui/custom_crate_path.rs:14:19
+   |
+14 | #[context(crate = "sdk_path_that_does_not_exist")]
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `sdk_path_that_does_not_exist`
+   |
+   = help: if you wanted to use a crate named `sdk_path_that_does_not_exist`, use `cargo add sdk_path_that_does_not_exist` to add it to your `Cargo.toml`
+
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `sdk_path_that_does_not_exist`
+  --> tests/ui/custom_crate_path.rs:14:19
+   |
+14 | #[context(crate = "sdk_path_that_does_not_exist")]
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `sdk_path_that_does_not_exist`
+   |
+   = help: if you wanted to use a crate named `sdk_path_that_does_not_exist`, use `cargo add sdk_path_that_does_not_exist` to add it to your `Cargo.toml`
+help: consider importing this crate
+   |
+10 + use blueprint_sdk::keystore;
+   |
