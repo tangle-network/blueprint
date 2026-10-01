@@ -3683,6 +3683,7 @@ async fn register_operator(
     let signer = load_evm_signer(&keystore_path)?;
 
     println!("Registering operator {}", signer.operator_address);
+    println!("  signing key     0x{}", hex::encode(signer.public_key));
     let tx = client
         .register_operator(blueprint_id, rpc_endpoint, registration_payload)
         .await?;

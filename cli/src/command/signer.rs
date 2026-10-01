@@ -62,11 +62,35 @@ pub fn load_keystore(path: impl AsRef<Path>) -> Result<Keystore> {
     Keystore::new(config).context("failed to open keystore")
 }
 
-/// Fetch the first local ECDSA signing key from the keystore.
+/// Fetch the local ECDSA signing key used for registration.
+///
+/// [`Keystore::first_local`] returns whichever key sorts first, which is not a
+/// property the operator can see or predict: `import_key` inserts without
+/// replacing, so a keystore holding two ECDSA keys is a supported state. Picking
+/// one silently would register an operator address the operator never chose, so
+/// this fails closed and names the candidates instead.
 pub fn load_ecdsa_signing_key(keystore: &Keystore) -> Result<K256SigningKey> {
-    let public = keystore
-        .first_local::<K256Ecdsa>()
-        .context("keystore does not contain an ECDSA key")?;
+    let mut local = keystore.list_local::<K256Ecdsa>()?;
+
+    match local.len() {
+        0 => return Err(eyre!("keystore does not contain an ECDSA key")),
+        1 => {}
+        _ => {
+            let candidates = local
+                .iter()
+                .map(|public| hex::encode(public.to_bytes()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(eyre!(
+                "keystore holds {} ECDSA keys and registration cannot tell which one to use: {candidates}. \
+                 Keep only the key you intend to register, or remove the others with \
+                 `cargo tangle keys export` and a fresh keystore.",
+                local.len()
+            ));
+        }
+    }
+
+    let public = local.remove(0);
 
     keystore
         .get_secret::<K256Ecdsa>(&public)
