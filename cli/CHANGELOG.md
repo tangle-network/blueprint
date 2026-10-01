@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.21](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.20...cargo-tangle-v0.5.0-alpha.21) - 2026-10-01
+
+### Fixed
+
+- *(harness)* make operator shutdown actually graceful (SIGTERM first) (#1557)
+
 ## [0.5.0-alpha.20](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.19...cargo-tangle-v0.5.0-alpha.20) - 2026-10-01
 
 ### Fixed

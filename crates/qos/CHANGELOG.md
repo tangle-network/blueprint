@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.18](https://github.com/tangle-network/blueprint/compare/blueprint-qos-v0.2.0-alpha.17...blueprint-qos-v0.2.0-alpha.18) - 2026-10-01
+
+### Fixed
+
+- *(keystore)* add sole_local and adopt it for operator identity selection (#1556)
+
 ## [0.2.0-alpha.17](https://github.com/tangle-network/blueprint/compare/blueprint-qos-v0.2.0-alpha.16...blueprint-qos-v0.2.0-alpha.17) - 2026-10-01
 
 ### Other
