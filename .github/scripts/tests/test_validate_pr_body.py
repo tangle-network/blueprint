@@ -79,6 +79,27 @@ class ValidatePrBodyTests(unittest.TestCase):
         self.assertEqual(required, 3)
         self.assertIn("Multiple crates", reason)
 
+    def test_selected_class_accepts_markdown_emphasis(self) -> None:
+        # The PR template shows the options in backticks, and contributors
+        # commonly bold their choice. Both must parse to the same rank.
+        for written in (
+            "Class B",
+            "`Class B` (single-crate behavior)",
+            "**Class B** (single-crate behavior)",
+            "*Class B*",
+        ):
+            with self.subTest(written=written):
+                section = f"- Selected class: {written}\n- Why this class: because"
+                selected = MODULE.extract_change_class(section)
+                self.assertEqual(MODULE.parse_change_class_rank(selected), 2)
+                self.assertEqual(MODULE.validate_change_class(section), [])
+
+    def test_selected_class_still_rejects_unknown_and_missing(self) -> None:
+        self.assertIsNone(MODULE.parse_change_class_rank(MODULE.extract_change_class("- Selected class: **Class E**")))
+        self.assertIsNone(MODULE.parse_change_class_rank(MODULE.extract_change_class("- Why this class: because")))
+        self.assertTrue(MODULE.validate_change_class("- Selected class: **Class E**"))
+        self.assertTrue(MODULE.validate_change_class("- Why this class: because"))
+
     def test_load_policy_config_from_toml(self) -> None:
         content = """
 [classification]

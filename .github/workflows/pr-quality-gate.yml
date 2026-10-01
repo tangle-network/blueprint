@@ -47,6 +47,12 @@ jobs:
 
       - name: Post PR quality summary
         uses: actions/github-script@v7
+        # Purely informational. On a `pull_request` event from a fork, GitHub
+        # downgrades GITHUB_TOKEN to read-only and this comment cannot be
+        # written, no matter what `permissions:` requests. That must not fail
+        # the job: the actual gate is the "Fail on validation errors" step
+        # below, which reads the validator's own exit status.
+        continue-on-error: true
         with:
           script: |
             const fs = require("fs");
