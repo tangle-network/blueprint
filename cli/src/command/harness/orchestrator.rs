@@ -323,16 +323,54 @@ impl Orchestrator {
         }
 
         // Graceful shutdown: SIGTERM → wait 5s → SIGKILL
-        for bp in &mut self.blueprints {
-            let _ = bp.child.start_kill();
-        }
-        for bp in &mut self.blueprints {
-            let _ = tokio::time::timeout(Duration::from_secs(5), bp.child.wait()).await;
-        }
+        graceful_shutdown(self.blueprints.iter_mut().map(|bp| &mut bp.child)).await;
 
         self.stack.shutdown().await;
         println!("Harness stopped.");
         Ok(())
+    }
+}
+
+/// Stop operator subprocesses gracefully: SIGTERM first so operators can
+/// flush state and shut down cleanly, then SIGKILL for anything still alive
+/// after the grace period.
+///
+/// `Child::start_kill` is SIGKILL-only; calling it directly gives operators
+/// no chance to clean up. The previous code commented "SIGTERM → wait 5s →
+/// SIGKILL" while sending SIGKILL immediately — this makes the code match
+/// the documented contract.
+async fn graceful_shutdown<'a>(children: impl IntoIterator<Item = &'a mut Child>) {
+    const GRACE_PERIOD: Duration = Duration::from_secs(5);
+
+    let mut children: Vec<&mut Child> = children.into_iter().collect();
+
+    // Ask nicely. On non-unix there is no SIGTERM, so kill directly.
+    for child in children.iter() {
+        #[cfg(unix)]
+        if let Some(pid) = child.id() {
+            use nix::sys::signal::{Signal, kill};
+            use nix::unistd::Pid;
+            let _ = kill(Pid::from_raw(pid as i32), Some(Signal::SIGTERM));
+        }
+        #[cfg(not(unix))]
+        let _ = child.start_kill();
+    }
+
+    // Give each operator the grace period to exit on SIGTERM.
+    for child in children.iter_mut() {
+        let _ = tokio::time::timeout(GRACE_PERIOD, child.wait()).await;
+    }
+
+    // Escalate: anything still alive gets SIGKILL, then is reaped.
+    for child in children {
+        if child
+            .try_wait()
+            .map(|status| status.is_none())
+            .unwrap_or(true)
+        {
+            let _ = child.start_kill();
+        }
+        let _ = child.wait().await;
     }
 }
 
@@ -692,5 +730,57 @@ mod tests {
 
         // Do not leak the control's own stand-in.
         force_kill(pid);
+    }
+
+    /// The documented contract: shutdown asks with SIGTERM first, so an
+    /// operator that exits on SIGTERM is terminated by SIGTERM, not SIGKILL.
+    /// This is what lets operators flush state and deregister on the way down.
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn graceful_shutdown_terminates_before_killing() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let mut child = operator_command(Path::new("/bin/sh"))
+            .args(["-c", "sleep 30"])
+            .spawn()
+            .expect("spawn operator stand-in");
+
+        super::graceful_shutdown([&mut child]).await;
+
+        let status = child.wait().await.expect("reap stand-in");
+        assert_eq!(
+            status.signal(),
+            Some(15),
+            "stand-in should die to SIGTERM (15), got {:?}",
+            status.code()
+        );
+    }
+
+    /// A straggaller that ignores SIGTERM must still die: after the grace
+    /// period the sequence escalates to SIGKILL and reaps it.
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn graceful_shutdown_escalates_to_sigkill_for_stragglers() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let mut child = operator_command(Path::new("/bin/sh"))
+            .args(["-c", "trap '' TERM; sleep 30"])
+            .spawn()
+            .expect("spawn straggling operator stand-in");
+
+        // Give the stand-in a moment to install its trap: SIGTERM arriving
+        // before `sh` has run `trap '' TERM` would kill it outright and turn
+        // this into a copy of the SIGTERM test.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        super::graceful_shutdown([&mut child]).await;
+
+        let status = child.wait().await.expect("reap straggler");
+        assert_eq!(
+            status.signal(),
+            Some(9),
+            "straggler should be SIGKILLed (9) after the grace period, got code {:?}",
+            status.code()
+        );
     }
 }
