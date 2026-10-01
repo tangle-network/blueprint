@@ -210,7 +210,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         let keystore = Keystore::new(KeystoreConfig::new().fs_root(runtime.keystore_uri.clone()))
             .map_err(|e| Error::Other(format!("Failed to initialize keystore: {e}")))?;
 
-        let operator_ecdsa_public_key = keystore.first_local::<K256Ecdsa>().map_err(|e| {
+        let operator_ecdsa_public_key = keystore.sole_local::<K256Ecdsa>().map_err(|e| {
             Error::Other(format!(
                 "Failed to query operator ECDSA public key from keystore: {e}"
             ))
