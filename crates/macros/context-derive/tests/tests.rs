@@ -15,5 +15,7 @@ mod tests {
         // fails to compile while the derives still honour the attribute.
         t.compile_fail("tests/ui/custom_crate_path.rs");
         t.compile_fail("tests/ui/unknown_crate_key.rs");
+        t.compile_fail("tests/ui/duplicate_crate_path.rs");
+        t.compile_fail("tests/ui/duplicate_crate_key.rs");
     }
 }

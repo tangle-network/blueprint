@@ -1,0 +1,5 @@
+error: duplicate `context` attribute: only one is allowed
+ --> tests/ui/duplicate_crate_path.rs:6:1
+  |
+6 | #[context(crate = "also_blueprint_sdk")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
