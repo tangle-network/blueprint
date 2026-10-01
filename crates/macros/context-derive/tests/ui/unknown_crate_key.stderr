@@ -1,0 +1,5 @@
+error: unsupported `context` key `sdk`, expected `crate`
+ --> tests/ui/unknown_crate_key.rs:5:11
+  |
+5 | #[context(sdk = "blueprint_sdk")]
+  |           ^^^
