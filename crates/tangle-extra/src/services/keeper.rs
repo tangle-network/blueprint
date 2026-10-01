@@ -196,7 +196,7 @@ impl KeeperConfig {
         let ecdsa_public = self
             .keystore
             .as_ref()
-            .first_local::<K256Ecdsa>()
+            .sole_local::<K256Ecdsa>()
             .map_err(KeeperError::Keystore)?;
 
         let ecdsa_secret = self

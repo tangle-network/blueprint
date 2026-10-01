@@ -527,7 +527,7 @@ impl TangleClient {
 
         // Get operator's address from keystore (using ECDSA key)
         let ecdsa_key = keystore
-            .first_local::<K256Ecdsa>()
+            .sole_local::<K256Ecdsa>()
             .map_err(Error::Keystore)?;
 
         // Convert ECDSA public key to Ethereum address
@@ -598,7 +598,7 @@ impl TangleClient {
     pub fn ecdsa_signing_key(&self) -> Result<blueprint_crypto::k256::K256SigningKey> {
         let public = self
             .keystore
-            .first_local::<K256Ecdsa>()
+            .sole_local::<K256Ecdsa>()
             .map_err(Error::Keystore)?;
         self.keystore
             .get_secret::<K256Ecdsa>(&public)
@@ -3296,7 +3296,7 @@ impl BlueprintServicesClient for TangleClient {
     ) -> core::result::Result<Self::PublicApplicationIdentity, Self::Error> {
         let key = self
             .keystore
-            .first_local::<K256Ecdsa>()
+            .sole_local::<K256Ecdsa>()
             .map_err(Error::Keystore)?;
 
         // Convert VerifyingKey to 65-byte uncompressed format

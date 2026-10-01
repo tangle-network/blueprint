@@ -43,7 +43,7 @@ ark-ec = { workspace = true, optional = true }
 ark-ff = { workspace = true, optional = true }
 
 # Optional dependencies
-hex = { workspace = true, optional = true }
+hex = { workspace = true, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"], optional = true }
 
 # Hardware/Cloud wallet support (optional)
@@ -74,8 +74,6 @@ std = [
     "thiserror/std",
     "dep:tokio",
     # Conditional std enables for misc
-    "hex?/std",
-    # Condition std enables for alloy
     "alloy-primitives?/std",
     # Conditional std enables for crypto
     "k256?/std",
@@ -89,10 +87,10 @@ std = [
 ]
 
 # Crypto primitive features
-ecdsa = ["dep:k256", "dep:ripemd", "dep:hex", "blueprint-crypto/k256"]
-sr25519-schnorrkel = ["dep:schnorrkel", "dep:hex", "blueprint-crypto/sr25519-schnorrkel"]
-zebra = ["dep:ed25519-zebra", "dep:hex", "blueprint-crypto/ed25519"]
-bls = ["dep:tnt-bls", "dep:hex", "blueprint-crypto/bls"]
+ecdsa = ["dep:k256", "dep:ripemd", "blueprint-crypto/k256"]
+sr25519-schnorrkel = ["dep:schnorrkel", "blueprint-crypto/sr25519-schnorrkel"]
+zebra = ["dep:ed25519-zebra", "blueprint-crypto/ed25519"]
+bls = ["dep:tnt-bls", "blueprint-crypto/bls"]
 bn254 = ["dep:ark-bn254", "dep:ark-ec", "dep:ark-ff", "dep:ark-serialize", "blueprint-crypto/bn254"]
 
 # Protocol features

@@ -238,7 +238,7 @@ async fn register_impl(
     // 1. Get ECDSA key from keystore
     let ecdsa_public = env
         .keystore()
-        .first_local::<K256Ecdsa>()
+        .sole_local::<K256Ecdsa>()
         .map_err(|e| TangleError::Keystore(e.to_string()))?;
 
     let ecdsa_secret = env
