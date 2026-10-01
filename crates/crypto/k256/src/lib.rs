@@ -6,15 +6,19 @@ pub mod error;
 mod tests;
 
 use crate::error::{K256Error, Result};
+#[cfg(feature = "std")]
 use alloy_signer_local::LocalSigner;
 use blueprint_crypto_core::BytesEncoding;
 use blueprint_crypto_core::{KeyType, KeyTypeId};
+#[cfg(feature = "std")]
 use blueprint_std::UniformRand;
 use blueprint_std::hash::{Hash, Hasher};
 use blueprint_std::string::{String, ToString};
 use blueprint_std::vec::Vec;
+#[cfg(feature = "std")]
+use k256::ecdsa::SigningKey;
+use k256::ecdsa::VerifyingKey;
 use k256::ecdsa::signature::SignerMut;
-use k256::ecdsa::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 /// ECDSA key type
@@ -229,6 +233,7 @@ impl K256SigningKey {
     }
 
     /// Returns the alloy-compatible key for the ECDSA key pair.
+    #[cfg(feature = "std")]
     pub fn alloy_key(&self) -> Result<LocalSigner<SigningKey>> {
         let k256_ecdsa_secret_key = self.clone().to_bytes();
         let res = LocalSigner::from_slice(&k256_ecdsa_secret_key)
@@ -237,6 +242,7 @@ impl K256SigningKey {
     }
 
     /// Returns the Alloy Address for the ECDSA key pair.
+    #[cfg(feature = "std")]
     pub fn alloy_address(&self) -> Result<alloy_primitives::Address> {
         Ok(self.alloy_key()?.address())
     }
