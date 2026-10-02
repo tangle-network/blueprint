@@ -1,0 +1,41 @@
+# cargo-audit policy for the blueprint workspace.
+#
+# Every ignore below is a written decision, not a shrug: either no fixed
+# version exists, or the fix is upstream-blocked on a dependency we cannot
+# bump without a breaking change we don't own. Revisit on minor bumps of
+# the owning crates.
+
+[advisories]
+ignore = [
+    # No fixed release exists (upstream: RustCrypto/rsa#observe). Our only
+    # usage is a DEV-dependency in blueprint-remote-providers that generates
+    # throwaway RSA keys and signs RS256 JWTs against a mock JWKS in tests.
+    # The Marvin attack is a timing sidechannel on private-key operations in
+    # production; it does not apply to test fixtures. Production attestation
+    # verification uses p256/k256 and ring-backed stacks, not rsa.
+    "RUSTSEC-2023-0071",
+
+    # h2 0.3 line (unbounded empty DATA frames). Pulled only by
+    # aws-smithy-http-client through aws-config (blueprint-keystore's
+    # aws-signer feature). The 0.4 line in this lockfile IS patched (0.4.16);
+    # the 0.3 line has no patched release — remove when aws-smithy moves to
+    # h2 0.4.
+    "RUSTSEC-2026-0258",
+
+    # quick-xml <0.41 namespace-declaration DoS + quadratic duplicate-attr
+    # checks. Pulled by plist -> netdev (blueprint-manager host inventory).
+    # plist pins quick-xml 0.38; blocked on a plist release against 0.41.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+
+    # rkyv 0.7 OOB reads on crafted archives with Rc/Arc. Pulled by
+    # rust_decimal's rkyv feature (netdev stack). We never deserialize
+    # untrusted rkyv archives — the crate reaches us only through
+    # rust_decimal's optional feature in a host-inventory path.
+    "RUSTSEC-2026-0235",
+
+    # tracing-subscriber 0.2 ANSI-escape log poisoning. 0.2 is pinned by
+    # ark-relations (bn254 crypto stack); the 0.3 line is also in the graph
+    # for everything we own. Blocked on ark bumping tracing-subscriber.
+    "RUSTSEC-2025-0055",
+]
