@@ -6,6 +6,7 @@
 //! to run setup scripts manually.
 
 use alloy_primitives::{Address, Bytes, U256};
+use alloy_provider::Provider;
 use anyhow::{Context, Result};
 use blueprint_anvil_testing_utils::{
     LOCAL_BLUEPRINT_ID, LOCAL_SERVICE_ID, SeededTangleTestnet, harness_builder_from_env,
@@ -14,6 +15,9 @@ use blueprint_anvil_testing_utils::{
 use blueprint_client_tangle::{TangleClient, TangleClientConfig, TangleSettings};
 use blueprint_crypto::BytesEncoding;
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
+
+const DEPLOYER_PRIVATE_KEY: &str =
+    "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
 use std::sync::Arc;
@@ -154,8 +158,15 @@ async fn submit_aggregated_result() -> Result<()> {
 }
 
 async fn create_test_client(deployment: &SeededTangleTestnet) -> Result<Arc<TangleClient>> {
+    create_client_with_key(deployment, OPERATOR1_PRIVATE_KEY).await
+}
+
+async fn create_client_with_key(
+    deployment: &SeededTangleTestnet,
+    private_key: &str,
+) -> Result<Arc<TangleClient>> {
     let keystore = Keystore::new(KeystoreConfig::new().in_memory(true))?;
-    let secret_bytes = hex::decode(OPERATOR1_PRIVATE_KEY)?;
+    let secret_bytes = hex::decode(private_key)?;
     let secret = K256SigningKey::from_bytes(&secret_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to parse private key: {e}"))?;
     keystore.insert::<K256Ecdsa>(&secret)?;
@@ -202,4 +213,72 @@ async fn boot_testnet(test_name: &str) -> Result<Option<SeededTangleTestnet>> {
             }
         }
     }
+}
+
+/// M2 CHAIN PROOF — an operator-signed RFQ quote is accepted on-chain.
+///
+/// Signs a `JobQuoteDetails` with [`JobQuoteSigner`] over the deployment's
+/// live domain (real chain id + the deployed tnt-core entrypoint), then
+/// submits it through `TangleClient::submit_job_from_quote`. The chain's
+/// `SignatureLib` verification is the third implementation of the digest
+/// (Rust SDK signer → tnt-core EIP-712 check); acceptance here closes the
+/// operator→buyer→chain loop end to end on the seeded LocalTestnet.
+#[tokio::test]
+async fn submit_job_from_operator_signed_quote() -> Result<()> {
+    run_anvil_test("submit_job_from_operator_signed_quote", async {
+        let Some(deployment) = boot_testnet("submit_job_from_operator_signed_quote").await? else {
+            return Ok(());
+        };
+        let client = create_client_with_key(&deployment, DEPLOYER_PRIVATE_KEY).await?;
+
+        // The buyer is the client's own sender (the quote binds `requester`
+        // to exactly this address; tnt-core rejects any other redeemer).
+        let requester = client.account();
+
+        // Sign with the OPERATOR key over the LIVE domain: the real chain id
+        // and the deployed tnt-core entrypoint the harness booted.
+        use alloy_provider::Provider;
+        let chain_id: u64 = client
+            .provider()
+            .get_chain_id()
+            .await
+            .context("chain id from the live testnet")?;
+        let domain = blueprint_tangle_extra::job_quote::QuoteSigningDomain {
+            chain_id,
+            verifying_contract: client.tangle_address(),
+        };
+        let operator_secret = K256SigningKey::from_bytes(&hex::decode(OPERATOR1_PRIVATE_KEY)?)
+            .map_err(|e| anyhow::anyhow!("operator key parse: {e}"))?;
+        let mut signer =
+            blueprint_tangle_extra::job_quote::JobQuoteSigner::new(operator_secret, domain)?;
+
+        let inputs = Bytes::from(vec![0xde, 0xad, 0xbe, 0xef]);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs();
+        let details = blueprint_tangle_extra::job_quote::JobQuoteDetails {
+            requester,
+            service_id: SERVICE_ID,
+            job_index: 0,
+            price: U256::ZERO, // seeded LocalTestnet job is unpaid; value path is exercised by unit tests
+            timestamp: now,
+            expiry: now + 120,
+            confidentiality: 0,
+            inputs_hash: alloy_primitives::keccak256(inputs.as_ref()),
+        };
+        let signed = signer.sign(&details)?;
+
+        let result = client
+            .submit_job_from_quote(SERVICE_ID, 0, inputs.clone(), vec![signed.into()])
+            .await
+            .context("submitJobFromQuote should be accepted by the chain")?;
+
+        assert!(result.tx.success, "transaction must succeed on-chain");
+        assert!(
+            result.call_id > 0 || result.tx.block_number.unwrap_or(0) > 0,
+            "a JobSubmitted call id / block must be recorded"
+        );
+        Ok(())
+    })
+    .await
 }
