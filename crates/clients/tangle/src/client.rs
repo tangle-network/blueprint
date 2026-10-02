@@ -2854,11 +2854,30 @@ impl TangleClient {
             .await
             .map_err(Error::PendingTransaction)?;
 
-        self.parse_job_submitted(&receipt)
+        // RFQ submission emits JobSubmittedFromQuote (with the quoted
+        // operators and total price), not the plain JobSubmitted event.
+        self.parse_job_submitted_with_sig(
+            &receipt,
+            "JobSubmittedFromQuote(uint64,uint64,uint8,address,address[],uint256,bytes)",
+        )
     }
 
     /// Parse a `JobSubmitted` event from a transaction receipt.
     fn parse_job_submitted(&self, receipt: &TransactionReceipt) -> Result<JobSubmissionResult> {
+        self.parse_job_submitted_with_sig(
+            receipt,
+            "JobSubmitted(uint64,uint64,uint8,address,bytes)",
+        )
+    }
+
+    /// Parse a job-submission event of the given signature. Both the plain
+    /// and the RFQ variants index `(serviceId, callId)` as the first two
+    /// topics, so the call id is topics[2] for either shape.
+    fn parse_job_submitted_with_sig(
+        &self,
+        receipt: &TransactionReceipt,
+        event_signature: &str,
+    ) -> Result<JobSubmissionResult> {
         let tx = TransactionResult {
             tx_hash: receipt.transaction_hash,
             block_number: receipt.block_number,
@@ -2866,7 +2885,7 @@ impl TangleClient {
             success: receipt.status(),
         };
 
-        let job_submitted_sig = keccak256("JobSubmitted(uint64,uint64,uint8,address,bytes)");
+        let job_submitted_sig = keccak256(event_signature);
         let call_id = receipt
             .logs()
             .iter()
