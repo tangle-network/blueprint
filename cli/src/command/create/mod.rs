@@ -124,6 +124,52 @@ fn build_define_map(define: &[String]) -> HashMap<String, String> {
     map
 }
 
+/// Entries that are allowed to pre-exist in an `--init` target directory.
+///
+/// `.git` is the whole point of `--init` (the operator already ran `git init`),
+/// and `.gitignore` is commonly written alongside it.
+const INIT_ALLOWED_ENTRIES: [&str; 2] = [".git", ".gitignore"];
+
+/// Check that `dir` is safe to generate a blueprint into with `--init`.
+///
+/// `--init` sets `GenerateArgs::init`, which makes `ProjectDir::try_from`
+/// return `destination()` (the cwd) instead of `destination()/sanitize(name)`.
+/// That path skips the "Target directory already exists" bail in
+/// `crates/cargo-generate/src/template_variables/project_dir.rs`, and the copy
+/// stage uses `safe_copy_skip_existing`, which only *warns* on a name collision.
+/// Generating into a populated directory would therefore scatter template
+/// files around existing ones and exit 0, so we reject it up front.
+///
+/// # Errors
+///
+/// Returns [`Error::InitDirNotEmpty`] if `dir` holds anything other than
+/// [`INIT_ALLOWED_ENTRIES`].
+pub(crate) fn ensure_init_dir_is_empty(dir: &std::path::Path) -> Result<(), Error> {
+    let mut unexpected: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        if INIT_ALLOWED_ENTRIES.contains(&file_name.as_str()) {
+            continue;
+        }
+        unexpected.push(file_name);
+    }
+
+    if unexpected.is_empty() {
+        return Ok(());
+    }
+
+    unexpected.sort();
+    // Keep the message readable when a directory holds a lot of entries.
+    let shown = unexpected.len().min(5);
+    let mut listing = unexpected[..shown].join(", ");
+    if unexpected.len() > shown {
+        listing.push_str(&format!(" (and {} more)", unexpected.len() - shown));
+    }
+
+    Err(Error::InitDirNotEmpty(dir.display().to_string(), listing))
+}
+
 /// Generate a new blueprint from a template
 ///
 /// # Errors
@@ -139,6 +185,7 @@ fn build_define_map(define: &[String]) -> HashMap<String, String> {
 /// * `template_variables` - Typed template variable overrides supplied via CLI flags
 /// * `template_values_file` - Optional path to a file containing template values
 /// * `skip_prompts` - Whether to skip all interactive prompts, using defaults for unspecified values
+/// * `init` - Generate into the current directory instead of a new `<name>/` subdirectory
 pub fn new_blueprint(
     name: &str,
     source: Option<Source>,
@@ -147,8 +194,27 @@ pub fn new_blueprint(
     template_variables: TemplateVariables,
     template_values_file: &Option<String>,
     skip_prompts: bool,
+    init: bool,
 ) -> Result<(), Error> {
-    println!("Generating blueprint with name: {}", name);
+    // With `GenerateArgs::init`, cargo-generate sets
+    // `should_initialize_git = !init || force_git_init()`, so an existing
+    // `.git` is left alone. We only force the fresh `git init` when there is
+    // none, which keeps the "a generated blueprint is a git repo" invariant
+    // for the empty-directory case without re-initialising the operator's repo.
+    let force_git_init = init && !std::path::Path::new(".git").exists();
+
+    if init {
+        // `GenerateArgs::init` makes the destination the cwd, so `name` no longer
+        // names a directory and is only used as the crate/package name.
+        let cwd = std::env::current_dir()?;
+        println!(
+            "Generating blueprint in current directory: {}",
+            cwd.display()
+        );
+        ensure_init_dir_is_empty(&cwd)?;
+    }
+
+    println!("Generating blueprint with name: {name}");
 
     let source = source.unwrap_or_default();
     let blueprint_variant = blueprint_type.map(|t| t.get_type()).unwrap_or_default();
@@ -215,9 +281,9 @@ pub fn new_blueprint(
         ssh_identity: None,
         gitconfig: None,
         define,
-        init: false,
+        init,
         destination: None,
-        force_git_init: false,
+        force_git_init,
         allow_commands: false,
         overwrite: false,
         skip_submodules: false,
@@ -246,4 +312,69 @@ pub fn new_blueprint(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn init_dir_accepts_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(ensure_init_dir_is_empty(dir.path()).is_ok());
+    }
+
+    #[test]
+    fn init_dir_accepts_git_and_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "target\n").unwrap();
+        assert!(ensure_init_dir_is_empty(dir.path()).is_ok());
+    }
+
+    #[test]
+    fn init_dir_rejects_populated_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Cargo.toml"), "[package]\n").unwrap();
+        let err = ensure_init_dir_is_empty(dir.path()).unwrap_err();
+        assert!(
+            matches!(&err, Error::InitDirNotEmpty(_, listing) if listing == "Cargo.toml"),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[test]
+    fn init_dir_rejects_dir_next_to_allowed_entries() {
+        // The guard must not stop scanning at `.git` just because it is allowed.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        std::fs::write(dir.path().join("README.md"), "hi\n").unwrap();
+        assert!(ensure_init_dir_is_empty(dir.path()).is_err());
+    }
+
+    #[test]
+    fn init_dir_error_lists_sorted_and_truncates() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["zeta", "alpha", "beta", "gamma", "delta", "epsilon"] {
+            std::fs::write(dir.path().join(name), "").unwrap();
+        }
+
+        let Error::InitDirNotEmpty(_, listing) = ensure_init_dir_is_empty(dir.path()).unwrap_err()
+        else {
+            panic!("expected InitDirNotEmpty");
+        };
+
+        // Sorted, so the message is stable across filesystems.
+        assert_eq!(listing, "alpha, beta, delta, epsilon, gamma (and 1 more)");
+    }
+
+    #[test]
+    fn init_dir_does_not_create_the_directory() {
+        // A read-only check: `--init` must not be what makes the dir exist.
+        let parent = tempfile::tempdir().unwrap();
+        let target = parent.path().join("not-yet");
+        let err = ensure_init_dir_is_empty(&target).unwrap_err();
+        assert!(matches!(err, Error::Io(_)), "unexpected error: {err:?}");
+        assert!(!target.exists());
+    }
 }
