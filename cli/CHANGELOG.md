@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.23](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.22...cargo-tangle-v0.5.0-alpha.23) - 2026-10-02
+
+### Added
+
+- *(cargo-tangle)* add --init to blueprint create for in-place scaffolding (#1564)
+
 ## [0.5.0-alpha.22](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.21...cargo-tangle-v0.5.0-alpha.22) - 2026-10-02
 
 ### Other
