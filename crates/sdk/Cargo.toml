@@ -134,6 +134,7 @@ evm = [
 tangle = [
     "dep:blueprint-tangle-extra",
     "dep:alloy",
+    "blueprint-tangle-extra/keepers",
     "blueprint-clients/tangle",
     "blueprint-contexts/tangle",
     "blueprint-context-derive?/tangle",

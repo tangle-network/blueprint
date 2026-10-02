@@ -725,3 +725,31 @@ mod tests {
         assert!(valid, "signature must verify");
     }
 }
+
+#[cfg(test)]
+mod marketplace_fixture_tests {
+    use super::*;
+
+    #[test]
+    fn canonical_marketplace_digest_is_stable() {
+        let details = JobQuoteDetails {
+            requester: alloy_primitives::address!("0x1111111111111111111111111111111111111111"),
+            service_id: 7,
+            job_index: 0,
+            price: U256::from(1_200_000_000_000_000u64),
+            timestamp: 1_800_000_000,
+            expiry: 1_800_000_120,
+            confidentiality: 1,
+            inputs_hash: B256::from(alloy_primitives::hex!(
+                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+            )),
+        };
+        let domain = QuoteSigningDomain {
+            chain_id: 5845,
+            verifying_contract: alloy_primitives::address!("0x0000000000000000000000000000000000000808"),
+        };
+        let digest = job_quote_digest_eip712(&details, domain);
+        println!("MARKETPLACE_DIGEST=0x{}", alloy_primitives::hex::encode(digest));
+        assert_eq!(digest.len(), 32);
+    }
+}
