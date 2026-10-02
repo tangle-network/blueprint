@@ -8,4 +8,6 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("Missing required template variables when --skip-prompts is used: {0}")]
     MissingTemplateVariables(String),
+    #[error("--init targets the current directory, but {0} is not empty: {1}")]
+    InitDirNotEmpty(String, String),
 }

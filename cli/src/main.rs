@@ -180,6 +180,13 @@ enum BlueprintCommands {
         /// Skip interactive prompts and use defaults.
         #[arg(long)]
         skip_prompts: bool,
+        /// Generate into the current directory instead of creating a new <NAME>/ subdirectory.
+        ///
+        /// `name` still names the crate/package; it just no longer names the
+        /// directory. The current directory must be empty apart from `.git`
+        /// and `.gitignore`.
+        #[arg(long)]
+        init: bool,
     },
 
     /// Deploy a blueprint to a protocol.
@@ -1549,6 +1556,7 @@ async fn main() -> Result<()> {
                 define,
                 template_values_file,
                 skip_prompts,
+                init,
             } => {
                 new_blueprint(
                     &name,
@@ -1558,6 +1566,7 @@ async fn main() -> Result<()> {
                     template_variables,
                     &template_values_file,
                     skip_prompts,
+                    init,
                 )?;
             }
             BlueprintCommands::Deploy { target } => match target {
