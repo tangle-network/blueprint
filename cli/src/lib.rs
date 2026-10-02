@@ -1,6 +1,7 @@
 pub mod command;
 pub mod foundry;
 pub mod settings;
+pub mod telemetry;
 pub mod utils;
 pub mod workspace;
 

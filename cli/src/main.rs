@@ -3768,7 +3768,7 @@ fn init_tracing_subscriber() {
         .pretty();
 
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(cargo_tangle::telemetry::cli_env_filter())
         .with(fmt_layer)
         .init();
 }
