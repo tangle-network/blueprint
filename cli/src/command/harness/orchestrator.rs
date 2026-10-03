@@ -426,7 +426,59 @@ fn allocate_free_port() -> Result<u16> {
     Ok(port)
 }
 
-/// Poll an HTTP health endpoint until 200 or timeout.
+/// Parse the numeric status code out of an HTTP response's status line.
+///
+/// The status line is the first line of a response and has the shape
+/// `HTTP/<version> <code> [reason]`. Returns `None` when the response is
+/// empty, truncated before the code, or does not start with an `HTTP/`
+/// version token at all. Callers treat `None` as a failed request, never as
+/// a success.
+///
+/// This exists because a substring search over the whole response body is
+/// not a status check: a body of `{"index":"200 items"}` or a header of
+/// `X-Req-Id: a200b` both satisfy `response.contains("200")`.
+fn parse_status_code(response: &str) -> Option<u16> {
+    let status_line = response.lines().next()?;
+    let mut parts = status_line.split_whitespace();
+    let version = parts.next()?;
+    if !version.starts_with("HTTP/") {
+        return None;
+    }
+    parts.next()?.parse().ok()
+}
+
+/// True only for a 2xx status.
+fn is_success_status(status: u16) -> bool {
+    (200..300).contains(&status)
+}
+
+/// Render a raw response for an error message: the status line, then a short
+/// truncation of whatever followed it. Truncated because a router error page
+/// can be arbitrarily long and this goes straight into a user-facing `eyre`.
+fn response_body_for_error(response: &str) -> String {
+    const MAX_BODY: usize = 200;
+    let mut lines = response.lines();
+    let status_line = lines.next().unwrap_or("no status line");
+    let body: String = lines.collect::<Vec<_>>().join(" ").trim().to_string();
+    if body.is_empty() {
+        return status_line.to_string();
+    }
+    if body.chars().count() > MAX_BODY {
+        let truncated: String = body.chars().take(MAX_BODY).collect();
+        return format!("{status_line} — {truncated}…");
+    }
+    format!("{status_line} — {body}")
+}
+
+/// Split a `curl -w "\n%{http_code}"` stdout into the response body and the
+/// trailing status code. Returns `None` if the status code is missing or is
+/// not a number, which callers treat as a failure rather than a success.
+fn split_curl_status(stdout: &str) -> Option<(&str, u16)> {
+    let (body, code) = stdout.rsplit_once('\n')?;
+    Some((body, code.trim().parse().ok()?))
+}
+
+/// Poll an HTTP health endpoint until 2xx or timeout.
 /// Uses raw TCP + HTTP/1.1 to avoid adding reqwest as a CLI dependency.
 async fn wait_for_health(url: &str, timeout: Duration) -> Result<()> {
     let start = tokio::time::Instant::now();
@@ -456,10 +508,22 @@ async fn wait_for_health(url: &str, timeout: Duration) -> Result<()> {
                     let mut buf = vec![0u8; 256];
                     if let Ok(n) = stream.read(&mut buf).await {
                         let response = String::from_utf8_lossy(&buf[..n]);
-                        if response.contains("200") {
-                            return Ok(());
+                        match parse_status_code(&response) {
+                            Some(status) if is_success_status(status) => return Ok(()),
+                            Some(status) => {
+                                last_error = format!(
+                                    "HTTP {status} ({})",
+                                    response.lines().next().unwrap_or("no reason phrase")
+                                );
+                            }
+                            None => {
+                                last_error = response
+                                    .lines()
+                                    .next()
+                                    .unwrap_or("malformed response")
+                                    .to_string();
+                            }
                         }
-                        last_error = response.lines().next().unwrap_or("unknown").to_string();
                     }
                 }
             }
@@ -563,7 +627,13 @@ async fn register_with_router(
     let is_https = router_url.starts_with("https://");
 
     if is_https {
-        // For HTTPS (production router), shell out to curl
+        // For HTTPS (production router), shell out to curl.
+        //
+        // `--write-out '%{http_code}'` is what makes the status observable:
+        // curl without `--fail` exits 0 for any HTTP status, so `status.success()`
+        // alone cannot distinguish a 201 from a 503. Without this flag a 503
+        // whose body does not literally contain "error" was reported as
+        // "Registered with router".
         let output = tokio::process::Command::new("curl")
             .args([
                 "-s",
@@ -574,6 +644,8 @@ async fn register_with_router(
                 "Content-Type: application/json",
                 "-d",
                 &body,
+                "-w",
+                "\n%{http_code}",
             ])
             .output()
             .await
@@ -583,9 +655,23 @@ async fn register_with_router(
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(eyre!("router registration failed: {stderr}"));
         }
+
         let stdout = String::from_utf8_lossy(&output.stdout);
-        if stdout.contains("error") {
-            return Err(eyre!("router returned error: {stdout}"));
+        let Some((response_body, status)) = split_curl_status(&stdout) else {
+            return Err(eyre!(
+                "router registration failed: could not read an HTTP status from curl output: {stdout}"
+            ));
+        };
+        if !is_success_status(status) {
+            return Err(eyre!(
+                "router registration failed: HTTP {status}: {response_body}"
+            ));
+        }
+        // A 2xx can still carry an application-level error object, so keep the
+        // existing body check. It is additive to the status check, not a
+        // replacement for it.
+        if response_body.contains("error") {
+            return Err(eyre!("router returned error: {response_body}"));
         }
     } else {
         // For HTTP (local router), use raw TCP
@@ -604,11 +690,18 @@ async fn register_with_router(
         let n = stream.read(&mut buf).await?;
         let response = String::from_utf8_lossy(&buf[..n]);
 
-        if !response.contains("200") && !response.contains("201") {
-            return Err(eyre!(
-                "router registration failed: {}",
-                response.lines().next().unwrap_or("unknown")
-            ));
+        match parse_status_code(&response) {
+            Some(status) if is_success_status(status) => {}
+            Some(status) => {
+                let detail = response_body_for_error(&response);
+                return Err(eyre!("router registration failed: HTTP {status}: {detail}"));
+            }
+            None => {
+                let detail = response_body_for_error(&response);
+                return Err(eyre!(
+                    "router registration failed: malformed response: {detail}"
+                ));
+            }
         }
     }
 
@@ -617,9 +710,112 @@ async fn register_with_router(
 
 #[cfg(test)]
 mod tests {
-    use super::operator_command;
+    use super::{
+        is_success_status, operator_command, parse_status_code, response_body_for_error,
+        split_curl_status,
+    };
     use std::path::Path;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn status_line_is_parsed_not_substring_matched() {
+        assert_eq!(parse_status_code("HTTP/1.1 200 OK\r\n\r\n"), Some(200));
+        assert_eq!(parse_status_code("HTTP/1.1 201 Created\r\n"), Some(201));
+        assert_eq!(
+            parse_status_code("HTTP/1.0 503 Service Unavailable\r\n"),
+            Some(503)
+        );
+        // No reason phrase is legal in HTTP/1.1 only for the first line of a
+        // bare status, but real servers emit it; either way the code parses.
+        assert_eq!(parse_status_code("HTTP/1.1 500\r\n"), Some(500));
+    }
+
+    /// The original bug: `response.contains("200")` accepted any response whose
+    /// text happened to include those digits anywhere.
+    #[test]
+    fn a_404_mentioning_200_is_not_a_200() {
+        let response = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n\
+                        {\"index\":\"200 items\"}";
+        let status = parse_status_code(response).expect("status line is well formed");
+        assert_eq!(status, 404);
+        assert!(!is_success_status(status));
+    }
+
+    #[test]
+    fn a_500_with_200_in_a_header_is_not_a_success() {
+        let response = "HTTP/1.1 500 Internal Server Error\r\nX-Req-Id: a200b\r\n\r\n";
+        let status = parse_status_code(response).expect("status line is well formed");
+        assert_eq!(status, 500);
+        assert!(!is_success_status(status));
+    }
+
+    /// A 200 whose body contains the word "error" must still be accepted by the
+    /// status check, otherwise the fix over-rejects. The https branch's separate
+    /// body check is what rejects that case, not the status code.
+    #[test]
+    fn a_200_body_containing_error_is_still_a_success_status() {
+        let response = "HTTP/1.1 200 OK\r\n\r\n{\"status\":\"error: none\"}";
+        let status = parse_status_code(response).expect("status line is well formed");
+        assert_eq!(status, 200);
+        assert!(is_success_status(status));
+    }
+
+    #[test]
+    fn only_2xx_counts_as_success() {
+        for ok in [200, 201, 202, 204, 299] {
+            assert!(is_success_status(ok), "{ok} should be a success");
+        }
+        for not_ok in [100, 199, 300, 301, 400, 401, 404, 429, 500, 503] {
+            assert!(
+                !is_success_status(not_ok),
+                "{not_ok} should not be a success"
+            );
+        }
+    }
+
+    #[test]
+    fn a_non_http_or_truncated_response_has_no_status() {
+        assert_eq!(parse_status_code(""), None);
+        assert_eq!(parse_status_code("\r\n\r\n"), None);
+        assert_eq!(parse_status_code("HTTP/1.1\r\n"), None);
+        assert_eq!(parse_status_code("not http at all\r\n"), None);
+        // A proxy error page that is HTML, not HTTP.
+        assert_eq!(parse_status_code("<html>502 Bad Gateway</html>\r\n"), None);
+    }
+
+    #[test]
+    fn curl_write_out_output_is_split_into_body_and_status() {
+        assert_eq!(
+            split_curl_status("{\"id\":1}\n201"),
+            Some(("{\"id\":1}", 201))
+        );
+        assert_eq!(split_curl_status("\n200"), Some(("", 200)));
+        assert_eq!(
+            split_curl_status("{\"error\":\"boom\"}\n422"),
+            Some(("{\"error\":\"boom\"}", 422))
+        );
+        // No trailing status line at all: curl failed before printing one.
+        assert_eq!(split_curl_status("{\"id\":1}"), None);
+        // Trailing garbage where the code should be.
+        assert_eq!(split_curl_status("body\nnot-a-number"), None);
+        assert_eq!(split_curl_status(""), None);
+    }
+
+    #[test]
+    fn error_rendering_keeps_the_status_line_and_bounds_the_body() {
+        assert_eq!(
+            response_body_for_error("HTTP/1.1 503 Service Unavailable\r\n\r\n"),
+            "HTTP/1.1 503 Service Unavailable"
+        );
+        assert_eq!(
+            response_body_for_error("HTTP/1.1 400 Bad Request\r\n{\"why\":\"nope\"}"),
+            "HTTP/1.1 400 Bad Request — {\"why\":\"nope\"}"
+        );
+        let long = "x".repeat(1000);
+        let rendered = response_body_for_error(&format!("HTTP/1.1 500 Err\r\n{long}"));
+        assert!(rendered.ends_with('…'), "long bodies are truncated");
+        assert!(rendered.len() < 400, "got {} chars", rendered.len());
+    }
 
     /// True only while the pid is a process that can still do work.
     ///
