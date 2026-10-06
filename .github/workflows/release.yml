@@ -28,7 +28,7 @@ on:
 jobs:
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
-    runs-on: "ubuntu-latest"
+    runs-on: [self-hosted, ci-public]
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
       tag: ${{ !github.event.pull_request && github.ref_name || '' }}
@@ -93,7 +93,9 @@ jobs:
       # - 1 "global" task that builds universal installers
       # - N "local" tasks that build each platform's binaries and platform-specific installers
       matrix: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix }}
-    runs-on: ${{ matrix.runner }}
+    # dist-workspace.toml names the self-hosted pool `ci-public`; the remaining
+    # macOS and Linux ARM targets need native hosted runners and build only on release tags.
+    runs-on: ${{ matrix.runner == 'ci-public' && fromJSON('["self-hosted","ci-public"]') || matrix.runner }}
     container: ${{ matrix.container && matrix.container.image || null }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,7 +139,7 @@ jobs:
           echo "::warning::soldeer failed after $attempts attempts; continuing without solidity deps (release build does not require them)" >&2
           exit 0
       - name: "install protobuf and gmp (Linux)"
-        if: "runner.os == 'Linux'"
+        if: "runner.os == 'Linux' && runner.environment == 'github-hosted'"
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev
@@ -193,7 +195,7 @@ jobs:
     needs:
       - plan
       - build-local-artifacts
-    runs-on: "ubuntu-latest"
+    runs-on: [self-hosted, ci-public]
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
@@ -244,7 +246,7 @@ jobs:
     if: ${{ always() && needs.plan.outputs.publishing == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    runs-on: "ubuntu-latest"
+    runs-on: [self-hosted, ci-public]
     outputs:
       val: ${{ steps.host.outputs.manifest }}
     steps:
@@ -307,7 +309,7 @@ jobs:
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
     if: ${{ always() && needs.host.result == 'success' }}
-    runs-on: "ubuntu-latest"
+    runs-on: [self-hosted, ci-public]
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:

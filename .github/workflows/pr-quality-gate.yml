@@ -9,7 +9,7 @@ jobs:
   validate-pr-description:
     name: Validate PR Description
     if: github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ci-public]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
               per_page: 100,
             });
             fs.writeFileSync(
-              "/tmp/pr-changed-files.txt",
+              `${process.env.RUNNER_TEMP}/pr-changed-files.txt`,
               files.map((f) => f.filename).join("\n"),
             );
 
@@ -38,9 +38,9 @@ jobs:
         run: |
           set +e
           python3 .github/scripts/validate_pr_body.py \
-            --changed-files-file /tmp/pr-changed-files.txt \
+            --changed-files-file "$RUNNER_TEMP/pr-changed-files.txt" \
             --config-file .github/pr-quality-gate.toml \
-            --report-file /tmp/pr-quality-report.json
+            --report-file "$RUNNER_TEMP/pr-quality-report.json"
           status=$?
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
@@ -57,7 +57,7 @@ jobs:
           script: |
             const fs = require("fs");
             const marker = "<!-- pr-quality-gate-report -->";
-            const report = JSON.parse(fs.readFileSync("/tmp/pr-quality-report.json", "utf8"));
+            const report = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/pr-quality-report.json`, "utf8"));
             const lines = [];
             lines.push(`${marker}`);
             lines.push("## PR Quality Gate Summary");
