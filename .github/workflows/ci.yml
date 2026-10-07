@@ -21,7 +21,7 @@ env:
 jobs:
   formatting:
     name: Rustfmt
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -39,16 +39,17 @@ jobs:
   linting:
     timeout-minutes: 120
     name: cargo clippy
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-disk-space
       - uses: ./.github/actions/setup-build-env
 
       - name: Run Clippy
         run: cargo clippy --workspace --tests --examples -- -D warnings
 
   generate-matrix:
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -141,13 +142,14 @@ jobs:
     # fan-out (which is what was happening on main: only 6 jobs ran
     # instead of the 6 + ~15 test bundles intended by the rewrite).
     name: cargo test (${{ join(matrix.bundle.packages, ', ') }})
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         bundle: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-disk-space
       - uses: ./.github/actions/setup-build-env
         with:
           nextest: "true"
@@ -193,7 +195,7 @@ jobs:
 
   integration:
     name: Integration Tests
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       RUST_LOG: info
@@ -201,6 +203,7 @@ jobs:
       BLUEPRINT_ANVIL_LOGS: "1"
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-disk-space
       - uses: ./.github/actions/setup-build-env
 
       - name: Warm up Foundry image
@@ -233,8 +236,7 @@ jobs:
 
   testnet-smoke-test:
     name: Testnet Smoke Test
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       RUST_LOG: info
@@ -242,24 +244,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-build-env
-        if: env.TANGLE_RPC_URL != ''
+        if: env.TANGLE_RPC_URL != '' && github.event_name == 'workflow_dispatch'
         with:
           foundry: "false"
 
       - name: Build CLI
-        if: env.TANGLE_RPC_URL != ''
+        if: env.TANGLE_RPC_URL != '' && github.event_name == 'workflow_dispatch'
         run: cargo build -p cargo-tangle --release
 
       - name: Smoke test
-        if: env.TANGLE_RPC_URL != ''
+        if: env.TANGLE_RPC_URL != '' && github.event_name == 'workflow_dispatch'
         run: |
           ./target/release/cargo-tangle tangle blueprint list blueprints --network testnet || echo "Testnet query failed (expected if no testnet access)"
 
   clippy-all-features:
     name: cargo clippy (--all-features)
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/free-disk-space
       - uses: ./.github/actions/setup-build-env
         with:
           tnt-core: "false"
