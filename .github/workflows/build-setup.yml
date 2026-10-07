@@ -42,8 +42,7 @@
     exit 0
 
 - name: install protobuf and gmp (Linux)
-  # Self-hosted runners already provide protobuf; they have no sudo.
-  if: runner.os == 'Linux' && runner.environment == 'github-hosted'
+  if: runner.os == 'Linux'
   run: |
     sudo apt-get update
     sudo apt-get install -y protobuf-compiler libprotobuf-dev libgmp-dev

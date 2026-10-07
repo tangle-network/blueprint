@@ -9,7 +9,7 @@ on:
 
 jobs:
   live-test:
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
