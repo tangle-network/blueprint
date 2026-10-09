@@ -12,7 +12,9 @@ use std::io::ErrorKind;
 ///
 /// The database is stored in a JSON file, which is updated every time
 /// a key-value pair is added, updated, or removed. Writes are atomic
-/// (write to temporary file, then rename) to prevent corruption.
+/// (write to temporary file, then rename) to prevent corruption. Mutations are
+/// published to this instance's in-memory map only after the write succeeds.
+/// This is not crash durability or coordination between database instances.
 ///
 /// # Example
 ///
@@ -102,8 +104,9 @@ where
     /// * Unable to write to disk
     pub fn set(&self, key: &str, value: T) -> Result<(), Error> {
         let mut data = self.lock()?;
-        data.insert(key.to_string(), value);
-        self.flush(&data)
+        let mut next = data.clone();
+        next.insert(key.to_string(), value);
+        self.commit(&mut data, next)
     }
 
     /// Retrieves a value associated with the given key.
@@ -117,9 +120,13 @@ where
     /// Returns the removed value if the key existed.
     pub fn remove(&self, key: &str) -> Result<Option<T>, Error> {
         let mut data = self.lock()?;
-        let removed = data.remove(key);
+        if !data.contains_key(key) {
+            return Ok(None);
+        }
+        let mut next = data.clone();
+        let removed = next.remove(key);
         if removed.is_some() {
-            self.flush(&data)?;
+            self.commit(&mut data, next)?;
         }
         Ok(removed)
     }
@@ -153,9 +160,13 @@ where
         F: FnOnce(&mut T),
     {
         let mut data = self.lock()?;
-        if let Some(value) = data.get_mut(key) {
+        if !data.contains_key(key) {
+            return Ok(false);
+        }
+        let mut next = data.clone();
+        if let Some(value) = next.get_mut(key) {
             f(value);
-            self.flush(&data)?;
+            self.commit(&mut data, next)?;
             Ok(true)
         } else {
             Ok(false)
@@ -165,8 +176,7 @@ where
     /// Replaces the entire database contents with a new map.
     pub fn replace(&self, new_data: HashMap<String, T>) -> Result<(), Error> {
         let mut data = self.lock()?;
-        *data = new_data;
-        self.flush(&data)
+        self.commit(&mut data, new_data)
     }
 
     /// Checks if a key exists in the database.
@@ -177,6 +187,14 @@ where
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, HashMap<String, T>>, Error> {
         self.data.lock().map_err(|_| Error::Poisoned)
+    }
+
+    // The caller holds the mutex across staging, persistence, and publication.
+    // An unsuccessful flush must not make the staged map visible to readers.
+    fn commit(&self, data: &mut HashMap<String, T>, next: HashMap<String, T>) -> Result<(), Error> {
+        self.flush(&next)?;
+        *data = next;
+        Ok(())
     }
 
     /// Atomically write to a temporary file and rename to the target path.
