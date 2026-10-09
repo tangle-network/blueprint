@@ -10,9 +10,9 @@ use crate::rt::hypervisor::net::Lease;
 use crate::sources::{BlueprintArgs, BlueprintEnvVars};
 use blueprint_core::{error, info, warn};
 use cloud_hypervisor_client::apis::DefaultApi;
-use cloud_hypervisor_client::models::console_config::Mode;
 use cloud_hypervisor_client::models::{
-    ConsoleConfig, DiskConfig, MemoryConfig, NetConfig, PayloadConfig, VmConfig, VsockConfig,
+    ConsoleConfig, ConsoleMode, DiskConfig, MemoryConfig, NetConfig, PayloadConfig, SerialConfig,
+    VmConfig, VsockConfig,
 };
 use cloud_hypervisor_client::{SocketBasedApiClient, socket_based_api_client};
 use fatfs::{Dir, FatType, FileSystem, FormatVolumeOptions, FsOptions};
@@ -322,7 +322,8 @@ impl HypervisorInstance {
                 e
             })?;
 
-        let (serial, console, cmdline_console_target) = self.logging_configs(self.config.pty);
+        let (serial, console, cmdline_console_target) =
+            Self::logging_configs(&self.guest_logs_path, self.config.pty);
 
         let tap_interface_addr = lease.addr();
         self.lease = Some(lease);
@@ -397,34 +398,24 @@ impl HypervisorInstance {
         format!("tap-tngl-{}", self.config.id)
     }
 
-    // Disable serial port logging in release builds, too much noise for production
-    //#[cfg(not(debug_assertions))]
-    // fn logging_configs(&self) -> (ConsoleConfig, ConsoleConfig, &'static str) {
-    //     let serial = ConsoleConfig { mode: Mode::Off, ..Default::default() };
-    //     let virtio_console = ConsoleConfig {
-    //         mode: Mode::File,
-    //         file: Some(self.guest_logs_path.to_string_lossy().into()),
-    //         ..Default::default()
-    //     };
-    //     (serial, virtio_console, "hvc0")
-    // }
-
-    //#[cfg(debug_assertions)]
-    fn logging_configs(&self, pty: bool) -> (ConsoleConfig, ConsoleConfig, &'static str) {
+    fn logging_configs(
+        guest_logs_path: &Path,
+        pty: bool,
+    ) -> (SerialConfig, ConsoleConfig, &'static str) {
         let serial = if pty {
-            ConsoleConfig {
-                mode: Mode::Pty,
+            SerialConfig {
+                mode: ConsoleMode::Pty,
                 ..Default::default()
             }
         } else {
-            ConsoleConfig {
-                mode: Mode::File,
-                file: Some(self.guest_logs_path.to_string_lossy().into()),
+            SerialConfig {
+                mode: ConsoleMode::File,
+                file: Some(guest_logs_path.to_string_lossy().into()),
                 ..Default::default()
             }
         };
         let virtio_console = ConsoleConfig {
-            mode: Mode::Off,
+            mode: ConsoleMode::Off,
             ..Default::default()
         };
         (serial, virtio_console, "ttyS0")
@@ -657,4 +648,45 @@ fn new_fat_fs(config: FatFsConfig) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn logging_configs_write_serial_to_guest_log() {
+        let (serial, console, target) =
+            HypervisorInstance::logging_configs(Path::new("/tmp/guest.log"), false);
+        let config = VmConfig {
+            serial: Some(serial),
+            console: Some(console),
+            ..Default::default()
+        };
+        let config = serde_json::to_value(config).unwrap();
+
+        assert_eq!(target, "ttyS0");
+        assert_eq!(
+            config["serial"],
+            json!({ "mode": "File", "file": "/tmp/guest.log" })
+        );
+        assert_eq!(config["console"], json!({ "mode": "Off" }));
+    }
+
+    #[test]
+    fn logging_configs_use_pty_without_a_log_file() {
+        let (serial, console, target) =
+            HypervisorInstance::logging_configs(Path::new("/tmp/guest.log"), true);
+        let config = VmConfig {
+            serial: Some(serial),
+            console: Some(console),
+            ..Default::default()
+        };
+        let config = serde_json::to_value(config).unwrap();
+
+        assert_eq!(target, "ttyS0");
+        assert_eq!(config["serial"], json!({ "mode": "Pty" }));
+        assert_eq!(config["console"], json!({ "mode": "Off" }));
+    }
 }
