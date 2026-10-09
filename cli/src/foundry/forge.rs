@@ -116,19 +116,10 @@ impl Forge {
             spinner.tick();
 
             // Check for new output
-            while let Ok(line) = rx.try_recv() {
-                // Only add non-duplicate lines
-                if !output_buffer.contains(&line) {
-                    output_buffer.push_back(line);
-
-                    // Keep only the last 100 lines
-                    if output_buffer.len() > 100 {
-                        output_buffer.pop_front();
-                    }
-
-                    // Print just the new line
+            for line in rx.try_iter() {
+                if let Some(new) = push_output_line(&mut output_buffer, line) {
                     spinner.suspend(|| {
-                        println!("{}", style(&output_buffer[output_buffer.len() - 1]).dim());
+                        println!("{}", style(&new).dim());
                     });
                 }
             }
@@ -138,14 +129,91 @@ impl Forge {
 
         let status = child.wait()?;
 
+        // `try_wait` reaps the child as soon as it exits, which means the loop
+        // above can stop before the reader threads have forwarded everything the
+        // pipes held. Forge writes its compiler diagnostics at the very end, so
+        // dropping this tail loses precisely the lines that explain the failure.
+        // The channel closes once both readers see EOF, which the exited child
+        // guarantees, so a blocking drain here cannot hang. These lines are not
+        // echoed: the error below is what the caller reports on.
+        for line in rx.iter() {
+            push_output_line(&mut output_buffer, line);
+        }
+
         if !status.success() {
             spinner.finish_with_message("❌ Failed to build contracts");
-            return Err(color_eyre::eyre::eyre!(
-                "Failed to build contracts. Check the output above for details."
-            ));
+            let mut message = String::from("Failed to build contracts.");
+            if output_buffer.is_empty() {
+                message.push_str(" `forge build` produced no output.");
+            } else {
+                message.push_str("\n\n");
+                message.push_str(&output_buffer.iter().fold(String::new(), |mut acc, line| {
+                    acc.push_str(line);
+                    acc.push('\n');
+                    acc
+                }));
+            }
+            return Err(color_eyre::eyre::eyre!(message));
         }
 
         spinner.finish_with_message("✨ Contracts built successfully!");
         Ok(())
+    }
+}
+
+/// Record one line of `forge` output, keeping the buffer bounded and duplicate
+/// free. Returns the line only when it was newly recorded, so the caller can
+/// echo exactly what the buffer kept.
+fn push_output_line(output_buffer: &mut VecDeque<String>, line: String) -> Option<String> {
+    // Only add non-duplicate lines
+    if output_buffer.contains(&line) {
+        return None;
+    }
+
+    output_buffer.push_back(line.clone());
+
+    // Keep only the last 100 lines
+    if output_buffer.len() > 100 {
+        output_buffer.pop_front();
+    }
+
+    Some(line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::push_output_line;
+
+    fn drain(lines: &[&str]) -> Vec<String> {
+        let mut buffer = std::collections::VecDeque::new();
+        lines
+            .iter()
+            .filter_map(|line| push_output_line(&mut buffer, (*line).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn records_each_line_once() {
+        assert_eq!(drain(&["a", "b"]), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn suppresses_repeated_lines() {
+        assert_eq!(drain(&["a", "b", "a"]), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn keeps_the_last_hundred_lines() {
+        let lines: Vec<String> = (0..150).map(|i| i.to_string()).collect();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let mut buffer = std::collections::VecDeque::new();
+        for line in &refs {
+            push_output_line(&mut buffer, (*line).to_owned());
+        }
+
+        assert_eq!(buffer.len(), 100);
+        // The earliest lines are the ones dropped; forge's diagnostics are last.
+        assert_eq!(buffer.front().map(String::as_str), Some("50"));
+        assert_eq!(buffer.back().map(String::as_str), Some("149"));
     }
 }
