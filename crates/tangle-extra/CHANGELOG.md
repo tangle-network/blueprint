@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.17](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.2.0-alpha.16...blueprint-tangle-extra-v0.2.0-alpha.17) - 2026-10-10
+
+### Fixed
+
+- *(clients)* submit_job_from_quote parsed the wrong event — plus the live chain proof (#1568)
+
+### Other
+
+- *(tangle)* live quote generator for the cross-SDK interop proof (#1567)
+- *(tangle)* pin the canonical marketplace quote digest (#1565)
+
 ## [0.2.0-alpha.16](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.2.0-alpha.15...blueprint-tangle-extra-v0.2.0-alpha.16) - 2026-10-01
 
 ### Fixed

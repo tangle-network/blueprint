@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.19...blueprint-manager-v0.4.0-alpha.20) - 2026-10-10
+
+### Fixed
+
+- *(manager)* adopt Cloud Hypervisor serial configuration (#1576) [skip release-plz]
+
 ## [0.4.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.18...blueprint-manager-v0.4.0-alpha.19) - 2026-10-02
 
 ### Other
