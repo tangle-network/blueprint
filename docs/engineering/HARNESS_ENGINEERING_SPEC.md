@@ -61,11 +61,11 @@ Use one class per PR:
 
 ## Automation
 
-Quality gates are enforced automatically in CI:
+PR evidence is checked locally before merge:
 
 - PR body/checklist + class validation: `.github/scripts/validate_pr_body.py`
 - Classification policy config: `.github/pr-quality-gate.toml`
-- Workflow and PR summary comment: `.github/workflows/pr-quality-gate.yml`
+- Run the validator with `--body-file` and `--changed-files-file`; the local Beelink gate checks affected code, and release workflows own publication checks.
 
 ## PR Contract Fields
 
