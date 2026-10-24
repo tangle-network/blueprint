@@ -8,16 +8,16 @@ Inspect the directory and source exports instead of maintaining generated direct
 
 ## Build and test
 
-Use [rust-toolchain.toml](rust-toolchain.toml), the workspace manifests, and [.github/workflows/ci.yml](.github/workflows/ci.yml) for current toolchain and check configuration.
-Rustfmt uses the toolchain selected by CI, which can differ from the compiler toolchain.
+Use [rust-toolchain.toml](rust-toolchain.toml), the workspace manifests, and [.config/nextest.toml](.config/nextest.toml) for current toolchain and check configuration.
 Read features from the affected manifest; preserve supported `no_std` and optional-feature builds.
 Use `cargo fmt --all` for formatting and `taplo fmt` for manifest formatting under the repository configuration.
 
-Start with crate-scoped checks, then run the broader checks required by the change and CI.
+Start with crate-scoped checks, then run the broader local checks required by the change.
 Do not infer workspace coverage from an unqualified `cargo test` command or a feature-gated suite that skipped its cases.
-CI owns the list of packages that require serial execution.
 Use [.config/nextest.toml](.config/nextest.toml)'s serial profile or `--test-threads=1` for those packages and resource-sharing tests.
 Keep network, environment, Docker, and process state isolated across tests.
+
+Local Beelink gate (set `CRATE` and `INTEGRATION_TEST` to the affected package and touched integration target): `beelink-gate auto https://github.com/tangle-network/blueprint.git "$(git rev-parse HEAD)" -- bash -lc 'cargo fetch --locked && cargo check --frozen -p "$1" && cargo test --frozen -p "$1" --test "$2" -- --test-threads=1' _ "${CRATE:?set affected Cargo package}" "${INTEGRATION_TEST:?set touched integration target}"`.
 Build prerequisites and external fixtures must be available before claiming their integration tests passed.
 
 For nontrivial behavior changes, follow [the engineering playbook](docs/engineering/HARNESS_ENGINEERING_PLAYBOOK.md) and [specification](docs/engineering/HARNESS_ENGINEERING_SPEC.md).
@@ -38,8 +38,7 @@ Do not treat every resolution failure as a cycle or remove production version co
 
 ## Pull requests
 
-Use [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) and the current [quality policy](.github/pr-quality-gate.toml).
+Use [.github/pull_request_template.md](.github/pull_request_template.md) and the current [quality policy](.github/pr-quality-gate.toml).
 The [validation script](.github/scripts/validate_pr_body.py) owns required sections, change classes, and documentation-only classification.
-Read the [workflow](.github/workflows/pr-quality-gate.yml) when diagnosing how the PR body reaches validation.
-A rerun can reuse the original event payload, so verify that a corrected body reached the check before claiming it passed.
+Run the validator locally with `python3 .github/scripts/validate_pr_body.py --body-file "$PR_BODY" --changed-files-file "$CHANGED_FILES"`; it does not run as hosted PR CI.
 Include changed behavior, relevant test evidence, risk, and rollback in the PR.

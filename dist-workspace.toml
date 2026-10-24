@@ -35,8 +35,8 @@ install-path = "CARGO_HOME"
 install-updater = true
 bin-aliases = { cargo-tangle = ["tangle", "tg"] }
 members = ["cargo:/cli"]
-# Which actions to run on pull requests
-pr-run-mode = "plan"
+# PR validation belongs to the local Beelink gate; dist only publishes releases.
+pr-run-mode = "skip"
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.28.7-prerelease.1"
 
