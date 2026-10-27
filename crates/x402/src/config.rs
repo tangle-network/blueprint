@@ -276,8 +276,11 @@ impl AcceptedToken {
                 name: name.unwrap_or_else(|| "USD Coin".into()),
                 version: version.unwrap_or_else(|| "2".into()),
             })
+        } else if let (Some(name), Some(version)) = (name, version) {
+            Some(AssetTransferMethod::Permit2 { name, version })
         } else {
-            Some(AssetTransferMethod::Permit2 { name: name?, version: version? })
+            tracing::error!(token = %self.symbol, "permit2 token without its EIP-712 domain");
+            None
         }
     }
 
@@ -365,7 +368,9 @@ impl AcceptedToken {
             tracing::warn!(
                 token = %self.symbol,
                 network = %self.network,
-                "EIP-3009 token without eip3009_name/eip3009_version; using the default EIP-712 domain \"USD Coin\" version \"2\""
+                domain_name = self.eip3009_name.as_deref().unwrap_or("USD Coin"),
+                domain_version = self.eip3009_version.as_deref().unwrap_or("2"),
+                "EIP-3009 token without a full eip3009_name/eip3009_version; signing with the default-filled EIP-712 domain"
             );
         } else if self.transfer_method != "eip3009" && !has_domain {
             return Err(X402Error::Config(format!(

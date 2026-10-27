@@ -68,8 +68,9 @@ fn permit2_token_without_a_domain_is_refused() {
 
 #[test]
 fn library_permit2_domain_matches_mainnet_permit2() {
-    // x402-chain-eip155 signs Permit2 with exactly this domain: name "Permit2", the chain id
-    // and its PERMIT2_ADDRESS, with no version field.
+    // x402-chain-eip155 builds this domain inline in its signing functions (name "Permit2",
+    // the chain id, its PERMIT2_ADDRESS, no version) and exports no builder, so this pins the
+    // library's address constant and that domain shape to mainnet Permit2's separator.
     let domain = eip712_domain! {
         name: "Permit2",
         chain_id: 1,
