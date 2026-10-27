@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-x402-v0.2.0-alpha.18...blueprint-x402-v0.2.0-alpha.19) - 2026-10-27
+
+### Fixed
+
+- *(deps)* make main build again on Alloy 2, rand 0.10 and dynosaur 0.3 (#1605)
+
 ## [0.2.0-alpha.18](https://github.com/tangle-network/blueprint/compare/blueprint-x402-v0.2.0-alpha.17...blueprint-x402-v0.2.0-alpha.18) - 2026-10-13
 
 ### Other

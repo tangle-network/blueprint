@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.26](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.25...cargo-tangle-v0.5.0-alpha.26) - 2026-10-27
+
+### Fixed
+
+- *(deps)* make main build again on Alloy 2, rand 0.10 and dynosaur 0.3 (#1605)
+
 ## [0.5.0-alpha.25](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.24...cargo-tangle-v0.5.0-alpha.25) - 2026-10-13
 
 ### Other

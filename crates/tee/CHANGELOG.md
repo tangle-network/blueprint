@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.11](https://github.com/tangle-network/blueprint/compare/blueprint-tee-v0.2.0-alpha.10...blueprint-tee-v0.2.0-alpha.11) - 2026-10-27
+
+### Fixed
+
+- *(deps)* make main build again on Alloy 2, rand 0.10 and dynosaur 0.3 (#1605)
+
 ## [0.2.0-alpha.10](https://github.com/tangle-network/blueprint/compare/blueprint-tee-v0.2.0-alpha.9...blueprint-tee-v0.2.0-alpha.10) - 2026-09-29
 
 ### Other
