@@ -51,7 +51,7 @@ pub async fn protocol_of_random_generation<R, M>(
 ) -> Result<[u8; 32], Error<M::ReceiveError, M::SendError>>
 where
     M: Mpc<ProtocolMessage = Msg>,
-    R: rand::RngCore,
+    R: rand::Rng,
 {
     let MpcParty { delivery, .. } = party.into_party();
     let (incoming, mut outgoing) = delivery.split();

@@ -1,5 +1,5 @@
 use base64::Engine;
-use blueprint_std::rand::{CryptoRng, RngCore};
+use blueprint_std::rand::{CryptoRng, Rng};
 use core::fmt::Display;
 use std::collections::BTreeMap;
 
@@ -66,7 +66,7 @@ impl ApiTokenGenerator {
     /// Generates a new API token without an expiration time for the given service ID.
     ///
     /// This is a convenience method that calls [`generate_token_with_expiration`](Self::generate_token_with_expiration) with an expiration time of 0.
-    pub fn generate_token<R: RngCore + CryptoRng>(
+    pub fn generate_token<R: Rng + CryptoRng>(
         &self,
         service_id: ServiceId,
         rng: &mut R,
@@ -75,7 +75,7 @@ impl ApiTokenGenerator {
     }
 
     /// Generates a new API token with the specified expiration time.
-    pub fn generate_token_with_expiration<R: RngCore + CryptoRng>(
+    pub fn generate_token_with_expiration<R: Rng + CryptoRng>(
         &self,
         service_id: ServiceId,
         expires_at: u64,
@@ -90,7 +90,7 @@ impl ApiTokenGenerator {
     }
 
     /// Generates a new API token with the specified expiration time and additional headers.
-    pub fn generate_token_with_expiration_and_headers<R: RngCore + CryptoRng>(
+    pub fn generate_token_with_expiration_and_headers<R: Rng + CryptoRng>(
         &self,
         service_id: ServiceId,
         expires_at: u64,

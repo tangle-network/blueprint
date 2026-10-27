@@ -148,7 +148,7 @@ impl AzureSkrBackend {
         let http = reqwest::Client::new();
 
         let mut secret = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut secret);
+        rand::Rng::fill_bytes(&mut rand::rng(), &mut secret);
 
         Self {
             config,

@@ -1,7 +1,7 @@
 //! Memory intensive profiling example showing peak memory tracking.
 
 use blueprint_profiling::{ProfileConfig, ProfileRunner};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, RngExt, SeedableRng};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let rng = Arc::clone(&rng);
             async move {
                 let mut rng = rng.lock().await;
-                let size = rng.gen_range(10_000..200_000);
+                let size = rng.random_range(10_000..200_000);
 
                 let mut buffer = Vec::with_capacity(size);
                 buffer.resize(size, 7u8);
