@@ -42,7 +42,7 @@ use tokio::time::sleep;
 use tower::Service;
 
 /// Configuration for the blueprint registration procedure
-#[dynosaur::dynosaur(DynBlueprintConfig)]
+#[dynosaur::dynosaur(DynBlueprintConfig = dyn(box) BlueprintConfig)]
 pub trait BlueprintConfig: Send + Sync {
     /// The registration logic for this protocol
     ///
@@ -123,7 +123,7 @@ fn resolve_service_id(env: &BlueprintEnvironment) -> Result<u64, crate::error::C
 ///     }
 /// }
 /// ```
-#[dynosaur::dynosaur(DynBackgroundService)]
+#[dynosaur::dynosaur(DynBackgroundService = dyn(box) BackgroundService)]
 pub trait BackgroundService: Send + Sync {
     /// Start this background service
     ///
