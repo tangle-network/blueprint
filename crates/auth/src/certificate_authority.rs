@@ -239,7 +239,7 @@ fn client_certificate_params(
 
 /// Random 128-bit serial compliant with RFC 5280 (avoid negative).
 fn random_serial() -> Result<SerialNumber, crate::Error> {
-    use blueprint_std::rand::RngCore;
+    use blueprint_std::rand::Rng;
 
     let mut rng = blueprint_std::BlueprintRng::new();
     let mut bytes = [0u8; 16];

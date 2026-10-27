@@ -30,7 +30,7 @@
 //! ```
 
 use base64::Engine;
-use blueprint_std::rand::{CryptoRng, RngCore};
+use blueprint_std::rand::{CryptoRng, Rng};
 use prost::Message;
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -122,7 +122,7 @@ impl ApiKeyGenerator {
     }
 
     /// Generate a new API key
-    pub fn generate_key<R: RngCore + CryptoRng>(
+    pub fn generate_key<R: Rng + CryptoRng>(
         &self,
         service_id: ServiceId,
         expires_at: u64,

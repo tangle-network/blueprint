@@ -242,7 +242,8 @@ impl TlsAssetManager {
     pub fn generate_cert_id(&self, service_id: u64) -> String {
         use blueprint_std::BlueprintRng;
         let mut rng = BlueprintRng::new();
-        let random_bytes: [u8; 16] = rng.r#gen();
+        let mut random_bytes = [0u8; 16];
+        blueprint_std::rand::Rng::fill_bytes(&mut rng, &mut random_bytes);
         format!("cert_{}_{}", service_id, hex::encode(random_bytes))
     }
 
@@ -250,7 +251,8 @@ impl TlsAssetManager {
     pub fn generate_key_id(&self, service_id: u64) -> String {
         use blueprint_std::BlueprintRng;
         let mut rng = BlueprintRng::new();
-        let random_bytes: [u8; 16] = rng.r#gen();
+        let mut random_bytes = [0u8; 16];
+        blueprint_std::rand::Rng::fill_bytes(&mut rng, &mut random_bytes);
         format!("key_{}_{}", service_id, hex::encode(random_bytes))
     }
 

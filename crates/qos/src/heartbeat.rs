@@ -8,7 +8,6 @@ use blueprint_core::{info, warn};
 use blueprint_crypto::k256::{K256Ecdsa, K256SigningKey};
 use blueprint_keystore::backends::Backend;
 use blueprint_keystore::{Keystore, KeystoreConfig};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::{
     future::Future,
@@ -410,7 +409,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
         let initial_interval_ms = self.config.interval_secs * 1000;
         let initial_jitter = if initial_jitter_percent > 0 {
             let max_jitter = (initial_interval_ms * u64::from(initial_jitter_percent)) / 100;
-            rand::thread_rng().gen_range(0..=max_jitter)
+            rand::random_range(0..=max_jitter)
         } else {
             0
         };
@@ -445,7 +444,7 @@ impl<C: HeartbeatConsumer + Send + Sync + 'static> HeartbeatService<C> {
 
                 let sleep_duration = if jitter_percent_val > 0 {
                     let max_jitter = (interval_ms * u64::from(jitter_percent_val)) / 100;
-                    let current_jitter = rand::thread_rng().gen_range(0..=max_jitter);
+                    let current_jitter = rand::random_range(0..=max_jitter);
                     base_interval + Duration::from_millis(current_jitter)
                 } else {
                     base_interval

@@ -35,7 +35,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["std"] }
 
 # Crypto
-rand = { workspace = true, features = ["std", "std_rng"] }
+rand = { workspace = true, features = ["std", "std_rng", "sys_rng"] }
 sha2 = { workspace = true, features = ["std"] }
 hex = { workspace = true, features = ["std"] }
 zeroize = { workspace = true }

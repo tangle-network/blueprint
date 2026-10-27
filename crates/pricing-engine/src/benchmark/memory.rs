@@ -2,7 +2,7 @@
 
 use crate::error::{PricingError, Result};
 use blueprint_core::info;
-use rand::Rng;
+use rand::RngExt;
 use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -102,9 +102,9 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchma
             let mut buffer = vec![0u8; thread_block_size_bytes as usize];
 
             // Initialize buffer with some data
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             for byte in buffer.iter_mut() {
-                *byte = (rng.gen_range(0..256)) as u8;
+                *byte = (rng.random_range(0..256)) as u8;
             }
 
             // Prepare for random access if needed
@@ -112,7 +112,7 @@ pub fn run_memory_benchmark(config: &BenchmarkRunConfig) -> Result<MemoryBenchma
             if thread_access_mode == MemoryAccessMode::Random {
                 // Pre-generate random offsets
                 for _ in 0..thread_ops {
-                    let offset = rng.gen_range(0..buffer.len());
+                    let offset = rng.random_range(0..buffer.len());
                     offsets.push(offset);
                 }
             }

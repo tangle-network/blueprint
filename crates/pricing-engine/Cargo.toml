@@ -47,7 +47,7 @@ k256 = { workspace = true, features = ["ecdsa"] }
 # Async / networking utilities
 futures = { workspace = true, features = ["thread-pool"] }
 tokio = { workspace = true, features = ["full"] }
-rand = { workspace = true, features = ["std", "std_rng"] }
+rand = { workspace = true, features = ["std", "std_rng", "thread_rng", "sys_rng"] }
 bincode = { workspace = true }
 crossbeam-channel = { workspace = true }
 libp2p = { workspace = true, features = ["gossipsub", "identify", "kad", "noise", "yamux", "tcp", "tokio", "dns"] }

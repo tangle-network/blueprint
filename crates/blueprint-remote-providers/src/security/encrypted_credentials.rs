@@ -97,7 +97,7 @@ impl EncryptedCloudCredentials {
 
     /// Generate secure random nonce
     fn generate_nonce() -> [u8; 12] {
-        use rand::RngCore;
+        use aes_gcm::aead::rand_core::RngCore;
         let mut nonce = [0u8; 12];
         OsRng.fill_bytes(&mut nonce);
         nonce

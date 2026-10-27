@@ -3608,7 +3608,6 @@ dependencies = [
  "alloy-transport-http 2.0.5",
  "anyhow",
  "async-trait",
- "auto_impl",
  "axum",
  "base64 0.22.1",
  "blake3",
@@ -3758,7 +3757,7 @@ dependencies = [
  "hex",
  "libp2p",
  "rand 0.10.1",
- "rand_dev",
+ "rand_dev 0.1.1",
  "serde",
  "serde_json",
  "serial_test",
@@ -3784,7 +3783,7 @@ dependencies = [
  "hex",
  "libp2p",
  "rand 0.10.1",
- "rand_dev",
+ "rand_dev 0.3.0",
  "round-based",
  "serde",
  "serde_json",
@@ -11159,6 +11158,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_chacha"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e6af7f3e25ded52c41df4e0b1af2d047e45896c2f3281792ed68a1c243daedb"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11192,6 +11201,18 @@ dependencies = [
  "hex",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand_dev"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ce0cb5cf648104d37cec5212da34e75d765417ad03d742d5721442bc69475dd"
+dependencies = [
+ "const-hex",
+ "getrandom 0.4.2",
+ "rand_chacha 0.10.0",
+ "rand_core 0.10.1",
 ]
 
 [[package]]
