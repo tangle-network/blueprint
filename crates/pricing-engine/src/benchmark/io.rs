@@ -405,7 +405,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
                 // Random read/write mix (70% reads, 30% writes)
                 for _ in 0..1000 {
                     // Perform 1000 random operations
-                    let is_read = rng.gen_bool(0.7); // 70% reads
+                    let is_read = rng.random_bool(0.7); // 70% reads
                     let file_idx = rng.random_range(0..num_files);
                     let block_idx = rng.random_range(0..(file_size / block_size as u64));
                     let offset = block_idx * block_size as u64;
@@ -574,7 +574,7 @@ fn fill_buffer(buffer: &mut [u8], offset: u64) {
     // Fill main data area with random values
     let mut rng = rand::make_rng::<StdRng>();
     for (_i, byte) in buffer.iter_mut().enumerate().take(data_size) {
-        *byte = rng.r#gen();
+        *byte = rng.random();
     }
 
     // Calculate checksum of the data
