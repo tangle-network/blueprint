@@ -159,6 +159,31 @@ impl rand::TryRng for SystemRng {
     }
 }
 
+// Crates still on the rand_core 0.6 traits (chacha20poly1305's key and nonce generators,
+// k256 0.13 signing keys) take a `BlueprintRng` directly; it delegates to the same OS source.
+#[cfg(feature = "std")]
+impl rand_core06::RngCore for BlueprintRng {
+    fn next_u32(&mut self) -> u32 {
+        rand::Rng::next_u32(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        rand::Rng::next_u64(self)
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        rand::Rng::fill_bytes(self, dest);
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core06::Error> {
+        rand::Rng::fill_bytes(self, dest);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+impl rand_core06::CryptoRng for BlueprintRng {}
+
 /// `rand_core` 0.6 compatibility shim for a [`SystemRng`], so crates still on the 0.6/0.8
 /// `rand` API (e.g. `ed25519-zebra`) can use the same OS entropy source.
 #[cfg(feature = "std")]

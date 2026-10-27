@@ -3,7 +3,7 @@
 use crate::error::{PricingError, Result};
 use blueprint_core::info;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -233,7 +233,7 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
     }
 
     // Create RNG for random operations
-    let mut rng = StdRng::from_entropy();
+    let mut rng = rand::make_rng::<StdRng>();
 
     // Start timing
     let start = Instant::now();
@@ -317,8 +317,8 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
                 // Random read
                 for _ in 0..1000 {
                     // Perform 1000 random reads
-                    let file_idx = rng.gen_range(0..num_files);
-                    let block_idx = rng.gen_range(0..(file_size / block_size as u64));
+                    let file_idx = rng.random_range(0..num_files);
+                    let block_idx = rng.random_range(0..(file_size / block_size as u64));
                     let offset = block_idx * block_size as u64;
 
                     let file = &mut files[file_idx];
@@ -357,8 +357,8 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
                 // Random write
                 for _ in 0..1000 {
                     // Perform 1000 random writes
-                    let file_idx = rng.gen_range(0..num_files);
-                    let block_idx = rng.gen_range(0..(file_size / block_size as u64));
+                    let file_idx = rng.random_range(0..num_files);
+                    let block_idx = rng.random_range(0..(file_size / block_size as u64));
                     let offset = block_idx * block_size as u64;
 
                     // Fill buffer with random data and embed checksum and offset
@@ -406,8 +406,8 @@ fn run_io_test(mode: IoTestMode) -> Result<IoBenchmarkResult> {
                 for _ in 0..1000 {
                     // Perform 1000 random operations
                     let is_read = rng.gen_bool(0.7); // 70% reads
-                    let file_idx = rng.gen_range(0..num_files);
-                    let block_idx = rng.gen_range(0..(file_size / block_size as u64));
+                    let file_idx = rng.random_range(0..num_files);
+                    let block_idx = rng.random_range(0..(file_size / block_size as u64));
                     let offset = block_idx * block_size as u64;
 
                     let file = &mut files[file_idx];
@@ -572,7 +572,7 @@ fn fill_buffer(buffer: &mut [u8], offset: u64) {
     let data_size = buffer.len() - FILE_CHECKSUM_LENGTH - FILE_OFFSET_LENGTH;
 
     // Fill main data area with random values
-    let mut rng = StdRng::from_entropy();
+    let mut rng = rand::make_rng::<StdRng>();
     for (_i, byte) in buffer.iter_mut().enumerate().take(data_size) {
         *byte = rng.r#gen();
     }
