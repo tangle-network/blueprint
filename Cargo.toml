@@ -457,8 +457,8 @@ testcontainers = { version = "0.27.3", default-features = false }
 metrics = { version = "0.24.6", default-features = false }
 
 # x402 protocol
-x402-types = { version = "1", default-features = false }
-x402-axum = { version = "1", default-features = false }
+x402-types = { version = "2", default-features = false }
+x402-axum = { version = "2", default-features = false }
 x402-chain-eip155 = { version = "2", default-features = false }
 mpp = { version = "0.8", default-features = false }
 
