@@ -113,6 +113,9 @@ pub struct JobPolicyConfig {
 /// pay_to = "0xYourOperatorAddressOnBase"
 /// rate_per_native_unit = "3200.00"
 /// markup_bps = 200
+/// # The token's EIP-712 domain, required for permit2 (the default transfer_method).
+/// eip3009_name = "USD Coin"
+/// eip3009_version = "2"
 ///
 /// # Optional: enable the parallel MPP (Machine Payments Protocol) ingress.
 /// # When present, the gateway also accepts WWW-Authenticate: Payment /
@@ -246,11 +249,11 @@ pub struct AcceptedToken {
     #[serde(default = "default_transfer_method")]
     pub transfer_method: String,
 
-    /// EIP-3009 domain name (required when `transfer_method = "eip3009"`).
+    /// Token EIP-712 domain name: required for `"permit2"`; `"eip3009"` defaults to `"USD Coin"`.
     #[serde(default)]
     pub eip3009_name: Option<String>,
 
-    /// EIP-3009 domain version (required when `transfer_method = "eip3009"`).
+    /// Token EIP-712 domain version: required for `"permit2"`; `"eip3009"` defaults to `"2"`.
     #[serde(default)]
     pub eip3009_version: Option<String>,
 }
@@ -260,6 +263,27 @@ fn default_transfer_method() -> String {
 }
 
 impl AcceptedToken {
+    /// The x402 transfer method for this token, carrying the token's EIP-712 domain.
+    /// x402 itself encodes the canonical Permit2 contract domain; this domain is the token's
+    /// own, used for EIP-3009 transfers and Permit2's EIP-2612 gas sponsoring. EIP-3009 keeps
+    /// USDC's ("USD Coin", "2") default; Permit2 has none and returns `None` without one.
+    #[must_use]
+    pub fn asset_transfer_method(&self) -> Option<x402_chain_eip155::chain::AssetTransferMethod> {
+        use x402_chain_eip155::chain::AssetTransferMethod;
+        let (name, version) = (self.eip3009_name.clone(), self.eip3009_version.clone());
+        if self.transfer_method == "eip3009" {
+            Some(AssetTransferMethod::Eip3009 {
+                name: name.unwrap_or_else(|| "USD Coin".into()),
+                version: version.unwrap_or_else(|| "2".into()),
+            })
+        } else if let (Some(name), Some(version)) = (name, version) {
+            Some(AssetTransferMethod::Permit2 { name, version })
+        } else {
+            tracing::error!(token = %self.symbol, "permit2 token without its EIP-712 domain");
+            None
+        }
+    }
+
     /// Convert a price in wei to a token amount string in the token's smallest unit.
     ///
     /// Applies the exchange rate and markup. Returns the amount as a decimal
@@ -334,6 +358,24 @@ impl AcceptedToken {
             return Err(X402Error::Config(format!(
                 "token {} on {}: rate_per_native_unit must be positive, got {}",
                 self.symbol, self.network, self.rate_per_native_unit
+            )));
+        }
+
+        // A signature domain must be stated, never guessed. Permit2 tokens carry their own
+        // EIP-712 domain; EIP-3009 keeps USDC's historical default, logged when used.
+        let has_domain = self.eip3009_name.is_some() && self.eip3009_version.is_some();
+        if self.transfer_method == "eip3009" && !has_domain {
+            tracing::warn!(
+                token = %self.symbol,
+                network = %self.network,
+                domain_name = self.eip3009_name.as_deref().unwrap_or("USD Coin"),
+                domain_version = self.eip3009_version.as_deref().unwrap_or("2"),
+                "EIP-3009 token without a full eip3009_name/eip3009_version; signing with the default-filled EIP-712 domain"
+            );
+        } else if self.transfer_method != "eip3009" && !has_domain {
+            return Err(X402Error::Config(format!(
+                "token {} on {}: permit2 requires eip3009_name and eip3009_version (the token's EIP-712 domain)",
+                self.symbol, self.network
             )));
         }
 

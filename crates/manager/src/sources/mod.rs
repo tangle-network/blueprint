@@ -62,8 +62,7 @@ pub(crate) fn unpack_archive_safely<R: Read>(
     Ok(())
 }
 
-#[auto_impl::auto_impl(Box)]
-#[dynosaur::dynosaur(pub(crate) DynBlueprintSource)]
+#[dynosaur::dynosaur(pub(crate) DynBlueprintSource = dyn(box) BlueprintSourceHandler)]
 pub trait BlueprintSourceHandler: Send + Sync {
     fn fetch(
         &mut self,

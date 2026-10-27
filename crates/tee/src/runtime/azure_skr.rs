@@ -148,7 +148,8 @@ impl AzureSkrBackend {
         let http = reqwest::Client::new();
 
         let mut secret = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut secret);
+        rand::TryRng::try_fill_bytes(&mut rand::rngs::SysRng, &mut secret)
+            .expect("OS random number generator failed");
 
         Self {
             config,

@@ -42,7 +42,7 @@ use tokio::time::sleep;
 use tower::Service;
 
 /// Configuration for the blueprint registration procedure
-#[dynosaur::dynosaur(DynBlueprintConfig)]
+#[dynosaur::dynosaur(DynBlueprintConfig = dyn(box) BlueprintConfig)]
 pub trait BlueprintConfig: Send + Sync {
     /// The registration logic for this protocol
     ///
@@ -123,7 +123,7 @@ fn resolve_service_id(env: &BlueprintEnvironment) -> Result<u64, crate::error::C
 ///     }
 /// }
 /// ```
-#[dynosaur::dynosaur(DynBackgroundService)]
+#[dynosaur::dynosaur(DynBackgroundService = dyn(box) BackgroundService)]
 pub trait BackgroundService: Send + Sync {
     /// Start this background service
     ///
@@ -333,7 +333,7 @@ where
 
         let adapter = HeartbeatServiceAdapter { service };
         self.background_services
-            .push(DynBackgroundService::boxed(adapter));
+            .push(DynBackgroundService::new_box(adapter));
         self
     }
 
@@ -409,7 +409,7 @@ where
     ) -> Self {
         let adapter = self::metrics_server::MetricsServerAdapter::new(server);
         self.background_services
-            .push(DynBackgroundService::boxed(adapter));
+            .push(DynBackgroundService::new_box(adapter));
         self
     }
 
@@ -551,7 +551,7 @@ where
             ready: qos_ready,
         };
         self.background_services
-            .push(DynBackgroundService::boxed(adapter));
+            .push(DynBackgroundService::new_box(adapter));
         self
     }
 
@@ -607,7 +607,7 @@ where
             let auth_service = blueprint_tee::TeeAuthService::new(config.key_exchange.clone());
             let adapter = TeeAuthServiceAdapter { auth_service };
             self.background_services
-                .push(DynBackgroundService::boxed(adapter));
+                .push(DynBackgroundService::new_box(adapter));
             tracing::info!(
                 mode = ?config.mode,
                 requirement = ?config.requirement,
@@ -669,7 +669,7 @@ where
     #[must_use]
     pub fn background_service(mut self, service: impl BackgroundService + 'static) -> Self {
         self.background_services
-            .push(DynBackgroundService::boxed(service));
+            .push(DynBackgroundService::new_box(service));
         self
     }
 
@@ -965,7 +965,7 @@ impl BlueprintRunner {
         env: BlueprintEnvironment,
     ) -> BlueprintRunnerBuilder<impl Future<Output = ()> + Send + 'static> {
         BlueprintRunnerBuilder {
-            config: DynBlueprintConfig::boxed(config),
+            config: DynBlueprintConfig::new_box(config),
             env,
             producers: Vec::new(),
             consumers: Vec::new(),

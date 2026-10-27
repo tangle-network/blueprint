@@ -34,7 +34,7 @@ pub struct PasetoKey(SymmetricKey<V4>);
 impl PasetoKey {
     /// Generate a new random Paseto key
     pub fn generate() -> Self {
-        use blueprint_std::rand::RngCore;
+        use blueprint_std::rand::Rng;
         let mut rng = blueprint_std::BlueprintRng::new();
         let mut key_bytes = [0u8; 32];
         rng.fill_bytes(&mut key_bytes);

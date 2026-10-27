@@ -44,7 +44,7 @@ tracing = { workspace = true }
 bytes = { workspace = true }
 
 # Notifier feature deps (outbound webhooks + SSE)
-rand = { workspace = true, optional = true }
+rand = { workspace = true, optional = true, features = ["sys_rng"] }
 reqwest = { workspace = true, features = ["json"], optional = true }
 tokio-stream = { version = "0.1", optional = true }
 
