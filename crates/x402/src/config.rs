@@ -246,11 +246,11 @@ pub struct AcceptedToken {
     #[serde(default = "default_transfer_method")]
     pub transfer_method: String,
 
-    /// EIP-3009 domain name (required when `transfer_method = "eip3009"`).
+    /// Token EIP-712 domain name (required for `"eip3009"`; Permit2 defaults to the symbol).
     #[serde(default)]
     pub eip3009_name: Option<String>,
 
-    /// EIP-3009 domain version (required when `transfer_method = "eip3009"`).
+    /// Token EIP-712 domain version (required for `"eip3009"`; Permit2 defaults to `"1"`).
     #[serde(default)]
     pub eip3009_version: Option<String>,
 }
@@ -260,6 +260,25 @@ fn default_transfer_method() -> String {
 }
 
 impl AcceptedToken {
+    /// The x402 transfer method for this token. x402 2 signs both EIP-3009 and Permit2
+    /// against the token's EIP-712 domain: EIP-3009 defaults to USDC's ("USD Coin", "2"),
+    /// Permit2 to the token symbol and version "1".
+    pub fn asset_transfer_method(&self) -> x402_chain_eip155::chain::AssetTransferMethod {
+        use x402_chain_eip155::chain::AssetTransferMethod;
+        let (name, version) = (self.eip3009_name.clone(), self.eip3009_version.clone());
+        if self.transfer_method == "eip3009" {
+            AssetTransferMethod::Eip3009 {
+                name: name.unwrap_or_else(|| "USD Coin".into()),
+                version: version.unwrap_or_else(|| "2".into()),
+            }
+        } else {
+            AssetTransferMethod::Permit2 {
+                name: name.unwrap_or_else(|| self.symbol.clone()),
+                version: version.unwrap_or_else(|| "1".into()),
+            }
+        }
+    }
+
     /// Convert a price in wei to a token amount string in the token's smallest unit.
     ///
     /// Applies the exchange rate and markup. Returns the amount as a decimal
