@@ -116,7 +116,8 @@ impl GcpConfidentialBackend {
         let http = reqwest::Client::new();
 
         let mut secret = [0u8; 32];
-        rand::Rng::fill_bytes(&mut rand::rng(), &mut secret);
+        rand::TryRng::try_fill_bytes(&mut rand::rngs::SysRng, &mut secret)
+            .expect("OS random number generator failed");
 
         Ok(Self {
             config,

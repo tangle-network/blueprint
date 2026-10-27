@@ -29,7 +29,7 @@ use crate::errors::TeeError;
 use crate::runtime::backend::{
     TeeDeployRequest, TeeDeploymentHandle, TeeDeploymentStatus, TeePublicKey, TeeRuntimeBackend,
 };
-use rand::Rng;
+use rand::TryRng;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -117,7 +117,9 @@ impl DirectBackend {
     /// Create a new direct backend with the given configuration.
     pub fn new(config: DirectBackendConfig) -> Self {
         let mut secret = [0u8; 32];
-        rand::rng().fill_bytes(&mut secret);
+        rand::rngs::SysRng
+            .try_fill_bytes(&mut secret)
+            .expect("OS random number generator failed");
 
         let software_measurement = match compute_binary_measurement() {
             Ok(m) => m,

@@ -124,7 +124,8 @@ impl NitroBackend {
         let ec2 = Ec2Client::new(&aws_config);
 
         let mut secret = [0u8; 32];
-        rand::Rng::fill_bytes(&mut rand::rng(), &mut secret);
+        rand::TryRng::try_fill_bytes(&mut rand::rngs::SysRng, &mut secret)
+            .expect("OS random number generator failed");
 
         Self {
             config,
