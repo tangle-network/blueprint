@@ -3515,7 +3515,6 @@ dependencies = [
  "alloy-transport-http 2.0.5",
  "anyhow",
  "async-trait",
- "auto_impl",
  "axum",
  "base64 0.22.1",
  "blake3",

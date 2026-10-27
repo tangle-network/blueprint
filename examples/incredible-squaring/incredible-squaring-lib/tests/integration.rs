@@ -41,7 +41,7 @@ struct BlsKeypair {
 
 /// Generate a BLS keypair for testing
 fn generate_bls_keypair() -> BlsKeypair {
-    let mut rng = rand::thread_rng();
+    let mut rng = blueprint_sdk::std::BlueprintRng::new();
     let secret = Fr::rand(&mut rng);
     let public: G2Affine = (G2Affine::generator() * secret).into();
     BlsKeypair { secret, public }
