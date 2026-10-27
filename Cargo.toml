@@ -135,7 +135,7 @@ blueprint-sdk = { version = "0.2.0-alpha.18", path = "./crates/sdk", default-fea
 # with self-only distributePayment, RFQ replay / freshness / cumulative TTL
 # hardening, the collapsed approveService(ApprovalParams) entry point,
 # claimRewards / claimRewardsAll griefing isolation, and O(1) operator accounting.
-tnt-core-bindings = "0.19"  # BinaryVersion loses binaryUri (event-only); onJobResult inputsHash (0.19.0)
+tnt-core-bindings = "0.20"  # Alloy 2 contract instances (0.20.0); BinaryVersion loses binaryUri, onJobResult inputsHash (0.19.0)
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.6", path = "crates/core", default-features = false }
@@ -404,35 +404,35 @@ test-log = { version = "0.2", default-features = false }
 serial_test = { version = "3.4.0", default-features = false }
 
 # Alloy (EVM)
-alloy = { version = "2.0", default-features = false }
+alloy = { version = "2.1", default-features = false }
 alloy-primitives = { version = "1.5", default-features = false }
 alloy-json-abi = { version = "1.5", default-features = false }
-alloy-json-rpc = { version = "=2.0.5", default-features = false }
+alloy-json-rpc = { version = "=2.1.1", default-features = false }
 alloy-dyn-abi = { version = "1.6", default-features = false, features = ["eip712"] }
 alloy-sol-types = { version = "1.5", default-features = false }
 alloy-rlp = { version = "0.3.12", default-features = false }
-alloy-rpc-client = { version = "=2.0.5", default-features = false }
-alloy-rpc-types = { version = "2.0", default-features = false }
-alloy-rpc-types-eth = { version = "2.0", default-features = false }
-alloy-provider = { version = "2.0", default-features = false, features = ["reqwest", "ws"] }
-alloy-pubsub = { version = "2.0", default-features = false }
-alloy-signer = { version = "2.0", default-features = false }
-alloy-signer-local = { version = "2.0", default-features = false }
-alloy-network = { version = "2.0", default-features = false }
-alloy-contract = { version = "2.0", default-features = false }
-alloy-consensus = { version = "2.0", default-features = false }
-# Alloy releases after 2.0.5 require rustc 1.94; hold the v2 graph at the source-tested
+alloy-rpc-client = { version = "=2.1.1", default-features = false }
+alloy-rpc-types = { version = "2.1", default-features = false }
+alloy-rpc-types-eth = { version = "2.1", default-features = false }
+alloy-provider = { version = "2.1", default-features = false, features = ["reqwest", "ws"] }
+alloy-pubsub = { version = "2.1", default-features = false }
+alloy-signer = { version = "2.1", default-features = false }
+alloy-signer-local = { version = "2.1", default-features = false }
+alloy-network = { version = "2.1", default-features = false }
+alloy-contract = { version = "2.1", default-features = false }
+alloy-consensus = { version = "2.1", default-features = false }
+# Alloy releases after 2.1.1 require rustc 1.94.1; hold the v2 graph at the source-tested
 # release so fresh registry installs of published crates keep the 1.93 MSRV.
-alloy-eips = { version = "=2.0.5", default-features = false }
-alloy-transport = { version = "=2.0.5", default-features = false }
-alloy-transport-http = { version = "=2.0.5", default-features = false }
+alloy-eips = { version = "=2.1.1", default-features = false }
+alloy-transport = { version = "=2.1.1", default-features = false }
+alloy-transport-http = { version = "=2.1.1", default-features = false }
 ripemd = { version = "0.2", default-features = false }
 libsecp256k1 = { version = "0.7.2", default-features = false }
 
 # Remote signing
-alloy-signer-aws = { version = "2.0", default-features = false }
-alloy-signer-gcp = { version = "2.0", default-features = false }
-alloy-signer-ledger = { version = "2.0", default-features = false, features = ["eip712"] }
+alloy-signer-aws = { version = "2.1", default-features = false }
+alloy-signer-gcp = { version = "2.1", default-features = false }
+alloy-signer-ledger = { version = "2.1", default-features = false, features = ["eip712"] }
 aws-config = { version = "1", default-features = false }
 aws-sdk-ec2 = { version = "1", default-features = false }
 aws-sdk-kms = { version = "1", default-features = false }
@@ -459,7 +459,7 @@ metrics = { version = "0.24.6", default-features = false }
 # x402 protocol
 x402-types = { version = "1", default-features = false }
 x402-axum = { version = "1", default-features = false }
-x402-chain-eip155 = { version = "1", default-features = false }
+x402-chain-eip155 = { version = "2", default-features = false }
 mpp = { version = "0.8", default-features = false }
 
 # AWS SDK (additional)
