@@ -3942,6 +3942,7 @@ version = "0.2.0-alpha.18"
 dependencies = [
  "alloy-primitives",
  "alloy-provider",
+ "alloy-sol-types",
  "axum",
  "base64 0.22.1",
  "blueprint-core",

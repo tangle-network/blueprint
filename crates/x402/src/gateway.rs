@@ -1431,7 +1431,7 @@ fn build_evm_price_tags(
                 }
             };
 
-            let transfer_method = token.asset_transfer_method();
+            let transfer_method = token.asset_transfer_method()?;
 
             let deployment = Eip155TokenDeployment {
                 chain_reference: Eip155ChainReference::new(chain_id),
