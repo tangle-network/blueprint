@@ -135,7 +135,7 @@ pub enum Error {
 /// This should be sent to the client to be signed with the user's private key.
 pub fn generate_challenge<R: Rng + CryptoRng>(rng: &mut R) -> [u8; 32] {
     let mut challenge = [0u8; 32];
-    rng.fill(&mut challenge);
+    rng.fill_bytes(&mut challenge);
     challenge
 }
 

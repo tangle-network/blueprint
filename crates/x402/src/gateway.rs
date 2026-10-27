@@ -1351,9 +1351,7 @@ fn build_evm_price_tags(
     uri: &http::Uri,
 ) -> Vec<x402_types::proto::v2::PriceTag> {
     use x402_chain_eip155::V2Eip155Exact;
-    use x402_chain_eip155::chain::{
-        AssetTransferMethod, Eip155ChainReference, Eip155TokenDeployment,
-    };
+    use x402_chain_eip155::chain::{Eip155ChainReference, Eip155TokenDeployment};
 
     // Parse service_id and job_index from URI: /x402/jobs/{service_id}/{job_index}
     let segments: Vec<&str> = uri.path().split('/').collect();
@@ -1433,16 +1431,7 @@ fn build_evm_price_tags(
                 }
             };
 
-            let transfer_method = if token.transfer_method == "eip3009" {
-                let name = token
-                    .eip3009_name
-                    .clone()
-                    .unwrap_or_else(|| "USD Coin".into());
-                let version = token.eip3009_version.clone().unwrap_or_else(|| "2".into());
-                AssetTransferMethod::Eip3009 { name, version }
-            } else {
-                AssetTransferMethod::Permit2
-            };
+            let transfer_method = token.asset_transfer_method()?;
 
             let deployment = Eip155TokenDeployment {
                 chain_reference: Eip155ChainReference::new(chain_id),

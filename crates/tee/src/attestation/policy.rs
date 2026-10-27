@@ -1,6 +1,6 @@
 //! Attestation verification policy.
 
-use rand::RngCore;
+use rand::TryRng;
 
 /// Policy applied when verifying attestation evidence.
 ///
@@ -123,7 +123,9 @@ impl AttestationPolicy {
 /// Generate a fresh, unguessable attestation challenge nonce.
 pub fn fresh_nonce() -> String {
     let mut bytes = [0_u8; 16];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rngs::SysRng
+        .try_fill_bytes(&mut bytes)
+        .expect("OS random number generator failed");
     hex::encode(bytes)
 }
 

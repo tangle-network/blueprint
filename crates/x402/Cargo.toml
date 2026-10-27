@@ -67,6 +67,7 @@ bytes = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
+alloy-sol-types = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]

@@ -11,7 +11,7 @@ use crate::attestation::report::AttestationReport;
 use crate::errors::TeeError;
 use chacha20poly1305::ChaCha20Poly1305;
 use chacha20poly1305::aead::{Aead, KeyInit};
-use rand::RngCore;
+use rand::TryRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -44,14 +44,16 @@ impl KeyExchangeSession {
     /// Generates a random X25519 keypair via `x25519-dalek`. The public key is the
     /// Curve25519 point derived from the private key via scalar multiplication.
     pub fn new(ttl_secs: u64) -> Self {
-        let secret = StaticSecret::random_from_rng(rand::rngs::OsRng);
+        let secret = StaticSecret::random();
         let public = PublicKey::from(&secret);
         let public_key = public.as_bytes().to_vec();
         let private_key = secret.to_bytes().to_vec();
 
         // Generate session ID
         let mut session_id_bytes = [0u8; 16];
-        rand::rngs::OsRng.fill_bytes(&mut session_id_bytes);
+        rand::rngs::SysRng
+            .try_fill_bytes(&mut session_id_bytes)
+            .expect("OS random number generator failed");
         let session_id = hex::encode(session_id_bytes);
 
         let now = SystemTime::now()
@@ -204,7 +206,7 @@ impl SealedSecretPayload {
             .try_into()
             .map_err(|_| TeeError::SealedSecret("TEE public key must be 32 bytes".into()))?;
 
-        let client_secret = StaticSecret::random_from_rng(rand::rngs::OsRng);
+        let client_secret = StaticSecret::random();
         let client_public = PublicKey::from(&client_secret);
         let tee_public = PublicKey::from(tee_pk_bytes);
 
@@ -214,7 +216,9 @@ impl SealedSecretPayload {
             .map_err(|e| TeeError::SealedSecret(format!("cipher init failed: {e}")))?;
 
         let mut nonce_bytes = [0u8; 12];
-        rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+        rand::rngs::SysRng
+            .try_fill_bytes(&mut nonce_bytes)
+            .expect("OS random number generator failed");
         let nonce = chacha20poly1305::aead::generic_array::GenericArray::from_slice(&nonce_bytes);
 
         let ciphertext = cipher

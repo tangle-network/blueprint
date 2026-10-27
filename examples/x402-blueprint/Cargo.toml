@@ -46,7 +46,8 @@ alloy-sol-types = { workspace = true }
 alloy-contract = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-network = { workspace = true }
-x402-chain-eip155 = { workspace = true, features = ["server", "client", "facilitator"] }
+# `telemetry` supplies the `tracing` dependency that x402-chain-eip155 2.0.2's client module uses.
+x402-chain-eip155 = { workspace = true, features = ["server", "client", "facilitator", "telemetry"] }
 x402-types = { workspace = true }
 axum = { workspace = true }
 hex = { workspace = true }

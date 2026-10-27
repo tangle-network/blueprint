@@ -58,6 +58,9 @@ decimals = 6
 pay_to  = "0xYourOperatorAddressOnBase"
 rate_per_native_unit = "3200.00"
 markup_bps = 200
+# The token's EIP-712 domain, required for permit2 (the default transfer_method).
+eip3009_name = "USD Coin"
+eip3009_version = "2"
 
 # USDC on Ethereum mainnet
 [[accepted_tokens]]
@@ -68,6 +71,9 @@ decimals = 6
 pay_to  = "0xYourOperatorAddressOnEthereum"
 rate_per_native_unit = "3200.00"
 markup_bps = 300
+# The token's EIP-712 domain, required for permit2 (the default transfer_method).
+eip3009_name = "USD Coin"
+eip3009_version = "2"
 
 # ─── Optional: MPP (Machine Payments Protocol) ingress ────────────────────
 #

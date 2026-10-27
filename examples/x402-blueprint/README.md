@@ -116,6 +116,9 @@ decimals = 6
 pay_to = "0x0000000000000000000000000000000000000001"
 rate_per_native_unit = "3200.00"
 markup_bps = 200
+# The token's EIP-712 domain, required for permit2 (the default transfer_method).
+eip3009_name = "USD Coin"
+eip3009_version = "2"
 
 # Optional: enable the parallel MPP ingress.
 [mpp]
@@ -410,6 +413,9 @@ decimals = 6
 pay_to = "0xYourAddressOnEthereum"
 rate_per_native_unit = "3200.00"
 markup_bps = 100
+# The token's EIP-712 domain, required for permit2 (the default transfer_method).
+eip3009_name = "USD Coin"
+eip3009_version = "2"
 ```
 
 Each token gets its own settlement option in the price discovery response.

@@ -1256,25 +1256,25 @@ fn build_source_handler(
     allow_unchecked_attestations: bool,
 ) -> Box<DynBlueprintSource<'static>> {
     match source {
-        BlueprintSource::Testing(fetcher) => DynBlueprintSource::boxed(TestSourceFetcher::new(
+        BlueprintSource::Testing(fetcher) => DynBlueprintSource::new_box(TestSourceFetcher::new(
             fetcher.clone(),
             blueprint_id,
             blueprint_name,
         )),
-        BlueprintSource::Github(fetcher) => DynBlueprintSource::boxed(GithubBinaryFetcher::new(
+        BlueprintSource::Github(fetcher) => DynBlueprintSource::new_box(GithubBinaryFetcher::new(
             fetcher.clone(),
             blueprint_id,
             blueprint_name,
             allow_unchecked_attestations,
         )),
         BlueprintSource::Container(fetcher) => {
-            DynBlueprintSource::boxed(crate::sources::container::ContainerSource::new(
+            DynBlueprintSource::new_box(crate::sources::container::ContainerSource::new(
                 fetcher.clone(),
                 blueprint_id,
                 blueprint_name,
             ))
         }
-        BlueprintSource::Remote(fetcher) => DynBlueprintSource::boxed(RemoteBinaryFetcher::new(
+        BlueprintSource::Remote(fetcher) => DynBlueprintSource::new_box(RemoteBinaryFetcher::new(
             fetcher.clone(),
             blueprint_id,
             blueprint_name,

@@ -48,7 +48,7 @@ fn b64url(bytes: &[u8]) -> String {
 }
 
 fn make_signer() -> TestJwtSigner {
-    let mut rng = rand::thread_rng();
+    let mut rng = blueprint_std::BlueprintRng::new();
     let key = RsaPrivateKey::new(&mut rng, 2048).expect("generate RSA key");
     let private_pem = key
         .to_pkcs1_pem(rsa::pkcs1::LineEnding::LF)
