@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.24](https://github.com/tangle-network/blueprint/compare/blueprint-qos-v0.2.0-alpha.23...blueprint-qos-v0.2.0-alpha.24) - 2026-10-28
+
+### Other
+
+- updated the following local packages: blueprint-remote-providers
+
 ## [0.2.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-qos-v0.2.0-alpha.22...blueprint-qos-v0.2.0-alpha.23) - 2026-10-27
 
 ### Fixed
