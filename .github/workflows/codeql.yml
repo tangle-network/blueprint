@@ -2,6 +2,8 @@ name: CodeQL
 
 # Scheduled security analysis does not consume the fleet's merge-gate runners.
 on:
+  schedule:
+    - cron: '17 4 * * *'
   workflow_dispatch:
 
 permissions:
