@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-std-v0.2.0-alpha.7...blueprint-std-v0.2.0-alpha.8) - 2026-10-27
+
+### Fixed
+
+- *(deps)* make main build again on Alloy 2, rand 0.10 and dynosaur 0.3 (#1605)
+- preserve gossip clocks and current RNG APIs
+
 ## [0.2.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-std-v0.2.0-alpha.6...blueprint-std-v0.2.0-alpha.7) - 2026-09-29
 
 ### Fixed
