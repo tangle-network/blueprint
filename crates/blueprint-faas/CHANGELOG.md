@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.9](https://github.com/tangle-network/blueprint/compare/blueprint-faas-v0.2.0-alpha.8...blueprint-faas-v0.2.0-alpha.9) - 2026-11-03
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.2.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-faas-v0.2.0-alpha.7...blueprint-faas-v0.2.0-alpha.8) - 2026-09-29
 
 ### Other
