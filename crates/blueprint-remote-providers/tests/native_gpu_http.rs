@@ -12,6 +12,9 @@ use wiremock::{
 #[path = "native_gpu_http/bootstrap.rs"]
 mod bootstrap;
 
+#[path = "native_gpu_http/lambda_firewall.rs"]
+mod lambda_firewall;
+
 #[path = "native_gpu_http/lium.rs"]
 mod lium;
 
