@@ -85,6 +85,20 @@ impl ManagedMetadata {
         }
     }
 
+    /// Native request identity includes the tenant and lease, even for equal specs.
+    pub fn idempotency_key(&self) -> String {
+        let tuple = serde_json::to_vec(&(
+            &self.identity.namespace,
+            &self.identity.lease_id,
+            &self.request_fingerprint,
+        ))
+        .expect("string tuple serializes");
+        hex::encode(aws_lc_rs::digest::digest(
+            &aws_lc_rs::digest::SHA256,
+            &tuple,
+        ))
+    }
+
     /// A DNS-compatible locator. Full native metadata establishes ownership.
     pub fn name(&self) -> String {
         let identity = format!("{}\0{}", self.identity.namespace, self.identity.lease_id);

@@ -4,9 +4,9 @@ Run the public GPU requests against local provider HTTP peers:
 
 ```bash
 cargo test -p blueprint-remote-providers --no-default-features --features std \
-  --test native_gpu_http -- --test-threads=1
+  --test native_gpu_http --test vast_env_http -- --test-threads=1
 cargo clippy -p blueprint-remote-providers --no-default-features --features std \
-  --lib --test native_gpu_http --no-deps
+  --lib --test native_gpu_http --test vast_env_http --no-deps
 ```
 
 The GPU cases exercise native request fields, inventory, allocation, status,

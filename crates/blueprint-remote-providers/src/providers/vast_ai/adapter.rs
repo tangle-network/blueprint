@@ -43,12 +43,11 @@ impl VastAiAdapter {
         })
     }
     fn constraints(spec: &ResourceSpec) -> Result<()> {
+        crate::managed::bootstrap::workload_environment(spec)?;
         if spec.tee_required
             || spec.source_network.is_some()
             || spec.volume_gb.is_some()
             || spec.volume_id.is_some()
-            || !spec.env.is_empty()
-            || spec.manifest.is_some()
         {
             return Err(Error::Provider(ProviderErrorCode::Unsupported));
         }
@@ -136,7 +135,11 @@ impl VastAiAdapter {
         };
         let count = raw["num_gpus"].as_u64().and_then(|n| u32::try_from(n).ok());
         let class = blueprint_core::gpu::catalog().into_iter().find(|class| {
-            count.is_some_and(|count| class.sku("vast-ai", count) == raw["gpu_name"].as_str())
+            count.is_some_and(|count| {
+                class
+                    .sku("vast-ai", count)
+                    .is_some_and(|sku| Some(sku) == raw["gpu_name"].as_str())
+            })
         });
         let mut resource = metadata.bind(Self::instance(raw)?, ManagedResourceKind::Instance);
         resource.gpu_class = class.as_ref().map(|class| class.id.clone());
@@ -235,10 +238,11 @@ impl ManagedProviderAdapter for VastAiAdapter {
                 {
                     continue;
                 }
-                let Some(class) = classes
-                    .iter()
-                    .find(|class| class.sku("vast-ai", count) == raw["gpu_name"].as_str())
-                else {
+                let Some(class) = classes.iter().find(|class| {
+                    class
+                        .sku("vast-ai", count)
+                        .is_some_and(|sku| Some(sku) == raw["gpu_name"].as_str())
+                }) else {
                     continue;
                 };
                 if spec.gpu_class.as_ref().is_some_and(|id| id != &class.id)
@@ -280,6 +284,8 @@ impl ManagedProviderAdapter for VastAiAdapter {
         offer: &NativeOffer,
         fingerprint: &str,
     ) -> Result<ManagedResource> {
+        spec.validate()
+            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
         Self::constraints(spec)?;
         let image = spec
             .image
@@ -291,8 +297,12 @@ impl ManagedProviderAdapter for VastAiAdapter {
             })
             .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
         let metadata = ManagedMetadata::for_spec(spec, fingerprint, chrono::Utc::now())?;
+        let mut native_env = crate::managed::bootstrap::workload_environment(spec)?;
+        for port in &spec.ports {
+            native_env.insert(format!("-p {port}:{port}"), "1".into());
+        }
         let mut body = json!({"client_id":"me","image":image,"disk":spec.storage_gb,"label":metadata.label()?,"runtype":"args","target_state":"running",
-            "env":spec.ports.iter().map(|port|format!("-p {port}:{port}")).collect::<Vec<_>>().join(" ")});
+            "env":native_env});
         if let Some(command) = &spec.command {
             body["args"] = json!(command);
         }
@@ -328,6 +338,9 @@ impl ManagedProviderAdapter for VastAiAdapter {
             .json()
             .await
             .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?;
+        if document["success"].as_bool() != Some(true) {
+            return Err(Error::Provider(ProviderErrorCode::Indeterminate));
+        }
         let id = document["new_contract"]
             .as_u64()
             .filter(|id| *id > 0)
@@ -402,7 +415,15 @@ impl ManagedProviderAdapter for VastAiAdapter {
         }
         Ok(resources)
     }
-    async fn destroy(&self, identity: &ManagedLeaseIdentity, id: &str) -> Result<()> {
+    async fn destroy(
+        &self,
+        identity: &ManagedLeaseIdentity,
+        resource: &ManagedResource,
+    ) -> Result<()> {
+        if resource.kind != ManagedResourceKind::Instance {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        let id = resource.instance.id.as_str();
         if <Self as ManagedProviderAdapter>::status(self, identity, id)
             .await?
             .is_none()

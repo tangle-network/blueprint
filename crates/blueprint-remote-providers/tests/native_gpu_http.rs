@@ -8,6 +8,13 @@ use wiremock::{
     matchers::{method, path},
 };
 
+#[cfg(unix)]
+#[path = "native_gpu_http/bootstrap.rs"]
+mod bootstrap;
+
+#[path = "native_gpu_http/lium.rs"]
+mod lium;
+
 async fn runpod_v2_peer() -> MockServer {
     use std::sync::{Arc, Mutex};
     use wiremock::{Request, matchers::path_regex};
@@ -461,77 +468,6 @@ async fn vast_search_and_bid_preserve_native_query_fields_and_requested_class() 
 }
 
 #[tokio::test]
-async fn lium_rents_the_recorded_executor_with_the_requested_count_and_lifetime() {
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    let peer = MockServer::start().await;
-    // https://lium.io/api/public/v1/nodes, captured 2026-11-06T03:55:56Z; SHA25600475806e9408e56046e04ad29f1056876941fd771de28e28c26782cdcb11828.
-    // Create/list replies below are synthetic; this is no claim that stock remains available.
-    let nodes: Value = serde_json::from_str(include_str!(
-        "fixtures/provider-api/lium-nodes-2026-11-06.json"
-    ))
-    .unwrap();
-    Mock::given(method("GET"))
-        .and(path("/public/v1/nodes"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(nodes))
-        .mount(&peer)
-        .await;
-    Mock::given(method("POST"))
-        .and(path("/rentals"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({"rental_id":"synthetic-lium"})),
-        )
-        .mount(&peer)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/rentals/synthetic-lium"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "rental_id":"synthetic-lium","status":"active","public_ip":"192.0.2.13",
-            "gpu_type":"B200","region":"NSW"
-        })))
-        .mount(&peer)
-        .await;
-    let credentials = serde_json::from_value(json!({"provider":"bittensor-lium",
-        "api_key":"synthetic-local-peer-key","endpoint":peer.uri()
-    }))
-    .unwrap();
-    let provisioner = CloudProvisioner::from_credentials(vec![credentials]).unwrap();
-    let mut spec = ResourceSpec::basic();
-    spec.gpu_class = Some("nvidia-b200".into());
-    spec.gpu_count = Some(8);
-    spec.gpu_vram_gb = Some(180);
-    spec.ownership = Some(ManagedLeaseIdentity {
-        namespace: "synthetic-cell".into(),
-        lease_id: "lium-eight".into(),
-    });
-    spec.lease_duration_secs = Some(3600);
-    spec.ssh_public_key = Some(
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMo32AY0vFK7g5FBIBcyPdxaxSEM5rEc0kEzMVveA9b+".into(),
-    );
-    spec.image = Some("example.invalid/synthetic-image:v1".into());
-    provisioner
-        .provision_with_requirements(CloudProvider::BittensorLium, &spec, "NSW", false)
-        .await
-        .unwrap();
-    let requests = peer.received_requests().await.unwrap();
-    let native_path = "/executors/b5864202-5da2-4707-886b-4805fecb4e3c/rent";
-    let launch = requests
-        .iter()
-        .find(|r| r.method == "POST" && r.url.path() == native_path)
-        .unwrap_or_else(|| {
-            panic!(
-                "expected the recorded native executor route; observed {:?}",
-                requests.iter().map(|r| r.url.path()).collect::<Vec<_>>()
-            )
-        });
-    let body: Value = launch.body_json().unwrap();
-    assert_eq!(body["gpu_count"], 8);
-    assert_eq!(body["termination_hours"], 1);
-    assert!(body["template_id"].as_str().is_some());
-    assert!(body.get("hotkey").is_none());
-    assert!(body.get("coldkey").is_none());
-}
-
-#[tokio::test]
 async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let peer = MockServer::start().await;
@@ -626,7 +562,7 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
             && request.url.path().starts_with("/firewall-rulesets"))
     );
     #[cfg(unix)]
-    execute_cloud_init_startup(launch["user_data"].as_str().unwrap());
+    bootstrap::execute_cloud_init_startup(launch["user_data"].as_str().unwrap());
     let identity = spec.ownership.as_ref().unwrap();
     let status = provisioner
         .status_managed(&CloudProvider::LambdaLabs, identity, &instance.id)
@@ -700,78 +636,5 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
             .await
             .unwrap()
             .is_empty()
-    );
-}
-
-#[cfg(unix)]
-fn execute_cloud_init_startup(document: &str) {
-    use std::os::unix::fs::PermissionsExt;
-    use std::process::Command;
-    let temp = tempfile::tempdir().unwrap();
-    let document: Value = serde_yaml::from_str(document).unwrap();
-    let rebase = |path: &str| temp.path().join(path.trim_start_matches('/'));
-    for file in document["write_files"].as_array().unwrap() {
-        let path = rebase(file["path"].as_str().unwrap());
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, file["content"].as_str().unwrap()).unwrap();
-        let mode = u32::from_str_radix(file["permissions"].as_str().unwrap(), 8).unwrap();
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
-        assert_eq!(file["owner"], "root:root");
-    }
-    let startup = document["runcmd"][0].as_array().unwrap();
-    let config_path = rebase(startup[2].as_str().unwrap());
-    let mut config: Value = serde_json::from_slice(&std::fs::read(&config_path).unwrap()).unwrap();
-    config["env_file"] = json!(rebase(config["env_file"].as_str().unwrap()));
-    std::fs::write(&config_path, serde_json::to_vec(&config).unwrap()).unwrap();
-    let bin = temp.path().join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    let docker = r#"#!/usr/bin/env python3
-import json, os, pathlib, stat, sys
-arguments = sys.argv[1:]
-path = pathlib.Path(arguments[arguments.index('--env-file') + 1])
-receipt = {'arguments': arguments,
-           'secret_loaded': 'MODEL_KEY=synthetic-bootstrap-secret\n' in path.read_text(),
-           'env_file_mode': stat.S_IMODE(path.stat().st_mode)}
-pathlib.Path(os.environ['BOOTSTRAP_RECEIPT']).write_text(json.dumps(receipt))
-"#;
-    for (name, source) in [("docker", docker), ("systemctl", "#!/bin/sh\nexit 0\n")] {
-        let path = bin.join(name);
-        std::fs::write(&path, source).unwrap();
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
-    }
-    let receipt_path = temp.path().join("receipt.json");
-    let output = Command::new(startup[0].as_str().unwrap())
-        .arg(rebase(startup[1].as_str().unwrap()))
-        .arg(config_path)
-        .env_clear()
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
-        .env("BOOTSTRAP_RECEIPT", &receipt_path)
-        .output()
-        .unwrap();
-    for stream in [&output.stdout, &output.stderr] {
-        assert!(!String::from_utf8_lossy(stream).contains("synthetic-bootstrap-secret"));
-    }
-    assert!(
-        output.status.success(),
-        "startup child failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let receipt: Value = serde_json::from_slice(&std::fs::read(receipt_path).unwrap()).unwrap();
-    assert_eq!(receipt["secret_loaded"], true);
-    assert_eq!(receipt["env_file_mode"], 0o600);
-    let arguments = receipt["arguments"].as_array().unwrap();
-    assert!(!arguments.iter().any(|arg| {
-        arg.as_str()
-            .is_some_and(|arg| arg.contains("synthetic-bootstrap-secret"))
-    }));
-    let image = arguments
-        .iter()
-        .position(|arg| arg == "example.invalid/workload:v1")
-        .unwrap();
-    assert_eq!(arguments[image - 1], "--");
-    assert!(
-        arguments
-            .windows(2)
-            .any(|pair| pair == [json!("--publish"), json!("8000:8000")])
     );
 }

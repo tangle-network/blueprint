@@ -107,8 +107,10 @@ impl RunPodAdapter {
             return Ok(None);
         };
         let instance = Self::instance(raw)?;
-        let count = raw["gpu"]["count"].as_u64().unwrap_or(1);
-        let count = u32::try_from(count).ok().filter(|count| *count > 0);
+        let count = raw["gpu"]["count"]
+            .as_u64()
+            .and_then(|count| u32::try_from(count).ok())
+            .filter(|count| *count > 0);
         let class = blueprint_core::gpu::catalog().into_iter().find(|class| {
             count.is_some_and(|count| {
                 class.sku("runpod", count) == Some(instance.instance_type.as_str())
@@ -389,7 +391,15 @@ impl ManagedProviderAdapter for RunPodAdapter {
         }
     }
 
-    async fn destroy(&self, identity: &ManagedLeaseIdentity, id: &str) -> Result<()> {
+    async fn destroy(
+        &self,
+        identity: &ManagedLeaseIdentity,
+        resource: &ManagedResource,
+    ) -> Result<()> {
+        if resource.kind != ManagedResourceKind::Instance {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        let id = resource.instance.id.as_str();
         if <Self as ManagedProviderAdapter>::status(self, identity, id)
             .await?
             .is_none()

@@ -182,7 +182,7 @@ impl CloudProvisioner {
         };
         for resource in resources {
             owned(&resource, provider, identity)?;
-            native.destroy(identity, &resource.instance.id).await?;
+            native.destroy(identity, &resource).await?;
         }
         if native
             .list(&identity.namespace)

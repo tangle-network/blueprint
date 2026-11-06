@@ -159,7 +159,23 @@ impl LambdaLabsAdapter {
         Some((u64::from(address & mask), u64::from(address | !mask)))
     }
 
+    fn validate_firewall_ids(&self) -> Result<()> {
+        let mut seen = HashSet::new();
+        if self.firewall_ruleset_ids.iter().any(|id| {
+            id.is_empty()
+                || id.len() > 128
+                || !id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                || !seen.insert(id)
+        }) {
+            return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+        }
+        Ok(())
+    }
+
     async fn verify_network(&self, spec: &ResourceSpec, region: &str) -> Result<()> {
+        self.validate_firewall_ids()?;
         let unsupported = || Error::Provider(ProviderErrorCode::Unsupported);
         if region == "us-south-1" {
             return if spec.source_network.is_none() {
@@ -179,15 +195,7 @@ impl LambdaLabsAdapter {
             .as_array()
             .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?
             .clone();
-        let mut ids = HashSet::new();
         for id in &self.firewall_ruleset_ids {
-            if id.is_empty()
-                || id.len() > 128
-                || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
-                || !ids.insert(id)
-            {
-                return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
-            }
             let set = self
                 .data(&format!("firewall-rulesets/{}", urlencoding::encode(id)))
                 .await?;
@@ -258,6 +266,7 @@ impl LambdaLabsAdapter {
 #[async_trait]
 impl ManagedProviderAdapter for LambdaLabsAdapter {
     async fn offers(&self, spec: &ResourceSpec, region: &str) -> Result<Vec<NativeOffer>> {
+        self.validate_firewall_ids()?;
         spec.validate()
             .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
         if spec.tee_required || spec.volume_gb.is_some() {
@@ -478,7 +487,15 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
         Ok(resources)
     }
 
-    async fn destroy(&self, identity: &ManagedLeaseIdentity, id: &str) -> Result<()> {
+    async fn destroy(
+        &self,
+        identity: &ManagedLeaseIdentity,
+        resource: &ManagedResource,
+    ) -> Result<()> {
+        if resource.kind != ManagedResourceKind::Instance {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        let id = resource.instance.id.as_str();
         if <Self as ManagedProviderAdapter>::status(self, identity, id)
             .await?
             .is_none()

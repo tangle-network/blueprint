@@ -82,6 +82,7 @@ pub struct QuoteSet {
 #[serde(rename_all = "snake_case")]
 pub enum ManagedResourceKind {
     Instance,
+    Template,
     Volume,
     Firewall,
 }
