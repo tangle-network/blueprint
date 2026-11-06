@@ -1,579 +1,248 @@
-//! Blueprint Sources End-to-End Tests
-//!
-//! Tests the source fetching and validation mechanisms:
-//! - Container image pulling
-//! - GitHub release fetching
-//! - Remote HTTP/IPFS fetching
-//! - Checksum validation
-//! - Cache behavior
-//!
-//! These tests exercise the real fetcher implementations.
+//! Public source-handler proof. Only HTTP peers and the gh child process are faked.
+#![cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
 
-use std::process::Command;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
-
-use blueprint_manager::error::Error as ManagerError;
-use blueprint_manager::sources::BlueprintSourceHandler;
-use blueprint_manager::sources::container::ContainerSource;
-use blueprint_manager::sources::github::GithubBinaryFetcher;
-use blueprint_manager::sources::remote::RemoteBinaryFetcher;
-use blueprint_manager::sources::types::{
-    BlueprintBinary, GithubFetcher, ImageRegistryFetcher, RemoteFetcher,
+use axum::{
+    Router,
+    http::{StatusCode, Uri},
 };
+use blueprint_manager::{
+    error::Error,
+    sources::{
+        BlueprintSourceHandler,
+        github::GithubBinaryFetcher,
+        remote::RemoteBinaryFetcher,
+        types::{BlueprintBinary, GithubFetcher, RemoteFetcher},
+    },
+};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::{
+    collections::BTreeMap,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::{Arc, Mutex},
+};
 use tar::{Builder, Header};
-use tempfile::tempdir;
-use tokio::time::timeout;
+use tempfile::{TempDir, tempdir};
+use tokio::task::JoinHandle;
+use url::Url;
 use xz2::write::XzEncoder;
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(60);
+const PAYLOAD: &[u8] = b"#!/bin/sh\nprintf 'fetched cargo-dist\\n'\n";
+const RELEASE: &str = "/tangle-network/blueprint/releases/download/cargo-tangle-v0.5.0-alpha.28";
+#[cfg(target_arch = "x86_64")]
+const TARGET: &str = "x86_64-unknown-linux-gnu";
+#[cfg(target_arch = "x86_64")]
+const ARCHIVE: &str = "cargo-tangle-x86_64-unknown-linux-gnu.tar.xz";
+#[cfg(target_arch = "aarch64")]
+const TARGET: &str = "aarch64-unknown-linux-gnu";
+#[cfg(target_arch = "aarch64")]
+const ARCHIVE: &str = "cargo-tangle-aarch64-unknown-linux-gnu.tar.xz";
 
-// =============================================================================
-// SECTION 1: Container Source Tests
-// =============================================================================
-
-/// Test: Container source pulls a real public image
-#[tokio::test]
-async fn container_source_pulls_alpine() {
-    if !docker_available() {
-        eprintln!("Skipping: Docker not available");
-        return;
-    }
-
-    let fetcher = ImageRegistryFetcher {
-        registry: "docker.io".to_string(),
-        image: "library/alpine".to_string(),
-        tag: "3.19".to_string(),
-    };
-
-    let mut source = ContainerSource::new(fetcher, 0, "test".to_string());
-    let cache_dir = tempdir().unwrap();
-
-    let result = timeout(TEST_TIMEOUT, source.fetch(cache_dir.path())).await;
-
-    match result {
-        Ok(Ok(path)) => {
-            let image_ref = path.to_string_lossy();
-            assert!(
-                image_ref.contains("alpine"),
-                "Should return alpine image ref: {}",
-                image_ref
-            );
-            println!("✓ Pulled alpine image: {}", image_ref);
-        }
-        Ok(Err(e)) => {
-            println!("Container pull failed (may be expected): {}", e);
-        }
-        Err(_) => {
-            eprintln!("Container pull timed out");
-        }
-    }
+type Responses = Arc<Mutex<BTreeMap<String, (StatusCode, Vec<u8>)>>>;
+struct Peer {
+    base: Url,
+    responses: Responses,
+    requests: Arc<Mutex<Vec<String>>>,
+    server: JoinHandle<()>,
 }
-
-/// Test: Container source rejects nonexistent images
-#[tokio::test]
-async fn container_source_rejects_bad_image() {
-    if !docker_available() {
-        eprintln!("Skipping: Docker not available");
-        return;
-    }
-
-    let fetcher = ImageRegistryFetcher {
-        registry: "docker.io".to_string(),
-        image: "nonexistent/image-xyz-99999".to_string(),
-        tag: "v999".to_string(),
-    };
-
-    let mut source = ContainerSource::new(fetcher, 0, "test".to_string());
-    let cache_dir = tempdir().unwrap();
-
-    let result = timeout(Duration::from_secs(30), source.fetch(cache_dir.path())).await;
-
-    match result {
-        Ok(Ok(_)) => panic!("Should have failed for nonexistent image"),
-        Ok(Err(_)) => println!("✓ Correctly rejected bad image"),
-        Err(_) => println!("✓ Timed out (expected for bad image)"),
-    }
-}
-
-// =============================================================================
-// SECTION 2: GitHub Source Tests
-// =============================================================================
-
-/// Test: GitHub fetcher validates binary list
-#[tokio::test]
-async fn github_source_requires_matching_binary() {
-    let fetcher = GithubFetcher {
-        owner: "jqlang".to_string(),
-        repo: "jq".to_string(),
-        tag: "jq-1.7.1".to_string(),
-        binaries: vec![], // Empty!
-    };
-
-    let mut github = GithubBinaryFetcher::new(fetcher, 0, "test".into(), true);
-    let cache_dir = tempdir().unwrap();
-
-    let result = github.fetch(cache_dir.path()).await;
-
-    match result {
-        Ok(_) => panic!("Should fail with empty binaries"),
-        Err(e) => {
-            assert!(
-                matches!(e, ManagerError::NoMatchingBinary),
-                "Expected NoMatchingBinary, got: {}",
-                e
-            );
-            println!("✓ Correctly rejected empty binaries list");
-        }
-    }
-}
-
-/// Test: GitHub fetcher handles rate limiting gracefully
-#[tokio::test]
-async fn github_source_handles_errors() {
-    let fetcher = GithubFetcher {
-        owner: "nonexistent-owner-xyz".to_string(),
-        repo: "nonexistent-repo".to_string(),
-        tag: "v0.0.0".to_string(),
-        binaries: vec![test_binary("app")],
-    };
-
-    let mut github = GithubBinaryFetcher::new(fetcher, 0, "test".into(), true);
-    let cache_dir = tempdir().unwrap();
-
-    let result = timeout(Duration::from_secs(15), github.fetch(cache_dir.path())).await;
-
-    match result {
-        Ok(Ok(_)) => panic!("Should fail for nonexistent repo"),
-        Ok(Err(e)) => {
-            println!("✓ GitHub error handled: {}", e);
-        }
-        Err(_) => {
-            println!("✓ Request timed out (expected)");
-        }
-    }
-}
-
-// =============================================================================
-// SECTION 3: Remote HTTP Source Tests
-// =============================================================================
-
-/// Test: Remote fetcher validates checksums correctly
-#[tokio::test]
-async fn remote_source_validates_checksum() {
-    use axum::Router;
-    use axum::routing::get;
-
-    let binary_content = b"#!/bin/sh\necho test\n";
-    let sha256 = Sha256::digest(binary_content);
-    let mut sha256_arr = [0u8; 32];
-    sha256_arr.copy_from_slice(&sha256);
-
-    let manifest = serde_json::json!({
-        "artifacts": {
-            "bundle": {
-                "kind": "executable-zip",
-                "assets": [{"kind": "executable", "name": "test-bin"}]
+impl Peer {
+    async fn new() -> Self {
+        let responses: Responses = Arc::default();
+        let requests: Arc<Mutex<Vec<String>>> = Arc::default();
+        let routes = responses.clone();
+        let seen = requests.clone();
+        let app = Router::new().fallback(move |uri: Uri| {
+            let routes = routes.clone();
+            let seen = seen.clone();
+            async move {
+                seen.lock().unwrap().push(uri.path().to_owned());
+                routes
+                    .lock()
+                    .unwrap()
+                    .get(uri.path())
+                    .cloned()
+                    .unwrap_or((StatusCode::NOT_FOUND, b"unknown artifact".to_vec()))
             }
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        Self {
+            base,
+            responses,
+            requests,
+            server,
         }
-    });
-    let archive = create_test_archive(&[("test-bin", binary_content)]);
-
-    let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
-    let archive_bytes = archive;
-
-    let app = Router::new()
-        .route(
-            "/dist.json",
-            get({
-                let data = manifest_bytes.clone();
-                move || {
-                    let d = data.clone();
-                    async move { d }
-                }
-            }),
-        )
-        .route(
-            "/archive.tar.xz",
-            get({
-                let data = archive_bytes.clone();
-                move || {
-                    let d = data.clone();
-                    async move { d }
-                }
-            }),
-        );
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
-    });
-
-    let binary = BlueprintBinary {
-        name: "test-bin".to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        os: format_os(std::env::consts::OS),
-        sha256: sha256_arr,
-        blake3: None,
-    };
-
-    let fetcher = RemoteFetcher {
-        dist_url: format!("http://{}/dist.json", addr),
-        archive_url: format!("http://{}/archive.tar.xz", addr),
-        binaries: vec![binary],
-    };
-
-    let mut remote = RemoteBinaryFetcher::new(fetcher, 0, "test".into());
-    let cache_dir = tempdir().unwrap();
-
-    let result = remote.fetch(cache_dir.path()).await;
-    server.abort();
-
-    match result {
-        Ok(path) => {
-            assert!(path.exists());
-            println!("✓ Checksum validation passed, binary at: {:?}", path);
-        }
-        Err(e) => panic!("Should succeed with correct checksum: {}", e),
+    }
+    fn serve(&self, path: &str, bytes: impl Into<Vec<u8>>) {
+        self.responses
+            .lock()
+            .unwrap()
+            .insert(path.to_owned(), (StatusCode::OK, bytes.into()));
+    }
+    fn seen(&self) -> Vec<String> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+impl Drop for Peer {
+    fn drop(&mut self) {
+        self.server.abort();
     }
 }
 
-/// Test: Remote fetcher rejects bad checksums
-#[tokio::test]
-async fn remote_source_rejects_bad_checksum() {
-    use axum::Router;
-    use axum::routing::get;
-
-    let manifest = serde_json::json!({
-        "artifacts": {
-            "bundle": {
-                "kind": "executable-zip",
-                "assets": [{"kind": "executable", "name": "test-bin"}]
-            }
-        }
-    });
-    let archive = create_test_archive(&[("test-bin", b"#!/bin/sh\necho test\n")]);
-
-    let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
-    let archive_bytes = archive;
-
-    let app = Router::new()
-        .route(
-            "/dist.json",
-            get({
-                let data = manifest_bytes.clone();
-                move || {
-                    let d = data.clone();
-                    async move { d }
-                }
-            }),
-        )
-        .route(
-            "/archive.tar.xz",
-            get({
-                let data = archive_bytes.clone();
-                move || {
-                    let d = data.clone();
-                    async move { d }
-                }
-            }),
-        );
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
-    });
-
-    let binary = BlueprintBinary {
-        name: "test-bin".to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        os: format_os(std::env::consts::OS),
-        sha256: [0xffu8; 32], // Wrong!
-        blake3: None,
-    };
-
-    let fetcher = RemoteFetcher {
-        dist_url: format!("http://{}/dist.json", addr),
-        archive_url: format!("http://{}/archive.tar.xz", addr),
-        binaries: vec![binary],
-    };
-
-    let mut remote = RemoteBinaryFetcher::new(fetcher, 0, "test".into());
-    let cache_dir = tempdir().unwrap();
-
-    let result = remote.fetch(cache_dir.path()).await;
-    server.abort();
-
-    match result {
-        Ok(_) => panic!("Should reject bad checksum"),
-        Err(e) => {
-            assert!(
-                matches!(e, ManagerError::HashMismatch { .. }),
-                "Expected HashMismatch, got: {}",
-                e
-            );
-            println!("✓ Bad checksum rejected");
-        }
-    }
-}
-
-/// Test: Remote fetcher rejects missing binary
-#[tokio::test]
-async fn remote_source_rejects_missing_binary() {
-    use axum::Router;
-    use axum::routing::get;
-
-    let manifest = serde_json::json!({
-        "artifacts": {
-            "bundle": {
-                "kind": "executable-zip",
-                "assets": [{"kind": "executable", "name": "other-bin"}]
-            }
-        }
-    });
-    let archive = create_test_archive(&[("other-bin", b"data")]);
-
-    let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
-    let archive_bytes = archive;
-
-    let app = Router::new()
-        .route(
-            "/dist.json",
-            get({
-                let data = manifest_bytes.clone();
-                move || {
-                    let d = data.clone();
-                    async move { d }
-                }
-            }),
-        )
-        .route(
-            "/archive.tar.xz",
-            get({
-                let data = archive_bytes.clone();
-                move || {
-                    let d = data.clone();
-                    async move { d }
-                }
-            }),
-        );
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
-    });
-
-    let binary = BlueprintBinary {
-        name: "wanted-bin".to_string(), // Not in archive!
-        arch: std::env::consts::ARCH.to_string(),
-        os: format_os(std::env::consts::OS),
-        sha256: [0u8; 32],
-        blake3: None,
-    };
-
-    let fetcher = RemoteFetcher {
-        dist_url: format!("http://{}/dist.json", addr),
-        archive_url: format!("http://{}/archive.tar.xz", addr),
-        binaries: vec![binary],
-    };
-
-    let mut remote = RemoteBinaryFetcher::new(fetcher, 0, "test".into());
-    let cache_dir = tempdir().unwrap();
-
-    let result = remote.fetch(cache_dir.path()).await;
-    server.abort();
-
-    match result {
-        Ok(_) => panic!("Should reject missing binary"),
-        Err(e) => {
-            assert!(
-                matches!(e, ManagerError::NoMatchingBinary),
-                "Expected NoMatchingBinary, got: {}",
-                e
-            );
-            println!("✓ Missing binary rejected");
-        }
-    }
-}
-
-/// Test: Remote fetcher uses cache on second fetch
-#[tokio::test]
-async fn remote_source_uses_cache() {
-    use axum::Router;
-    use axum::routing::get;
-
-    let hit_count = Arc::new(AtomicUsize::new(0));
-    let manifest_hits = hit_count.clone();
-
-    let binary_content = b"#!/bin/sh\necho cached\n";
-    let sha256 = Sha256::digest(binary_content);
-    let mut sha256_arr = [0u8; 32];
-    sha256_arr.copy_from_slice(&sha256);
-
-    let manifest = serde_json::json!({
-        "artifacts": {
-            "bundle": {
-                "kind": "executable-zip",
-                "assets": [{"kind": "executable", "name": "cached-bin"}]
-            }
-        }
-    });
-    let archive = create_test_archive(&[("cached-bin", binary_content)]);
-
-    let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
-    let archive_bytes = archive;
-
-    let app = Router::new()
-        .route(
-            "/dist.json",
-            get({
-                let data = manifest_bytes.clone();
-                let hits = manifest_hits.clone();
-                move || {
-                    hits.fetch_add(1, Ordering::SeqCst);
-                    let d = data.clone();
-                    async move { d }
-                }
-            }),
-        )
-        .route(
-            "/archive.tar.xz",
-            get({
-                let data = archive_bytes.clone();
-                move || {
-                    let d = data.clone();
-                    async move { d }
-                }
-            }),
-        );
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move {
-        axum::serve(listener, app).await.ok();
-    });
-
-    let binary = BlueprintBinary {
-        name: "cached-bin".to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        os: format_os(std::env::consts::OS),
-        sha256: sha256_arr,
-        blake3: None,
-    };
-
-    let cache_dir = tempdir().unwrap();
-
-    // First fetch
-    let fetcher1 = RemoteFetcher {
-        dist_url: format!("http://{}/dist.json", addr),
-        archive_url: format!("http://{}/archive.tar.xz", addr),
-        binaries: vec![binary.clone()],
-    };
-    let mut remote1 = RemoteBinaryFetcher::new(fetcher1, 0, "cache-test".into());
-    remote1.fetch(cache_dir.path()).await.unwrap();
-
-    // Second fetch - should use cache
-    let fetcher2 = RemoteFetcher {
-        dist_url: format!("http://{}/dist.json", addr),
-        archive_url: format!("http://{}/archive.tar.xz", addr),
-        binaries: vec![binary],
-    };
-    let mut remote2 = RemoteBinaryFetcher::new(fetcher2, 0, "cache-test".into());
-    remote2.fetch(cache_dir.path()).await.unwrap();
-
-    server.abort();
-
-    let hits = hit_count.load(Ordering::SeqCst);
-    assert_eq!(
-        hits, 1,
-        "Second fetch should use cache, but hit {} times",
-        hits
-    );
-    println!("✓ Cache correctly reused");
-}
-
-/// Test: Network failures produce clear errors
-#[tokio::test]
-async fn remote_source_network_failure() {
-    let binary = test_binary("unreachable");
-    let fetcher = RemoteFetcher {
-        dist_url: "http://192.0.2.1:12345/dist.json".to_string(), // Unreachable
-        archive_url: "http://192.0.2.1:12345/archive.tar.xz".to_string(),
-        binaries: vec![binary],
-    };
-
-    let mut remote = RemoteBinaryFetcher::new(fetcher, 0, "test".into());
-    let cache_dir = tempdir().unwrap();
-
-    let result = timeout(Duration::from_secs(10), remote.fetch(cache_dir.path())).await;
-
-    match result {
-        Ok(Ok(_)) => panic!("Should fail to connect"),
-        Ok(Err(e)) => {
-            let err = e.to_string().to_lowercase();
-            assert!(
-                err.contains("connect") || err.contains("download") || err.contains("timeout"),
-                "Error should mention connection: {}",
-                e
-            );
-            println!("✓ Network error handled: {}", e);
-        }
-        Err(_) => println!("✓ Timed out as expected"),
-    }
-}
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-fn docker_available() -> bool {
-    Command::new("docker")
-        .arg("ps")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-}
-
-fn test_binary(name: &str) -> BlueprintBinary {
+fn binary(name: &str) -> BlueprintBinary {
     BlueprintBinary {
-        name: name.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        os: format_os(std::env::consts::OS),
-        sha256: [0u8; 32],
+        name: name.into(),
+        arch: std::env::consts::ARCH.into(),
+        os: "linux".into(),
+        sha256: Sha256::digest(PAYLOAD).into(),
         blake3: None,
     }
 }
-
-fn format_os(os: &str) -> String {
-    // Must match get_formatted_os_string() from sdk/utils.rs
-    match os {
-        "macos" => "apple-darwin".to_string(),
-        "linux" => "unknown-linux-gnu".to_string(),
-        "windows" => "pc-windows-msvc".to_string(),
-        other => other.to_string(),
-    }
-}
-
-fn create_test_archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
-    let cursor = Vec::new();
-    let encoder = XzEncoder::new(cursor, 6);
-    let mut builder = Builder::new(encoder);
-
-    for (name, contents) in entries {
+fn archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut tar = Builder::new(XzEncoder::new(Vec::new(), 1));
+    for (path, contents) in entries {
         let mut header = Header::new_gnu();
-        header.set_path(name).unwrap();
         header.set_size(contents.len() as u64);
         header.set_mode(0o755);
         header.set_cksum();
-        builder.append(&header, *contents).unwrap();
+        tar.append_data(&mut header, path, *contents).unwrap();
     }
+    tar.into_inner().unwrap().finish().unwrap()
+}
+fn gh_tool(folder: &Path) -> PathBuf {
+    let tool = folder.join("gh");
+    std::fs::write(&tool, "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$0.args\"\n[ \"$1\" = attestation ] && [ \"$2\" = verify ] && [ -f \"$3\" ] && [ \"$4\" = --repo ] && [ \"$5\" = tangle-network/blueprint ]\n").unwrap();
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o700)).unwrap();
+    tool
+}
+fn github_manifest(peer: &Peer) -> Value {
+    // Names, target and asset layout follow the retained real cargo-dist0.28.7 plan.
+    json!({"dist_version":"0.28.7-prerelease.1", "announcement_tag":"cargo-tangle-v0.5.0-alpha.28",
+        "releases":[{"app_name":"cargo-tangle", "app_version":"0.5.0-alpha.28",
+            "artifacts":[ARCHIVE, format!("{ARCHIVE}.sha256")],
+            "hosting":{"github":{"artifact_base_url":peer.base.as_str().trim_end_matches('/'),
+                "artifact_download_path":RELEASE, "owner":"tangle-network", "repo":"blueprint"}}}],
+        "artifacts":{ARCHIVE:{"name":ARCHIVE, "kind":"executable-zip", "target_triples":[TARGET],
+            "assets":[{"name":"cargo-tangle", "path":"cargo-tangle", "kind":"executable"}],
+            "checksum":format!("{ARCHIVE}.sha256")},
+            format!("{ARCHIVE}.sha256"):{"name":format!("{ARCHIVE}.sha256"),"kind":"checksum"}}})
+}
 
-    builder.finish().unwrap();
-    let encoder = builder.into_inner().unwrap();
-    encoder.finish().unwrap()
+#[tokio::test]
+async fn github_fetches_the_manifest_target_archive_and_executes_the_pinned_asset() {
+    let peer = Peer::new().await;
+    let archive = archive(&[(
+        &format!("{}/cargo-tangle", ARCHIVE.trim_end_matches(".tar.xz")),
+        PAYLOAD,
+    )]);
+    peer.serve(
+        &format!("{RELEASE}/dist-manifest.json"),
+        serde_json::to_vec(&github_manifest(&peer)).unwrap(),
+    );
+    peer.serve(
+        &format!("{RELEASE}/{ARCHIVE}.sha256"),
+        format!("{}  {ARCHIVE}\n", hex::encode(Sha256::digest(&archive))),
+    );
+    peer.serve(&format!("{RELEASE}/{ARCHIVE}"), archive);
+    let cache = tempdir().unwrap();
+    let tools = tempdir().unwrap();
+    let gh = gh_tool(tools.path());
+    let fetcher = GithubFetcher {
+        owner: "tangle-network".into(),
+        repo: "blueprint".into(),
+        tag: "cargo-tangle-v0.5.0-alpha.28".into(),
+        binaries: vec![binary("cargo-tangle")],
+    };
+    let mut source = GithubBinaryFetcher::new(fetcher, 77, "public fetch".into(), false)
+        .with_release_base_url(peer.base.clone())
+        .with_http_client(reqwest::Client::new())
+        .with_github_cli(gh.clone());
+    let result = source.fetch(cache.path()).await;
+    assert!(
+        result.is_ok(),
+        "manifest-defined native archive must fetch: {result:?}; requests={:?}",
+        peer.seen()
+    );
+    let executable = result.unwrap();
+    assert_eq!(std::fs::read(&executable).unwrap(), PAYLOAD);
+    let run = Command::new(&executable).output().unwrap();
+    assert!(run.status.success());
+    assert_eq!(run.stdout, b"fetched cargo-dist\n");
+    assert!(peer.seen().contains(&format!("{RELEASE}/{ARCHIVE}")));
+    let args = std::fs::read_to_string(gh.with_extension("args")).unwrap();
+    assert!(args.starts_with("attestation\nverify\n"));
+    assert!(args.ends_with("--repo\ntangle-network/blueprint\n"));
+}
+
+async fn remote_fixture(name: &str) -> (Peer, RemoteBinaryFetcher, TempDir) {
+    let peer = Peer::new().await;
+    peer.serve(
+        "/dist.json",
+        serde_json::to_vec(&json!({"artifacts":{"bundle":{
+        "kind":"executable-zip", "assets":[{"kind":"executable","name":name}]}}}))
+        .unwrap(),
+    );
+    peer.serve("/archive.tar.xz", archive(&[(name, PAYLOAD)]));
+    let source = RemoteBinaryFetcher::new(
+        RemoteFetcher {
+            dist_url: peer.base.join("dist.json").unwrap().to_string(),
+            archive_url: peer.base.join("archive.tar.xz").unwrap().to_string(),
+            binaries: vec![binary(name)],
+        },
+        1,
+        "remote public HTTP".into(),
+    );
+    (peer, source, tempdir().unwrap())
+}
+
+#[tokio::test]
+async fn remote_source_validates_checksum_and_reuses_verified_cache() {
+    let (peer, mut source, cache) = remote_fixture("cached-bin").await;
+    let path = source.fetch(cache.path()).await.unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), PAYLOAD);
+    assert_eq!(source.fetch(cache.path()).await.unwrap(), path);
+    assert_eq!(peer.seen(), ["/dist.json", "/archive.tar.xz"]);
+}
+
+#[tokio::test]
+async fn remote_source_rejects_bad_checksum() {
+    let (peer, _, cache) = remote_fixture("bad-bin").await;
+    let mut wrong = binary("bad-bin");
+    wrong.sha256 = [0xff; 32];
+    let mut source = RemoteBinaryFetcher::new(
+        RemoteFetcher {
+            dist_url: peer.base.join("dist.json").unwrap().to_string(),
+            archive_url: peer.base.join("archive.tar.xz").unwrap().to_string(),
+            binaries: vec![wrong],
+        },
+        1,
+        "bad checksum".into(),
+    );
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::HashMismatch { .. })
+    ));
+}
+
+#[tokio::test]
+async fn remote_source_rejects_missing_binary() {
+    let (peer, mut source, cache) = remote_fixture("wanted-bin").await;
+    peer.serve(
+        "/dist.json",
+        serde_json::to_vec(&json!({"artifacts":{"bundle":{
+        "kind":"executable-zip", "assets":[{"kind":"executable","name":"other-bin"}]}}}))
+        .unwrap(),
+    );
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::NoMatchingBinary)
+    ));
 }
