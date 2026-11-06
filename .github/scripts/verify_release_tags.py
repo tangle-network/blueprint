@@ -120,13 +120,7 @@ def tagged_workspace_names(versions: dict[str, str]) -> list[str]:
 
 
 def audited_names(names: list[str], versions: dict[str, str]) -> list[str]:
-    """Union the manifest's releases with every tagged workspace crate.
-
-    release-plz skips a crate whose tag already exists and reports it as
-    "Already published - Tag <tag>" without listing it, so a tag that exists
-    with no matching index entry never reaches `names`. On 2026-07-03 that
-    left 19 tagged crates off crates.io while the run went green.
-    """
+    """Union the manifest's releases with every tagged workspace crate: release-plz omits already-tagged releases, which once left 19 tagged crates unpublished (2026-07-03)."""
     combined = list(names)
     seen = set(names)
     for name in tagged_workspace_names(versions):
@@ -169,13 +163,7 @@ def report_missing(problems: list[tuple[str, str, str]]) -> str:
     ]
     for name, version, reason in problems:
         lines.append(f"  - {name} {version}: {reason}")
-    lines.extend(
-        [
-            "",
-            "These results came from complete registry responses. Inspect the tags",
-            "and release state before taking recovery action.",
-        ]
-    )
+    lines += ["", "These results came from complete registry responses; inspect tags and release state before recovery."]
     return "\n".join(lines)
 
 
@@ -188,13 +176,7 @@ def report_unverified(problems: list[tuple[str, str, str]]) -> str:
     ]
     for name, version, reason in problems:
         lines.append(f"  - {name} {version}: {reason}")
-    lines.extend(
-        [
-            "",
-            "No tag-removal advice is safe while the registry result is unknown.",
-            "Restore registry connectivity, then rerun the verification.",
-        ]
-    )
+    lines += ["", "No tag-removal advice is safe while the registry result is unknown; restore connectivity and rerun."]
     return "\n".join(lines)
 
 
@@ -208,6 +190,14 @@ def github(*args: str, raw: bool = False, timeout: float = 15):
             pass
         raise ReleaseVerificationError(f"GitHub command failed (exit {result.returncode})")
     return result.stdout if raw else json.loads(result.stdout)
+
+
+def fetch_assets(repo: str, tag: str) -> dict:
+    return {row["name"]: row for row in (github("api", f"repos/{repo}/releases/tags/{tag}") or {}).get("assets", [])}
+
+
+def download_asset(repo: str, asset_id) -> bytes | None:
+    return github("api", f"repos/{repo}/releases/assets/{asset_id}", "-H", "Accept: application/octet-stream", raw=True)
 
 
 def artifact_context(tag: str, plan_path: str):
@@ -237,9 +227,13 @@ def artifact_mode(args) -> int:
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ReleaseVerificationError("invalid release output")
         rows = [row for row in rows if row.get("package_name") == "cargo-tangle"]
-        if any(row.get("tag") != f"cargo-tangle-v{row.get('version')}" for row in rows):
-            raise ReleaseVerificationError("invalid cargo-tangle release output")
-        tags = {row["tag"] for row in rows}
+        tags = set()
+        for row in rows:
+            version = row.get("version")
+            tag = row.get("tag") or (f"cargo-tangle-v{version}" if isinstance(version, str) and version else None)
+            if not tag or tag != f"cargo-tangle-v{version}":
+                raise ReleaseVerificationError("invalid cargo-tangle release output")
+            tags.add(tag)
         if not tags:
             print("No cargo-tangle release to dispatch")
             return 0
@@ -248,6 +242,15 @@ def artifact_mode(args) -> int:
         tag = tags.pop()
         if not CLI_TAG.fullmatch(tag):
             raise ReleaseVerificationError("invalid dispatch tag")
+        record = fetch_assets(repo, tag).get("release-source.json")
+        data = download_asset(repo, record["id"]) if record else None
+        try:
+            published = json.loads(data) if data is not None and record.get("digest") == "sha256:" + hashlib.sha256(data).hexdigest() else None
+        except ValueError:
+            published = None
+        if isinstance(published, dict) and published.get("tag") == tag:
+            print(json.dumps({"tag": tag, "dispatch_skipped": "release already records its artifact source", "source_sha": published.get("source_sha")}))
+            return 0
         receipt = github("api", "--method", "POST", f"repos/{repo}/actions/workflows/release.yml/dispatches",
                          "-H", "X-GitHub-Api-Version: 2026-03-10", "-f", "ref=main", "-f", f"inputs[tag]={tag}")
         run_id = receipt.get("workflow_run_id") if isinstance(receipt, dict) else None
@@ -265,16 +268,13 @@ def artifact_mode(args) -> int:
         Path("target/distrib/release-source.json").write_text(json.dumps(record, sort_keys=True) + "\n")
         print(json.dumps({"source_sha": source, "artifacts_recorded": len(files)}))
         return 0
-    release = github("api", f"repos/{repo}/releases/tags/{args.tag}")
-    assets = {row["name"]: row for row in (release or {}).get("assets", [])}
+    assets = fetch_assets(repo, args.tag)
     if "release-source.json" not in assets:
         if assets.keys() & plan["artifacts"]:
             raise ReleaseVerificationError("published assets have no source record; release a new version instead of replacing them")
         print("Release artifact set is incomplete")
         return 3
-    def download(name):
-        return github("api", f"repos/{repo}/releases/assets/{assets[name]['id']}", "-H", "Accept: application/octet-stream", raw=True)
-    data = download("release-source.json")
+    data = download_asset(repo, assets["release-source.json"]["id"])
     if data is None:
         raise ReleaseVerificationError("published source record is unavailable")
     if assets["release-source.json"].get("digest") != "sha256:" + hashlib.sha256(data).hexdigest():
@@ -290,7 +290,7 @@ def artifact_mode(args) -> int:
             return 3
         checksum = plan["artifacts"][name].get("checksum") or (name + ".sha256" if name + ".sha256" in hashes else None)
         if checksum:
-            payload = download(checksum)
+            payload = download_asset(repo, assets[checksum]["id"])
             parts = payload.decode().strip().split(maxsplit=1) if payload is not None else []
             if len(parts) != 2 or parts[0] != digest or parts[1].removeprefix("*") != name:
                 return 3
