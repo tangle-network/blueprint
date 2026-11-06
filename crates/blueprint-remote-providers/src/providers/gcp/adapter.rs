@@ -253,6 +253,7 @@ impl CloudProviderAdapter for GcpAdapter {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         };
 
         // Ensure firewall rules are configured before provisioning

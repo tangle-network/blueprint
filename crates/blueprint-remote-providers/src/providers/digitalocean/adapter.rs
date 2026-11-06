@@ -77,6 +77,7 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         };
 
         let droplet_name = format!("blueprint-{}", uuid::Uuid::new_v4());

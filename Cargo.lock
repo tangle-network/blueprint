@@ -2981,7 +2981,6 @@ dependencies = [
 name = "blueprint-core"
 version = "0.2.0-alpha.7"
 dependencies = [
- "blueprint-sdk",
  "bytes",
  "futures-util",
  "hashbrown 0.16.1",
@@ -3778,6 +3777,7 @@ dependencies = [
  "blueprint-x402",
  "document-features",
  "openssl-sys",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

@@ -82,6 +82,9 @@ blueprint-remote-providers = { workspace = true, optional = true }
 
 openssl-sys = { workspace = true, features = ["vendored"] }
 
+[dev-dependencies]
+serde_json = { workspace = true, features = ["alloc"] }
+
 [features]
 default = ["std", "tracing"]
 
