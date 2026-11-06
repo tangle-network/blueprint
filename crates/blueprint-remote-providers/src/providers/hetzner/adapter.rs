@@ -325,10 +325,11 @@ impl CloudProviderAdapter for HetznerAdapter {
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
         match self.fetch_server(instance_id).await {
             Ok(raw) => Ok(Self::parse_server(&raw)?.status),
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Hetzner server status");
-                Ok(InstanceStatus::Unknown)
+            // Hetzner answers a deleted server with the error code `not_found`.
+            Err(Error::HttpError(body)) if body.contains("\"not_found\"") => {
+                Ok(InstanceStatus::Terminated)
             }
+            Err(error) => Err(error),
         }
     }
 

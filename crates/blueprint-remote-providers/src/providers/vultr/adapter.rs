@@ -16,8 +16,6 @@ use blueprint_std::collections::HashMap;
 /// Vultr adapter for Blueprint deployment
 pub struct VultrAdapter {
     provisioner: VultrProvisioner,
-    #[allow(dead_code)]
-    api_key: String,
 }
 
 impl VultrAdapter {
@@ -26,11 +24,8 @@ impl VultrAdapter {
         let api_key = std::env::var("VULTR_API_KEY")
             .map_err(|_| Error::Other("VULTR_API_KEY environment variable not set".into()))?;
 
-        let provisioner = VultrProvisioner::new(api_key.clone()).await?;
-        Ok(Self {
-            api_key,
-            provisioner,
-        })
+        let provisioner = VultrProvisioner::new(api_key).await?;
+        Ok(Self { provisioner })
     }
 
     /// Get SSH username for Vultr instances

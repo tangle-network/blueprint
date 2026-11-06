@@ -159,9 +159,10 @@ impl VultrProvisioner {
             .map_err(|e| Error::ConfigurationError(format!("Failed to get instance: {e}")))?;
 
         if !response.status().is_success() {
-            return Err(Error::ConfigurationError(
-                "Failed to get instance details".into(),
-            ));
+            return Err(Error::ConfigurationError(format!(
+                "Failed to get instance details: {}",
+                response.status()
+            )));
         }
 
         let json: serde_json::Value = response
@@ -220,7 +221,10 @@ impl VultrProvisioner {
                 ("pending", _) => Ok(crate::infra::types::InstanceStatus::Starting),
                 _ => Ok(crate::infra::types::InstanceStatus::Unknown),
             },
-            Err(_) => Ok(crate::infra::types::InstanceStatus::Terminated),
+            Err(error) if error.to_string().contains("404") => {
+                Ok(crate::infra::types::InstanceStatus::Terminated)
+            }
+            Err(error) => Err(error),
         }
     }
 
