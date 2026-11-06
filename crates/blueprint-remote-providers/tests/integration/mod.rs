@@ -4,7 +4,6 @@
 
 // pub mod auth_integration; // DISABLED: missing dependencies
 pub mod blueprint_ssh_deployment_tests;
-// pub mod chaos_engineering_tests; // DISABLED: compiler cycle error
 // pub mod critical_flows; // DISABLED: missing dependencies
 // pub mod manager_bridge; // DISABLED: missing dependencies
 pub mod real_blueprint_tests;
