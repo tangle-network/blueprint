@@ -2962,6 +2962,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.16.1",
  "pin-project-lite",
+ "serde",
  "serde_json",
  "tiny-keccak",
  "tokio",
