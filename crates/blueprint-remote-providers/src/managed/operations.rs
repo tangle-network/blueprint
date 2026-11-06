@@ -72,11 +72,40 @@ impl CloudProvisioner {
         let complete = async |resource: ManagedResource| -> Result<ManagedResource> {
             validate(&resource)?;
             let id = resource.instance.id.clone();
+            let resource = native
+                .status(identity, &id)
+                .await?
+                .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+            let assigned = |resource: &ManagedResource| {
+                validate(resource)?;
+                let (Some(class), Some(count), Some(vram), Some(price)) = (
+                    resource.gpu_class.as_deref(),
+                    resource.gpu_count,
+                    resource.gpu_vram_gb,
+                    resource.hourly_cost_usd,
+                ) else {
+                    return Err(Error::Provider(ProviderErrorCode::Indeterminate));
+                };
+                if resource.instance.region.is_empty() || !price.is_finite() || price <= 0.0 {
+                    return Err(Error::Provider(ProviderErrorCode::Indeterminate));
+                }
+                if resource.instance.id != id
+                    || class != candidate.offer.gpu_class
+                    || count != candidate.offer.gpu_count
+                    || resource.instance.region != candidate.offer.region
+                    || vram < resolved.gpu_vram_gb.unwrap_or(0)
+                    || price
+                        > resolved
+                            .max_hourly_cost_usd
+                            .unwrap_or(candidate.offer.hourly_cost_usd)
+                {
+                    return Err(Error::Provider(ProviderErrorCode::Conflict));
+                }
+                Ok(())
+            };
+            assigned(&resource)?;
             let resource = native.complete(&resolved, resource).await?;
-            validate(&resource)?;
-            if resource.instance.id != id {
-                return Err(Error::Provider(ProviderErrorCode::Conflict));
-            }
+            assigned(&resource)?;
             Ok(resource)
         };
         let existing = native.list(&identity.namespace).await?;
