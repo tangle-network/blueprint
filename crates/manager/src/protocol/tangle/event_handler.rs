@@ -433,7 +433,8 @@ impl TangleEventHandler {
                 );
                 if let Some(metadata) = self.metadata.resolve_service(client, service_id).await? {
                     let blueprint_id = metadata.blueprint_id;
-                    let gpu_requirements = metadata.gpu_requirements;
+                    #[cfg(feature = "remote-providers")]
+                    let gpu_requirements = metadata.gpu_requirements.clone();
                     if let Err(e) = self
                         .ensure_service_running(&trace_id, metadata, env, ctx, active_blueprints)
                         .await

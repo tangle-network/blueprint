@@ -746,10 +746,15 @@ mod marketplace_fixture_tests {
         };
         let domain = QuoteSigningDomain {
             chain_id: 5845,
-            verifying_contract: alloy_primitives::address!("0x0000000000000000000000000000000000000808"),
+            verifying_contract: alloy_primitives::address!(
+                "0x0000000000000000000000000000000000000808"
+            ),
         };
         let digest = job_quote_digest_eip712(&details, domain);
-        println!("MARKETPLACE_DIGEST=0x{}", alloy_primitives::hex::encode(digest));
+        println!(
+            "MARKETPLACE_DIGEST=0x{}",
+            alloy_primitives::hex::encode(digest)
+        );
         assert_eq!(digest.len(), 32);
     }
 }
@@ -795,22 +800,27 @@ mod live_interop_proof {
         let mut sig65 = signed.signature.to_bytes();
         sig65.push(27 + signed.recovery_id);
 
-        println!("LIVE_QUOTE_JSON={}", serde_json::json!({
-            "quote": {
-                "requester": format!("{:?}", details.requester),
-                "serviceId": details.service_id,
-                "jobIndex": details.job_index,
-                "price": details.price.to_string(),
-                "timestamp": details.timestamp,
-                "expiry": details.expiry,
-                "confidentiality": details.confidentiality,
-                "inputsHash": format!("{:?}", details.inputs_hash),
-            },
-            "signature": format!("0x{}", alloy_primitives::hex::encode(sig65)),
-            "operator": format!("{:?}", signed.operator),
-        }));
-        println!("LIVE_QUOTE_DIGEST=0x{}", alloy_primitives::hex::encode(
-            job_quote_digest_eip712(&details, domain)));
+        println!(
+            "LIVE_QUOTE_JSON={}",
+            serde_json::json!({
+                "quote": {
+                    "requester": format!("{:?}", details.requester),
+                    "serviceId": details.service_id,
+                    "jobIndex": details.job_index,
+                    "price": details.price.to_string(),
+                    "timestamp": details.timestamp,
+                    "expiry": details.expiry,
+                    "confidentiality": details.confidentiality,
+                    "inputsHash": format!("{:?}", details.inputs_hash),
+                },
+                "signature": format!("0x{}", alloy_primitives::hex::encode(sig65)),
+                "operator": format!("{:?}", signed.operator),
+            })
+        );
+        println!(
+            "LIVE_QUOTE_DIGEST=0x{}",
+            alloy_primitives::hex::encode(job_quote_digest_eip712(&details, domain))
+        );
         // Internal round-trip guard: our own verify agrees.
         assert!(verify_job_quote(&signed, &signer.verifying_key(), domain).unwrap());
     }

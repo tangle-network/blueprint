@@ -57,15 +57,12 @@ impl Default for RemoteDeploymentPolicy {
 }
 
 fn env_bool(name: &str) -> bool {
-    std::env::var(name)
-        .ok()
-        .map(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes"
-            )
-        })
-        .unwrap_or(false)
+    std::env::var(name).is_ok_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes"
+        )
+    })
 }
 
 fn parse_tee_backend(raw: &str) -> Option<String> {
@@ -250,13 +247,11 @@ impl RemoteDeploymentService {
             }
         }
 
-        // Select deployment target.
         let target = self
             .selector
             .select_target(&resource_spec)
             .map_err(|e| Error::Other(format!("Provider selection failed: {}", e)))?;
 
-        // 4. Deploy based on target type
         match target {
             DeploymentTarget::CloudInstance(provider) => {
                 self.deploy_to_cloud(

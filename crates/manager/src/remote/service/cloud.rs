@@ -307,13 +307,6 @@ fn resolve_provider_region(ctx: &BlueprintManagerContext, provider: &CloudProvid
             CloudProvider::Azure => config.azure.as_ref().map(|c| c.region.clone()),
             CloudProvider::DigitalOcean => config.digital_ocean.as_ref().map(|c| c.region.clone()),
             CloudProvider::Vultr => config.vultr.as_ref().map(|c| c.region.clone()),
-            CloudProvider::Hetzner
-            | CloudProvider::RunPod
-            | CloudProvider::LambdaLabs
-            | CloudProvider::PrimeIntellect
-            | CloudProvider::VastAi
-            | CloudProvider::Crusoe
-            | CloudProvider::Generic => None,
             _ => None,
         };
         if let Some(region) = configured {
