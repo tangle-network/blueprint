@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.25](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-anvil-v0.2.0-alpha.24...blueprint-chain-setup-anvil-v0.2.0-alpha.25) - 2026-11-06
+
+### Other
+
+- updated the following local packages: blueprint-core, blueprint-core-testing-utils
+
 ## [0.2.0-alpha.24](https://github.com/tangle-network/blueprint/compare/blueprint-chain-setup-anvil-v0.2.0-alpha.23...blueprint-chain-setup-anvil-v0.2.0-alpha.24) - 2026-11-03
 
 ### Other
