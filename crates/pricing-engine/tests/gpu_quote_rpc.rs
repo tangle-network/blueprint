@@ -233,7 +233,7 @@ async fn resource_prices_cross_the_public_rpc_as_exact_usd18_integers() {
         requester: job.requester,
         security_requirements: Some(pricing_engine::AssetSecurityRequirements {
             asset: Some(pricing_engine::Asset {
-                asset_type: Some(pricing_engine::asset::AssetType::Erc20(vec![0; 20])),
+                asset_type: Some(pricing_engine::asset::AssetType::Erc20(vec![8; 20])),
             }),
             minimum_exposure_percent: 1,
             maximum_exposure_percent: 100,
