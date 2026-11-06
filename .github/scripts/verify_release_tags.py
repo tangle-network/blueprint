@@ -18,6 +18,7 @@ import urllib.request
 SPARSE_INDEX = "https://index.crates.io"
 USER_AGENT = "tangle-blueprint-release-verify (hello@tangle.tools)"
 DEFAULT_TIMEOUT = 20
+YANKED = "version is yanked"
 CLI_TAG = re.compile(r"cargo-tangle-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?")
 
 
@@ -156,8 +157,33 @@ def verify(
         elif version not in shard:
             missing.append((name, version, "version absent from sparse index"))
         elif shard[version]:
-            missing.append((name, version, "version is yanked"))
+            missing.append((name, version, YANKED))
     return missing, unverified
+
+
+def publish_plan(path: str) -> int:
+    """Write one tag commit's crates that are tagged but not live, oldest commit first."""
+    versions = workspace_versions()
+    missing, unverified = verify(tagged_workspace_names(versions), versions)
+    if unverified:
+        print(report_unverified(unverified), file=sys.stderr)
+        return 2
+    git = lambda *args: subprocess.check_output(["git", *args], text=True).strip()
+    groups: dict[str, list[dict[str, str]]] = {}
+    for name, version, reason in missing:
+        if reason != YANKED:
+            tag = f"{normalize(name)}-v{version}"
+            groups.setdefault(git("rev-list", "-n", "1", tag), []).append(
+                {"package_name": name, "version": version, "tag": tag}
+            )
+    # A published crate must match its tag's tree, so one run publishes one commit.
+    source = min(groups, key=lambda sha: int(git("rev-list", "--count", sha)), default="")
+    releases = groups.get(source, [])
+    Path(path).write_text(json.dumps({"source_sha": source, "releases": releases}))
+    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+        output.write(f"source_sha={source}\n")
+    print(f"{len(releases)} crate(s) to publish from {source or 'no commit'}; {max(len(groups) - 1, 0)} later commit(s) wait")
+    return 0
 
 
 def report_missing(problems: list[tuple[str, str, str]]) -> str:
@@ -307,6 +333,7 @@ def main(argv: list[str] | None = None) -> int:
         help="release-plz output written by release-plz.yml",
     )
     parser.add_argument("--artifacts", choices=["check", "record", "dispatch"])
+    parser.add_argument("--publish-plan", action="store_true", help="write tagged crates missing from crates.io")
     parser.add_argument("--plan")
     parser.add_argument("--tag")
     args = parser.parse_args(argv)
@@ -318,6 +345,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     try:
+        if args.publish_plan:
+            return publish_plan(args.release_json)
         versions = workspace_versions()
         if Path(args.release_json).is_file():
             names = release_names(args.release_json)
@@ -327,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
         if not names:
             print("No tagged workspace releases, nothing to verify")
             return 0
-    except (OSError, json.JSONDecodeError, ReleaseVerificationError) as error:
+    except (OSError, KeyError, json.JSONDecodeError, subprocess.CalledProcessError, ReleaseVerificationError) as error:
         print(f"RELEASE VERIFICATION INCOMPLETE: {error}", file=sys.stderr)
         return 2
 

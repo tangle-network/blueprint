@@ -86,7 +86,8 @@ For questions, open an issue or use Discord: <https://discord.com/invite/cv8EfJu
 
 [Release Plz](.github/workflows/release-plz.yml) owns version PRs, tags and
 batched crate publication. Merge the generated version PR through the repository
-gate. For recovery, dispatch that same workflow; do not publish crates by hand:
+gate. Every run publishes tagged crates missing from crates.io from the tag's commit,
+so recovery is dispatching that same workflow; do not publish crates by hand:
 
 ```bash
 gh-drew workflow run release-plz.yml --ref main

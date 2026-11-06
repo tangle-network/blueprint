@@ -16,6 +16,11 @@ on:
 env:
   RELEASE_PLZ_LOG: TRACE
 
+# Two merges minutes apart raced on the same tags; the later run waits instead.
+concurrency:
+  group: release-plz
+  cancel-in-progress: false
+
 jobs:
   check-release-enabled:
     name: Check if releases are enabled
@@ -83,25 +88,38 @@ jobs:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      - name: Save release output for batch publishing
-        if: steps.release-plz.outputs.releases_created == 'true'
-        env:
-          RELEASES_JSON: ${{ steps.release-plz.outputs.releases }}
-        run: printf '%s\n' "$RELEASES_JSON" > release-output.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Batch publish to crates.io (with rate limiting)
-        if: steps.release-plz.outputs.releases_created == 'true'
+      # release-plz skips an existing tag forever, so publication works from
+      # tags: this run's, and any an earlier run left off crates.io.
+      - name: Plan tagged crates missing from crates.io
+        id: publish-plan
         run: |
-          ./.github/scripts/batch-publish.sh release-output.json
+          git fetch --tags --force --quiet origin
+          python3 .github/scripts/verify_release_tags.py --publish-plan release-output.json
+
+      - name: Publish from the tagged commit
+        if: steps.publish-plan.outputs.source_sha != ''
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          SOURCE_SHA: ${{ steps.publish-plan.outputs.source_sha }}
+        run: |
+          git checkout --force "$SOURCE_SHA"
+          git checkout "$GITHUB_SHA" -- .github/scripts
+          cargo hakari disable
+          cargo hakari remove-deps -y
+          ./.github/scripts/batch-publish.sh release-output.json --verify-tags
 
-      - name: Verify every released crate is on crates.io
-        if: always() && !cancelled() && steps.release-plz.outputs.releases_created == 'true'
-        run: python3 .github/scripts/verify_release_tags.py release-output.json
+      - name: Verify every tagged crate is on crates.io
+        if: always() && !cancelled() && steps.publish-plan.outputs.source_sha != ''
+        run: |
+          git checkout --force "$GITHUB_SHA"
+          python3 .github/scripts/verify_release_tags.py release-output.json
 
       - name: Dispatch CLI artifacts and record the run
-        if: success() && steps.release-plz.outputs.releases_created == 'true'
+        if: success() && steps.publish-plan.outputs.source_sha != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/verify_release_tags.py --artifacts dispatch release-output.json

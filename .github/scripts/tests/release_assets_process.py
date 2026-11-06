@@ -135,5 +135,44 @@ sys.stdout.write(values[i])
                           "bad_checksum":"incomplete","unknown_github":"error","dispatch_receipt":99,"workflow_publication":"complete_after_upload"}))
 
 
+def stranded_publish_proof():
+    """Real Git tags, real cargo metadata and the real crates.io index."""
+    # Hermetic from host Git config, including global hooks; this repository is a throwaway.
+    git_env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    run = lambda *a, cwd: subprocess.run(a, cwd=cwd, env=git_env, check=True, capture_output=True, text=True).stdout.strip()
+    with tempfile.TemporaryDirectory(prefix="release-publish-plan-") as folder:
+        root = Path(folder)
+        crates = {"cargo-tangle": "0.5.0-alpha.28", "blueprint-core": "9.9.9-absent", "blueprint-sdk": "9.9.9-absent"}
+        (root / "Cargo.toml").write_text('[workspace]\nresolver="2"\nmembers=["%s"]\n' % '","'.join(crates))
+        for name, version in crates.items():
+            (root / name / "src").mkdir(parents=True)
+            (root / name / "Cargo.toml").write_text(f'[package]\nname="{name}"\nversion="{version}"\nedition="2021"\n')
+            (root / name / "src/lib.rs").write_text("")
+        run("git", "init", "-q", cwd=root)
+        commit = lambda message: (run("git", "add", ".", cwd=root), run("git", "-c", "user.name=proof", "-c", "user.email=proof@example.com", "commit", "-qm", message, cwd=root), run("git", "rev-parse", "HEAD", cwd=root))[2]
+        oldest = commit("release")
+        run("git", "tag", "cargo-tangle-v0.5.0-alpha.28", cwd=root)
+        run("git", "tag", "blueprint-core-v9.9.9-absent", cwd=root)
+        (root / "later").write_text("later")
+        run("git", "tag", "blueprint-sdk-v9.9.9-absent", commit("later release"), cwd=root)
+        (root / "tip").write_text("tip")
+        commit("main moved on")
+        output = root / "github-output"
+        env = {**os.environ, "GITHUB_OUTPUT": str(output)}
+        result = subprocess.run([sys.executable, str(SCRIPT), "--publish-plan", "plan.json"], cwd=root, env=env, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        plan = json.loads((root / "plan.json").read_text())
+        assert plan == {"source_sha": oldest, "releases": [{"package_name": "blueprint-core", "version": "9.9.9-absent", "tag": "blueprint-core-v9.9.9-absent"}]}, plan
+        assert output.read_text() == f"source_sha={oldest}\n"
+        assert "1 later commit(s) wait" in result.stdout
+        order = SCRIPT.parent / "crate-publish-plan.py"
+        verify_tags = [sys.executable, str(order), "plan.json", "--verify-tags"]
+        run("git", "checkout", "-q", oldest, cwd=root)
+        assert run(*verify_tags, cwd=root) == "blueprint-core\t9.9.9-absent"
+        run("git", "tag", "-f", "blueprint-core-v9.9.9-absent", "HEAD@{1}", cwd=root)
+        assert subprocess.run(verify_tags, cwd=root, capture_output=True).returncode == 1, "a moved tag must refuse"
+
+
 if __name__ == "__main__":
     proof()
+    stranded_publish_proof()
