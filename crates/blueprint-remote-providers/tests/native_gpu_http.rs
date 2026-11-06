@@ -647,3 +647,6 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
             .is_empty()
     );
 }
+
+#[path = "native_gpu_http/adversarial_review.rs"]
+mod adversarial_review;
