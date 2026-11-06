@@ -412,11 +412,11 @@ the manager rebuilds the state cleanly.
 
 > **Note:** Release archives include cloud commands; source installs need the `remote-providers` feature. See [Feature flags](#feature-flags).
 
-The cloud commands configure providers, quote live prices, and inspect, update and terminate deployments recorded in the deployment tracker. No CLI command allocates capacity, and `cargo tangle blueprint run` cannot enable the manager's remote deployment path.
+The cloud commands configure providers, quote live prices, and inspect and terminate deployments recorded in the deployment tracker. No CLI command allocates capacity, updates a running deployment or reads its logs, and `cargo tangle blueprint run` cannot enable the manager's remote deployment path.
 
 ### Configure Cloud Provider
 
-`configure` saves a region and default provider. Credentials come from the environment, and for AWS also from `~/.aws/credentials`. `configure` names the variables a provider needs; it never stores a credential.
+`configure` saves a region and default provider. Credentials come from the environment, and for AWS also from `~/.aws/credentials`. `configure` names the variables a provider needs; it never stores a credential. A token can also come from the Compute Engine metadata server for GCP, and from a managed identity or `az login` for Azure.
 
 ```bash
 # Configure AWS
@@ -453,7 +453,7 @@ cargo tangle cloud policy --gpu-providers gcp,aws --cost-providers vultr,do
 
 ### Monitor Cloud Deployments
 
-`status` and `terminate` read the tracker at `TANGLE_DEPLOYMENT_TRACKER_PATH`, by default `~/.tangle/remote_deployments`. `status` also asks the provider for its state, shown as `unknown` without credentials. `terminate` exits non-zero if any deployment is not confirmed terminated, and that deployment stays tracked.
+`status` and `terminate` read the tracker at `TANGLE_DEPLOYMENT_TRACKER_PATH`, by default `~/.tangle/remote_deployments`. Both reach each provider in the region its record names, and a provider that is missing a variable affects only its own deployments. `status` shows `unknown` when the provider cannot answer, and `status <id>` also says why. `terminate` exits non-zero if any deployment is not confirmed terminated, and that deployment stays tracked.
 
 ```bash
 # Check status of all deployments

@@ -3,9 +3,10 @@
 //! This module handles the configuration and authentication setup for various cloud providers.
 //! It provides interactive setup flows, credential management, and persistent configuration storage.
 
+use blueprint_remote_providers::security::auth;
 use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
-use dialoguer::{Input, Select, theme::ColorfulTheme};
+use dialoguer::{Select, theme::ColorfulTheme};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -75,9 +76,6 @@ pub struct ProviderSettings {
     /// GCP project ID (only used for Google Cloud)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
-    /// Internal flag indicating if provider is fully configured
-    #[serde(skip)]
-    pub configured: bool,
 }
 
 impl CloudConfig {
@@ -171,7 +169,7 @@ pub async fn configure(
         prompt_region(provider)?
     };
 
-    if credentials_present(provider) {
+    if credentials_present(provider).await {
         println!("✓ Found {provider} credentials");
     } else {
         println!(
@@ -181,18 +179,12 @@ pub async fn configure(
         );
     }
 
-    // Save settings
-    let mut settings = ProviderSettings {
+    let settings = ProviderSettings {
         region,
-        project_id: None,
-        configured: true,
+        project_id: std::env::var("GCP_PROJECT_ID")
+            .ok()
+            .filter(|_| provider == CloudProvider::GCP),
     };
-
-    // GCP needs project ID
-    if provider == CloudProvider::GCP {
-        settings.project_id = Some(Input::new().with_prompt("GCP Project ID").interact()?);
-    }
-
     config.providers.insert(provider, settings);
 
     if set_default || config.default_provider.is_none() {
@@ -213,13 +205,8 @@ pub async fn configure(
 fn credential_variables(provider: CloudProvider) -> &'static [&'static str] {
     match provider {
         CloudProvider::AWS => &["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
-        CloudProvider::GCP => &["GCP_PROJECT_ID", "GOOGLE_APPLICATION_CREDENTIALS"],
-        CloudProvider::Azure => &[
-            "AZURE_SUBSCRIPTION_ID",
-            "AZURE_CLIENT_ID",
-            "AZURE_CLIENT_SECRET",
-            "AZURE_TENANT_ID",
-        ],
+        CloudProvider::GCP => &["GCP_PROJECT_ID", "GCP_ACCESS_TOKEN"],
+        CloudProvider::Azure => &["AZURE_SUBSCRIPTION_ID", "AZURE_ACCESS_TOKEN"],
         CloudProvider::DigitalOcean => &["DIGITALOCEAN_TOKEN"],
         CloudProvider::Vultr => &["VULTR_API_KEY"],
         CloudProvider::Hetzner => &["HETZNER_API_TOKEN"],
@@ -227,25 +214,28 @@ fn credential_variables(provider: CloudProvider) -> &'static [&'static str] {
         CloudProvider::LambdaLabs => &["LAMBDA_LABS_API_KEY"],
         CloudProvider::PrimeIntellect => &["PRIME_INTELLECT_API_KEY"],
         CloudProvider::VastAi => &["VAST_AI_API_KEY"],
-        CloudProvider::Crusoe => &["CRUSOE_API_KEY", "CRUSOE_API_SECRET"],
+        CloudProvider::Crusoe => &["CRUSOE_API_KEY", "CRUSOE_API_SECRET", "CRUSOE_PROJECT_ID"],
     }
 }
 
 /// Whether a provider's credentials are available to this process.
-pub(super) fn credentials_present(provider: CloudProvider) -> bool {
-    let exported = credential_variables(provider)
-        .iter()
-        .all(|name| std::env::var_os(name).is_some());
+///
+/// GCP and Azure ask the token lookup their adapters use, because a metadata server or
+/// `az login` can stand in for an exported token.
+pub(super) async fn credentials_present(provider: CloudProvider) -> bool {
+    let exported = |names: &[&str]| names.iter().all(|name| std::env::var_os(name).is_some());
     match provider {
         CloudProvider::AWS => {
-            exported || dirs::home_dir().is_some_and(|home| home.join(".aws/credentials").exists())
+            exported(credential_variables(provider))
+                || dirs::home_dir().is_some_and(|home| home.join(".aws/credentials").exists())
         }
         CloudProvider::GCP => {
-            exported
-                && std::env::var_os("GOOGLE_APPLICATION_CREDENTIALS")
-                    .is_some_and(|path| PathBuf::from(path).exists())
+            exported(&["GCP_PROJECT_ID"]) && auth::gcp_access_token().await.is_ok()
         }
-        _ => exported,
+        CloudProvider::Azure => {
+            exported(&["AZURE_SUBSCRIPTION_ID"]) && auth::azure_access_token().await.is_ok()
+        }
+        _ => exported(credential_variables(provider)),
     }
 }
 

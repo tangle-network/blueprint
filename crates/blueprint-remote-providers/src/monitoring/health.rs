@@ -128,7 +128,11 @@ impl HealthMonitor {
         let provider = deployment.deployment_type.as_provider();
 
         // Check instance status
-        let instance_status = match self.provisioner.get_status(provider, &deployment.id).await {
+        let instance_status = match self
+            .provisioner
+            .get_status_in(provider, &deployment.id, deployment.region.as_deref())
+            .await
+        {
             Ok(status) => status,
             Err(e) => {
                 return HealthCheckResult {
@@ -173,7 +177,11 @@ impl HealthMonitor {
         // First, try to terminate the existing instance
         if let Err(e) = self
             .provisioner
-            .terminate(provider.clone(), &deployment.id)
+            .terminate_in(
+                provider.clone(),
+                &deployment.id,
+                deployment.region.as_deref(),
+            )
             .await
         {
             warn!("Failed to terminate unhealthy instance: {}", e);

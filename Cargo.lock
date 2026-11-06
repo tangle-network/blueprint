@@ -4276,7 +4276,6 @@ dependencies = [
  "clap",
  "clap-cargo",
  "color-eyre",
- "colored",
  "dialoguer 0.11.0",
  "dirs",
  "dotenv",

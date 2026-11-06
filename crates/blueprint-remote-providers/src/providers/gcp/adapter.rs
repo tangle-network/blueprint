@@ -48,13 +48,27 @@ impl GcpAdapter {
         })
     }
 
+    /// The zone a caller names, else the one this process provisioned the instance in.
+    async fn zone_of(&self, instance_id: &str, zone: Option<&str>) -> String {
+        if let Some(zone) = zone {
+            return zone.to_owned();
+        }
+        self.zone_map
+            .read()
+            .await
+            .get(instance_id)
+            .cloned()
+            .unwrap_or_else(|| format!("{}-a", self.default_region))
+    }
+
     /// Create secure firewall rules for blueprint deployment
     async fn ensure_firewall_rules(&self) -> Result<()> {
         let access_token = auth::gcp_access_token().await?;
 
         let client = crate::create_provider_client(30)?;
         let base_url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/global/firewalls",
+            "{}projects/{}/global/firewalls",
+            super::compute_api(),
             self.project_id
         );
 
@@ -304,14 +318,15 @@ impl CloudProviderAdapter for GcpAdapter {
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        // Retrieve the zone from our tracking map, falling back to default region
-        let zone = self
-            .zone_map
-            .read()
-            .await
-            .get(instance_id)
-            .cloned()
-            .unwrap_or_else(|| format!("{}-a", self.default_region));
+        self.terminate_instance_in(instance_id, None).await
+    }
+
+    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
+        self.get_instance_status_in(instance_id, None).await
+    }
+
+    async fn terminate_instance_in(&self, instance_id: &str, zone: Option<&str>) -> Result<()> {
+        let zone = self.zone_of(instance_id, zone).await;
 
         self.provisioner
             .lock()
@@ -325,19 +340,19 @@ impl CloudProviderAdapter for GcpAdapter {
         Ok(())
     }
 
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        // Retrieve the zone from our tracking map, falling back to default region
-        let zone = self
-            .zone_map
-            .read()
-            .await
-            .get(instance_id)
-            .cloned()
-            .unwrap_or_else(|| format!("{}-a", self.default_region));
+    async fn get_instance_status_in(
+        &self,
+        instance_id: &str,
+        zone: Option<&str>,
+    ) -> Result<InstanceStatus> {
+        let zone = self.zone_of(instance_id, zone).await;
 
         let url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
-            self.project_id, zone, instance_id
+            "{}projects/{}/zones/{}/instances/{}",
+            super::compute_api(),
+            self.project_id,
+            zone,
+            instance_id
         );
 
         let access_token = auth::gcp_access_token().await?;

@@ -17,22 +17,34 @@ use std::sync::{Arc, Mutex};
 const REFUSAL: &str = "<Response><Errors><Error><Code>UnauthorizedOperation</Code>\
     <Message>refused</Message></Error></Errors><RequestID>r</RequestID></Response>";
 
-/// An operator's machine: an empty HOME, optionally with tracked AWS deployments.
+/// An operator's machine: an empty HOME, optionally with tracked deployments.
 struct Machine(tempfile::TempDir);
 
 impl Machine {
     fn tracking(instances: &[&str]) -> Self {
+        let records: Vec<_> = instances
+            .iter()
+            .map(|instance| (*instance, CloudProvider::AWS, "us-east-1"))
+            .collect();
+        Self::tracking_in(&records)
+    }
+
+    fn tracking_in(records: &[(&str, CloudProvider, &str)]) -> Self {
         let machine = Self(tempfile::tempdir().unwrap());
         let mut state = HashMap::new();
-        for instance in instances {
+        for (instance, provider, region) in records {
             let mut record = DeploymentRecord::new(
                 format!("blueprint-{instance}"),
-                DeploymentType::AwsEc2,
+                match provider {
+                    CloudProvider::GCP => DeploymentType::GcpGce,
+                    CloudProvider::Crusoe => DeploymentType::CrusoeVm,
+                    _ => DeploymentType::AwsEc2,
+                },
                 ResourceSpec::recommended(),
                 None,
             );
             record.id = (*instance).to_owned();
-            record.set_cloud_info(CloudProvider::AWS, "us-east-1".to_owned());
+            record.set_cloud_info(provider.clone(), (*region).to_owned());
             record.add_resource("instance_id".to_owned(), (*instance).to_owned());
             record.add_resource("public_ip".to_owned(), "203.0.113.9".to_owned());
             state.insert(record.blueprint_id.clone(), record);
@@ -63,6 +75,11 @@ impl Machine {
     }
 
     fn cli(&self, args: &[&str], aws: Option<&FakeAws>) -> Output {
+        self.cli_with(args, aws, &[])
+    }
+
+    /// No test exports `AWS_REGION`: each record names its own region.
+    fn cli_with(&self, args: &[&str], aws: Option<&FakeAws>, env: &[(&str, &str)]) -> Output {
         let binary = std::env::var_os("CARGO_TANGLE_TEST_BIN")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_cargo-tangle").into());
         let mut command = Command::new(binary);
@@ -79,10 +96,9 @@ impl Machine {
                 .env("AWS_ENDPOINT_URL", &aws.endpoint)
                 .env("AWS_ACCESS_KEY_ID", "test")
                 .env("AWS_SECRET_ACCESS_KEY", "test")
-                .env("AWS_REGION", "us-east-1")
                 .env("AWS_EC2_METADATA_DISABLED", "true");
         }
-        command.output().unwrap()
+        command.envs(env.iter().copied()).output().unwrap()
     }
 }
 
@@ -90,23 +106,34 @@ impl Machine {
 struct FakeAws {
     endpoint: String,
     terminated: Arc<Mutex<Vec<String>>>,
+    regions: Arc<Mutex<Vec<String>>>,
 }
 
 impl FakeAws {
     fn refusing(refused: &'static str) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let endpoint = format!("http://{}", listener.local_addr().unwrap());
         let terminated = Arc::new(Mutex::new(Vec::new()));
-        let recorded = terminated.clone();
-        std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                answer(stream.unwrap(), refused, &recorded);
+        let regions = Arc::new(Mutex::new(Vec::new()));
+        let (recorded, signed) = (terminated.clone(), regions.clone());
+        let endpoint = serve(move |request| {
+            if let Some((_, scope)) = request.split_once("Credential=") {
+                let region = scope.split('/').nth(2).unwrap_or_default();
+                signed.lock().unwrap().push(region.to_owned());
             }
+            answer(request, refused, &recorded)
         });
         Self {
             endpoint,
             terminated,
+            regions,
         }
+    }
+
+    /// The regions requests were signed for, which is the region they were sent to.
+    fn regions(&self) -> Vec<String> {
+        let mut regions = self.regions.lock().unwrap().clone();
+        regions.sort();
+        regions.dedup();
+        regions
     }
 
     fn terminated(&self) -> Vec<String> {
@@ -116,14 +143,71 @@ impl FakeAws {
     }
 }
 
-fn answer(mut stream: TcpStream, refused: &str, terminated: &Mutex<Vec<String>>) {
-    let request = read_request(&mut stream);
+/// Compute Engine on a local port: one instance at one path, which a DELETE removes.
+struct FakeGcp {
+    endpoint: String,
+    deleted: Arc<Mutex<bool>>,
+}
+
+impl FakeGcp {
+    fn serving(instance: &'static str) -> Self {
+        let deleted = Arc::new(Mutex::new(false));
+        let removed = deleted.clone();
+        let endpoint = serve(move |request| {
+            let line = request.lines().next().unwrap_or_default();
+            let mut removed = removed.lock().unwrap();
+            if !request
+                .to_lowercase()
+                .contains("authorization: bearer token")
+            {
+                ("401 Unauthorized", "{}".to_owned())
+            } else if *removed || !line.contains(instance) {
+                ("404 Not Found", "{}".to_owned())
+            } else if line.starts_with("DELETE") {
+                *removed = true;
+                ("200 OK", "{}".to_owned())
+            } else {
+                ("200 OK", r#"{"status":"RUNNING"}"#.to_owned())
+            }
+        });
+        Self { endpoint, deleted }
+    }
+
+    fn env(&self) -> [(&str, &str); 3] {
+        [
+            ("GCP_PROJECT_ID", "p"),
+            ("GCP_ACCESS_TOKEN", "token"),
+            ("CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE", &self.endpoint),
+        ]
+    }
+}
+
+/// Answer each request on a local port and return the port's address.
+fn serve(respond: impl Fn(&str) -> (&'static str, String) + Send + 'static) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}/", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let mut stream = stream.unwrap();
+            let (status, body) = respond(&read_request(&mut stream));
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: text/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+    endpoint
+}
+
+fn answer(request: &str, refused: &str, terminated: &Mutex<Vec<String>>) -> (&'static str, String) {
     let instance = request
         .split('&')
         .find_map(|pair| pair.strip_prefix("InstanceId.1="))
         .map(|value| value.trim().to_owned())
         .unwrap_or_default();
-    let (status, body) = if request.to_lowercase().contains("x-amz-target") {
+    if request.to_lowercase().contains("x-amz-target") {
         (
             "403 Forbidden",
             r#"{"__type":"AccessDeniedException"}"#.to_owned(),
@@ -152,13 +236,7 @@ fn answer(mut stream: TcpStream, refused: &str, terminated: &Mutex<Vec<String>>)
                 "<DescribeInstancesResponse><requestId>r</requestId><reservationSet><item><instancesSet><item><instanceId>{instance}</instanceId><instanceState><name>{state}</name></instanceState></item></instancesSet></item></reservationSet></DescribeInstancesResponse>"
             ),
         )
-    };
-    write!(
-        stream,
-        "HTTP/1.1 {status}\r\nContent-Type: text/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    )
-    .unwrap();
+    }
 }
 
 fn read_request(stream: &mut TcpStream) -> String {
@@ -326,5 +404,116 @@ fn aws_pricing_reaches_the_provider() {
         stderr(&output).contains("Provider rejected its pricing credential"),
         "{}",
         stderr(&output)
+    );
+}
+
+#[test]
+fn each_record_reaches_the_provider_in_its_own_region() {
+    let machine = Machine::tracking_in(&[
+        ("i-east", CloudProvider::AWS, "us-east-1"),
+        ("i-west", CloudProvider::AWS, "us-west-2"),
+    ]);
+    let aws = FakeAws::refusing("");
+    let configured = machine.cli(&["configure", "aws", "--region", "eu-west-1"], Some(&aws));
+    assert!(configured.status.success(), "{}", stderr(&configured));
+    let output = machine.cli(&["status", "i-west"], Some(&aws));
+    assert!(
+        stdout(&output).contains("Provider state:  running"),
+        "{}",
+        stdout(&output)
+    );
+    assert_eq!(aws.regions(), ["us-west-2"]);
+    let output = machine.cli(&["terminate", "--all", "--yes"], Some(&aws));
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(aws.terminated(), ["i-east", "i-west"]);
+    assert_eq!(aws.regions(), ["us-east-1", "us-west-2"]);
+}
+
+#[test]
+fn a_provider_that_cannot_start_fails_only_its_own_deployments() {
+    let machine = Machine::tracking_in(&[
+        ("i-aws", CloudProvider::AWS, "us-east-1"),
+        ("i-crusoe", CloudProvider::Crusoe, "us-east1"),
+        ("i-gcp", CloudProvider::GCP, "us-central1-a"),
+    ]);
+    let aws = FakeAws::refusing("");
+    let env = [
+        ("GOOGLE_APPLICATION_CREDENTIALS", "/no/such/file"),
+        ("GCP_PROJECT_ID", "p"),
+        ("CRUSOE_API_KEY", "k"),
+        ("CRUSOE_API_SECRET", "s"),
+    ];
+    let running = machine.cli_with(&["status", "i-aws"], Some(&aws), &env);
+    assert!(
+        stdout(&running).contains("Provider state:  running"),
+        "{}",
+        stdout(&running)
+    );
+    let unknown = machine.cli_with(&["status", "i-crusoe"], Some(&aws), &env);
+    assert!(unknown.status.success(), "{}", stderr(&unknown));
+    assert!(
+        stdout(&unknown).contains("unknown (") && stdout(&unknown).contains("CRUSOE_PROJECT_ID"),
+        "{}",
+        stdout(&unknown)
+    );
+    let output = machine.cli_with(&["terminate", "--all", "--yes"], Some(&aws), &env);
+    assert!(!output.status.success(), "{}", stdout(&output));
+    assert_eq!(aws.terminated(), ["i-aws"]);
+    assert_eq!(machine.tracked(), ["i-crusoe", "i-gcp"]);
+    for reason in ["CRUSOE_PROJECT_ID", "GCP_ACCESS_TOKEN"] {
+        assert!(
+            stderr(&output).contains(reason),
+            "{reason}: {}",
+            stderr(&output)
+        );
+    }
+}
+
+#[test]
+fn gcp_answers_and_terminates_in_the_records_zone() {
+    let machine = Machine::tracking_in(&[("i-gcp", CloudProvider::GCP, "europe-west1-b")]);
+    let gcp = FakeGcp::serving("/projects/p/zones/europe-west1-b/instances/i-gcp ");
+    let output = machine.cli_with(&["status", "i-gcp"], None, &gcp.env());
+    assert!(
+        stdout(&output).contains("Provider state:  running"),
+        "{}",
+        stdout(&output)
+    );
+    let output = machine.cli_with(&["terminate", "i-gcp", "--yes"], None, &gcp.env());
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(*gcp.deleted.lock().unwrap());
+    assert!(machine.tracked().is_empty());
+}
+
+#[test]
+fn configure_reads_the_environment_and_names_what_is_missing() {
+    let machine = Machine::tracking(&[]);
+    let env = [
+        ("GCP_PROJECT_ID", "p-from-env"),
+        ("GCP_ACCESS_TOKEN", "token"),
+        ("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8"),
+        ("BLUEPRINT_ALLOWED_QOS_CIDRS", "10.0.0.0/8"),
+    ];
+    let output = machine.cli_with(&["configure", "gcp", "--region", "us-central1"], None, &env);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("Found Google Cloud credentials"),
+        "{}",
+        stdout(&output)
+    );
+    assert!(stdout(&machine.cli(&["list"], None)).contains("p-from-env"));
+    let output = machine.cli_with(&["preflight", "--provider", "gcp"], None, &env);
+    assert!(output.status.success(), "{}", stdout(&output));
+
+    let output = machine.cli_with(
+        &["configure", "crusoe", "--region", "us-east1"],
+        None,
+        &[("CRUSOE_API_KEY", "k"), ("CRUSOE_API_SECRET", "s")],
+    );
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("CRUSOE_PROJECT_ID"),
+        "{}",
+        stdout(&output)
     );
 }

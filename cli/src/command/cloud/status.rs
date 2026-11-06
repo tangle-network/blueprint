@@ -1,7 +1,7 @@
 //! Cloud deployment status and termination, read from the deployment tracker and the provider.
 
 use super::open_tracker;
-use blueprint_remote_providers::{CloudProvisioner, deployment::DeploymentRecord};
+use blueprint_remote_providers::{CloudProvider, CloudProvisioner, deployment::DeploymentRecord};
 use chrono::Utc;
 use color_eyre::{
     Result,
@@ -28,13 +28,13 @@ pub async fn show_status(service_id: Option<String>, watch: bool) -> Result<()> 
 async fn display_status(service_id: Option<&str>) -> Result<()> {
     let mut records = open_tracker().await?.list_all().await?;
     records.sort_by(|left, right| left.id.cmp(&right.id));
-    // The tracker needs no credentials; only the provider's own answer does.
-    let provisioner = CloudProvisioner::new().await.ok();
+    let provisioner = CloudProvisioner::new().await?;
     if let Some(id) = service_id {
         let record = find(records, id)?;
+        let state = provider_state(&provisioner, &record).await;
         print_details(
             &record,
-            &provider_state(provisioner.as_ref(), &record).await,
+            &state.unwrap_or_else(|error| format!("unknown ({error:#})")),
         );
         return Ok(());
     }
@@ -45,7 +45,7 @@ async fn display_status(service_id: Option<&str>) -> Result<()> {
     let states = join_all(
         records
             .iter()
-            .map(|record| provider_state(provisioner.as_ref(), record)),
+            .map(|record| provider_state(&provisioner, record)),
     )
     .await;
     println!(
@@ -59,7 +59,7 @@ async fn display_status(service_id: Option<&str>) -> Result<()> {
             provider_name(record),
             record.region.as_deref().unwrap_or("unknown"),
             tracked_state(record),
-            state,
+            state.unwrap_or_else(|_| "unknown".to_owned()),
             public_ip(record),
             uptime(record),
             ttl(record),
@@ -117,9 +117,7 @@ pub async fn terminate(service_id: Option<String>, yes: bool) -> Result<()> {
         println!("Termination cancelled.");
         return Ok(());
     }
-    let provisioner = CloudProvisioner::new()
-        .await
-        .wrap_err("Failed to initialize the cloud provisioner; nothing was terminated")?;
+    let provisioner = CloudProvisioner::new().await?;
     let outcomes = join_all(
         records
             .iter()
@@ -155,12 +153,19 @@ async fn terminate_instance(
     provisioner: &CloudProvisioner,
     record: &DeploymentRecord,
 ) -> Result<()> {
+    let (provider, instance) = target(record)?;
+    Ok(provisioner
+        .terminate_in(provider, instance, record.region.as_deref())
+        .await?)
+}
+
+fn target(record: &DeploymentRecord) -> Result<(CloudProvider, &str)> {
     let provider = record
         .provider
         .clone()
         .ok_or_else(|| eyre!("its record names no cloud provider"))?;
     let instance = instance_id(record).ok_or_else(|| eyre!("its record names no instance"))?;
-    Ok(provisioner.terminate(provider, instance).await?)
+    Ok((provider, instance))
 }
 
 fn find(records: Vec<DeploymentRecord>, id: &str) -> Result<DeploymentRecord> {
@@ -170,22 +175,16 @@ fn find(records: Vec<DeploymentRecord>, id: &str) -> Result<DeploymentRecord> {
         .ok_or_else(|| eyre!("Deployment {id} is not in the deployment tracker"))
 }
 
+/// The provider's answer for a record, or why it could not give one.
 async fn provider_state(
-    provisioner: Option<&CloudProvisioner>,
+    provisioner: &CloudProvisioner,
     record: &DeploymentRecord,
-) -> String {
-    let (Some(provisioner), Some(provider), Some(instance)) =
-        (provisioner, record.provider.clone(), instance_id(record))
-    else {
-        return "unknown".to_owned();
-    };
-    provisioner
-        .get_status(provider, instance)
-        .await
-        .map_or_else(
-            |_| "unknown".to_owned(),
-            |state| format!("{state:?}").to_lowercase(),
-        )
+) -> Result<String> {
+    let (provider, instance) = target(record)?;
+    let state = provisioner
+        .get_status_in(provider, instance, record.region.as_deref())
+        .await?;
+    Ok(format!("{state:?}").to_lowercase())
 }
 
 fn instance_id(record: &DeploymentRecord) -> Option<&str> {

@@ -36,7 +36,7 @@ pub async fn run(
 
     for selected in &providers {
         let configured = config.providers.contains_key(selected);
-        let credentials_ok = credentials_present(*selected);
+        let credentials_ok = credentials_present(*selected).await;
         let supports_tee = provider_supports_tee(*selected);
         let tee_ok = !tee_required || supports_tee;
         let gcp_cidrs_ok = if *selected == CloudProvider::GCP {

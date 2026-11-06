@@ -47,18 +47,9 @@ pub async fn estimate(opts: EstimateOptions) -> Result<()> {
         !opts.spot,
         "No live spot quote is available for this estimate"
     );
-    #[cfg(feature = "remote-providers")]
-    {
-        estimate_live(opts, hours).await
-    }
-    #[cfg(not(feature = "remote-providers"))]
-    {
-        let _ = (opts, hours);
-        Err(eyre!("Enable remote-providers for live VM pricing"))
-    }
+    estimate_live(opts, hours).await
 }
 
-#[cfg(feature = "remote-providers")]
 async fn estimate_live(opts: EstimateOptions, hours: f64) -> Result<()> {
     use super::config::CloudConfig;
     use blueprint_remote_providers::{
@@ -132,7 +123,6 @@ async fn estimate_live(opts: EstimateOptions, hours: f64) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "remote-providers")]
 fn remote_provider(provider: &CloudProvider) -> blueprint_remote_providers::CloudProvider {
     use blueprint_remote_providers::CloudProvider as Native;
     match provider {

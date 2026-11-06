@@ -34,169 +34,108 @@ use blueprint_std::collections::HashMap;
 /// Multi-cloud provisioner that handles deployments across all supported providers
 pub struct CloudProvisioner {
     providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
+    /// Why each provider the environment names has no adapter.
+    init_errors: HashMap<CloudProvider, String>,
     retry_policy: RetryPolicy,
 }
 
 impl CloudProvisioner {
+    /// Build an adapter for every provider the environment names.
+    ///
+    /// A provider that cannot start fails only its own work: [`Self::get_adapter`] reports why
+    /// when that provider is used, so it never stops another provider's deployments.
     pub async fn new() -> Result<Self> {
-        let mut providers = HashMap::new();
+        let mut provisioner = Self {
+            providers: HashMap::new(),
+            init_errors: HashMap::new(),
+            retry_policy: RetryPolicy::default(),
+        };
+        let present = |name: &str| std::env::var_os(name).is_some();
 
-        // Initialize provider adapters based on available credentials
         #[cfg(feature = "aws")]
         if aws_credentials_available() {
-            providers.insert(
-                CloudProvider::AWS,
-                Box::new(AwsAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+            provisioner.add(CloudProvider::AWS, AwsAdapter::new().await);
         }
-
-        // GCP uses REST API via reqwest, no extra dependencies needed
-        if std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
-            providers.insert(
-                CloudProvider::GCP,
-                Box::new(GcpAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("GCP_PROJECT_ID") {
+            provisioner.add(CloudProvider::GCP, GcpAdapter::new().await);
         }
-
-        // Azure adapter
-        if std::env::var("AZURE_SUBSCRIPTION_ID").is_ok() {
-            providers.insert(
-                CloudProvider::Azure,
-                Box::new(AzureAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("AZURE_SUBSCRIPTION_ID") {
+            provisioner.add(CloudProvider::Azure, AzureAdapter::new().await);
         }
-
-        if std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
-            providers.insert(
+        if present("DIGITALOCEAN_TOKEN") {
+            provisioner.add(
                 CloudProvider::DigitalOcean,
-                Box::new(DigitalOceanAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+                DigitalOceanAdapter::new().await,
             );
         }
-
-        // Vultr adapter
-        if std::env::var("VULTR_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Vultr,
-                Box::new(VultrAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("VULTR_API_KEY") {
+            provisioner.add(CloudProvider::Vultr, VultrAdapter::new().await);
         }
-
-        // Lambda Labs adapter
-        if std::env::var("LAMBDA_LABS_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::LambdaLabs,
-                Box::new(LambdaLabsAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("LAMBDA_LABS_API_KEY") {
+            provisioner.add(CloudProvider::LambdaLabs, LambdaLabsAdapter::new().await);
         }
-
-        // RunPod adapter
-        if std::env::var("RUNPOD_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::RunPod,
-                Box::new(RunPodAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("RUNPOD_API_KEY") {
+            provisioner.add(CloudProvider::RunPod, RunPodAdapter::new().await);
         }
-
-        // Vast.ai adapter
-        if std::env::var("VAST_AI_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::VastAi,
-                Box::new(VastAiAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("VAST_AI_API_KEY") {
+            provisioner.add(CloudProvider::VastAi, VastAiAdapter::new().await);
         }
-
-        // CoreWeave adapter
-        if std::env::var("COREWEAVE_TOKEN").is_ok() {
-            providers.insert(
-                CloudProvider::CoreWeave,
-                Box::new(CoreWeaveAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("COREWEAVE_TOKEN") {
+            provisioner.add(CloudProvider::CoreWeave, CoreWeaveAdapter::new().await);
         }
-
-        // Paperspace adapter
-        if std::env::var("PAPERSPACE_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Paperspace,
-                Box::new(PaperspaceAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("PAPERSPACE_API_KEY") {
+            provisioner.add(CloudProvider::Paperspace, PaperspaceAdapter::new().await);
         }
-
-        // Fluidstack adapter
-        if std::env::var("FLUIDSTACK_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Fluidstack,
-                Box::new(FluidstackAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("FLUIDSTACK_API_KEY") {
+            provisioner.add(CloudProvider::Fluidstack, FluidstackAdapter::new().await);
         }
-
-        // TensorDock adapter
-        if std::env::var("TENSORDOCK_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::TensorDock,
-                Box::new(TensorDockAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("TENSORDOCK_API_KEY") {
+            provisioner.add(CloudProvider::TensorDock, TensorDockAdapter::new().await);
         }
-
-        // Akash adapter
-        if std::env::var("AKASH_RPC_URL").is_ok() {
-            providers.insert(
-                CloudProvider::Akash,
-                Box::new(AkashAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("AKASH_RPC_URL") {
+            provisioner.add(CloudProvider::Akash, AkashAdapter::new().await);
         }
-
-        // io.net adapter
-        if std::env::var("IO_NET_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::IoNet,
-                Box::new(IoNetAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("IO_NET_API_KEY") {
+            provisioner.add(CloudProvider::IoNet, IoNetAdapter::new().await);
         }
-
-        // Prime Intellect adapter
-        if std::env::var("PRIME_INTELLECT_API_KEY").is_ok() {
-            providers.insert(
+        if present("PRIME_INTELLECT_API_KEY") {
+            provisioner.add(
                 CloudProvider::PrimeIntellect,
-                Box::new(PrimeIntellectAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+                PrimeIntellectAdapter::new().await,
             );
         }
-
-        // Render adapter
-        if std::env::var("RENDER_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Render,
-                Box::new(RenderAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("RENDER_API_KEY") {
+            provisioner.add(CloudProvider::Render, RenderAdapter::new().await);
         }
-
-        // Bittensor/Lium adapter
-        if std::env::var("LIUM_API_KEY").is_ok() {
-            providers.insert(
+        if present("LIUM_API_KEY") {
+            provisioner.add(
                 CloudProvider::BittensorLium,
-                Box::new(BittensorLiumAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+                BittensorLiumAdapter::new().await,
             );
         }
-
-        // Hetzner adapter
-        if std::env::var("HETZNER_API_TOKEN").is_ok() {
-            providers.insert(
-                CloudProvider::Hetzner,
-                Box::new(HetznerAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
+        if present("HETZNER_API_TOKEN") {
+            provisioner.add(CloudProvider::Hetzner, HetznerAdapter::new().await);
+        }
+        if present("CRUSOE_API_KEY") && present("CRUSOE_API_SECRET") {
+            provisioner.add(CloudProvider::Crusoe, CrusoeAdapter::new().await);
         }
 
-        // Crusoe adapter
-        if std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok() {
-            providers.insert(
-                CloudProvider::Crusoe,
-                Box::new(CrusoeAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
+        Ok(provisioner)
+    }
 
-        Ok(Self {
-            providers,
-            retry_policy: RetryPolicy::default(),
-        })
+    fn add(
+        &mut self,
+        provider: CloudProvider,
+        adapter: Result<impl CloudProviderAdapter + 'static>,
+    ) {
+        match adapter {
+            Ok(adapter) => {
+                self.providers.insert(provider, Box::new(adapter));
+            }
+            Err(error) => {
+                self.init_errors.insert(provider, error.to_string());
+            }
+        }
     }
 
     #[cfg(test)]
@@ -205,6 +144,7 @@ impl CloudProvisioner {
     ) -> Self {
         Self {
             providers,
+            init_errors: HashMap::new(),
             retry_policy: RetryPolicy::default(),
         }
     }
@@ -214,6 +154,11 @@ impl CloudProvisioner {
         &self,
         provider: &CloudProvider,
     ) -> Result<&(dyn CloudProviderAdapter + '_)> {
+        if let Some(reason) = self.init_errors.get(provider) {
+            return Err(Error::ConfigurationError(format!(
+                "{provider:?} is unavailable: {reason}"
+            )));
+        }
         self.providers
             .get(provider)
             .map(Box::as_ref)
@@ -239,10 +184,7 @@ impl CloudProvisioner {
         region: &str,
         require_tee: bool,
     ) -> Result<ProvisionedInstance> {
-        let adapter = self
-            .providers
-            .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
+        let adapter = self.get_adapter(&provider)?;
 
         if require_tee
             && !matches!(
@@ -299,17 +241,24 @@ impl CloudProvisioner {
 
     /// Terminate instance with cleanup verification
     pub async fn terminate(&self, provider: CloudProvider, instance_id: &str) -> Result<()> {
-        let adapter = self
-            .providers
-            .get(&provider)
-            .ok_or(Error::ProviderNotConfigured(provider))?;
+        self.terminate_in(provider, instance_id, None).await
+    }
 
-        adapter.terminate_instance(instance_id).await?;
+    /// Terminate an instance in the region its deployment record names, with cleanup verification
+    pub async fn terminate_in(
+        &self,
+        provider: CloudProvider,
+        instance_id: &str,
+        region: Option<&str>,
+    ) -> Result<()> {
+        let adapter = self.get_adapter(&provider)?;
+
+        adapter.terminate_instance_in(instance_id, region).await?;
 
         // Verify termination
         let mut retries = 0;
         while retries < 10 {
-            match adapter.get_instance_status(instance_id).await {
+            match adapter.get_instance_status_in(instance_id, region).await {
                 Ok(InstanceStatus::Terminated) => {
                     info!("Instance {} successfully terminated", instance_id);
                     return Ok(());
@@ -351,12 +300,19 @@ impl CloudProvisioner {
         provider: CloudProvider,
         instance_id: &str,
     ) -> Result<InstanceStatus> {
-        let adapter = self
-            .providers
-            .get(&provider)
-            .ok_or(Error::ProviderNotConfigured(provider))?;
+        self.get_status_in(provider, instance_id, None).await
+    }
 
-        adapter.get_instance_status(instance_id).await
+    /// Get an instance's status in the region its deployment record names
+    pub async fn get_status_in(
+        &self,
+        provider: CloudProvider,
+        instance_id: &str,
+        region: Option<&str>,
+    ) -> Result<InstanceStatus> {
+        self.get_adapter(&provider)?
+            .get_instance_status_in(instance_id, region)
+            .await
     }
 
     /// Deploy a Blueprint to a provisioned instance using the appropriate adapter
@@ -368,10 +324,7 @@ impl CloudProvisioner {
         resource_spec: &ResourceSpec,
         env_vars: std::collections::HashMap<String, String>,
     ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
-        let adapter = self
-            .providers
-            .get(provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
+        let adapter = self.get_adapter(provider)?;
 
         adapter
             .deploy_blueprint(instance, blueprint_image, resource_spec, env_vars)
@@ -458,10 +411,7 @@ impl CloudProvisioner {
         resource_spec: &ResourceSpec,
         env_vars: std::collections::HashMap<String, String>,
     ) -> Result<crate::infra::traits::BlueprintDeploymentResult> {
-        let adapter = self
-            .providers
-            .get(provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
+        let adapter = self.get_adapter(provider)?;
 
         adapter
             .deploy_blueprint_with_target(target, blueprint_image, resource_spec, env_vars)
@@ -496,10 +446,7 @@ impl CloudProvisioner {
         provider: &CloudProvider,
         instance_id: &str,
     ) -> Result<ProvisionedInstance> {
-        let adapter = self
-            .providers
-            .get(provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
+        let adapter = self.get_adapter(provider)?;
 
         adapter.get_instance_details(instance_id).await
     }

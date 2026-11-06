@@ -21,8 +21,8 @@ blueprint-testing-utils = { optional = true, workspace = true, features = ["anvi
 blueprint-contexts = { optional = true, workspace = true }
 blueprint-clients = { optional = true, workspace = true, features = ["tangle", "evm", "std"] }
 blueprint-client-tangle = { optional = true, workspace = true, features = ["std"] }
-# Its default set (AWS, TEE attestation) is what every cloud-enabled build ships.
-blueprint-remote-providers = { workspace = true, optional = true, default-features = true }
+# Its default set (AWS, TEE attestation) plus GCP is what every cloud-enabled build ships.
+blueprint-remote-providers = { workspace = true, optional = true, default-features = true, features = ["gcp"] }
 blueprint-crypto = { optional = true, workspace = true, features = ["k256", "bls", "bn254"] }
 blueprint-crypto-core = { optional = true, workspace = true, features = ["clap"] }
 blueprint-keystore = { optional = true, workspace = true, features = [
@@ -48,7 +48,6 @@ tokio = { workspace = true, features = ["full"] }
 hex = { optional = true, workspace = true }
 tracing = { workspace = true, features = ["log"] }
 thiserror = { optional = true, workspace = true }
-colored = { workspace = true }
 futures = { workspace = true }
 bip39 = { optional = true, workspace = true, features = ["rand_core", "rand"] }
 dotenv = { optional = true, workspace = true }
