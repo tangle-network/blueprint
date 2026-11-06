@@ -18,10 +18,10 @@ on:
       - dist-workspace.toml
       - .github/**
 
-# Concurrent release runs race on tag creation ("Reference already exists", e.g. #1630) and on the registry.
+# Release runs race on tag creation (#1630) and the registry, so they serialize; queue: max keeps every pending run, where the default lets a push replace a pending recover-tagged dispatch.
 concurrency:
   group: release-plz
-  cancel-in-progress: false
+  queue: max
 
 env:
   RELEASE_PLZ_LOG: TRACE
