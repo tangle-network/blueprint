@@ -48,8 +48,7 @@ impl GithubBinaryFetcher {
         }
     }
 
-    /// Configure the release transport host from application configuration.
-    /// Repository metadata cannot change this host or the attestation policy.
+    /// Configure application transport; repository metadata cannot weaken attestation.
     #[must_use]
     pub fn with_release_base_url(mut self, url: Url) -> Self {
         self.release_base_url = url;
@@ -117,6 +116,7 @@ impl GithubBinaryFetcher {
         };
         let name = artifact.name.as_ref().ok_or(Error::NoMatchingBinary)?;
         let stem = name
+            .as_str()
             .strip_suffix(".tar.xz")
             .ok_or(Error::NoMatchingBinary)?;
         let url = artifact_url(&release_url, name.as_str())?;
@@ -156,7 +156,7 @@ impl GithubBinaryFetcher {
                 return Err(Error::NoMatchingBinary);
             }
             let filename = checksum.name.as_ref().ok_or(Error::NoMatchingBinary)?;
-            if !filename.ends_with(".sha256") {
+            if !filename.as_str().ends_with(".sha256") {
                 return Err(Error::NoMatchingBinary);
             }
             let url = artifact_url(&release_url, filename.as_str())?;
