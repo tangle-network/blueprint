@@ -136,6 +136,82 @@ fn github_manifest(peer: &Peer) -> Value {
             format!("{ARCHIVE}.sha256"):{"name":format!("{ARCHIVE}.sha256"),"kind":"checksum"}}})
 }
 
+async fn github_digest_fixture(
+    expected: BlueprintBinary,
+) -> (Peer, GithubBinaryFetcher, TempDir, TempDir) {
+    let peer = Peer::new().await;
+    peer.serve(
+        &format!("{RELEASE}/dist-manifest.json"),
+        serde_json::to_vec(&github_manifest(&peer)).unwrap(),
+    );
+    let bytes = archive(&[("cargo-tangle", PAYLOAD)]);
+    peer.serve(&format!("{RELEASE}/{ARCHIVE}"), bytes.clone());
+    // Also serve the old guessed URL, isolating digest enforcement from selection.
+    peer.serve(
+        &format!(
+            "{RELEASE}/cargo-tangle-linux-{}.tar.xz",
+            std::env::consts::ARCH
+        ),
+        bytes.clone(),
+    );
+    peer.serve(
+        &format!("{RELEASE}/{ARCHIVE}.sha256"),
+        format!("{}  {ARCHIVE}\n", hex::encode(Sha256::digest(&bytes))),
+    );
+    let tools = tempdir().unwrap();
+    let source = GithubBinaryFetcher::new(
+        GithubFetcher {
+            owner: "tangle-network".into(),
+            repo: "blueprint".into(),
+            tag: "cargo-tangle-v0.5.0-alpha.28".into(),
+            binaries: vec![expected],
+        },
+        77,
+        "digest HTTP boundary".into(),
+        true,
+    )
+    .with_release_base_url(peer.base.clone())
+    .with_http_client(reqwest::Client::new())
+    .with_github_cli(gh_tool(tools.path()));
+    (peer, source, tempdir().unwrap(), tools)
+}
+
+#[tokio::test]
+async fn github_rejects_wrong_pinned_digest_even_with_unchecked_attestations() {
+    let mut expected = binary("cargo-tangle");
+    expected.sha256 = [0xff; 32];
+    let (_peer, mut source, cache, tools) = github_digest_fixture(expected).await;
+    std::fs::write(tools.path().join("gh"), "#!/bin/sh\nexit 1\n").unwrap();
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::HashMismatch { .. })
+    ));
+}
+
+#[tokio::test]
+async fn github_rechecks_the_pinned_digest_on_resolved_cache_hits() {
+    let (_peer, mut source, cache, _tools) = github_digest_fixture(binary("cargo-tangle")).await;
+    let executable = source.fetch(cache.path()).await.unwrap();
+    std::fs::write(executable, b"changed cached executable").unwrap();
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::HashMismatch { .. })
+    ));
+}
+
+#[tokio::test]
+async fn github_rejects_a_mismatched_declared_archive_checksum() {
+    let (peer, mut source, cache, _tools) = github_digest_fixture(binary("cargo-tangle")).await;
+    peer.serve(
+        &format!("{RELEASE}/{ARCHIVE}.sha256"),
+        format!("{}  {ARCHIVE}\n", "00".repeat(32)),
+    );
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::HashMismatch { .. })
+    ));
+}
+
 #[tokio::test]
 async fn github_fetches_the_manifest_target_archive_and_executes_the_pinned_asset() {
     let peer = Peer::new().await;
