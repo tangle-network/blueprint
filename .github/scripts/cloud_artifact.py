@@ -14,6 +14,7 @@ from check_cloud_distribution import check
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = {"x86_64-unknown-linux-gnu": 62, "aarch64-unknown-linux-gnu": 183}
+# Not target/distrib: cargo-dist deletes its planned outputs there before running the verify hook.
 OUTPUT = ROOT / "target/cloud-artifacts"
 VERIFIED = ROOT / "target/verified-cloud-artifacts"
 
@@ -45,8 +46,7 @@ def inspect_archive(archive, target, execute=False):
 
 def verify(targets, source):
     VERIFIED.mkdir(parents=True, exist_ok=True)
-    # Pinned cargo-dist logs extra-artifact subprocess failures and still copies existing
-    # outputs. Publish verified paths only after every input passes; clear stale outputs first.
+    # Verified paths hold only outputs of a run in which every input passed.
     for target in targets:
         assert target in TARGETS, "unsupported cloud artifact target"
         for suffix in (".tar.xz", ".tar.xz.sha256"):
@@ -90,7 +90,7 @@ def build(target):
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["verify"]:
-        verify(TARGETS, ROOT / "target/distrib")
+        verify(TARGETS, OUTPUT)
     elif len(sys.argv) == 4 and sys.argv[1] == "verify":
         verify((sys.argv[2],), Path(sys.argv[3]))
     elif len(sys.argv) == 3 and sys.argv[1] == "build":

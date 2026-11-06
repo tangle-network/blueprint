@@ -34,7 +34,8 @@ pr-run-mode = "skip"
 cargo-dist-version = "0.28.7-prerelease.1"
 
 # Native Linux jobs build the cloud-only flavor through github-build-setup.
-# The global cargo-dist phase verifies and uploads these alongside the full CLI.
+# The global cargo-dist phase verifies and uploads these alongside the full CLI;
+# `.github/scripts/check_cloud_distribution.py global <dist>` runs that phase.
 [[dist.extra-artifacts]]
 build = ["python3", ".github/scripts/cloud_artifact.py", "verify"]
 artifacts = [

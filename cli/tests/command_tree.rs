@@ -54,3 +54,14 @@ fn every_command_in_the_built_feature_set_renders_help() {
         }
     }
 }
+
+#[cfg(feature = "remote-providers")]
+#[test]
+fn an_unknown_cloud_provider_is_rejected() {
+    let output = Command::new(env!("CARGO_BIN_EXE_cargo-tangle"))
+        .args(["cloud", "configure", "invalid"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid value 'invalid'"));
+}

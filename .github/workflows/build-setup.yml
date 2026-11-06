@@ -27,5 +27,5 @@
   if: runner.os == 'Linux'
   uses: actions/upload-artifact@v4
   with:
-    name: artifacts-cloud-${{ matrix.targets[0] }}
+    name: cloud-${{ matrix.targets[0] }}
     path: target/cloud-artifacts/cargo-tangle-cloud-*
