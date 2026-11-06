@@ -84,10 +84,6 @@ wiremock = { workspace = true }
 serial_test.workspace = true
 proptest = { workspace = true }
 mockito = { workspace = true }
-# Official AWS mocking library
-aws-smithy-mocks-experimental = { workspace = true }
-aws-smithy-runtime = { workspace = true, features = ["test-util"] }
-aws-smithy-types = { workspace = true }
 http = { workspace = true }
 # Additional dependencies for integration tests
 chrono = { workspace = true, features = ["serde", "clock"] }
