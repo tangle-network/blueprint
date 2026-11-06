@@ -52,7 +52,7 @@ async fn an_unpriced_candidate_cannot_discard_another_providers_live_cpu_quote()
     );
     assert_eq!(selected, CloudProvider::DigitalOcean);
     assert_eq!(region, "nyc3");
-    assert_eq!(price, 0.25);
+    assert_eq!(price.to_bits(), 0.25_f64.to_bits());
 }
 
 #[tokio::test]
