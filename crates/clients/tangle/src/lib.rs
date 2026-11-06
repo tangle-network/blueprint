@@ -45,7 +45,6 @@
 //! - `std` (default) - Standard library support
 //! - `web` - WebAssembly support
 
-#![cfg_attr(not(feature = "std"), no_std)]
 #![deny(
     missing_docs,
     missing_debug_implementations,
