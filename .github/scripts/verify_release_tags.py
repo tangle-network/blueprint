@@ -267,21 +267,21 @@ def artifact_mode(args) -> int:
         return 0
     release = github("api", f"repos/{repo}/releases/tags/{args.tag}")
     assets = {row["name"]: row for row in (release or {}).get("assets", [])}
-    if "release-source.json" not in assets or not set(plan["artifacts"]).issubset(assets):
+    if "release-source.json" not in assets:
         print("Release artifact set is incomplete")
         return 3
     def download(name):
         return github("api", f"repos/{repo}/releases/assets/{assets[name]['id']}", "-H", "Accept: application/octet-stream", raw=True)
     data = download("release-source.json")
     if data is None:
-        return 3
+        raise ReleaseVerificationError("published source record is unavailable")
+    if assets["release-source.json"].get("digest") != "sha256:" + hashlib.sha256(data).hexdigest():
+        raise ReleaseVerificationError("published source record integrity is unverified")
     record = json.loads(data)
     hashes = record.get("sha256", {})
     if record.get("schema_version") != 1 or record.get("tag") != args.tag or record.get("source_sha") != source:
         raise ReleaseVerificationError("published record belongs to a different source or schema; release a new version")
-    if set(hashes) != set(plan["artifacts"]):
-        return 3
-    if assets["release-source.json"].get("digest") != "sha256:" + hashlib.sha256(data).hexdigest():
+    if not set(plan["artifacts"]).issubset(assets) or set(hashes) != set(plan["artifacts"]):
         return 3
     for name, digest in hashes.items():
         if not re.fullmatch(r"[0-9a-f]{64}", digest) or assets[name].get("digest") != "sha256:" + digest:
@@ -311,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.artifacts:
         try:
             return artifact_mode(args)
-        except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError, subprocess.TimeoutExpired, ReleaseVerificationError) as error:
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.CalledProcessError, subprocess.TimeoutExpired, ReleaseVerificationError) as error:
             print(f"ARTIFACT VERIFICATION INCOMPLETE: {error}", file=sys.stderr)
             return 2
 

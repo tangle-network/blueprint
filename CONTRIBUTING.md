@@ -20,14 +20,6 @@ This document defines how we ship high-confidence changes in this repository.
    nix develop
    ```
 
-## Repository Layout
-
-- `cli/`: `cargo-tangle` CLI.
-- `crates/`: SDK crates (`core`, `manager`, `networking`, `stores`, `testing-utils`, etc.).
-- `examples/`: reference blueprints that must stay buildable.
-- `docs/`: long-form specifications, RFCs, and operator guides.
-- `.github/`: CI workflows and PR automation.
-
 ## Branches and Commits
 
 - Branch prefixes:

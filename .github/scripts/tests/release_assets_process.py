@@ -27,7 +27,7 @@ def proof():
         content["cli.tar.xz.sha256"] = hashlib.sha256(content["cli.tar.xz"].encode()).hexdigest() + " *cli.tar.xz\n"
         record = {"schema_version": 1, "tag": TAG, "source_sha": SHA,
                   "sha256": {name: hashlib.sha256(value.encode()).hexdigest() for name, value in content.items()}}
-        fixture = {"record": record, "content": content, "complete": False, "fail": False, "head": SHA, "tagged": SHA}
+        fixture = {"record": record, "content": content, "complete": False, "partial": False, "fail": False, "head": SHA, "tagged": SHA}
         state = root / "fixture.json"
         binary = root / "bin"
         binary.mkdir()
@@ -42,9 +42,10 @@ endpoint=next(x for x in a if x.startswith("repos/"))
 if endpoint.endswith("/dispatches"):
  print(json.dumps({"workflow_run_id":99,"run_url":"https://api.github.com/repos/tangle-network/blueprint/actions/runs/99","html_url":"https://github.com/tangle-network/blueprint/actions/runs/99"}));sys.exit(0)
 if "/releases/tags/" in endpoint:
- names=list(f["content"])+["release-source.json"] if f["complete"] else []
+ allnames=list(f["content"])+["release-source.json"]
+ names=allnames[1:] if f["partial"] else (allnames if f["complete"] else [])
  values={**f["content"],"release-source.json":json.dumps(f["record"],sort_keys=True)}
- print(json.dumps({"assets":[{"id":i,"name":n,"digest":"sha256:"+hashlib.sha256(values[n].encode()).hexdigest()} for i,n in enumerate(names)]}));sys.exit(0)
+ print(json.dumps({"assets":[{"id":i,"name":n,"digest":"sha256:"+hashlib.sha256(values[n].encode()).hexdigest()} for i,n in enumerate(allnames) if n in names]}));sys.exit(0)
 i=int(endpoint.rsplit("/",1)[1]);values=[*f["content"].values(),json.dumps(f["record"],sort_keys=True)]
 sys.stdout.write(values[i])
 ''')
@@ -64,6 +65,9 @@ sys.stdout.write(values[i])
         invoke()
         fixture["record"]["source_sha"] = "0"*40
         invoke(expected=2)
+        fixture["partial"] = True
+        invoke(expected=2)
+        fixture["partial"] = False
         fixture["record"]["source_sha"] = SHA
         fixture["head"] = "0"*40
         invoke(expected=2)
@@ -87,7 +91,7 @@ sys.stdout.write(values[i])
         invoke("record")
         written = json.loads((root / "target/distrib/release-source.json").read_text())
         assert written==record, written
-        print(json.dumps({"cases":10,"missing_assets":"incomplete","wrong_source":"error",
+        print(json.dumps({"cases":11,"missing_assets":"incomplete","wrong_source":"error",
                           "bad_checksum":"incomplete","unknown_github":"error","dispatch_receipt":99}))
 
 
