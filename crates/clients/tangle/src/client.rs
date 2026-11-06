@@ -2816,7 +2816,7 @@ impl TangleClient {
         inputs: Bytes,
         quotes: Vec<ITangleTypes::SignedJobQuote>,
     ) -> Result<JobSubmissionResult> {
-        use crate::contracts::ITangle::submitJobFromQuoteCall;
+        use crate::contracts::ITangle::submitJobFromQuote_1Call;
         use alloy_sol_types::SolCall;
 
         // Sum all quote prices to determine total native value to send.
@@ -2829,7 +2829,7 @@ impl TangleClient {
             .await
             .map_err(Error::Transport)?;
 
-        let call = submitJobFromQuoteCall {
+        let call = submitJobFromQuote_1Call {
             serviceId: service_id,
             jobIndex: job_index,
             inputs,
