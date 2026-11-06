@@ -236,20 +236,7 @@ pub enum CloudCommands {
     },
 }
 
-/// Execute cloud commands.
-///
-/// # Arguments
-///
-/// * `command` - The cloud subcommand to execute
-///
-/// # Errors
-///
-/// Returns an error if:
-/// * Provider configuration fails
-/// * Deployment fails
-/// * Cost estimation encounters invalid parameters
-/// * Status check fails to connect
-/// * Termination is rejected or fails
+/// Execute deployment commands or the SDK rental boundary.
 pub async fn execute(command: CloudCommands) -> Result<()> {
     match command {
         CloudCommands::Catalog { .. } => json::execute("catalog").await,

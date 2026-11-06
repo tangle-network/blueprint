@@ -212,6 +212,24 @@ impl SecureHttpClient {
         self.post(url, auth, Some(body)).await
     }
 
+    pub async fn post_json_idempotent(
+        &self,
+        url: &str,
+        auth: &ApiAuthentication,
+        body: serde_json::Value,
+        key: &str,
+    ) -> Result<Response> {
+        if key.len() != 64 || !key.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+        }
+        self.send(
+            self.authenticated(Method::POST, url, auth)?
+                .header("Idempotency-Key", key)
+                .json(&body),
+        )
+        .await
+    }
+
     pub async fn post_form(
         &self,
         url: &str,
@@ -257,47 +275,38 @@ impl std::fmt::Debug for ApiAuthentication {
 }
 
 impl ApiAuthentication {
-    /// Create DigitalOcean API authentication
     pub fn digitalocean(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create Google Cloud API authentication
     pub fn google_cloud(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create Azure authentication
     pub fn azure(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create Vultr API authentication
     pub fn vultr(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Lambda Labs API authentication
     pub fn lambda_labs(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create RunPod API authentication
     pub fn runpod(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Vast.ai API authentication
     pub fn vast_ai(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create CoreWeave API authentication
     pub fn coreweave(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create Paperspace API authentication
     pub fn paperspace(api_key: String) -> Self {
         Self::ApiKey {
             key: api_key,
@@ -305,7 +314,6 @@ impl ApiAuthentication {
         }
     }
 
-    /// Create Fluidstack API authentication
     pub fn fluidstack(api_key: String) -> Self {
         Self::ApiKey {
             key: api_key,
@@ -313,7 +321,6 @@ impl ApiAuthentication {
         }
     }
 
-    /// Create TensorDock API authentication
     pub fn tensordock(api_key: String, api_token: String) -> Self {
         Self::ApiKey {
             key: format!("{api_key}:{api_token}"),
@@ -321,37 +328,33 @@ impl ApiAuthentication {
         }
     }
 
-    /// Create Akash API authentication
     pub fn akash(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create io.net API authentication
     pub fn io_net(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Prime Intellect API authentication
     pub fn prime_intellect(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Render API authentication
     pub fn render(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Bittensor/Lium API authentication
     pub fn bittensor_lium(api_key: String) -> Self {
-        Self::Bearer { token: api_key }
+        Self::ApiKey {
+            key: api_key,
+            header_name: "X-API-Key".into(),
+        }
     }
 
-    /// Create Hetzner Cloud API authentication
     pub fn hetzner(api_token: String) -> Self {
         Self::Bearer { token: api_token }
     }
 
-    /// Create Crusoe Cloud API authentication (key:secret as Bearer)
     pub fn crusoe(api_key: String, api_secret: String) -> Self {
         Self::Bearer {
             token: format!("{api_key}:{api_secret}"),
