@@ -14,7 +14,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tar::Archive;
-use tokio::io::AsyncWriteExt;
+use url::Url;
 use xz::read::XzDecoder;
 
 pub struct GithubBinaryFetcher {
@@ -24,6 +24,9 @@ pub struct GithubBinaryFetcher {
     allow_unchecked_attestations: bool,
     target_binary_name: Option<String>,
     resolved_binary_path: Option<PathBuf>,
+    http: reqwest::Client,
+    release_base_url: Url,
+    github_cli: PathBuf,
 }
 
 impl GithubBinaryFetcher {
@@ -41,7 +44,32 @@ impl GithubBinaryFetcher {
             allow_unchecked_attestations,
             target_binary_name: None,
             resolved_binary_path: None,
+            http: reqwest::Client::new(),
+            release_base_url: Url::parse("https://github.com/").expect("static GitHub URL"),
+            github_cli: PathBuf::from("gh"),
         }
+    }
+
+    /// Configure the release transport host from application configuration.
+    /// Repository metadata cannot change this host or the attestation policy.
+    #[must_use]
+    pub fn with_release_base_url(mut self, url: Url) -> Self {
+        self.release_base_url = url;
+        self
+    }
+
+    /// Supply application-owned HTTP transport, such as an enterprise proxy client.
+    #[must_use]
+    pub fn with_http_client(mut self, client: reqwest::Client) -> Self {
+        self.http = client;
+        self
+    }
+
+    /// Select the installed GitHub CLI executable; repository metadata cannot set it.
+    #[must_use]
+    pub fn with_github_cli(mut self, path: impl Into<PathBuf>) -> Self {
+        self.github_cli = path.into();
+        self
     }
 
     async fn get_binary(&mut self, cache_dir: &Path) -> Result<PathBuf> {
@@ -78,10 +106,10 @@ impl GithubBinaryFetcher {
             let _ = tokio::fs::remove_file(&dist_manifest_path).await;
         }
 
-        let urls = DownloadUrls::new(relevant_binary, &self.fetcher);
+        let urls = DownloadUrls::new(relevant_binary, &self.fetcher, &self.release_base_url);
         info!("Downloading dist manifest from {}", urls.dist_manifest);
 
-        let Ok(manifest) = reqwest::get(urls.dist_manifest).await else {
+        let Ok(manifest) = self.http.get(urls.dist_manifest).send().await else {
             error!(
                 "No dist manifest found for blueprint {} (id: {}, tag: {tag_str})",
                 self.blueprint_id, self.blueprint_id
@@ -94,22 +122,13 @@ impl GithubBinaryFetcher {
 
         let manifest: DistManifest = serde_json::from_slice(manifest_contents.as_ref())?;
 
-        let mut found_asset = false;
-        for (_, artifact) in manifest.artifacts {
-            if !matches!(artifact.kind, ArtifactKind::ExecutableZip) {
-                continue;
-            }
-
-            for asset in artifact.assets {
-                if !matches!(asset.kind, AssetKind::Executable(_)) {
-                    continue;
-                }
-
-                if asset.name.is_some_and(|s| s == relevant_binary_name) {
-                    found_asset = true;
-                }
-            }
-        }
+        let found_asset = manifest.artifacts.values().any(|artifact| {
+            matches!(artifact.kind, ArtifactKind::ExecutableZip)
+                && artifact.assets.iter().any(|asset| {
+                    matches!(asset.kind, AssetKind::Executable(_))
+                        && asset.name.as_deref() == Some(relevant_binary_name.as_str())
+                })
+        });
 
         if !found_asset {
             error!(
@@ -126,15 +145,15 @@ impl GithubBinaryFetcher {
             archive_download_path.display()
         );
 
-        let archive = reqwest::get(&urls.binary_archive_url)
+        let archive = self
+            .http
+            .get(&urls.binary_archive_url)
+            .send()
             .await?
             .bytes()
             .await?;
 
-        // Write the archive to disk
-        let mut file = tokio::fs::File::create(&archive_download_path).await?;
-        file.write_all(&archive).await?;
-        file.flush().await?;
+        tokio::fs::write(&archive_download_path, &archive).await?;
 
         Ok(archive_download_path)
     }
@@ -156,14 +175,9 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
         let owner = self.fetcher.owner.clone();
         let repo = self.fetcher.repo.clone();
 
-        match verify_attestation(&owner, &repo, &archive_path) {
-            AttestationResult::Ok => {}
-            AttestationResult::NotMatching | AttestationResult::NoGithubCli
-                if self.allow_unchecked_attestations => {}
-            AttestationResult::NotMatching => return Err(Error::AttestationFailed),
-            AttestationResult::NoGithubCli => {
-                error!("No GitHub CLI found, unable to verify attestation.");
-                return Err(Error::NoGithubCli);
+        if let Err(error) = verify_attestation(&self.github_cli, &owner, &repo, &archive_path) {
+            if !self.allow_unchecked_attestations {
+                return Err(error);
             }
         }
 
@@ -243,7 +257,8 @@ struct DownloadUrls {
 }
 
 impl DownloadUrls {
-    fn new(binary: &BlueprintBinary, fetcher: &GithubFetcher) -> Self {
+    fn new(binary: &BlueprintBinary, fetcher: &GithubFetcher, base_url: &Url) -> Self {
+        let base_url = base_url.as_str().trim_end_matches('/');
         let owner = fetcher.owner.clone();
         let repo = fetcher.repo.clone();
         let tag = fetcher.tag.clone();
@@ -253,11 +268,11 @@ impl DownloadUrls {
 
         // TODO: This is NOT the correct format for cargo-dist. Need the target triple onchain
         let binary_archive_url = format!(
-            "https://github.com/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}.tar.xz"
+            "{base_url}/{owner}/{repo}/releases/download/{tag}/{binary_name}-{os_name}-{arch_name}.tar.xz"
         );
 
         let dist_manifest =
-            format!("https://github.com/{owner}/{repo}/releases/download/{tag}/dist-manifest.json");
+            format!("{base_url}/{owner}/{repo}/releases/download/{tag}/dist-manifest.json");
         Self {
             binary_archive_url,
             dist_manifest,
@@ -265,28 +280,17 @@ impl DownloadUrls {
     }
 }
 
-enum AttestationResult {
-    Ok,
-    NotMatching,
-    NoGithubCli,
-}
-
-fn verify_attestation(owner: &str, repo: &str, binary: impl AsRef<Path>) -> AttestationResult {
-    match Command::new("which").arg("gh").output() {
-        Ok(output) if output.status.success() => {}
-        Ok(_) | Err(_) => return AttestationResult::NoGithubCli,
-    }
-
+fn verify_attestation(cli: &Path, owner: &str, repo: &str, binary: impl AsRef<Path>) -> Result<()> {
     let repo = format!("{owner}/{repo}");
-    match Command::new("gh")
+    match Command::new(cli)
         .args(["attestation", "verify"])
         .arg(binary.as_ref())
         .arg("--repo")
         .arg(repo)
         .output()
     {
-        Ok(output) if output.status.success() => AttestationResult::Ok,
-        Ok(_) => AttestationResult::NotMatching,
-        Err(_) => AttestationResult::NoGithubCli,
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(_) => Err(Error::AttestationFailed),
+        Err(_) => Err(Error::NoGithubCli),
     }
 }

@@ -182,7 +182,8 @@ async fn github_fetches_the_manifest_target_archive_and_executes_the_pinned_asse
     assert!(args.ends_with("--repo\ntangle-network/blueprint\n"));
 }
 
-async fn remote_fixture(name: &str) -> (Peer, RemoteBinaryFetcher, TempDir) {
+async fn remote_fixture(binary: BlueprintBinary) -> (Peer, RemoteBinaryFetcher, TempDir) {
+    let name = &binary.name;
     let peer = Peer::new().await;
     peer.serve(
         "/dist.json",
@@ -195,7 +196,7 @@ async fn remote_fixture(name: &str) -> (Peer, RemoteBinaryFetcher, TempDir) {
         RemoteFetcher {
             dist_url: peer.base.join("dist.json").unwrap().to_string(),
             archive_url: peer.base.join("archive.tar.xz").unwrap().to_string(),
-            binaries: vec![binary(name)],
+            binaries: vec![binary],
         },
         1,
         "remote public HTTP".into(),
@@ -205,7 +206,7 @@ async fn remote_fixture(name: &str) -> (Peer, RemoteBinaryFetcher, TempDir) {
 
 #[tokio::test]
 async fn remote_source_validates_checksum_and_reuses_verified_cache() {
-    let (peer, mut source, cache) = remote_fixture("cached-bin").await;
+    let (peer, mut source, cache) = remote_fixture(binary("cached-bin")).await;
     let path = source.fetch(cache.path()).await.unwrap();
     assert_eq!(std::fs::read(&path).unwrap(), PAYLOAD);
     assert_eq!(source.fetch(cache.path()).await.unwrap(), path);
@@ -214,18 +215,9 @@ async fn remote_source_validates_checksum_and_reuses_verified_cache() {
 
 #[tokio::test]
 async fn remote_source_rejects_bad_checksum() {
-    let (peer, _, cache) = remote_fixture("bad-bin").await;
     let mut wrong = binary("bad-bin");
     wrong.sha256 = [0xff; 32];
-    let mut source = RemoteBinaryFetcher::new(
-        RemoteFetcher {
-            dist_url: peer.base.join("dist.json").unwrap().to_string(),
-            archive_url: peer.base.join("archive.tar.xz").unwrap().to_string(),
-            binaries: vec![wrong],
-        },
-        1,
-        "bad checksum".into(),
-    );
+    let (_peer, mut source, cache) = remote_fixture(wrong).await;
     assert!(matches!(
         source.fetch(cache.path()).await,
         Err(Error::HashMismatch { .. })
@@ -234,7 +226,7 @@ async fn remote_source_rejects_bad_checksum() {
 
 #[tokio::test]
 async fn remote_source_rejects_missing_binary() {
-    let (peer, mut source, cache) = remote_fixture("wanted-bin").await;
+    let (peer, mut source, cache) = remote_fixture(binary("wanted-bin")).await;
     peer.serve(
         "/dist.json",
         serde_json::to_vec(&json!({"artifacts":{"bundle":{
