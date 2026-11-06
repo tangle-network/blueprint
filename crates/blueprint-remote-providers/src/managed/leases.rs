@@ -29,12 +29,15 @@ impl LeaseAccess {
             .map_err(|_| failed())?;
         let keypair = Ed25519Keypair {
             public: ssh_key::public::Ed25519PublicKey(
-                pair.public_key().as_ref().try_into().map_err(|_| failed())?,
+                pair.public_key()
+                    .as_ref()
+                    .try_into()
+                    .map_err(|_| failed())?,
             ),
             private: Ed25519PrivateKey::from_bytes(&seed),
         };
-        let key = ssh_key::PrivateKey::new(KeypairData::Ed25519(keypair), "")
-            .map_err(|_| failed())?;
+        let key =
+            ssh_key::PrivateKey::new(KeypairData::Ed25519(keypair), "").map_err(|_| failed())?;
         Ok(Self {
             public_key: key.public_key().to_openssh().map_err(|_| failed())?,
             private_key: Some(
@@ -49,7 +52,10 @@ impl core::fmt::Debug for LeaseAccess {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("LeaseAccess")
             .field("public_key", &self.public_key)
-            .field("private_key", &self.private_key.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "private_key",
+                &self.private_key.as_ref().map(|_| "[REDACTED]"),
+            )
             .finish()
     }
 }
@@ -61,15 +67,32 @@ pub struct Lease {
     pub access: LeaseAccess,
 }
 
+/// Leases retired by `retire_expired`, and the providers it could not finish.
+#[derive(Debug, Default)]
+pub struct RetireReport {
+    pub retired: Vec<ManagedLeaseIdentity>,
+    pub failures: Vec<ProviderFailure>,
+}
+
+fn failure(provider: &CloudProvider, error: Error) -> ProviderFailure {
+    ProviderFailure {
+        provider: provider.clone(),
+        code: match error {
+            Error::Provider(code) => code,
+            _ => ProviderErrorCode::ProviderError,
+        },
+    }
+}
+
 impl CloudProvisioner {
     /// Rent the best-ranked candidate in stock for `ttl`, with per-lease SSH access.
     ///
-    /// Only refusals proving nothing was rented move on to the next quote. Any other
-    /// failure returns at once; `retire_expired` or `destroy_managed` then cleans up.
+    /// A refusal moves on only after the lease identity is proven absent on that
+    /// provider, so a rental accepted before a later error is retired, never doubled.
     pub async fn allocate(&self, spec: &ResourceSpec, ttl: Duration) -> Result<Lease> {
-        if spec.ownership.is_none() || ttl.as_secs() == 0 {
+        let Some(identity) = spec.ownership.as_ref().filter(|_| ttl.as_secs() > 0) else {
             return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
-        }
+        };
         let access = match spec.ssh_public_key.as_deref() {
             Some(key) => LeaseAccess {
                 public_key: crate::security::canonical_public_key(key)?,
@@ -94,46 +117,56 @@ impl CloudProvisioner {
                     | ProviderErrorCode::Quota
                     | ProviderErrorCode::RateLimited
                     | ProviderErrorCode::Unsupported),
-                )) => refusal = code,
+                )) => {
+                    self.destroy_managed(&quote.offer.provider, identity, None).await?;
+                    refusal = code;
+                }
                 Err(error) => return Err(error),
             }
         }
         Err(Error::Provider(refusal))
     }
 
-    /// Retire every lease in `namespace` whose provider-recorded deadline has passed.
+    /// Retire every lease in `namespace` with a resource past its provider-recorded deadline.
     ///
-    /// The provider listing is the only state read, so this is safe after a restart.
-    /// Every expired lease is attempted; the first failure is returned afterwards.
-    pub async fn retire_expired(&self, namespace: &str) -> Result<Vec<ManagedLeaseIdentity>> {
+    /// Provider listings are the only state read, so this is safe after a restart. Each
+    /// provider is handled on its own; one failing account never stops the others.
+    pub async fn retire_expired(&self, namespace: &str) -> RetireReport {
         let now = chrono::Utc::now();
-        let expired: Vec<(CloudProvider, ManagedLeaseIdentity, String)> = self
-            .list_managed(namespace)
-            .await?
-            .into_iter()
-            .filter(|resource| {
-                resource.kind == ManagedResourceKind::Instance
-                    && resource.is_present()
-                    && resource.expires_at.is_some_and(|deadline| deadline <= now)
-            })
-            .map(|resource| {
+        let mut report = RetireReport::default();
+        for (provider, adapter) in self.providers.iter() {
+            let Some(native) = adapter.managed() else {
+                continue;
+            };
+            let listed = match native.list(namespace).await {
+                Ok(listed) => listed,
+                Err(error) => {
+                    report.failures.push(failure(provider, error));
+                    continue;
+                }
+            };
+            let mut expired: Vec<ManagedLeaseIdentity> = Vec::new();
+            for resource in listed {
                 let identity = ManagedLeaseIdentity {
                     namespace: resource.namespace,
                     lease_id: resource.lease_id,
                 };
-                (resource.instance.provider, identity, resource.instance.id)
-            })
-            .collect();
-        let mut retired = Vec::new();
-        let mut failure = None;
-        for (provider, identity, id) in expired {
-            match self.destroy_managed(&provider, &identity, Some(&id)).await {
-                Ok(()) => retired.push(identity),
-                Err(error) => {
-                    failure.get_or_insert(error);
+                if &resource.instance.provider == provider
+                    && identity.namespace == namespace
+                    && resource.is_present()
+                    && resource.expires_at.is_some_and(|deadline| deadline <= now)
+                    && !expired.contains(&identity)
+                {
+                    expired.push(identity);
+                }
+            }
+            for identity in expired {
+                match self.destroy_managed(provider, &identity, None).await {
+                    Ok(()) => report.retired.push(identity),
+                    Err(error) => report.failures.push(failure(provider, error)),
                 }
             }
         }
-        failure.map_or(Ok(retired), Err)
+        report
     }
 }

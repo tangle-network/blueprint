@@ -49,7 +49,10 @@ async fn allocated_leases_carry_their_own_key_and_retire_from_provider_deadlines
         short.access.public_key
     );
     assert!(!format!("{short:?}").contains("PRIVATE KEY"));
-    let launch: Value = peer.received_requests().await.unwrap()
+    let launch: Value = peer
+        .received_requests()
+        .await
+        .unwrap()
         .iter()
         .find(|request| request.method == "POST")
         .unwrap()
@@ -76,8 +79,10 @@ async fn allocated_leases_carry_their_own_key_and_retire_from_provider_deadlines
     )
     .await;
     let restarted = CloudProvisioner::from_credentials(vec![credentials()]).unwrap();
+    let report = restarted.retire_expired("lease-cell").await;
+    assert!(report.failures.is_empty(), "{report:?}");
     assert_eq!(
-        restarted.retire_expired("lease-cell").await.unwrap(),
+        report.retired,
         vec![ManagedLeaseIdentity {
             namespace: "lease-cell".into(),
             lease_id: "short".into(),
@@ -88,10 +93,39 @@ async fn allocated_leases_carry_their_own_key_and_retire_from_provider_deadlines
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].lease_id, "long");
     assert_eq!(
-        peer.received_requests().await.unwrap()
+        peer.received_requests()
+            .await
+            .unwrap()
             .iter()
             .filter(|request| request.method == "DELETE")
             .count(),
         1
     );
+}
+
+#[tokio::test]
+async fn a_refusal_after_the_rental_retires_it_instead_of_renting_again() {
+    use wiremock::matchers::path_regex;
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let peer = runpod_v2_peer().await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/pods/.+$"))
+        .respond_with(ResponseTemplate::new(429))
+        .with_priority(1)
+        .up_to_n_times(1)
+        .mount(&peer)
+        .await;
+    let credentials = serde_json::from_value(json!({
+        "provider":"runpod", "api_key":"synthetic-local-peer-key", "endpoint":peer.uri()
+    }))
+    .unwrap();
+    let provisioner = CloudProvisioner::from_credentials(vec![credentials]).unwrap();
+    let result = provisioner
+        .allocate(&lease_spec("throttled"), Duration::from_secs(3600))
+        .await;
+    assert!(result.is_err(), "{result:?}");
+    let requests = peer.received_requests().await.unwrap();
+    let count = |verb: &str| requests.iter().filter(|r| r.method == verb).count();
+    assert_eq!((count("POST"), count("DELETE")), (1, 1));
+    assert!(provisioner.list_managed("lease-cell").await.unwrap().is_empty());
 }
