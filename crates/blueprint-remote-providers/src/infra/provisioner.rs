@@ -309,7 +309,7 @@ impl CloudProvisioner {
             resource_spec,
             &provider,
             require_tee,
-        );
+        )?;
         info!(
             "Provisioning {} instance type {} (tee_required={})",
             provider, instance_selection.instance_type, require_tee

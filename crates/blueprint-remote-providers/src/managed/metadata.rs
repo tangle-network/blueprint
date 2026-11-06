@@ -1,7 +1,7 @@
 //! Nonsecret recovery metadata stored in native provider tags, env or labels.
 
-use super::{ManagedLeaseIdentity, ProviderErrorCode};
-use crate::{Error, ResourceSpec, Result};
+use super::{ManagedLeaseIdentity, ManagedResource, ManagedResourceKind, ProviderErrorCode};
+use crate::{Error, ProvisionedInstance, ResourceSpec, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -62,6 +62,41 @@ impl ManagedMetadata {
             return Err(Error::Provider(ProviderErrorCode::Conflict));
         }
         Ok(())
+    }
+
+    /// Bind submitted recovery metadata without inventing provider billing observations.
+    pub fn bind(self, instance: ProvisionedInstance, kind: ManagedResourceKind) -> ManagedResource {
+        ManagedResource {
+            instance,
+            namespace: self.identity.namespace,
+            lease_id: self.identity.lease_id,
+            request_fingerprint: Some(self.request_fingerprint),
+            kind,
+            worker_url: None,
+            endpoint_url: None,
+            ssh_endpoint: None,
+            gpu_class: None,
+            gpu_count: None,
+            gpu_vram_gb: None,
+            hourly_cost_usd: None,
+            created_at: None,
+            expires_at: Some(self.expires_at),
+            preempted: false,
+        }
+    }
+
+    /// Native request identity includes the tenant and lease, even for equal specs.
+    pub fn idempotency_key(&self) -> String {
+        let tuple = serde_json::to_vec(&(
+            &self.identity.namespace,
+            &self.identity.lease_id,
+            &self.request_fingerprint,
+        ))
+        .expect("string tuple serializes");
+        hex::encode(aws_lc_rs::digest::digest(
+            &aws_lc_rs::digest::SHA256,
+            &tuple,
+        ))
     }
 
     /// A DNS-compatible locator. Full native metadata establishes ownership.

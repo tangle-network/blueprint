@@ -1,6 +1,7 @@
 //! One native provider primitive for SDK leases and external orchestrators.
 
 mod boundary;
+pub mod bootstrap;
 mod credentials;
 mod metadata;
 mod operations;
@@ -34,7 +35,11 @@ pub trait ManagedProviderAdapter: Send + Sync {
         provider_id: &str,
     ) -> Result<Option<ManagedResource>>;
     async fn list(&self, namespace: &str) -> Result<Vec<ManagedResource>>;
-    async fn destroy(&self, identity: &ManagedLeaseIdentity, provider_id: &str) -> Result<()>;
+    async fn destroy(
+        &self,
+        identity: &ManagedLeaseIdentity,
+        resource: &ManagedResource,
+    ) -> Result<()>;
 }
 
 pub fn request_fingerprint(spec: &ResourceSpec) -> Result<String> {
