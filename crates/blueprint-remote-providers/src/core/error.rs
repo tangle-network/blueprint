@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Provider operation failed: {0}")]
+    Provider(crate::managed::ProviderErrorCode),
+
     #[error("Configuration error: {0}")]
     ConfigurationError(String),
 

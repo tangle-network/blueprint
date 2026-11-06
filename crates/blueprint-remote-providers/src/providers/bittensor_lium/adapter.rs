@@ -1,476 +1,586 @@
-//! Bittensor Lium (subnet 51) `CloudProviderAdapter` implementation.
-//!
-//! **Stability note:** Lium is primarily a Python SDK; the REST shim used here
-//! is documented at <https://docs.lium.ai> as a best-effort interop surface.
-//! Endpoint shapes may evolve as the subnet matures. Payment settlement happens
-//! out-of-band via the Bittensor CLI/SDK against the operator's coldkey — this
-//! adapter only handles the rental lifecycle (create/poll/terminate), never
-//! TAO transfers. Operators must fund their hotkey/coldkey wallets before use.
-
-use crate::core::error::{Error, Result};
-use crate::core::remote::CloudProvider;
-use crate::core::resources::ResourceSpec;
-use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
-use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::common::gpu_adapter::{
-    ClassifiedError, RetryPolicy, build_http_client, classify_response, deploy_via_ssh,
-    generate_instance_name, poll_until, provision_with_cleanup, require_public_ip,
-    retry_with_backoff,
+//! Lium native executor rent, private templates and namespace-scoped recovery.
+use crate::infra::traits::CloudProviderAdapter;
+use crate::managed::{
+    ManagedLeaseIdentity, ManagedMetadata, ManagedProviderAdapter, ManagedResource,
+    ManagedResourceKind, NativeOffer, ProviderErrorCode,
 };
-use crate::security::{ApiAuthentication, SecureHttpClient};
-use crate::shared::SshDeploymentConfig;
+use crate::security::{
+    ApiAuthentication, SecureHttpClient, canonical_public_key, parse_public_key,
+};
+use crate::{CloudProvider, Error, InstanceStatus, ProvisionedInstance, ResourceSpec, Result};
 use async_trait::async_trait;
-use blueprint_core::{info, warn};
-use blueprint_std::collections::HashMap;
-use std::time::Duration;
+use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
-const BASE_URL: &str = "https://api.lium.ai/v1";
-// Subnet consensus + miner orchestration is slower than centralized clouds; give
-// rentals more headroom before timing out.
-const RENTAL_READY_TIMEOUT: Duration = Duration::from_secs(900);
-const RENTAL_POLL_INTERVAL: Duration = Duration::from_secs(10);
-const DEFAULT_DURATION_HOURS: u64 = 24;
-
-/// Adapter for Bittensor Lium subnet 51 GPU rentals.
+const BASE_URL: &str = "https://lium.io/api";
 pub struct BittensorLiumAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
-    hotkey: String,
-    coldkey: String,
-    region: String,
-    duration_hours: u64,
-    ssh_pubkey: Option<String>,
+    base_url: String,
+    default_region: Option<String>,
 }
-
 impl BittensorLiumAdapter {
-    /// Construct from environment variables.
     pub async fn new() -> Result<Self> {
-        let api_key = std::env::var("LIUM_API_KEY")
-            .map_err(|_| Error::Other("LIUM_API_KEY environment variable not set".into()))?;
-        let hotkey = std::env::var("LIUM_WALLET_HOTKEY")
-            .map_err(|_| Error::Other("LIUM_WALLET_HOTKEY environment variable not set".into()))?;
-        let coldkey = std::env::var("LIUM_WALLET_COLDKEY")
-            .map_err(|_| Error::Other("LIUM_WALLET_COLDKEY environment variable not set".into()))?;
-        let region = std::env::var("LIUM_REGION").unwrap_or_else(|_| "auto".to_string());
-        let duration_hours = std::env::var("LIUM_DURATION_HOURS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(DEFAULT_DURATION_HOURS);
-        let ssh_pubkey = std::env::var("LIUM_SSH_PUBKEY").ok();
-
+        let key = std::env::var("LIUM_API_KEY")
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderNotConfigured))?;
+        let mut adapter = Self::with_credentials(key)?;
+        adapter.default_region = std::env::var("LIUM_REGION").ok();
+        Ok(adapter)
+    }
+    pub fn with_credentials(api_key: String) -> Result<Self> {
+        Self::with_endpoint(api_key, BASE_URL)
+    }
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
         Ok(Self {
-            http: build_http_client()?,
+            http: SecureHttpClient::with_endpoint(endpoint)?,
             auth: ApiAuthentication::bittensor_lium(api_key),
-            hotkey,
-            coldkey,
-            region,
-            duration_hours,
-            ssh_pubkey,
+            base_url: endpoint.trim_end_matches('/').into(),
+            default_region: None,
         })
     }
-
-    async fn fetch_rental_json(&self, rental_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/rentals/{rental_id}");
-        retry_with_backoff("lium.get_rental", &RetryPolicy::default(), |_| {
-            let url = url.clone();
-            async move {
-                let response = self.http.get(&url, &self.auth).await.map_err(|e| {
-                    ClassifiedError::transient(Error::HttpError(format!("Lium GET {url}: {e}")))
-                })?;
-                if let Some(class) = classify_response(&response) {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(ClassifiedError {
-                        class,
-                        inner: Error::HttpError(format!("Lium GET {url} failed: {body}")),
-                    });
-                }
-                response.json::<serde_json::Value>().await.map_err(|e| {
-                    ClassifiedError::transient(Error::HttpError(format!(
-                        "Lium response parse: {e}"
-                    )))
-                })
-            }
-        })
-        .await
+    fn constraints(spec: &ResourceSpec) -> Result<()> {
+        crate::managed::bootstrap::workload_environment(spec)?;
+        if let Some(key) = &spec.ssh_public_key {
+            parse_public_key(key)?;
+        }
+        if spec
+            .max_hourly_cost_usd
+            .is_some_and(|cap| cap / f64::from(spec.gpu_count.unwrap_or(1)) <= 0.01)
+        {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        if spec.tee_required
+            || spec.source_network.is_some()
+            || spec.volume_gb.is_some()
+            || spec.command.is_some()
+            || spec.volume_id.is_some()
+                && spec
+                    .volume_mount_path
+                    .as_deref()
+                    .is_some_and(|path| path != "/mnt")
+        {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        if spec
+            .lease_duration_secs
+            .is_none_or(|seconds| seconds == 0 || seconds % 3600 != 0 || seconds / 3600 > 720)
+        {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        Ok(())
     }
-
-    /// Convert a Lium rental JSON payload into a `ProvisionedInstance`.
-    fn parse_instance(
-        value: &serde_json::Value,
-        fallback_region: &str,
-    ) -> Result<ProvisionedInstance> {
-        let data = value
-            .get("rental")
-            .or_else(|| value.get("data"))
-            .unwrap_or(value);
-        let id = data
-            .get("rental_id")
-            .or_else(|| data.get("id"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::HttpError("Lium response missing rental_id".into()))?
-            .to_string();
-        let instance_type = data
-            .get("gpu_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        let region = data
-            .get("region")
-            .or_else(|| data.get("datacenter"))
-            .and_then(|v| v.as_str())
-            .unwrap_or(fallback_region)
-            .to_string();
-        let public_ip = data
-            .get("public_ip")
-            .or_else(|| data.get("ip"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let private_ip = data
-            .get("private_ip")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let status = match data.get("status").and_then(|v| v.as_str()).unwrap_or("") {
-            "active" | "running" | "ready" => InstanceStatus::Running,
-            "matching" | "pending" | "provisioning" | "starting" | "queued" => {
-                InstanceStatus::Starting
-            }
-            "stopping" | "ending" => InstanceStatus::Stopping,
-            "ended" | "expired" | "terminated" | "failed" | "cancelled" => {
-                InstanceStatus::Terminated
-            }
-            _ => InstanceStatus::Unknown,
-        };
-
-        Ok(ProvisionedInstance {
-            id,
-            provider: CloudProvider::BittensorLium,
-            instance_type,
-            region,
-            public_ip,
-            private_ip,
-            status,
-        })
-    }
-
-    async fn wait_for_running(&self, rental_id: &str) -> Result<ProvisionedInstance> {
-        let region = self.region.clone();
-        poll_until(
-            "Bittensor Lium rental",
-            RENTAL_POLL_INTERVAL,
-            RENTAL_READY_TIMEOUT,
-            || async {
-                let raw = self.fetch_rental_json(rental_id).await?;
-                let instance = Self::parse_instance(&raw, &region)?;
-                match instance.status {
-                    InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
-                    InstanceStatus::Terminated => Err(Error::HttpError(
-                        "Lium rental terminated before becoming ready".into(),
-                    )),
-                    _ => Ok(None),
-                }
-            },
-        )
-        .await
-    }
-
-    async fn create_rental(&self, gpu_type: &str, _region: &str) -> Result<ProvisionedInstance> {
-        let name = generate_instance_name("lium");
-        let payload = serde_json::json!({
-            "name": name,
-            "hotkey": self.hotkey,
-            "coldkey": self.coldkey,
-            "gpu_type": gpu_type,
-            "duration_hours": self.duration_hours,
-            "ssh_pubkey": self.ssh_pubkey.clone().unwrap_or_default(),
-        });
-
-        let json: serde_json::Value =
-            retry_with_backoff("lium.create_rental", &RetryPolicy::default(), |_| {
-                let payload = payload.clone();
-                async move {
-                    let response = self
-                        .http
-                        .authenticated_request(
-                            reqwest::Method::POST,
-                            &format!("{BASE_URL}/rentals"),
-                            &self.auth,
-                            Some(payload),
-                        )
-                        .await
-                        .map_err(|e| {
-                            ClassifiedError::transient(Error::HttpError(format!(
-                                "Lium create rental: {e}"
-                            )))
-                        })?;
-                    if let Some(class) = classify_response(&response) {
-                        let body = response.text().await.unwrap_or_default();
-                        return Err(ClassifiedError {
-                            class,
-                            inner: Error::HttpError(format!("Lium create rental failed: {body}")),
-                        });
-                    }
-                    response.json::<serde_json::Value>().await.map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Lium rental parse: {e}"
-                        )))
-                    })
-                }
-            })
+    async fn get(&self, path: &str) -> Result<Option<Value>> {
+        let response = self
+            .http
+            .get(&format!("{}/{path}", self.base_url), &self.auth)
             .await?;
-
-        let data = json
-            .get("rental")
-            .or_else(|| json.get("data"))
-            .unwrap_or(&json);
-        let rental_id = data
-            .get("rental_id")
-            .or_else(|| data.get("id"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::HttpError("Lium create: no rental id returned".into()))?
-            .to_string();
-        let miner_uid = data
-            .get("miner_uid")
-            .and_then(|v| {
-                v.as_u64()
-                    .map(|u| u.to_string())
-                    .or_else(|| v.as_str().map(String::from))
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        response
+            .json()
+            .await
+            .map(Some)
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))
+    }
+    fn id(raw: &Value) -> Result<&str> {
+        raw["id"]
+            .as_str()
+            .filter(|id| uuid::Uuid::parse_str(id).is_ok())
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))
+    }
+    fn class(model: &str, count: u32) -> Option<blueprint_core::gpu::GpuClass> {
+        let classes = blueprint_core::gpu::catalog();
+        if let Some(class) = classes
+            .iter()
+            .find(|class| class.sku("bittensor-lium", count) == Some(model))
+        {
+            return Some(class.clone());
+        }
+        let mut matches = classes
+            .into_iter()
+            .filter(|class| count > 0 && count <= class.max_per_node && class.matches_name(model));
+        let class = matches.next()?;
+        matches.next().is_none().then_some(class)
+    }
+    fn metadata(raw: &Value) -> Result<Option<ManagedMetadata>> {
+        let env = match raw["environment"].as_object() {
+            Some(_) => &raw["environment"],
+            None => &raw["template"]["environment"],
+        };
+        if env.is_null() {
+            return Ok(None);
+        }
+        let env: BTreeMap<String, String> = serde_json::from_value(env.clone())
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?;
+        ManagedMetadata::from_env(&env)
+    }
+    fn instance(raw: &Value) -> Result<ProvisionedInstance> {
+        Ok(ProvisionedInstance {
+            id: Self::id(raw)?.into(),
+            provider: CloudProvider::BittensorLium,
+            instance_type: raw["gpu_name"].as_str().unwrap_or("").into(),
+            region: raw["executor"]["location"]["region"]
+                .as_str()
+                .unwrap_or("")
+                .into(),
+            public_ip: raw["executor"]["executor_ip_address"]
+                .as_str()
+                .and_then(|ip| ip.parse::<std::net::IpAddr>().ok())
+                .map(|ip| ip.to_string()),
+            private_ip: None,
+            status: match raw["status"].as_str() {
+                Some("RUNNING") => InstanceStatus::Running,
+                Some("PENDING" | "START_PENDING" | "REBOOT_PENDING") => InstanceStatus::Starting,
+                Some("DELETING" | "STOP_PENDING") => InstanceStatus::Stopping,
+                Some("STOPPED" | "FAILED" | "CREATION_FAILED" | "BROKEN" | "REBOOT_FAILED") => {
+                    InstanceStatus::Stopped
+                }
+                _ => InstanceStatus::Unknown,
+            },
+        })
+    }
+    fn managed_pod(raw: &Value) -> Result<Option<ManagedResource>> {
+        let Some(metadata) = Self::metadata(raw)? else {
+            return Ok(None);
+        };
+        let count = raw["gpu_count"]
+            .as_str()
+            .and_then(|n| n.parse::<u32>().ok())
+            .or_else(|| {
+                raw["gpu_count"]
+                    .as_u64()
+                    .and_then(|n| u32::try_from(n).ok())
+            });
+        let class =
+            count.and_then(|count| Self::class(raw["gpu_name"].as_str().unwrap_or(""), count));
+        let mut resource = metadata.bind(Self::instance(raw)?, ManagedResourceKind::Instance);
+        resource.gpu_class = class.as_ref().map(|class| class.id.clone());
+        resource.gpu_vram_gb = class.map(|class| class.vram_gb);
+        resource.gpu_count = count;
+        resource.hourly_cost_usd = raw["price"]
+            .as_f64()
+            .filter(|price| price.is_finite() && *price > 0.0);
+        resource.created_at = raw["created_at"]
+            .as_str()
+            .and_then(|date| date.parse().ok());
+        resource.ssh_endpoint = raw["ssh_connect_cmd"].as_str().and_then(Self::ssh_endpoint);
+        Ok(Some(resource))
+    }
+    fn ssh_endpoint(command: &str) -> Option<String> {
+        let words = command.split_whitespace().collect::<Vec<_>>();
+        if words.first() != Some(&"ssh") {
+            return None;
+        }
+        let mut port = 22u16;
+        let mut target = None;
+        let mut index = 1;
+        while index < words.len() {
+            if words[index] == "-p" {
+                index += 1;
+                port = words.get(index)?.parse().ok().filter(|port| *port > 0)?;
+            } else if target.replace(words[index]).is_some() {
+                return None;
+            }
+            index += 1;
+        }
+        let (user, host) = target?.split_once('@')?;
+        if user.is_empty()
+            || !user
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        {
+            return None;
+        }
+        let candidate = format!("ssh://{user}@{host}:{port}");
+        let url = url::Url::parse(&candidate).ok()?;
+        (url.host_str() == Some(host)
+            && url.password().is_none()
+            && url.path().is_empty()
+            && url.query().is_none()
+            && url.fragment().is_none())
+        .then_some(candidate)
+    }
+    fn managed_template(raw: &Value) -> Result<Option<ManagedResource>> {
+        let Some(metadata) = Self::metadata(raw)? else {
+            return Ok(None);
+        };
+        if raw["is_private"].as_bool() != Some(true) {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Ok(Some(metadata.bind(
+            ProvisionedInstance {
+                id: Self::id(raw)?.into(),
+                provider: CloudProvider::BittensorLium,
+                instance_type: "template".into(),
+                region: String::new(),
+                public_ip: None,
+                private_ip: None,
+                status: InstanceStatus::Running,
+            },
+            ManagedResourceKind::Template,
+        )))
+    }
+    async fn templates(&self) -> Result<Vec<Value>> {
+        self.get("templates")
+            .await?
+            .and_then(|raw| raw.as_array().cloned())
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))
+    }
+}
+#[async_trait]
+impl ManagedProviderAdapter for BittensorLiumAdapter {
+    async fn offers(&self, spec: &ResourceSpec, region: &str) -> Result<Vec<NativeOffer>> {
+        spec.validate()
+            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        Self::constraints(spec)?;
+        let count = spec
+            .gpu_count
+            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let document = self
+            .get("public/v1/nodes")
+            .await?
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+        let nodes = document["nodes"]
+            .as_array()
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+        let region = if region.is_empty() {
+            self.default_region.as_deref().unwrap_or("")
+        } else {
+            region
+        };
+        let mut offers = Vec::new();
+        for node in nodes {
+            if node["available_now"].as_bool() != Some(true)
+                || node["available_gpu_count"]
+                    .as_u64()
+                    .is_none_or(|free| free < u64::from(count))
+                || node["min_rentable_gpu_count"].as_u64().map_or_else(
+                    || node["gpu_count"].as_u64() != Some(u64::from(count)),
+                    |minimum| u64::from(count) < minimum,
+                )
+                || node["cpu_count"]
+                    .as_f64()
+                    .is_none_or(|cpu| cpu < f64::from(spec.cpu))
+                || node["ram_gb"]
+                    .as_f64()
+                    .is_none_or(|ram| ram < f64::from(spec.memory_gb))
+                || node["disk_free_gb"]
+                    .as_f64()
+                    .is_none_or(|disk| disk < f64::from(spec.storage_gb))
+            {
+                continue;
+            }
+            let spot = match node["tier"].as_str() {
+                Some("secure") => false,
+                Some("spot") if spec.allow_spot => true,
+                _ => continue,
+            };
+            let Some(class) = node["gpu_model"]
+                .as_str()
+                .and_then(|model| Self::class(model, count))
+            else {
+                continue;
+            };
+            if spec.gpu_class.as_ref().is_some_and(|id| id != &class.id)
+                || spec
+                    .gpu_vram_gb
+                    .is_some_and(|minimum| class.vram_gb < minimum)
+            {
+                continue;
+            }
+            let Some(location) = node["region"]
+                .as_str()
+                .filter(|location| !location.is_empty())
+            else {
+                continue;
+            };
+            if !region.is_empty() && location != region {
+                continue;
+            }
+            let Some(price) = node["price_per_gpu_hour"]
+                .as_f64()
+                .map(|price| price * f64::from(count))
+                .filter(|price| price.is_finite() && *price > 0.0)
+            else {
+                continue;
+            };
+            offers.push(NativeOffer {
+                provider: CloudProvider::BittensorLium,
+                native_id: Self::id(node)?.into(),
+                instance_type: node["gpu_model"].as_str().unwrap_or("").into(),
+                region: location.into(),
+                gpu_class: class.id,
+                gpu_count: count,
+                hourly_cost_usd: price,
+                spot,
+                pricing_source: format!("{}/public/v1/nodes", self.base_url),
+                underlying: None,
+            });
+        }
+        Ok(offers)
+    }
+    async fn create(
+        &self,
+        spec: &ResourceSpec,
+        offer: &NativeOffer,
+        fingerprint: &str,
+    ) -> Result<ManagedResource> {
+        spec.validate()
+            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        Self::constraints(spec)?;
+        let image = spec
+            .image
+            .as_ref()
+            .filter(|image| {
+                !image.is_empty()
+                    && !image.starts_with('-')
+                    && !image.chars().any(|c| c.is_whitespace() || c.is_control())
             })
-            .unwrap_or_else(|| "unknown".to_string());
-
-        info!(%rental_id, %gpu_type, %miner_uid, "Created Bittensor Lium rental");
-
-        self.wait_for_running(&rental_id).await
+            .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
+        let key = canonical_public_key(
+            spec.ssh_public_key
+                .as_deref()
+                .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?,
+        )?;
+        let mut metadata = ManagedMetadata::for_spec(spec, fingerprint, chrono::Utc::now())?;
+        let mut original_offer = offer.clone();
+        let mut owned = Vec::new();
+        for raw in self.templates().await? {
+            if let Some(existing) = Self::metadata(&raw)? {
+                if existing.identity == metadata.identity {
+                    if existing.request_fingerprint != fingerprint
+                        || existing.expires_at <= chrono::Utc::now()
+                        || raw["is_private"].as_bool() != Some(true)
+                    {
+                        return Err(Error::Provider(ProviderErrorCode::Conflict));
+                    }
+                    owned.push((raw, existing));
+                }
+            }
+        }
+        if owned.len() > 1 {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        let template = if let Some((raw, existing)) = owned.pop() {
+            metadata = existing;
+            original_offer = raw["description"]
+                .as_str()
+                .and_then(|description| serde_json::from_str::<NativeOffer>(description).ok())
+                .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+            if original_offer.provider != offer.provider
+                || original_offer.native_id != offer.native_id
+                || original_offer.instance_type != offer.instance_type
+                || original_offer.region != offer.region
+                || original_offer.gpu_class != offer.gpu_class
+                || original_offer.gpu_count != offer.gpu_count
+                || original_offer.spot != offer.spot
+                || !original_offer.hourly_cost_usd.is_finite()
+                || original_offer.hourly_cost_usd <= 0.0
+                || spec
+                    .max_hourly_cost_usd
+                    .is_some_and(|cap| original_offer.hourly_cost_usd > cap)
+            {
+                return Err(Error::Provider(ProviderErrorCode::Conflict));
+            }
+            Self::id(&raw)?.to_owned()
+        } else {
+            let mut env = crate::managed::bootstrap::workload_environment(spec)?;
+            env.extend(metadata.env());
+            let mut ports = spec.ports.clone();
+            ports.push(22);
+            ports.sort_unstable();
+            ports.dedup();
+            let response=self.http.post_json(&format!("{}/templates",self.base_url),&self.auth,json!({"name":metadata.name(),"description":serde_json::to_string(&original_offer).map_err(|_|Error::Provider(ProviderErrorCode::InvalidRequest))?,"docker_image":image,"docker_image_tag":"","environment":env,"internal_ports":ports,"is_private":true,"one_time_template":true,"category":"DOCKER","volumes":["/workspace"]})).await?;
+            let raw: Value = response
+                .json()
+                .await
+                .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?;
+            Self::id(&raw)
+                .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?
+                .to_owned()
+        };
+        let native_ceiling = spec
+            .max_hourly_cost_usd
+            .map(|cap| (cap / f64::from(offer.gpu_count) - 0.01).next_down());
+        let expected_price = native_ceiling.map_or(
+            original_offer.hourly_cost_usd / f64::from(offer.gpu_count),
+            |ceiling| ceiling.min(original_offer.hourly_cost_usd / f64::from(offer.gpu_count)),
+        );
+        if !expected_price.is_finite() || expected_price <= 0.0 {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        let body = json!({"pod_name":metadata.name(),"template_id":template,"gpu_count":offer.gpu_count,"volume_id":spec.volume_id,"user_public_key":key,
+            "termination_hours":spec.lease_duration_secs.unwrap_or(0)/3600,"initial_port_count":spec.ports.len()+usize::from(!spec.ports.contains(&22)),"enable_jupyter":false,"enable_backups":false,
+            "expected_price_per_gpu_hour":expected_price});
+        let idempotency_key = metadata.idempotency_key();
+        let response = self
+            .http
+            .post_json_idempotent(
+                &format!(
+                    "{}/executors/{}/rent",
+                    self.base_url,
+                    urlencoding::encode(&offer.native_id)
+                ),
+                &self.auth,
+                body,
+                &idempotency_key,
+            )
+            .await?;
+        let raw: Value = response
+            .json()
+            .await
+            .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?;
+        if raw["success"].as_bool() != Some(true) {
+            return Err(Error::Provider(ProviderErrorCode::Indeterminate));
+        }
+        let id = raw["pod_id"]
+            .as_str()
+            .filter(|id| uuid::Uuid::parse_str(id).is_ok())
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let mut resource = metadata.bind(
+            ProvisionedInstance {
+                id: id.into(),
+                provider: CloudProvider::BittensorLium,
+                instance_type: offer.instance_type.clone(),
+                region: offer.region.clone(),
+                public_ip: None,
+                private_ip: None,
+                status: InstanceStatus::Starting,
+            },
+            ManagedResourceKind::Instance,
+        );
+        resource.gpu_class = Some(offer.gpu_class.clone());
+        resource.gpu_count = Some(offer.gpu_count);
+        resource.gpu_vram_gb =
+            blueprint_core::gpu::find(&offer.gpu_class).map(|class| class.vram_gb);
+        resource.hourly_cost_usd = Some(offer.hourly_cost_usd);
+        Ok(resource)
+    }
+    async fn complete(
+        &self,
+        spec: &ResourceSpec,
+        resource: ManagedResource,
+    ) -> Result<ManagedResource> {
+        let Some(expected) = spec.ssh_public_key.as_deref() else {
+            return Ok(resource);
+        };
+        let expected = parse_public_key(expected)?;
+        let raw = self
+            .get(&format!(
+                "pods/{}",
+                urlencoding::encode(&resource.instance.id)
+            ))
+            .await?
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let keys = raw["ssh_keys"]
+            .as_array()
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let keys = keys
+            .iter()
+            .map(|key| {
+                parse_public_key(
+                    key["public_key"]
+                        .as_str()
+                        .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if !keys.iter().any(|key| key.key_data() == expected.key_data()) {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Self::managed_pod(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Conflict))
     }
 
-    async fn cancel_rental(&self, rental_id: &str) -> Result<()> {
-        let url = format!("{BASE_URL}/rentals/{rental_id}");
-        retry_with_backoff("lium.cancel_rental", &RetryPolicy::default(), |_| {
-            let url = url.clone();
-            async move {
-                let response = self
-                    .http
-                    .authenticated_request(reqwest::Method::DELETE, &url, &self.auth, None)
-                    .await
-                    .map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Lium cancel rental: {e}"
-                        )))
-                    })?;
-                if let Some(class) = classify_response(&response) {
-                    if response.status().as_u16() == 404 {
-                        return Ok(());
-                    }
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(ClassifiedError {
-                        class,
-                        inner: Error::HttpError(format!("Lium cancel failed: {body}")),
-                    });
+    async fn status(
+        &self,
+        identity: &ManagedLeaseIdentity,
+        id: &str,
+    ) -> Result<Option<ManagedResource>> {
+        if uuid::Uuid::parse_str(id).is_err() {
+            return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+        }
+        let Some(raw) = self
+            .get(&format!("pods/{}", urlencoding::encode(id)))
+            .await?
+        else {
+            return Ok(None);
+        };
+        let resource =
+            Self::managed_pod(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+        if resource.namespace != identity.namespace || resource.lease_id != identity.lease_id {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Ok(Some(resource))
+    }
+    async fn list(&self, namespace: &str) -> Result<Vec<ManagedResource>> {
+        let pods = self
+            .get("pods")
+            .await?
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+        let mut resources = Vec::new();
+        for raw in pods
+            .as_array()
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?
+        {
+            if let Some(resource) = Self::managed_pod(raw)? {
+                if resource.namespace == namespace {
+                    resources.push(resource);
                 }
-                Ok(())
             }
-        })
-        .await?;
-        info!(%rental_id, "Cancelled Bittensor Lium rental");
+        }
+        for raw in self.templates().await? {
+            if let Some(resource) = Self::managed_template(&raw)? {
+                if resource.namespace == namespace {
+                    resources.push(resource);
+                }
+            }
+        }
+        Ok(resources)
+    }
+    async fn destroy(
+        &self,
+        identity: &ManagedLeaseIdentity,
+        resource: &ManagedResource,
+    ) -> Result<()> {
+        let id = &resource.instance.id;
+        if uuid::Uuid::parse_str(id).is_err() {
+            return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+        }
+        let path = match resource.kind {
+            ManagedResourceKind::Instance => "pods",
+            ManagedResourceKind::Template => "templates",
+            _ => return Err(Error::Provider(ProviderErrorCode::Unsupported)),
+        };
+        let Some(raw) = self.get(&format!("{path}/{id}")).await? else {
+            return Ok(());
+        };
+        let observed = if resource.kind == ManagedResourceKind::Instance {
+            Self::managed_pod(&raw)?
+        } else {
+            Self::managed_template(&raw)?
+        }
+        .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+        if observed.namespace != identity.namespace || observed.lease_id != identity.lease_id {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        self.http
+            .delete(&format!("{}/{path}/{id}", self.base_url), &self.auth)
+            .await?;
         Ok(())
     }
 }
-
 #[async_trait]
 impl CloudProviderAdapter for BittensorLiumAdapter {
-    async fn provision_instance(
-        &self,
-        instance_type: &str,
-        region: &str,
-        require_tee: bool,
-    ) -> Result<ProvisionedInstance> {
-        // Fail closed at the trait boundary: this provider has no
-        // confidential-compute / TEE attestation path. Refuse rather than
-        // silently return a non-TEE instance for a require_tee request.
-        if require_tee {
-            return Err(Error::ConfigurationError(
-                "Bittensor Lium does not support confidential-compute / TEE attestation; \
-                 refusing require_tee"
-                    .into(),
-            ));
-        }
-        self.create_rental(instance_type, region).await
+    fn managed(&self) -> Option<&dyn ManagedProviderAdapter> {
+        Some(self)
     }
-
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        self.cancel_rental(instance_id).await
-    }
-
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        match self.fetch_rental_json(instance_id).await {
-            Ok(raw) => {
-                let instance = Self::parse_instance(&raw, &self.region)?;
-                Ok(instance.status)
-            }
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Lium rental status");
-                Ok(InstanceStatus::Unknown)
-            }
-        }
-    }
-
-    async fn deploy_blueprint_with_target(
-        &self,
-        target: &crate::core::deployment_target::DeploymentTarget,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        use crate::core::deployment_target::DeploymentTarget;
-        match target {
-            DeploymentTarget::VirtualMachine { runtime: _ } => {
-                let plan = super::BittensorLiumInstanceMapper::map(resource_spec);
-                provision_with_cleanup(
-                    "bittensor_lium",
-                    || self.create_rental(&plan.instance_type, ""),
-                    |instance| {
-                        let env_vars = env_vars.clone();
-                        async move {
-                            self.deploy_blueprint(
-                                &instance,
-                                blueprint_image,
-                                resource_spec,
-                                env_vars,
-                            )
-                            .await
-                        }
-                    },
-                    |id| async move { self.cancel_rental(&id).await },
-                )
-                .await
-            }
-            DeploymentTarget::ManagedKubernetes { .. } => Err(Error::ConfigurationError(
-                "Bittensor Lium does not offer managed Kubernetes".into(),
-            )),
-            DeploymentTarget::GenericKubernetes {
-                context: _,
-                namespace,
-            } => {
-                #[cfg(feature = "kubernetes")]
-                {
-                    use crate::shared::SharedKubernetesDeployment;
-                    SharedKubernetesDeployment::deploy_to_generic_k8s(
-                        namespace,
-                        blueprint_image,
-                        resource_spec,
-                        env_vars,
-                    )
-                    .await
-                }
-                #[cfg(not(feature = "kubernetes"))]
-                {
-                    let _ = (namespace, blueprint_image, resource_spec, env_vars);
-                    Err(Error::ConfigurationError(
-                        "Kubernetes feature not enabled".into(),
-                    ))
-                }
-            }
-            DeploymentTarget::Serverless { .. } => Err(Error::ConfigurationError(
-                "Bittensor Lium does not offer serverless deployment".into(),
-            )),
-        }
-    }
-
-    async fn deploy_blueprint(
-        &self,
-        instance: &ProvisionedInstance,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        require_public_ip(instance)?;
-        deploy_via_ssh(
-            instance,
-            blueprint_image,
-            resource_spec,
-            env_vars,
-            SshDeploymentConfig::bittensor_lium(),
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        Self::instance(
+            &self
+                .get(&format!("pods/{}", urlencoding::encode(id)))
+                .await?
+                .ok_or(Error::Provider(ProviderErrorCode::NotFound))?,
         )
-        .await
-    }
-
-    async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
-        if let Some(endpoint) = deployment.qos_grpc_endpoint() {
-            // Reuse the pre-built pooled client instead of rebuilding the
-            // TLS stack on every (interval-driven) health probe.
-            match self
-                .http
-                .get(&format!("{endpoint}/health"), &ApiAuthentication::None)
-                .await
-            {
-                Ok(response) => Ok(response.status().is_success()),
-                Err(_) => Ok(false),
-            }
-        } else {
-            Ok(false)
-        }
-    }
-
-    async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
-        self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_running_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-9001",
-                "status": "active",
-                "gpu_type": "H100-80GB",
-                "datacenter": "eu-central",
-                "public_ip": "192.0.2.55",
-                "private_ip": "10.20.0.7",
-                "miner_uid": 42
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.id, "lium-9001");
-        assert_eq!(instance.public_ip.as_deref(), Some("192.0.2.55"));
-        assert_eq!(instance.region, "eu-central");
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::BittensorLium);
-    }
-
-    #[test]
-    fn parses_starting_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-pending",
-                "status": "matching",
-                "gpu_type": "A100-80GB"
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-        assert!(instance.public_ip.is_none());
-        assert_eq!(instance.region, "auto");
-    }
-
-    #[test]
-    fn parses_terminated_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-dead",
-                "status": "ended",
-                "gpu_type": "RTX_4090"
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    #[test]
-    fn parse_fails_without_id() {
-        let json = serde_json::json!({ "rental": { "status": "active" } });
-        assert!(BittensorLiumAdapter::parse_instance(&json, "auto").is_err());
     }
 }

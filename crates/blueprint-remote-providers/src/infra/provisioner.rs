@@ -33,7 +33,8 @@ use blueprint_std::collections::HashMap;
 
 /// Multi-cloud provisioner that handles deployments across all supported providers
 pub struct CloudProvisioner {
-    providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
+    pub(crate) providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
+    pub(crate) regions: HashMap<CloudProvider, String>,
     retry_policy: RetryPolicy,
 }
 
@@ -195,18 +196,24 @@ impl CloudProvisioner {
 
         Ok(Self {
             providers,
+            regions: HashMap::new(),
             retry_policy: RetryPolicy::default(),
         })
     }
 
-    #[cfg(test)]
     pub fn with_providers(
         providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
     ) -> Self {
         Self {
             providers,
+            regions: HashMap::new(),
             retry_policy: RetryPolicy::default(),
         }
+    }
+
+    pub fn with_regions(mut self, regions: HashMap<CloudProvider, String>) -> Self {
+        self.regions = regions;
+        self
     }
 
     /// Get the adapter for a specific provider
@@ -239,6 +246,10 @@ impl CloudProvisioner {
         region: &str,
         require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        resource_spec
+            .validate()
+            .map_err(|_| Error::Provider(crate::managed::ProviderErrorCode::InvalidRequest))?;
+        let require_tee = require_tee || resource_spec.tee_required;
         let adapter = self
             .providers
             .get(&provider)
@@ -255,12 +266,50 @@ impl CloudProvisioner {
             )));
         }
 
+        if adapter.managed().is_some()
+            && (resource_spec.gpu_count.is_some() || !resource_spec.arms.is_empty())
+        {
+            use crate::managed::ProviderErrorCode;
+            let mut spec = resource_spec.clone();
+            if spec
+                .provider
+                .as_ref()
+                .is_some_and(|value| value != &provider)
+                || spec
+                    .region
+                    .as_deref()
+                    .is_some_and(|value| !region.is_empty() && value != region)
+                || spec.ownership.is_none()
+                || spec.lease_duration_secs.is_none_or(|seconds| seconds == 0)
+            {
+                return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+            }
+            spec.provider = Some(provider.clone());
+            if spec.region.is_none() && !region.is_empty() {
+                spec.region = Some(region.into());
+            }
+            spec.tee_required |= require_tee;
+            let offers = self.quotes(&spec).await?;
+            let quote = offers.quotes.first().ok_or_else(|| {
+                Error::Provider(
+                    offers
+                        .errors
+                        .first()
+                        .map_or(ProviderErrorCode::NoStock, |error| error.code),
+                )
+            })?;
+            return self
+                .create_managed(&spec, &quote.candidate)
+                .await
+                .map(|resource| resource.instance);
+        }
+
         // Map resources to appropriate instance type
         let instance_selection = InstanceTypeMapper::map_to_instance_type_with_requirements(
             resource_spec,
             &provider,
             require_tee,
-        );
+        )?;
         info!(
             "Provisioning {} instance type {} (tee_required={})",
             provider, instance_selection.instance_type, require_tee

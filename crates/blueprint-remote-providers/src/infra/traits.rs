@@ -42,61 +42,82 @@ impl BlueprintDeploymentResult {
 /// Common adapter trait for all cloud providers
 #[async_trait]
 pub trait CloudProviderAdapter: Send + Sync {
-    /// Provision a new instance of the specified type in the given region
-    async fn provision_instance(
-        &self,
-        instance_type: &str,
-        region: &str,
-        require_tee: bool,
-    ) -> Result<ProvisionedInstance>;
-
-    /// Terminate an existing instance
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()>;
-
-    /// Get the current status of an instance
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus>;
-
-    /// Get full instance details including public IP (may not be implemented by all providers)
-    async fn get_instance_details(&self, _instance_id: &str) -> Result<ProvisionedInstance> {
-        // Default implementation returns error - providers should override if they support this
-        Err(crate::core::error::Error::Other(
-            "get_instance_details not implemented for this provider".into(),
-        ))
+    fn managed(&self) -> Option<&dyn crate::managed::ManagedProviderAdapter> {
+        None
     }
 
-    /// Deploy a Blueprint service with QoS port exposure
-    ///
-    /// Routes to appropriate deployment method based on target:
-    /// - VirtualMachine: SSH + Docker deployment
-    /// - ManagedKubernetes: Provider's managed K8s (EKS/GKE/AKS)
-    /// - GenericKubernetes: kubectl API deployment
+    /// Lossy legacy calls cannot allocate a managed GPU lease.
+    async fn provision_instance(
+        &self,
+        _sku: &str,
+        _region: &str,
+        _tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        Err(crate::Error::Provider(
+            crate::managed::ProviderErrorCode::Unsupported,
+        ))
+    }
+    async fn terminate_instance(&self, _id: &str) -> Result<()> {
+        Err(crate::Error::Provider(
+            crate::managed::ProviderErrorCode::Unsupported,
+        ))
+    }
+    async fn get_instance_status(&self, id: &str) -> Result<InstanceStatus> {
+        self.get_instance_details(id)
+            .await
+            .map(|instance| instance.status)
+    }
+    async fn get_instance_details(&self, _id: &str) -> Result<ProvisionedInstance> {
+        Err(crate::Error::Provider(
+            crate::managed::ProviderErrorCode::Unsupported,
+        ))
+    }
     async fn deploy_blueprint_with_target(
         &self,
         target: &crate::core::deployment_target::DeploymentTarget,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult>;
-
-    /// Legacy method - deploys to VM by default
+        image: &str,
+        spec: &ResourceSpec,
+        env: HashMap<String, String>,
+    ) -> Result<BlueprintDeploymentResult> {
+        #[cfg(feature = "kubernetes")]
+        if let crate::core::deployment_target::DeploymentTarget::GenericKubernetes {
+            namespace,
+            ..
+        } = target
+        {
+            return crate::shared::SharedKubernetesDeployment::deploy_to_generic_k8s(
+                namespace, image, spec, env,
+            )
+            .await;
+        }
+        let _ = (target, image, spec, env);
+        Err(crate::Error::Provider(
+            crate::managed::ProviderErrorCode::Unsupported,
+        ))
+    }
+    /// Deploying an existing VM requires the SDK's full access-aware lifecycle.
     async fn deploy_blueprint(
         &self,
         _instance: &ProvisionedInstance,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
+        _image: &str,
+        _spec: &ResourceSpec,
+        _env: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
-        use crate::core::deployment_target::{ContainerRuntime, DeploymentTarget};
-        let target = DeploymentTarget::VirtualMachine {
-            runtime: ContainerRuntime::Docker,
-        };
-        self.deploy_blueprint_with_target(&target, blueprint_image, resource_spec, env_vars)
-            .await
+        Err(crate::Error::Provider(
+            crate::managed::ProviderErrorCode::Unsupported,
+        ))
     }
-
-    /// Check if a Blueprint deployment is healthy and responsive
-    async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool>;
-
-    /// Cleanup a Blueprint deployment from an instance
-    async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()>;
+    async fn health_check_blueprint(
+        &self,
+        _deployment: &BlueprintDeploymentResult,
+    ) -> Result<bool> {
+        Err(crate::Error::Provider(
+            crate::managed::ProviderErrorCode::Unsupported,
+        ))
+    }
+    async fn cleanup_blueprint(&self, _deployment: &BlueprintDeploymentResult) -> Result<()> {
+        Err(crate::Error::Provider(
+            crate::managed::ProviderErrorCode::Unsupported,
+        ))
+    }
 }
