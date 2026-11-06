@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import os
 import re
-import time
 import tomllib
 import json
 from pathlib import Path
@@ -249,18 +248,15 @@ def artifact_mode(args) -> int:
         tag = tags.pop()
         if not CLI_TAG.fullmatch(tag):
             raise ReleaseVerificationError("invalid dispatch tag")
-        listing = ["run", "list", "--repo", repo, "--workflow", "release.yml", "--event", "workflow_dispatch",
-                   "--limit", "50", "--json", "databaseId,displayTitle,url"]
-        previous = {row["databaseId"] for row in github(*listing)}
-        github("workflow", "run", "release.yml", "--repo", repo, "--ref", "main", "--field", f"tag={tag}", raw=True)
-        deadline = time.monotonic() + 40
-        while time.monotonic() < deadline:
-            for row in github(*listing, timeout=min(10, max(1, deadline - time.monotonic()))):
-                if row["databaseId"] not in previous and row["displayTitle"] == f"cargo-tangle artifacts {tag}":
-                    print(json.dumps({"tag": tag, "dispatch_accepted": True, "run_id": row["databaseId"], "url": row["url"]}))
-                    return 0
-            time.sleep(min(2, max(0, deadline - time.monotonic())))
-        raise ReleaseVerificationError(f"dispatch accepted for {tag}, but run receipt not observed within 40 seconds")
+        receipt = github("api", "--method", "POST", f"repos/{repo}/actions/workflows/release.yml/dispatches",
+                         "-H", "X-GitHub-Api-Version: 2026-03-10", "-f", "ref=main", "-f", f"inputs[tag]={tag}")
+        run_id = receipt.get("workflow_run_id") if isinstance(receipt, dict) else None
+        server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+        api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+        if type(run_id) is not int or run_id <= 0 or receipt.get("html_url") != f"{server}/{repo}/actions/runs/{run_id}" or receipt.get("run_url") != f"{api}/repos/{repo}/actions/runs/{run_id}":
+            raise ReleaseVerificationError("dispatch accepted without a valid run receipt")
+        print(json.dumps({"tag": tag, "dispatch_accepted": True, "run_id": run_id, "url": receipt["html_url"]}))
+        return 0
     source, plan = artifact_context(args.tag, args.plan)
     if args.artifacts == "record":
         files = {name: hashlib.sha256((Path("target/distrib") / name).read_bytes()).hexdigest()

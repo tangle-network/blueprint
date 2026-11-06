@@ -27,7 +27,7 @@ def proof():
         content["cli.tar.xz.sha256"] = hashlib.sha256(content["cli.tar.xz"].encode()).hexdigest() + " *cli.tar.xz\n"
         record = {"schema_version": 1, "tag": TAG, "source_sha": SHA,
                   "sha256": {name: hashlib.sha256(value.encode()).hexdigest() for name, value in content.items()}}
-        fixture = {"record": record, "content": content, "complete": False, "fail": False, "dispatch": False, "head": SHA, "tagged": SHA}
+        fixture = {"record": record, "content": content, "complete": False, "fail": False, "head": SHA, "tagged": SHA}
         state = root / "fixture.json"
         binary = root / "bin"
         binary.mkdir()
@@ -38,10 +38,9 @@ from pathlib import Path
 p=Path(os.environ["RELEASE_FIXTURE"]);f=json.loads(p.read_text());a=sys.argv[1:]
 with (p.parent/"argv.jsonl").open("a") as out: out.write(json.dumps(a)+"\\n")
 if f["fail"]: print("credential-reflection-canary",file=sys.stderr);sys.exit(1)
-if a[:2]==["workflow","run"]: f["dispatch"]=True;p.write_text(json.dumps(f));sys.exit(0)
-if a[:2]==["run","list"]:
- print(json.dumps([{"databaseId":99,"displayTitle":"cargo-tangle artifacts cargo-tangle-v0.5.0-alpha.28","url":"https://example.invalid/run/99"}] if f["dispatch"] else []));sys.exit(0)
 endpoint=next(x for x in a if x.startswith("repos/"))
+if endpoint.endswith("/dispatches"):
+ print(json.dumps({"workflow_run_id":99,"run_url":"https://api.github.com/repos/tangle-network/blueprint/actions/runs/99","html_url":"https://github.com/tangle-network/blueprint/actions/runs/99"}));sys.exit(0)
 if "/releases/tags/" in endpoint:
  names=list(f["content"])+["release-source.json"] if f["complete"] else []
  values={**f["content"],"release-source.json":json.dumps(f["record"],sort_keys=True)}
@@ -51,7 +50,7 @@ sys.stdout.write(values[i])
 ''')
         for executable in binary.iterdir(): executable.chmod(0o700)
         env = {**os.environ, "PATH": str(binary)+os.pathsep+os.environ["PATH"],
-               "RELEASE_FIXTURE": str(state), "GITHUB_REPOSITORY": "tangle-network/blueprint"}
+               "RELEASE_FIXTURE": str(state), "GITHUB_REPOSITORY": "tangle-network/blueprint", "GITHUB_SERVER_URL": "https://github.com", "GITHUB_API_URL": "https://api.github.com"}
         def invoke(mode="check", expected=0):
             state.write_text(json.dumps(fixture))
             args = [sys.executable, str(SCRIPT), "--artifacts", mode]
@@ -79,7 +78,7 @@ sys.stdout.write(values[i])
         result = invoke("dispatch")
         assert '99' in result.stdout, result.stdout
         requests = [json.loads(line) for line in (root / "argv.jsonl").read_text().splitlines()]
-        assert ["workflow", "run", "release.yml", "--repo", "tangle-network/blueprint", "--ref", "main", "--field", f"tag={TAG}"] in requests
+        assert ["api", "--method", "POST", "repos/tangle-network/blueprint/actions/workflows/release.yml/dispatches", "-H", "X-GitHub-Api-Version: 2026-03-10", "-f", "ref=main", "-f", f"inputs[tag]={TAG}"] in requests
         (root / "release.json").write_text(json.dumps([{"package_name": "cargo-tangle", "version": "0.5.0-alpha.28", "tag": "main"}]))
         invoke("dispatch", expected=2)
         (root / "release.json").write_text(json.dumps([{"package_name": "blueprint-core", "version": "1.0.0", "tag": "blueprint-core-v1.0.0"}]))
