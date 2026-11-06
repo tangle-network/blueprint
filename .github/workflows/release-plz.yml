@@ -99,7 +99,7 @@ jobs:
 
       - name: Recover release output from existing tags
         if: inputs.recover-tagged == true
-        run: git checkout "$GITHUB_SHA" -- .github/scripts/crate-publish-plan.py && python3 .github/scripts/crate-publish-plan.py --from-tags > release-output.json
+        run: git checkout "$GITHUB_SHA" -- .github/scripts && python3 .github/scripts/crate-publish-plan.py --from-tags > release-output.json
 
       - name: Save release output for batch publishing
         if: steps.release-plz.outputs.releases_created == 'true'
