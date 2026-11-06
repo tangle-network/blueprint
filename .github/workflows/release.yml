@@ -87,9 +87,6 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
     steps:
-      - name: enable windows longpaths
-        run: |
-          git config --global core.longpaths true
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -100,7 +97,7 @@ jobs:
         run: |
           if ! command -v cargo > /dev/null 2>&1; then
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           fi
       - name: "install protobuf and gmp (Linux)"
         if: "runner.os == 'Linux'"
@@ -134,9 +131,8 @@ jobs:
         name: Post-build
         shell: bash
         run: |
-          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          dist print-upload-files-from-manifest --manifest dist-manifest.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          upload_paths=$(dist print-upload-files-from-manifest --manifest dist-manifest.json)
+          printf 'paths<<EOF\n%s\nEOF\n' "$upload_paths" >> "$GITHUB_OUTPUT"
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
       - name: "Upload artifacts"
@@ -179,9 +175,8 @@ jobs:
         run: |
           dist build ${{ needs.plan.outputs.tag-flag }} --output-format=json "--artifacts=global" > dist-manifest.json
 
-          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          jq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          upload_paths=$(jq --raw-output ".upload_files[]" dist-manifest.json)
+          printf 'paths<<EOF\n%s\nEOF\n' "$upload_paths" >> "$GITHUB_OUTPUT"
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
       - name: "Upload artifacts"
@@ -249,7 +244,11 @@ jobs:
         run: |
           gh release upload "$RELEASE_TAG" artifacts/* --clobber
 
-          gh release edit "$RELEASE_TAG" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --draft=false
+          prerelease_args=()
+          if [ -n "$PRERELEASE_FLAG" ]; then
+            prerelease_args+=("$PRERELEASE_FLAG")
+          fi
+          gh release edit "$RELEASE_TAG" --target "$RELEASE_COMMIT" "${prerelease_args[@]}" --draft=false
           gh release upload "$RELEASE_TAG" target/distrib/release-source.json --clobber
           python3 .github/scripts/verify_release_tags.py --artifacts check --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
           echo "source-bound artifacts uploaded and verified"
