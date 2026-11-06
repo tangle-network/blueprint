@@ -99,6 +99,26 @@ impl LambdaLabsAdapter {
         })
     }
 
+    fn class(native: &Value, count: u32) -> Option<blueprint_core::gpu::GpuClass> {
+        let classes = blueprint_core::gpu::catalog();
+        let known = classes.iter().find(|class| {
+            class.sku("lambda-labs", count) == native["name"].as_str() && native["name"].is_string()
+        });
+        let mut described = classes.iter().filter(|class| {
+            count <= class.max_per_node
+                && native["gpu_description"]
+                    .as_str()
+                    .is_some_and(|name| class.matches_name(name))
+        });
+        let first = described.next();
+        let unique = first.filter(|_| described.next().is_none());
+        match (known, unique) {
+            (Some(known), Some(description)) if known.id != description.id => None,
+            (Some(known), _) => Some(known.clone()),
+            (None, description) => description.cloned(),
+        }
+    }
+
     fn managed(raw: &Value) -> Result<Option<ManagedResource>> {
         let mut tags = BTreeMap::new();
         if let Some(values) = raw["tags"].as_array() {
@@ -124,11 +144,7 @@ impl LambdaLabsAdapter {
             .as_u64()
             .and_then(|count| u32::try_from(count).ok())
             .filter(|count| *count > 0);
-        let class = blueprint_core::gpu::catalog().into_iter().find(|class| {
-            count.is_some_and(|count| {
-                class.sku("lambda-labs", count) == Some(instance.instance_type.as_str())
-            })
-        });
+        let class = count.and_then(|count| Self::class(&raw["instance_type"], count));
         let mut resource = metadata.bind(instance, ManagedResourceKind::Instance);
         resource.gpu_class = class.as_ref().map(|class| class.id.clone());
         resource.gpu_vram_gb = class.map(|class| class.vram_gb);
@@ -149,6 +165,42 @@ impl LambdaLabsAdapter {
             .and_then(|ip| ip.parse::<std::net::Ipv4Addr>().ok())
             .map(|ip| format!("ssh://ubuntu@{ip}:22"));
         Ok(Some(resource))
+    }
+
+    async fn verify_ssh_key(&self, spec: &ResourceSpec) -> Result<()> {
+        let Some(public_key) = &spec.ssh_public_key else {
+            return Ok(());
+        };
+        let unsupported = || Error::Provider(ProviderErrorCode::Unsupported);
+        let parse = |value: &str| {
+            if value.contains(['\0', '\r', '\n']) {
+                return Err(unsupported());
+            }
+            ssh_key::PublicKey::from_openssh(value).map_err(|_| unsupported())
+        };
+        let expected = parse(public_key)?;
+        let name = self
+            .ssh_key_name
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .ok_or_else(unsupported)?;
+        let data = match self.data("ssh-keys").await {
+            Err(Error::Provider(ProviderErrorCode::NotFound)) => return Err(unsupported()),
+            result => result?,
+        };
+        let mut selected = data
+            .as_array()
+            .ok_or_else(unsupported)?
+            .iter()
+            .filter(|key| key["name"].as_str() == Some(name));
+        let registered = selected
+            .next()
+            .and_then(|key| key["public_key"].as_str())
+            .ok_or_else(unsupported)?;
+        if selected.next().is_some() || parse(registered)?.key_data() != expected.key_data() {
+            return Err(unsupported());
+        }
+        Ok(())
     }
 
     fn network(value: &str) -> Option<(u64, u64)> {
@@ -212,16 +264,22 @@ impl LambdaLabsAdapter {
                     .cloned(),
             );
         }
-        let mut ports = spec.ports.clone();
-        ports.push(22);
-        ports.sort_unstable();
-        ports.dedup();
-        for port in ports {
-            let mut intervals = Vec::new();
-            for rule in &rules {
-                if !matches!(rule["protocol"].as_str(), Some("tcp" | "all")) {
-                    continue;
-                }
+        let mut effective = Vec::new();
+        for rule in &rules {
+            let protocol = match rule["protocol"].as_str() {
+                Some(protocol @ ("tcp" | "udp" | "icmp" | "all")) => protocol,
+                _ => return Err(unsupported()),
+            };
+            let source = rule["source_network"]
+                .as_str()
+                .and_then(Self::network)
+                .ok_or_else(unsupported)?;
+            if source.0 < requested.0 || source.1 > requested.1 {
+                return Err(unsupported());
+            }
+            let (low, high) = if protocol == "icmp" {
+                (0, 0)
+            } else {
                 let range = rule["port_range"]
                     .as_array()
                     .filter(|range| range.len() == 2)
@@ -235,18 +293,24 @@ impl LambdaLabsAdapter {
                 if !(1..=65535).contains(&low) || high < low || high > 65535 {
                     return Err(Error::Provider(ProviderErrorCode::ProviderError));
                 }
-                if u64::from(port) < low || u64::from(port) > high {
-                    continue;
-                }
-                let source = rule["source_network"]
-                    .as_str()
-                    .and_then(Self::network)
-                    .ok_or_else(unsupported)?;
-                if source.0 < requested.0 || source.1 > requested.1 {
-                    return Err(unsupported());
-                }
-                intervals.push(source);
-            }
+                (low, high)
+            };
+            effective.push((protocol, low, high, source));
+        }
+        let mut ports = spec.ports.clone();
+        ports.push(22);
+        ports.sort_unstable();
+        ports.dedup();
+        for port in ports {
+            let mut intervals = effective
+                .iter()
+                .filter(|(protocol, low, high, _)| {
+                    matches!(*protocol, "tcp" | "all")
+                        && u64::from(port) >= *low
+                        && u64::from(port) <= *high
+                })
+                .map(|(_, _, _, source)| *source)
+                .collect::<Vec<_>>();
             intervals.sort_unstable();
             let mut covered = requested.0;
             for (start, end) in intervals {
@@ -272,6 +336,7 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
         if spec.tee_required || spec.volume_gb.is_some() {
             return Err(Error::Provider(ProviderErrorCode::Unsupported));
         }
+        self.verify_ssh_key(spec).await?;
         let count = spec
             .gpu_count
             .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
@@ -284,7 +349,6 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
         } else {
             region
         };
-        let classes = blueprint_core::gpu::catalog();
         let mut offers = Vec::new();
         for entry in types.values() {
             let native = &entry["instance_type"];
@@ -294,10 +358,7 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
             if native["specs"]["gpus"].as_u64() != Some(u64::from(count)) {
                 continue;
             }
-            let Some(class) = classes
-                .iter()
-                .find(|class| class.sku("lambda-labs", count) == Some(sku))
-            else {
+            let Some(class) = Self::class(native, count) else {
                 continue;
             };
             if spec.gpu_class.as_ref().is_some_and(|id| id != &class.id)
@@ -378,6 +439,7 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
             return Err(Error::Provider(ProviderErrorCode::Unsupported));
         }
         self.verify_network(spec, &offer.region).await?;
+        self.verify_ssh_key(spec).await?;
         let key = self
             .ssh_key_name
             .as_ref()

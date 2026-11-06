@@ -85,19 +85,18 @@ impl BittensorLiumAdapter {
             .ok_or(Error::Provider(ProviderErrorCode::ProviderError))
     }
     fn class(model: &str, count: u32) -> Option<blueprint_core::gpu::GpuClass> {
-        let normalize = |name: &str| {
-            name.trim()
-                .to_ascii_lowercase()
-                .trim_start_matches("nvidia ")
-                .to_owned()
-        };
-        let model = normalize(model);
-        blueprint_core::gpu::catalog().into_iter().find(|class| {
-            class
-                .sku("bittensor-lium", count)
-                .is_some_and(|sku| normalize(sku) == model)
-                || class.aliases.iter().any(|alias| normalize(alias) == model)
-        })
+        let classes = blueprint_core::gpu::catalog();
+        if let Some(class) = classes
+            .iter()
+            .find(|class| class.sku("bittensor-lium", count) == Some(model))
+        {
+            return Some(class.clone());
+        }
+        let mut matches = classes
+            .into_iter()
+            .filter(|class| count > 0 && count <= class.max_per_node && class.matches_name(model));
+        let class = matches.next()?;
+        matches.next().is_none().then_some(class)
     }
     fn metadata(raw: &Value) -> Result<Option<ManagedMetadata>> {
         let env = match raw["environment"].as_object() {

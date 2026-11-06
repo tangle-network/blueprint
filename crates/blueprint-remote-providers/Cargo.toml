@@ -30,6 +30,7 @@ aes-gcm = { workspace = true }
 blake3 = { workspace = true }
 hex = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
+ssh-key = { version = "0.6.7", default-features = false, features = ["alloc", "ecdsa"] }
 url = { workspace = true }
 jsonwebtoken = { workspace = true }
 thiserror.workspace = true
@@ -82,10 +83,6 @@ wiremock = { workspace = true }
 serial_test.workspace = true
 proptest = { workspace = true }
 mockito = { workspace = true }
-# Official AWS mocking library
-aws-smithy-mocks-experimental = { workspace = true }
-aws-smithy-runtime = { workspace = true, features = ["test-util"] }
-aws-smithy-types = { workspace = true }
 http = { workspace = true }
 # Additional dependencies for integration tests
 chrono = { workspace = true, features = ["serde", "clock"] }
