@@ -101,7 +101,7 @@ jobs:
         run: python3 .github/scripts/verify_release_tags.py release-output.json
 
       - name: Dispatch CLI artifacts and record the run
-        if: always() && !cancelled() && steps.release-plz.outputs.releases_created == 'true'
+        if: success() && steps.release-plz.outputs.releases_created == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/verify_release_tags.py --artifacts dispatch release-output.json

@@ -33,6 +33,7 @@ jobs:
       tag: ${{ inputs.tag || github.ref_name }}
       tag-flag: ${{ format('--tag={0}', inputs.tag || github.ref_name) }}
       complete: ${{ steps.complete.outputs.complete }}
+      source-sha: ${{ steps.plan.outputs.source_sha }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
@@ -54,8 +55,7 @@ jobs:
       - id: plan
         run: |
           dist plan --tag="$RELEASE_TAG" --output-format=json > plan-dist-manifest.json
-          echo "dist ran successfully"
-          cat plan-dist-manifest.json
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: Check existing source-bound artifacts
         id: complete
@@ -130,7 +130,6 @@ jobs:
       - name: Build artifacts
         run: |
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
-          echo "dist ran successfully"
       - id: cargo-dist
         name: Post-build
         shell: bash
@@ -179,7 +178,6 @@ jobs:
         shell: bash
         run: |
           dist build ${{ needs.plan.outputs.tag-flag }} --output-format=json "--artifacts=global" > dist-manifest.json
-          echo "dist ran successfully"
 
           echo "paths<<EOF" >> "$GITHUB_OUTPUT"
           jq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
@@ -228,10 +226,7 @@ jobs:
         run: |
           python3 .github/scripts/verify_release_tags.py --artifacts record --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
           dist host ${{ needs.plan.outputs.tag-flag }} --steps=upload --steps=release --output-format=json > dist-manifest.json
-          gh release upload "$RELEASE_TAG" target/distrib/release-source.json --clobber
-          python3 .github/scripts/verify_release_tags.py --artifacts check --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
-          echo "source-bound artifacts uploaded and verified"
-          cat dist-manifest.json
+          echo "artifact manifest prepared"
           echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@v4
@@ -250,11 +245,14 @@ jobs:
       - name: Create GitHub Release
         env:
           PRERELEASE_FLAG: "${{ fromJson(steps.host.outputs.manifest).announcement_is_prerelease && '--prerelease' || '' }}"
-          RELEASE_COMMIT: "${{ github.sha }}"
+          RELEASE_COMMIT: "${{ needs.plan.outputs.source-sha }}"
         run: |
-          gh release upload "${{ needs.plan.outputs.tag }}" artifacts/*
+          gh release upload "$RELEASE_TAG" artifacts/* --clobber
 
-          gh release edit "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --draft=false
+          gh release edit "$RELEASE_TAG" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --draft=false
+          gh release upload "$RELEASE_TAG" target/distrib/release-source.json --clobber
+          python3 .github/scripts/verify_release_tags.py --artifacts check --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
+          echo "source-bound artifacts uploaded and verified"
 
   announce:
     needs:
