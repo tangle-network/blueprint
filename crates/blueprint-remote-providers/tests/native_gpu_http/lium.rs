@@ -377,3 +377,57 @@ async fn lium_rents_the_recorded_executor_with_the_requested_count_and_lifetime(
         "equal specifications in different cells require separate native idempotency keys"
     );
 }
+
+#[tokio::test]
+async fn lium_prices_the_recorded_eight_b300_nodes_through_catalog_aliases() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let peer = lium_native_peer().await;
+    let credentials=serde_json::from_value(json!({"provider":"bittensor-lium","api_key":"synthetic-local-peer-key","endpoint":peer.uri()})).unwrap();
+    let provisioner = CloudProvisioner::from_credentials(vec![credentials]).unwrap();
+    let mut spec = ResourceSpec::basic();
+    spec.gpu_class = Some("nvidia-b300".into());
+    spec.gpu_count = Some(8);
+    spec.gpu_vram_gb = Some(288);
+    spec.allow_spot = true;
+    spec.region = Some("LND".into());
+    spec.lease_duration_secs = Some(3600);
+    spec.validate().unwrap();
+    let result = provisioner.quotes(&spec).await.unwrap();
+    let offers = result
+        .quotes
+        .iter()
+        .map(|quote| {
+            (
+                &quote.offer.native_id,
+                quote.offer.hourly_cost_usd,
+                quote.offer.gpu_count,
+                quote.offer.gpu_class.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        offers,
+        vec![
+            (
+                &"d87df3d2-bfb9-4a96-aff0-edde934a0637".to_owned(),
+                51.2,
+                8,
+                "nvidia-b300"
+            ),
+            (
+                &"558e4c00-1bcc-45c6-84fa-fc4f29502af9".to_owned(),
+                64.0,
+                8,
+                "nvidia-b300"
+            )
+        ],
+        "recorded AC variants use catalog VRAM and keep both native node offers; no present-stock claim"
+    );
+    assert!(
+        peer.received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .all(|request| request.method == "GET")
+    );
+}
