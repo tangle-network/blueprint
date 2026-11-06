@@ -55,6 +55,16 @@ fn published_core_contains_one_hardware_catalog() {
         assert!(class["vendor"].is_string() && class["generation"].is_string());
         assert!(class["interconnect"].is_string() && class["providerSkus"].is_object());
     }
+    let typed = blueprint_core::gpu::find("nvidia-b200").unwrap();
+    assert_eq!(typed.sku("lambda-labs", 8), Some("gpu_8x_b200_sxm6"));
+    assert!(typed.sku("lambda-labs", 7).is_none());
+    assert!(blueprint_core::gpu::find("unknown-gpu").is_none());
+    assert!(
+        blueprint_core::gpu::find("nvidia-gb300")
+            .unwrap()
+            .sku("prime-intellect", 5)
+            .is_none()
+    );
     let b200 = classes
         .iter()
         .find(|class| class["id"] == "nvidia-b200")
