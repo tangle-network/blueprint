@@ -8,62 +8,201 @@ use wiremock::{
     matchers::{method, path},
 };
 
+async fn runpod_v2_peer() -> MockServer {
+    use std::sync::{Arc, Mutex};
+    use wiremock::{Request, matchers::path_regex};
+    let peer = MockServer::start().await;
+    let state = Arc::new(Mutex::new((
+        0u64,
+        std::collections::BTreeMap::<String, Value>::new(),
+    )));
+    Mock::given(path_regex("^/(catalog/gpus|pods(/[^/]+)?)$"))
+        .respond_with(move |request: &Request| {
+            if request.headers.get("authorization").and_then(|header| header.to_str().ok()) != Some("Bearer synthetic-local-peer-key") {
+                return ResponseTemplate::new(401).set_body_string("synthetic-local-peer-key");
+            }
+            let mut state = state.lock().unwrap();
+            match (request.method.as_str(), request.url.path()) {
+                ("GET", "/catalog/gpus") => ResponseTemplate::new(200).set_body_json(json!({"gpus":[{
+                    "id":"NVIDIA H200","memory":141,"secure":true,"community":false,
+                    "maxCount":{"secure":8,"community":0},"price":{"secure":4.5,"community":0},
+                    "availability":"HIGH","dataCenters":[{"id":"US-TEST-1","availability":"HIGH"}]
+                }]})),
+                ("POST", "/pods") => {
+                    let Ok(body) = request.body_json::<Value>() else { return ResponseTemplate::new(400); };
+                    state.0 += 1;
+                    let id = format!("synthetic{}", state.0);
+                    let pod = json!({
+                        "id":id,"name":body["name"],"gpu":{"id":body["gpu"]["id"],"count":body["gpu"]["count"],"vcpuCount":8,"memory":64},
+                        "env":body["env"],"ports":body["ports"],"mounts":body["mounts"],"image":body["image"],
+                        "status":"RUNNING","dataCenterId":"US-TEST-1","cost":9.0,
+                        "ssh":{"direct":{"host":"192.0.2.10","port":22334,"username":"root"}},
+                        "runtime":{"ports":[{"private":8000,"public":null,"type":"http","ip":null}]}
+                    });
+                    state.1.insert(id, pod.clone());
+                    ResponseTemplate::new(201).set_body_json(pod)
+                }
+                ("GET", "/pods") => {
+                    let offset = request.url.query_pairs().find(|(key,_)|key=="cursor")
+                        .and_then(|(_,value)| value.parse::<usize>().ok()).unwrap_or(0);
+                    let pods = state.1.values().rev().cloned().collect::<Vec<_>>();
+                    let page = pods.iter().skip(offset).take(1).cloned().collect::<Vec<_>>();
+                    let more = offset + page.len() < pods.len();
+                    ResponseTemplate::new(200).set_body_json(json!({"pods":page,
+                        "pagination":{"hasNextPage":more,"nextCursor":more.then(||(offset+1).to_string())}}))
+                }
+                ("GET", path) => match state.1.get(path.trim_start_matches("/pods/")) {
+                    Some(pod) => ResponseTemplate::new(200).set_body_json(pod),
+                    None => ResponseTemplate::new(404),
+                },
+                ("DELETE", path) => {
+                    state.1.remove(path.trim_start_matches("/pods/"));
+                    ResponseTemplate::new(204)
+                }
+                _ => ResponseTemplate::new(404),
+            }
+        }).mount(&peer).await;
+    peer
+}
+
 #[tokio::test]
 async fn runpod_receives_the_requested_gpu_shape_and_volume() {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    let peer = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/pods"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id":"synthetic-pod"})))
-        .expect(1)
-        .mount(&peer)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/pods/synthetic-pod"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "id":"synthetic-pod", "desiredStatus":"RUNNING", "publicIp":"192.0.2.10",
-            "gpuTypeId":"NVIDIA H200", "gpuCount":2, "dataCenterId":"US-TEST-1"
-        })))
-        .mount(&peer)
-        .await;
+    let peer = runpod_v2_peer().await;
     let credentials = serde_json::from_value(json!({
         "provider":"runpod", "api_key":"synthetic-local-peer-key", "endpoint":peer.uri()
     }))
     .unwrap();
     let provisioner = CloudProvisioner::from_credentials(vec![credentials]).unwrap();
     let mut spec = ResourceSpec::basic();
-    spec.ownership = Some(ManagedLeaseIdentity {
-        namespace: "synthetic-cell".into(),
-        lease_id: "synthetic-lease".into(),
-    });
+    let identity = ManagedLeaseIdentity {
+        namespace: "synthetic-cell-a".into(),
+        lease_id: "lease-a".into(),
+    };
+    spec.ownership = Some(identity.clone());
     spec.lease_duration_secs = Some(3600);
     spec.gpu_class = Some("nvidia-h200".into());
     spec.gpu_count = Some(2);
     spec.gpu_vram_gb = Some(140);
     spec.volume_gb = Some(37.0);
-    spec.image = Some("example.invalid/workload@sha256:synthetic".into());
-    let result = provisioner
+    spec.image = Some("example.invalid/workload:v1".into());
+    spec.endpoint_port = Some(8000);
+    let instance = provisioner
         .provision_with_requirements(CloudProvider::RunPod, &spec, "US-TEST-1", false)
         .await
         .unwrap();
-    assert_eq!(result.id, "synthetic-pod");
     let requests = peer.received_requests().await.unwrap();
     let launch: Value = requests
         .iter()
-        .find(|request| request.method == "POST")
+        .find(|r| r.method == "POST")
         .unwrap()
         .body_json()
         .unwrap();
     assert_eq!(
-        json!({
-            "gpuTypeIds":launch["gpuTypeIds"], "gpuCount":launch["gpuCount"],
-            "volumeInGb":launch["volumeInGb"], "imageName":launch["imageName"]
-        }),
-        json!({
-            "gpuTypeIds":["NVIDIA H200"], "gpuCount":2, "volumeInGb":37,
-            "imageName":"example.invalid/workload@sha256:synthetic"
-        }),
-        "provider launch must preserve the caller's class, count, volume and workload image"
+        json!({"gpu":launch["gpu"]["id"],"count":launch["gpu"]["count"],
+        "volume":launch["mounts"]["persistent"]["size"],"image":launch["image"]}),
+        json!({"gpu":"NVIDIA H200","count":2,"volume":37,"image":"example.invalid/workload:v1"})
+    );
+    assert_eq!(launch["ports"], json!(["8000/http"]));
+    assert!(!launch.to_string().contains("synthetic-local-peer-key"));
+    let resource = provisioner
+        .status_managed(&CloudProvider::RunPod, &identity, &instance.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(resource.gpu_class.as_deref(), Some("nvidia-h200"));
+    assert_eq!(resource.gpu_count, Some(2));
+    assert_eq!(resource.gpu_vram_gb, Some(141));
+    assert_eq!(
+        resource.hourly_cost_usd.unwrap().to_bits(),
+        9.0f64.to_bits()
+    );
+    assert_eq!(
+        resource.endpoint_url.as_deref(),
+        Some("https://synthetic1-8000.proxy.runpod.net")
+    );
+    assert!(
+        resource.worker_url.is_none(),
+        "a serving endpoint is not an advertised worker control URL"
+    );
+    assert_eq!(
+        resource.ssh_endpoint.as_deref(),
+        Some("ssh://root@192.0.2.10:22334")
+    );
+    let foreign = ManagedLeaseIdentity {
+        namespace: "synthetic-cell-b".into(),
+        lease_id: "lease-b".into(),
+    };
+    let mut other = spec.clone();
+    other.ownership = Some(foreign.clone());
+    let quote = provisioner.quotes(&other).await.unwrap().quotes.remove(0);
+    let other_resource = provisioner
+        .create_managed(&other, &quote.candidate)
+        .await
+        .unwrap();
+    assert_eq!(
+        provisioner
+            .list_managed(&identity.namespace)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        provisioner
+            .list_managed(&foreign.namespace)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        provisioner
+            .status_managed(
+                &CloudProvider::RunPod,
+                &identity,
+                &other_resource.instance.id
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        provisioner
+            .destroy_managed(
+                &CloudProvider::RunPod,
+                &identity,
+                Some(&other_resource.instance.id)
+            )
+            .await
+            .is_err()
+    );
+    provisioner
+        .destroy_managed(&CloudProvider::RunPod, &identity, Some(&instance.id))
+        .await
+        .unwrap();
+    assert!(
+        provisioner
+            .list_managed(&identity.namespace)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        provisioner.list_managed(&foreign.namespace).await.unwrap()[0]
+            .instance
+            .id,
+        other_resource.instance.id
+    );
+    provisioner
+        .destroy_managed(&CloudProvider::RunPod, &foreign, None)
+        .await
+        .unwrap();
+    assert!(
+        provisioner
+            .list_managed(&foreign.namespace)
+            .await
+            .unwrap()
+            .is_empty()
     );
 }
 
@@ -276,4 +415,73 @@ async fn lium_rents_the_recorded_executor_with_the_requested_count_and_lifetime(
     assert!(body["template_id"].as_str().is_some());
     assert!(body.get("hotkey").is_none());
     assert!(body.get("coldkey").is_none());
+}
+
+#[tokio::test]
+async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let peer = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/instance-types"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":{
+            "gpu_8x_b200_sxm6":{"instance_type":{"name":"gpu_8x_b200_sxm6",
+                "gpu_description":"NVIDIA B200","price_cents_per_hour":6400,
+                "specs":{"gpus":8,"memory_gib":2048,"vcpus":128,"storage_gib":4096}},
+                "regions_with_capacity_available":[{"name":"us-test-1"}]}
+        }})))
+        .mount(&peer)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/instances"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":[]})))
+        .mount(&peer)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/instance-operations/launch"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"data":{"instance_ids":["synthetic-lambda-eight"]}})),
+        )
+        .mount(&peer)
+        .await;
+    Mock::given(method("GET")).and(path("/instances/synthetic-lambda-eight"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":{
+            "id":"synthetic-lambda-eight","status":"active","ip":"192.0.2.14",
+            "instance_type":{"name":"gpu_8x_b200_sxm6","specs":{"gpus":8}},"region":{"name":"us-test-1"}
+        }}))).mount(&peer).await;
+    let credentials = serde_json::from_value(json!({"provider":"lambda-labs",
+        "api_key":"synthetic-local-peer-key","endpoint":peer.uri(),"ssh_key_name":"synthetic-key"
+    }))
+    .unwrap();
+    let provisioner = CloudProvisioner::from_credentials(vec![credentials]).unwrap();
+    let mut spec = ResourceSpec::basic();
+    spec.gpu_class = Some("nvidia-b200".into());
+    spec.gpu_count = Some(8);
+    spec.gpu_vram_gb = Some(180);
+    spec.image = Some("example.invalid/workload:v1".into());
+    spec.env
+        .insert("MODEL_KEY".into(), "synthetic-bootstrap-secret".into());
+    spec.endpoint_port = Some(8000);
+    spec.ownership = Some(ManagedLeaseIdentity {
+        namespace: "synthetic-cell".into(),
+        lease_id: "lambda-eight".into(),
+    });
+    spec.lease_duration_secs = Some(3600);
+    provisioner
+        .provision_with_requirements(CloudProvider::LambdaLabs, &spec, "us-test-1", false)
+        .await
+        .unwrap();
+    let requests = peer.received_requests().await.unwrap();
+    let launch: Value = requests
+        .iter()
+        .find(|r| r.method == "POST" && r.url.path() == "/instance-operations/launch")
+        .unwrap()
+        .body_json()
+        .unwrap();
+    assert_eq!(
+        json!({"sku":launch["instance_type_name"],"user_data":launch["user_data"].as_str().is_some(),
+        "tags":launch["tags"].as_array().is_some_and(|tags|tags.len()>=6)}),
+        json!({"sku":"gpu_8x_b200_sxm6","user_data":true,"tags":true}),
+        "a native VM rental must carry the requested container and recovery identity"
+    );
 }
