@@ -423,6 +423,22 @@ async fn lium_prices_the_recorded_eight_b300_nodes_through_catalog_aliases() {
         ],
         "recorded AC variants use catalog VRAM and keep both native node offers; no present-stock claim"
     );
+    spec.region = Some("TX".into());
+    let pc = provisioner.quotes(&spec).await.unwrap();
+    assert_eq!(
+        pc.quotes.len(),
+        1,
+        "recorded PC variant must match the same B300 class"
+    );
+    assert_eq!(
+        pc.quotes[0].offer.native_id,
+        "efebd441-6d29-4582-934c-9dbadd17a018"
+    );
+    assert_eq!(pc.quotes[0].offer.hourly_cost_usd, 52.0);
+    assert_eq!(pc.quotes[0].offer.gpu_count, 8);
+    assert_eq!(pc.quotes[0].offer.gpu_class, "nvidia-b300");
+    spec.allow_spot = false;
+    assert!(provisioner.quotes(&spec).await.unwrap().quotes.is_empty());
     assert!(
         peer.received_requests()
             .await
