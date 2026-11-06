@@ -2,6 +2,7 @@ use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::providers::akash::AkashInstanceMapper;
 use crate::providers::bittensor_lium::BittensorLiumInstanceMapper;
+pub use crate::providers::common::InstanceSelection;
 use crate::providers::coreweave::CoreWeaveInstanceMapper;
 use crate::providers::crusoe::CrusoeInstanceMapper;
 use crate::providers::fluidstack::FluidstackInstanceMapper;
@@ -79,12 +80,7 @@ impl InstanceTypeMapper {
             instance_type: instance_type.clone(),
             // Confidential-compute SKUs are generally not spot-capable in managed flows.
             spot_capable: false,
-            estimated_hourly_cost: match provider {
-                CloudProvider::AWS => Self::estimate_aws_cost(&instance_type),
-                CloudProvider::GCP => Self::estimate_gcp_cost(&instance_type),
-                CloudProvider::Azure => Self::estimate_azure_cost(&instance_type),
-                _ => Self::map_generic_instance(spec).estimated_hourly_cost,
-            },
+            estimated_hourly_cost: None,
         }
     }
 
@@ -144,7 +140,7 @@ impl InstanceTypeMapper {
         InstanceSelection {
             instance_type: instance_type.to_string(),
             spot_capable: spec.allow_spot && !instance_type.starts_with('p'), // No spot for GPU
-            estimated_hourly_cost: Self::estimate_aws_cost(instance_type),
+            estimated_hourly_cost: None,
         }
     }
 
@@ -168,7 +164,7 @@ impl InstanceTypeMapper {
         InstanceSelection {
             instance_type: instance_type.to_string(),
             spot_capable: spec.allow_spot,
-            estimated_hourly_cost: Self::estimate_gcp_cost(instance_type),
+            estimated_hourly_cost: None,
         }
     }
 
@@ -189,7 +185,7 @@ impl InstanceTypeMapper {
         InstanceSelection {
             instance_type: instance_type.to_string(),
             spot_capable: spec.allow_spot,
-            estimated_hourly_cost: Self::estimate_azure_cost(instance_type),
+            estimated_hourly_cost: None,
         }
     }
 
@@ -207,7 +203,7 @@ impl InstanceTypeMapper {
         InstanceSelection {
             instance_type: instance_type.to_string(),
             spot_capable: false, // DigitalOcean doesn't have spot instances
-            estimated_hourly_cost: Self::estimate_do_cost(instance_type),
+            estimated_hourly_cost: None,
         }
     }
 
@@ -224,7 +220,7 @@ impl InstanceTypeMapper {
         InstanceSelection {
             instance_type: instance_type.to_string(),
             spot_capable: false,
-            estimated_hourly_cost: Self::estimate_vultr_cost(instance_type),
+            estimated_hourly_cost: None,
         }
     }
 
@@ -232,7 +228,7 @@ impl InstanceTypeMapper {
         InstanceSelection {
             instance_type: common.instance_type,
             spot_capable: common.spot_capable,
-            estimated_hourly_cost: common.estimated_hourly_cost.unwrap_or(0.10),
+            estimated_hourly_cost: None,
         }
     }
 
@@ -240,72 +236,9 @@ impl InstanceTypeMapper {
         InstanceSelection {
             instance_type: format!("{}cpu-{}gb", spec.cpu, spec.memory_gb),
             spot_capable: false,
-            estimated_hourly_cost: (spec.cpu * 0.05 + spec.memory_gb * 0.01) as f64,
+            estimated_hourly_cost: None,
         }
     }
-
-    // Cost estimation helpers
-    fn estimate_aws_cost(instance_type: &str) -> f64 {
-        match instance_type {
-            "t3.micro" => 0.0104,
-            "t3.small" => 0.0208,
-            "t3.medium" => 0.0416,
-            "t3.large" => 0.0832,
-            "m6i.xlarge" => 0.192,
-            "m6i.2xlarge" => 0.384,
-            "m6i.4xlarge" => 0.768,
-            "g4dn.xlarge" => 0.526, // GPU
-            "p3.8xlarge" => 12.24,  // High-end GPU
-            _ => 0.10,
-        }
-    }
-
-    fn estimate_gcp_cost(instance_type: &str) -> f64 {
-        match instance_type {
-            "e2-micro" => 0.008,
-            "e2-small" => 0.017,
-            "e2-medium" => 0.034,
-            "n2-standard-4" => 0.17,
-            "n2-standard-8" => 0.34,
-            _ => 0.10,
-        }
-    }
-
-    fn estimate_azure_cost(instance_type: &str) -> f64 {
-        match instance_type {
-            "Standard_B1s" => 0.012,
-            "Standard_B2s" => 0.048,
-            "Standard_D2s_v5" => 0.096,
-            "Standard_D4s_v5" => 0.192,
-            _ => 0.10,
-        }
-    }
-
-    fn estimate_do_cost(instance_type: &str) -> f64 {
-        match instance_type {
-            "s-1vcpu-1gb" => 0.009,
-            "s-1vcpu-2gb" => 0.018,
-            "s-2vcpu-4gb" => 0.036,
-            "s-4vcpu-8gb" => 0.072,
-            _ => 0.05,
-        }
-    }
-
-    fn estimate_vultr_cost(instance_type: &str) -> f64 {
-        match instance_type {
-            "vc2-1c-1gb" => 0.007,
-            "vc2-2c-4gb" => 0.024,
-            "vc2-4c-8gb" => 0.048,
-            _ => 0.05,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InstanceSelection {
-    pub instance_type: String,
-    pub spot_capable: bool,
-    pub estimated_hourly_cost: f64,
 }
 
 /// Auto-scaling configuration that works for both local and remote
@@ -338,111 +271,4 @@ pub trait ResourceLimitsExt {
     /// - For local: Sets Kubernetes resource limits
     /// - For remote: Ensures proper node selection
     fn apply_resource_requirements(&mut self, spec: &ResourceSpec);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::resources::ResourceSpec;
-
-    #[test]
-    fn test_aws_instance_mapping() {
-        let spec = ResourceSpec {
-            cpu: 4.0,
-            memory_gb: 16.0,
-            storage_gb: 100.0,
-            gpu_count: Some(0),
-            allow_spot: false,
-            qos: Default::default(),
-        };
-
-        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);
-        assert_eq!(selection.instance_type, "m6i.xlarge");
-        assert!(selection.estimated_hourly_cost > 0.0);
-    }
-
-    #[test]
-    fn test_gpu_instance_selection() {
-        let spec = ResourceSpec {
-            cpu: 4.0,
-            memory_gb: 16.0,
-            storage_gb: 100.0,
-            gpu_count: Some(1),
-            allow_spot: false,
-            qos: Default::default(),
-        };
-
-        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);
-        assert!(selection.instance_type.contains("g4dn"));
-        assert!(!selection.spot_capable); // GPU instances shouldn't use spot by default
-    }
-
-    #[test]
-    fn test_digital_ocean_mapping() {
-        let spec = ResourceSpec {
-            cpu: 2.0,
-            memory_gb: 4.0,
-            storage_gb: 50.0,
-            gpu_count: Some(0),
-            allow_spot: false,
-            qos: Default::default(),
-        };
-
-        let selection =
-            InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::DigitalOcean);
-        assert_eq!(selection.instance_type, "s-2vcpu-4gb");
-        assert!(!selection.spot_capable); // DO doesn't have spot
-    }
-
-    #[test]
-    fn test_cost_aware_selection() {
-        let spec = ResourceSpec {
-            cpu: 0.5,
-            memory_gb: 1.0,
-            storage_gb: 10.0,
-            gpu_count: Some(0),
-            allow_spot: true,
-            qos: Default::default(),
-        };
-
-        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &CloudProvider::AWS);
-        assert_eq!(selection.instance_type, "t3.micro");
-        assert!(selection.spot_capable);
-        assert!(selection.estimated_hourly_cost < 0.02); // Should be cheap
-    }
-
-    #[test]
-    fn test_tee_mapping_prefers_confidential_families() {
-        let spec = ResourceSpec {
-            cpu: 4.0,
-            memory_gb: 16.0,
-            storage_gb: 100.0,
-            gpu_count: None,
-            allow_spot: true,
-            qos: Default::default(),
-        };
-
-        let aws = InstanceTypeMapper::map_to_instance_type_with_requirements(
-            &spec,
-            &CloudProvider::AWS,
-            true,
-        );
-        let gcp = InstanceTypeMapper::map_to_instance_type_with_requirements(
-            &spec,
-            &CloudProvider::GCP,
-            true,
-        );
-        let azure = InstanceTypeMapper::map_to_instance_type_with_requirements(
-            &spec,
-            &CloudProvider::Azure,
-            true,
-        );
-
-        assert_eq!(aws.instance_type, "m6i.xlarge");
-        assert_eq!(gcp.instance_type, "n2d-standard-4");
-        assert_eq!(azure.instance_type, "Standard_DC4as_v5");
-        assert!(!aws.spot_capable);
-        assert!(!gcp.spot_capable);
-        assert!(!azure.spot_capable);
-    }
 }

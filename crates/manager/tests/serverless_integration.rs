@@ -139,61 +139,6 @@ fn test_blueprint_analysis_edge_cases() {
     );
 }
 
-/// Test resource spec conversion logic with REAL calculations
-#[test]
-fn test_resource_spec_conversion_accuracy() {
-    #[cfg(feature = "remote-providers")]
-    {
-        use blueprint_manager::rt::ResourceLimits;
-
-        // Create real resource limits
-        let limits = ResourceLimits {
-            cpu_count: Some(4),
-            memory_size: 8 * 1024 * 1024 * 1024, // 8 GB in bytes
-            storage_space: 100 * 1024 * 1024 * 1024, // 100 GB in bytes
-            gpu_count: Some(1),
-            gpu_policy: blueprint_manager::rt::GpuSchedulingPolicy::Required,
-            gpu_min_vram_gb: Some(40),
-            network_bandwidth: Some(1000), // 1 Gbps
-        };
-
-        use blueprint_remote_providers::resources::ResourceSpec;
-
-        // Convert to ResourceSpec (this tests the actual conversion logic)
-        let spec = ResourceSpec {
-            cpu: limits.cpu_count.map(|c| c as f32).unwrap_or(2.0),
-            memory_gb: (limits.memory_size / (1024 * 1024 * 1024)) as f32,
-            storage_gb: (limits.storage_space / (1024 * 1024 * 1024)) as f32,
-            gpu_count: limits.gpu_count.map(|c| c as u32),
-            allow_spot: false,
-            qos: blueprint_remote_providers::resources::QosParameters::default(),
-        };
-
-        // VERIFY CONVERSION MATH:
-        assert_eq!(spec.cpu, 4.0, "CPU conversion should be exact");
-        assert_eq!(spec.memory_gb, 8.0, "Memory conversion should be exact");
-        assert_eq!(spec.storage_gb, 100.0, "Storage conversion should be exact");
-        assert_eq!(spec.gpu_count, Some(1), "GPU count should match");
-
-        // Test cost estimation uses real formula
-        let hourly_cost = spec.estimate_hourly_cost();
-
-        // Cost formula from ResourceSpec::estimate_hourly_cost:
-        // base = cpu * 0.04 + memory_gb * 0.01
-        // storage = storage_gb * 0.0001
-        // gpu = gpu_count * 0.90
-        let expected_base = 4.0 * 0.04 + 8.0 * 0.01;
-        let expected_storage = 100.0 * 0.0001;
-        let expected_gpu = 1.0 * 0.90;
-        let expected_total = expected_base + expected_storage + expected_gpu;
-
-        assert!(
-            (hourly_cost - expected_total).abs() < 0.01,
-            "Cost calculation mismatch: got {hourly_cost}, expected {expected_total}"
-        );
-    }
-}
-
 /// Test `FaaS` limits from real providers - validates the limit definitions match reality
 #[test]
 fn test_faas_provider_limits_accuracy() {

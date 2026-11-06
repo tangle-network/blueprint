@@ -198,58 +198,61 @@ impl AutoDeploymentManager {
         }
     }
 
-    /// Find the cheapest deployment option for a given resource spec
+    /// Supply caller-owned pricing credentials and HTTP gateways.
+    pub fn with_pricing_fetcher(mut self, fetcher: PricingFetcher) -> Self {
+        self.pricing_fetcher = Arc::new(RwLock::new(fetcher));
+        self
+    }
+
+    /// Compare fresh provider prices for the exact native SKUs that will be provisioned.
     pub async fn find_cheapest_provider(
         &self,
         spec: &ResourceSpec,
     ) -> Result<(CloudProvider, String, f64)> {
-        let enabled_providers = self.enabled_providers.read().await;
-
-        if enabled_providers.is_empty() {
-            // Default to AWS if no providers configured
-            return Ok((CloudProvider::AWS, "us-west-2".to_string(), 0.10));
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if !spec.cpu.is_finite() || !spec.memory_gb.is_finite() || !spec.storage_gb.is_finite() {
+            return Err(Error::ConfigurationError(
+                "Resource requirements must be finite".into(),
+            ));
         }
-
-        let mut best_option = None;
-        let mut best_price = f64::MAX;
-
-        {
-            let mut fetcher = self.pricing_fetcher.write().await;
-
-            // Get real pricing for each provider
-            for provider_config in enabled_providers.iter() {
-                // Find best instance dynamically based on requirements
-                match fetcher
-                    .find_best_instance(
-                        provider_config.provider.clone(),
-                        &provider_config.region,
-                        spec.cpu,
-                        spec.memory_gb,
-                        self.max_hourly_cost,
-                    )
-                    .await
+        if !self.max_hourly_cost.is_finite() || self.max_hourly_cost <= 0.0 {
+            return Err(Error::ConfigurationError(
+                "Invalid hourly spending cap".into(),
+            ));
+        }
+        let providers = self.enabled_providers.read().await.clone();
+        if providers.is_empty() {
+            return Err(Error::ConfigurationError(
+                "No cloud providers configured".into(),
+            ));
+        }
+        let pricing = self.pricing_fetcher.read().await;
+        let mut best: Option<(CloudProvider, String, f64)> = None;
+        for provider in providers {
+            let sku =
+                super::mapper::InstanceTypeMapper::map_to_instance_type(spec, &provider.provider)
+                    .instance_type;
+            match pricing
+                .quote_instance(provider.provider.clone(), &provider.region, &sku)
+                .await
+            {
+                Ok(Some(price))
+                    if price <= self.max_hourly_cost
+                        && best.as_ref().is_none_or(|current| price < current.2) =>
                 {
-                    Ok(instance) if instance.hourly_price < best_price => {
-                        best_price = instance.hourly_price;
-                        best_option = Some((
-                            provider_config.provider.clone(),
-                            provider_config.region.clone(),
-                            instance.hourly_price,
-                        ));
-                    }
-                    Err(e) => {
-                        debug!(
-                            "No suitable instance for {:?}: {}",
-                            provider_config.provider, e
-                        );
-                    }
-                    _ => {}
+                    best = Some((provider.provider, provider.region, price));
                 }
+                Err(blueprint_pricing_engine_lib::PricingError::AuthRejected) => {
+                    return Err(Error::ConfigurationError(
+                        "Provider rejected its pricing credential".into(),
+                    ));
+                }
+                Err(error) => return Err(Error::ConfigurationError(error.to_string())),
+                _ => {}
             }
         }
-
-        best_option.ok_or_else(|| {
-            Error::ConfigurationError("No affordable deployment options available".into())
+        best.ok_or_else(|| {
+            Error::ConfigurationError("No configured provider has an affordable live quote".into())
         })
     }
 

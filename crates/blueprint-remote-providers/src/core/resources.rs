@@ -145,22 +145,6 @@ impl ResourceSpec {
         })
     }
 
-    /// Estimate hourly cost in USD
-    pub fn estimate_hourly_cost(&self) -> f64 {
-        let base_cost = self.cpu * 0.04 + self.memory_gb * 0.01;
-        let storage_cost = self.storage_gb * 0.0001;
-        let gpu_cost = self.gpu_count.unwrap_or(0) as f32 * 0.90;
-
-        let total = base_cost + storage_cost + gpu_cost;
-
-        let final_cost = if self.allow_spot {
-            total * 0.7 // 30% discount for spot instances
-        } else {
-            total
-        };
-        final_cost as f64
-    }
-
     /// Convert to pricing units for pricing engine integration
     pub fn to_pricing_units(&self) -> std::collections::HashMap<String, f64> {
         let mut units = std::collections::HashMap::new();
@@ -213,25 +197,6 @@ mod tests {
             ..Default::default()
         };
         assert!(invalid_memory.validate().is_err());
-    }
-
-    #[test]
-    fn test_cost_estimation() {
-        let basic = ResourceSpec::basic();
-        let cost = basic.estimate_hourly_cost();
-        assert!(cost > 0.0);
-        assert!(cost < 1.0); // Basic should be under $1/hour
-
-        let with_gpu = ResourceSpec::basic().with_gpu(1);
-        let gpu_cost = with_gpu.estimate_hourly_cost();
-        assert!(gpu_cost > cost); // GPU should increase cost
-
-        let spot = ResourceSpec {
-            allow_spot: true,
-            ..basic
-        };
-        let spot_cost = spot.estimate_hourly_cost();
-        assert!(spot_cost < cost); // Spot should be cheaper
     }
 
     #[cfg(feature = "kubernetes")]

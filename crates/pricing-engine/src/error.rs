@@ -48,6 +48,9 @@ pub enum PricingError {
     #[error("Resource unit parsing error")]
     ResourceUnitParsing(#[from] ParseResourceUnitError),
 
+    #[error("Provider rejected its pricing credential")]
+    AuthRejected,
+
     #[error("HTTP error: {0}")]
     HttpError(String),
 
