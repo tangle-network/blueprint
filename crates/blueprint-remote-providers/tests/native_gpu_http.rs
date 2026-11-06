@@ -1,5 +1,7 @@
 //! Public SDK requests against synthetic provider HTTP peers; no stock or live-rental claim.
-use blueprint_remote_providers::{CloudProvider, CloudProvisioner, ResourceSpec};
+use blueprint_remote_providers::{
+    CloudProvider, CloudProvisioner, ResourceSpec, managed::ManagedLeaseIdentity,
+};
 use serde_json::{Value, json};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -30,6 +32,11 @@ async fn runpod_receives_the_requested_gpu_shape_and_volume() {
     .unwrap();
     let provisioner = CloudProvisioner::from_credentials(vec![credentials]).unwrap();
     let mut spec = ResourceSpec::basic();
+    spec.ownership = Some(ManagedLeaseIdentity {
+        namespace: "synthetic-cell".into(),
+        lease_id: "synthetic-lease".into(),
+    });
+    spec.lease_duration_secs = Some(3600);
     spec.gpu_class = Some("nvidia-h200".into());
     spec.gpu_count = Some(2);
     spec.gpu_vram_gb = Some(140);
