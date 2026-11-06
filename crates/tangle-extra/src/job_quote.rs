@@ -1,39 +1,8 @@
-//! Job Quote signing and verification for Tangle v2 RFQ system
+//! Per-job EIP-712 signing for Tangle's legacy and GPU RFQ overloads.
 //!
-//! Operators use this module to sign per-job quotes that requesters submit on-chain
-//! via `submitJobFromQuote`. The EIP-712 structured data matches
-//! `tnt-core/src/libraries/SignatureLib.sol`'s `JOB_QUOTE_TYPEHASH`.
-//!
-//! # v0.13.0 binding to `requester`
-//!
-//! Since tnt-core v0.13.0 (audit Round 2 economic F1, tnt-core PRs #124/#125),
-//! every quote is bound to a specific `requester` address. The on-chain verifier
-//! rejects `requester == address(0)` (wildcard quotes are no longer permitted),
-//! and the `address requester` field is the first member of the EIP-712 struct.
-//!
-//! # Usage
-//!
-//! ```rust,ignore
-//! use blueprint_tangle_extra::job_quote::{JobQuoteSigner, JobQuoteDetails, QuoteSigningDomain};
-//! use blueprint_crypto::k256::K256SigningKey;
-//!
-//! let domain = QuoteSigningDomain { chain_id: 1, verifying_contract: contract_addr };
-//! let mut signer = JobQuoteSigner::new(keypair, domain)?;
-//!
-//! let details = JobQuoteDetails {
-//!     requester: buyer_addr, // MUST be non-zero — wildcard quotes are rejected on-chain
-//!     service_id: 1,
-//!     job_index: 0,
-//!     price: U256::from(1_000_000_000_000_000_000u128), // 1 ETH
-//!     timestamp: 1700000000,
-//!     expiry: 1700003600,
-//!     confidentiality: 0,
-//!     inputs_hash: keccak256(&job_inputs), // binds the price to the exact submitted inputs
-//! };
-//!
-//! let signed = signer.sign(&details)?;
-//! assert!(verify_job_quote(&signed, &signer.verifying_key(), domain)?);
-//! ```
+//! Canonical schemas live in `tnt-core/src/libraries/SignatureLib.sol`.
+//! The public pricing-engine gRPC integration target demonstrates signing,
+//! independent verification, and conversion through the SDK exports.
 
 use alloy_primitives::{Address, B256, ChainId, U256, keccak256};
 use alloy_sol_types::SolValue;
@@ -48,13 +17,7 @@ pub enum JobQuoteError {
 
 type Result<T> = core::result::Result<T, JobQuoteError>;
 
-/// Typed confidentiality levels for job quotes.
-///
-/// Maps to the on-chain `uint8 confidentiality` field:
-/// - 0 = Any (no TEE requirement)
-/// - 1 = TeeRequired
-/// - 2 = StandardRequired
-/// - 3 = TeePreferred
+/// Canonical on-chain confidentiality policy; unknown values are rejected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Confidentiality {
@@ -86,39 +49,19 @@ impl TryFrom<u8> for Confidentiality {
     }
 }
 
-/// Per-job quote details that get EIP-712 signed
-///
-/// Matches `Types.JobQuoteDetails` in tnt-core (v0.18.0+):
-/// ```solidity
-/// struct JobQuoteDetails {
-///     address requester;
-///     uint64 serviceId;
-///     uint8 jobIndex;
-///     uint256 price;
-///     uint64 timestamp;
-///     uint64 expiry;
-///     uint8 confidentiality;
-///     bytes32 inputsHash;
-/// }
-/// ```
+/// Legacy `Types.JobQuoteDetails`, retaining its original EIP-712 schema.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobQuoteDetails {
-    /// Address allowed to redeem this quote on-chain. MUST be non-zero —
-    /// the contract rejects wildcard (`address(0)`) quotes since v0.13.0.
+    /// Non-zero address allowed to redeem this quote.
     pub requester: Address,
     pub service_id: u64,
     pub job_index: u8,
     pub price: U256,
     pub timestamp: u64,
     pub expiry: u64,
-    /// Confidentiality level bound into the EIP-712 signature.
-    /// Canonical `Types.ConfidentialityPolicy` value, validated before signing.
-    /// Prevents replay of a non-TEE quote for a TEE-required service.
+    /// Canonical policy, validated before signing and bound into the signature.
     pub confidentiality: u8,
-    /// `keccak256(inputs)` of the exact job inputs the requester will submit
-    /// on-chain, binding the operator's price to those inputs. There is NO
-    /// wildcard: submission reverts `JobQuoteInputsMismatch` unless
-    /// `keccak256(submitted inputs)` equals this value (tnt-core v0.18.0+).
+    /// `keccak256` of the exact submitted inputs; there is no wildcard.
     pub inputs_hash: B256,
 }
 
@@ -212,10 +155,7 @@ impl JobQuoteSigner {
     }
 }
 
-/// Verify a signed job quote against a public key.
-///
-/// Uses `verify_prehash` to verify against the raw keccak256 digest directly,
-/// matching the `sign_prehash_recoverable` used in `JobQuoteSigner::sign`.
+/// Verify the raw EIP-712 digest against the operator's public key.
 pub fn verify_job_quote(
     quote: &SignedJobQuote,
     public_key: &K256VerifyingKey,
@@ -229,12 +169,7 @@ pub fn verify_job_quote(
         .is_ok())
 }
 
-/// Compute the full EIP-712 digest for a job quote
-///
-/// Matches `SignatureLib.computeJobQuoteDigest()` in tnt-core:
-/// ```text
-/// keccak256(abi.encodePacked("\x19\x01", domainSeparator, hashJobQuote(details)))
-/// ```
+/// Compute the legacy digest matching `SignatureLib.computeJobQuoteDigest`.
 pub fn job_quote_digest_eip712(details: &JobQuoteDetails, domain: QuoteSigningDomain) -> [u8; 32] {
     let domain_separator = compute_domain_separator(domain);
     let struct_hash = hash_job_quote_details(details);
@@ -272,12 +207,7 @@ fn compute_domain_separator(domain: QuoteSigningDomain) -> B256 {
     keccak256(encoded)
 }
 
-/// Hash job quote details per the JOB_QUOTE_TYPEHASH
-///
-/// Matches `SignatureLib.hashJobQuote()` in tnt-core v0.13.0+:
-/// ```text
-/// keccak256(abi.encode(JOB_QUOTE_TYPEHASH, requester, serviceId, jobIndex, price, timestamp, expiry, confidentiality))
-/// ```
+/// Preserve the legacy job schema, including requester and inputs hash.
 fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
     const JOB_QUOTE_TYPEHASH_STR: &str = "JobQuoteDetails(address requester,uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry,uint8 confidentiality,bytes32 inputsHash)";
 
@@ -304,10 +234,7 @@ fn hash_job_quote_details(details: &JobQuoteDetails) -> B256 {
 
 // ---- Conversion to on-chain types ----
 
-/// Convert an SDK `SignedJobQuote` to the on-chain `ITangleTypes::SignedJobQuote`
-/// for submission via `TangleClient::submit_job_from_quote`.
-///
-/// Produces a 65-byte ECDSA signature (r || s || v) where v = 27 + recovery_id.
+/// Convert to the legacy ABI tuple with a 65-byte Ethereum signature.
 impl From<SignedJobQuote> for blueprint_client_tangle::contracts::ITangleTypes::SignedJobQuote {
     fn from(quote: SignedJobQuote) -> Self {
         use blueprint_crypto::BytesEncoding;
@@ -366,16 +293,30 @@ impl GpuResourceCommitment {
     pub fn class_hash(&self) -> B256 {
         keccak256(self.class.as_bytes())
     }
-
-    pub fn abi_tuple(&self) -> (u8, u64, B256, u64) {
-        (5, self.count, self.class_hash(), self.duration_secs)
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct SignedGpuJobQuote {
     pub quote: SignedJobQuote,
     pub resource: GpuResourceCommitment,
+}
+
+impl SignedGpuJobQuote {
+    /// The signed job tuple and fifth argument of the GPU RFQ overload.
+    pub fn into_abi_parts(
+        self,
+    ) -> (
+        blueprint_client_tangle::contracts::ITangleTypes::SignedJobQuote,
+        blueprint_client_tangle::contracts::ITangleTypes::GpuResourceCommitment,
+    ) {
+        let resource = blueprint_client_tangle::contracts::ITangleTypes::GpuResourceCommitment {
+            kind: 5,
+            count: self.resource.count,
+            gpuClass: self.resource.class_hash(),
+            durationSecs: self.resource.duration_secs,
+        };
+        (self.quote.into(), resource)
+    }
 }
 
 impl JobQuoteSigner {

@@ -55,7 +55,9 @@ Enable `blueprint-tangle-extra`'s `keepers` feature and use
 job type; `sign_with_resources` accepts a validated `GpuResourceCommitment`.
 The [Tangle signature library](https://github.com/tangle-network/tnt-core/blob/main/src/libraries/SignatureLib.sol)
 owns the protocol's typed-data names and domain. GPU submission uses the existing
-signed job tuple plus the allocation as the overload's fifth argument.
+signed job tuple plus the allocation as the overload's fifth argument, returned
+by `SignedGpuJobQuote::into_abi_parts`. The `blueprint-sdk` `tangle` feature
+re-exports these signing types through `blueprint_sdk::tangle::job_quote`.
 
 ## Running
 

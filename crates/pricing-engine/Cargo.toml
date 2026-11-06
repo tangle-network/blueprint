@@ -83,6 +83,7 @@ sha2 = { workspace = true }
 
 [dev-dependencies]
 alloy-dyn-abi = { workspace = true }
+blueprint-sdk = { path = "../sdk", default-features = false, features = ["std", "tangle"] }
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true, features = ["net"] }

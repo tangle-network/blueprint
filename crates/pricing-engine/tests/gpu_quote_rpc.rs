@@ -1,6 +1,8 @@
-//! Future protobuf fields exercise the actual public gRPC server on the unchanged base.
+//! Public gRPC wire, SDK exports and released contract ABI interoperability.
 use alloy_dyn_abi::TypedData;
 use alloy_primitives::{Address, B256, Signature, U256, keccak256};
+use alloy_sol_types::SolCall;
+use blueprint_client_tangle::contracts::{ITangle, ITangleTypes};
 use blueprint_crypto::{BytesEncoding, k256::K256SigningKey};
 use blueprint_pricing_engine_lib::{
     BenchmarkCache, BenchmarkProfile, JobPricingConfig, OperatorConfig, OperatorSigner,
@@ -9,6 +11,9 @@ use blueprint_pricing_engine_lib::{
     pricing_engine::{self, pricing_engine_server::PricingEngineServer},
     signer::QuoteSigningDomain,
     types::ResourceUnit,
+};
+use blueprint_sdk::tangle::job_quote::{
+    GpuResourceCommitment, JobQuoteDetails, JobQuoteSigner, QuoteSigningDomain as JobDomain,
 };
 use prost::Message;
 use rust_decimal::Decimal;
@@ -283,29 +288,9 @@ async fn gpu_allocation_crosses_the_public_rpc_without_becoming_a_cpu_quote() {
     assert_eq!(quote.price.len(), 32);
     assert_eq!(response.signature.len(), 65);
     assert_eq!(recover(&response, &quote), rpc.operator);
-    use blueprint_tangle_extra::job_quote::{
-        GpuResourceCommitment, JobQuoteDetails, JobQuoteSigner, QuoteSigningDomain as JobDomain,
-    };
-    let mut sdk = JobQuoteSigner::new(
-        K256SigningKey::from_bytes(&[1; 32]).unwrap(),
-        JobDomain {
-            chain_id: 31_337,
-            verifying_contract: Address::repeat_byte(4),
-        },
-    )
-    .unwrap();
-    let signed = sdk
+    let signed = sdk_signer()
         .sign_with_resources(
-            &JobQuoteDetails {
-                requester: Address::from_slice(&quote.requester),
-                service_id: quote.service_id,
-                job_index: u8::try_from(quote.job_index).unwrap(),
-                price: U256::from_be_slice(&quote.price),
-                timestamp: quote.timestamp,
-                expiry: quote.expiry,
-                confidentiality: u8::try_from(quote.confidentiality).unwrap(),
-                inputs_hash: B256::from_slice(&quote.inputs_hash),
-            },
+            &sdk_details(&quote),
             GpuResourceCommitment::new(&quote.gpu_class, quote.gpu_count, quote.duration_secs)
                 .unwrap(),
         )
@@ -314,6 +299,24 @@ async fn gpu_allocation_crosses_the_public_rpc_without_becoming_a_cpu_quote() {
     sdk_response.signature = signed.quote.signature.to_bytes();
     sdk_response.signature.push(27 + signed.quote.recovery_id);
     assert_eq!(recover(&sdk_response, &quote), rpc.operator);
+    let (signed, resource) = signed.into_abi_parts();
+    let calldata = ITangle::submitJobFromQuote_0Call {
+        serviceId: quote.service_id,
+        jobIndex: u8::try_from(quote.job_index).unwrap(),
+        inputs: b"lease".to_vec().into(),
+        quotes: vec![signed],
+        resource,
+    }
+    .abi_encode();
+    let decoded = ITangle::submitJobFromQuote_0Call::abi_decode_validate(&calldata).unwrap();
+    assert_eq!(decoded.resource.kind, 5);
+    assert_eq!(decoded.resource.count, 8);
+    assert_eq!(decoded.resource.durationSecs, 3600);
+    assert_eq!(decoded.resource.gpuClass, keccak256(b"nvidia-b200"));
+    assert_eq!(decoded.quotes[0].signature.as_ref(), sdk_response.signature);
+    assert_eq!(decoded.quotes[0].details.price, U256::from(86_407));
+    let selector = keccak256(b"submitJobFromQuote(uint64,uint8,bytes,((address,uint64,uint8,uint256,uint64,uint64,uint8,bytes32),bytes,address)[],(uint8,uint64,bytes32,uint64))");
+    assert_eq!(&calldata[..4], &selector[..4]);
 
     for field in 0..4 {
         let mut altered = quote.clone();
@@ -373,6 +376,20 @@ async fn confidentiality_uses_the_same_four_policies_as_the_public_chain() {
             "an optional policy cannot downgrade a hard TEE request"
         );
     }
+    for policy in [4, 255, u32::MAX] {
+        let mut request = Rpc::request().await;
+        request.confidentiality = Some(policy);
+        assert_eq!(
+            rpc.job(request).await.unwrap_err().code(),
+            tonic::Code::InvalidArgument
+        );
+    }
+    let mut required = Rpc::request().await;
+    required.require_tee = true;
+    assert_eq!(
+        rpc.job(required).await.unwrap_err().code(),
+        tonic::Code::Unavailable
+    );
 }
 
 #[tokio::test]
@@ -384,10 +401,22 @@ async fn malformed_legacy_rpc_parameters_cannot_produce_a_quote() {
         recover(&response, response.quote.as_ref().unwrap()),
         rpc.operator
     );
-    assert_eq!(
-        U256::from_be_slice(&response.quote.unwrap().price),
-        U256::from(7)
-    );
+    let quote = response.quote.as_ref().unwrap();
+    assert_eq!(U256::from_be_slice(&quote.price), U256::from(7));
+    let signed = sdk_signer().sign(&sdk_details(quote)).unwrap();
+    let signed: ITangleTypes::SignedJobQuote = signed.into();
+    let calldata = ITangle::submitJobFromQuote_1Call {
+        serviceId: quote.service_id,
+        jobIndex: u8::try_from(quote.job_index).unwrap(),
+        inputs: b"lease".to_vec().into(),
+        quotes: vec![signed],
+    }
+    .abi_encode();
+    let decoded = ITangle::submitJobFromQuote_1Call::abi_decode_validate(&calldata).unwrap();
+    assert_eq!(decoded.quotes[0].signature.as_ref(), response.signature);
+    assert_eq!(decoded.quotes[0].details.price, U256::from(7));
+    let selector = keccak256(b"submitJobFromQuote(uint64,uint8,bytes,((address,uint64,uint8,uint256,uint64,uint64,uint8,bytes32),bytes,address)[])");
+    assert_eq!(&calldata[..4], &selector[..4]);
     for malformed in 0..4 {
         let mut request = valid.clone();
         match malformed {
@@ -407,6 +436,30 @@ async fn malformed_legacy_rpc_parameters_cannot_produce_a_quote() {
         rpc.job(unknown_job).await.unwrap_err().code(),
         tonic::Code::NotFound
     );
+}
+
+fn sdk_signer() -> JobQuoteSigner {
+    JobQuoteSigner::new(
+        K256SigningKey::from_bytes(&[1; 32]).unwrap(),
+        JobDomain {
+            chain_id: 31_337,
+            verifying_contract: Address::repeat_byte(4),
+        },
+    )
+    .unwrap()
+}
+
+fn sdk_details(q: &JobQuote) -> JobQuoteDetails {
+    JobQuoteDetails {
+        requester: Address::from_slice(&q.requester),
+        service_id: q.service_id,
+        job_index: u8::try_from(q.job_index).unwrap(),
+        price: U256::from_be_slice(&q.price),
+        timestamp: q.timestamp,
+        expiry: q.expiry,
+        confidentiality: u8::try_from(q.confidentiality).unwrap(),
+        inputs_hash: B256::from_slice(&q.inputs_hash),
+    }
 }
 
 fn recover(response: &JobResponse, q: &JobQuote) -> Address {

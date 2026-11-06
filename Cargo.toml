@@ -125,17 +125,8 @@ broken_intra_doc_links = "deny"
 [workspace.dependencies]
 # SDKs (overarching crates that include all other crates)
 blueprint-sdk = { version = "0.2.0-alpha.22", path = "./crates/sdk", default-features = false }
-# tnt-core 0.19 makes binary URIs event-only: `BinaryVersion` drops its
-# `binaryUri` field (the URI now lives solely on the `BinaryVersionPublished`
-# event), `onJobResult` takes `bytes32 inputsHash` instead of `bytes inputs`,
-# and `onBinaryVersionPublished` gains a trailing `string binaryUri`. This is on
-# top of 0.18's event-sourced blueprint definition (blueprintDefinitionHash view
-# + BlueprintDefinitionRecorded event) and 0.17.0's subscription billing
-# rearchitecture (requestService + fundService flow), the payments facet split
-# with self-only distributePayment, RFQ replay / freshness / cumulative TTL
-# hardening, the collapsed approveService(ApprovalParams) entry point,
-# claimRewards / claimRewardsAll griefing isolation, and O(1) operator accounting.
-tnt-core-bindings = "0.20"  # Alloy 2 contract instances (0.20.0); BinaryVersion loses binaryUri, onJobResult inputsHash (0.19.0)
+# Canonical generated Tangle ABI, including legacy and GPU RFQ overloads.
+tnt-core-bindings = "0.21"
 
 # Job system
 blueprint-core = { version = "0.2.0-alpha.7", path = "crates/core", default-features = false }

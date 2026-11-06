@@ -38,7 +38,7 @@ pub(super) fn usd18(rate: Decimal) -> Result<Vec<u8>, Status> {
         U256::from(mantissa) * U256::from(10u128.pow(18 - rate.scale()))
     } else {
         let divisor = 10u128.pow(rate.scale() - 18);
-        if mantissa % divisor != 0 {
+        if !mantissa.is_multiple_of(divisor) {
             return Err(Status::failed_precondition(
                 "resource price is below USD18 precision",
             ));
