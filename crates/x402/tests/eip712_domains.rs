@@ -18,7 +18,7 @@ const USDC_BASE_DOMAIN_SEPARATOR: B256 =
 const PERMIT2_MAINNET_DOMAIN_SEPARATOR: B256 =
     b256!("0x866a5aba21966af95d6c7ab78eb2b2fc913915c28be3b9aa07cc04ff903e3f28");
 
-fn usdc_base(transfer_method: &str, name: Option<&str>, version: Option<&str>) -> AcceptedToken {
+fn usdc_base(transfer_method: &str) -> AcceptedToken {
     AcceptedToken {
         network: "eip155:8453".into(),
         asset: USDC_BASE.to_string(),
@@ -28,8 +28,8 @@ fn usdc_base(transfer_method: &str, name: Option<&str>, version: Option<&str>) -
         rate_per_native_unit: Decimal::from(3200u32),
         markup_bps: 0,
         transfer_method: transfer_method.into(),
-        eip3009_name: name.map(Into::into),
-        eip3009_version: version.map(Into::into),
+        eip712_name: "USD Coin".into(),
+        eip712_version: "2".into(),
     }
 }
 
@@ -47,23 +47,35 @@ fn token_domain_separator(method: AssetTransferMethod) -> B256 {
 
 #[test]
 fn usdc_on_base_token_domain_matches_chain_for_both_transfer_methods() {
-    for token in [
-        usdc_base("permit2", Some("USD Coin"), Some("2")),
-        usdc_base("eip3009", Some("USD Coin"), Some("2")),
-        // EIP-3009 keeps USDC's historical default domain.
-        usdc_base("eip3009", None, None),
-    ] {
+    for token in [usdc_base("permit2"), usdc_base("eip3009")] {
         token.validate().expect("valid token");
-        let method = token.asset_transfer_method().expect("token domain");
+        let method = token.asset_transfer_method();
         assert_eq!(token_domain_separator(method), USDC_BASE_DOMAIN_SEPARATOR);
     }
 }
 
 #[test]
-fn permit2_token_without_a_domain_is_refused() {
-    let token = usdc_base("permit2", None, None);
-    assert!(token.validate().is_err());
-    assert!(token.asset_transfer_method().is_none());
+fn a_domain_is_stated_never_guessed_and_unknown_methods_are_refused() {
+    let token = |extra: &str| {
+        toml::from_str::<AcceptedToken>(&format!(
+            "network = \"eip155:8453\"\nasset = \"{USDC_BASE}\"\nsymbol = \"USDC\"\ndecimals = 6\n\
+             pay_to = \"0x0000000000000000000000000000000000000001\"\nrate_per_native_unit = \"3200\"\n{extra}"
+        ))
+    };
+    // No default domain for either method.
+    assert!(token("transfer_method = \"eip3009\"").is_err());
+    // Older configs keep loading through the eip3009_* aliases.
+    let old = token(
+        "transfer_method = \"eip3009\"\neip3009_name = \"USD Coin\"\neip3009_version = \"2\"",
+    );
+    assert_eq!(
+        old.expect("aliases load").asset_transfer_method(),
+        usdc_base("eip3009").asset_transfer_method()
+    );
+    // A near-miss method never silently becomes permit2.
+    let mut typo = usdc_base("permit2");
+    typo.transfer_method = "EIP3009".into();
+    assert!(typo.validate().is_err());
 }
 
 #[test]

@@ -29,12 +29,15 @@ shell-escape = { workspace = true }
 aes-gcm = { workspace = true }
 blake3 = { workspace = true }
 hex = { workspace = true }
+sha1 = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
 ssh-key = { version = "0.6.7", default-features = false, features = ["alloc", "ecdsa"] }
 url = { workspace = true }
 jsonwebtoken = { workspace = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
+# Unconditional: GcpAdapter is not behind `gcp`, and default builds already link it via blueprint-tee.
+gcp_auth = { workspace = true }
 toml = { workspace = true }
 blueprint-core = { workspace = true, features = ["tracing"] }
 

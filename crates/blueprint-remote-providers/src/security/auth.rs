@@ -2,13 +2,15 @@
 
 use crate::core::error::{Error, Result};
 use crate::create_metadata_client;
+use std::sync::Arc;
+use tokio::sync::OnceCell;
 use url::Url;
 
-const GCP_METADATA_URL: &str =
-    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
 const AZURE_METADATA_URL: &str = "http://169.254.169.254/metadata/identity/oauth2/token";
 
-/// Fetch a GCP access token from env or metadata service.
+/// Fetch a GCP access token. `GCP_ACCESS_TOKEN` is an explicit override; otherwise
+/// `gcp_auth` tries `GOOGLE_APPLICATION_CREDENTIALS`, application-default credentials,
+/// the GCE metadata server and the `gcloud` CLI, in that order.
 pub async fn gcp_access_token() -> Result<String> {
     if let Ok(token) = std::env::var("GCP_ACCESS_TOKEN") {
         if token.trim().is_empty() {
@@ -19,30 +21,49 @@ pub async fn gcp_access_token() -> Result<String> {
         return Ok(token);
     }
 
-    validate_gcp_metadata_url(GCP_METADATA_URL)?;
-    let client = create_metadata_client(2)?;
+    // Discovery probes files, the metadata server and `gcloud`, so run it once per
+    // process; the provider caches and refreshes its token.
+    static PROVIDER: OnceCell<Arc<dyn gcp_auth::TokenProvider>> = OnceCell::const_new();
+    let provider = PROVIDER
+        .get_or_try_init(gcp_auth::provider)
+        .await
+        .map_err(gcp_login_error)?;
+    let token = provider
+        .token(&["https://www.googleapis.com/auth/cloud-platform"])
+        .await
+        .map_err(gcp_login_error)?;
+    Ok(token.as_str().to_owned())
+}
 
-    let response = client
-        .get(GCP_METADATA_URL)
-        .header("Metadata-Flavor", "Google")
-        .send()
-        .await;
-
-    if let Ok(resp) = response {
-        if resp.status().is_success() {
-            let json: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| Error::ConfigurationError(format!("Failed to parse token: {e}")))?;
-            if let Some(token) = json["access_token"].as_str() {
-                return Ok(token.to_string());
-            }
-        }
-    }
-
-    Err(Error::ConfigurationError(
-        "No GCP credentials found. Set GCP_ACCESS_TOKEN or use a service account".into(),
+fn gcp_login_error(err: gcp_auth::Error) -> Error {
+    let detail = match &err {
+        gcp_auth::Error::NoAuthMethod(gcloud, metadata, adc) => format!(
+            "application-default credentials: {}; GCE metadata: {}; gcloud: {}",
+            error_chain(adc),
+            error_chain(metadata),
+            error_chain(gcloud)
+        ),
+        other => error_chain(other),
+    };
+    Error::ConfigurationError(format!(
+        "No usable GCP credentials ({detail}). Log in with one of: GCP_ACCESS_TOKEN, \
+         GOOGLE_APPLICATION_CREDENTIALS=<service-account.json>, \
+         `gcloud auth application-default login` (or delete a stale \
+         application_default_credentials.json), `gcloud auth login`, or a GCE service account"
     ))
+}
+
+fn error_chain(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut text = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        let cause_text = cause.to_string();
+        if !text.contains(&cause_text) {
+            text = format!("{text}: {cause_text}");
+        }
+        source = cause.source();
+    }
+    text
 }
 
 /// Fetch an Azure management token from env, metadata service, or Azure CLI.
@@ -114,25 +135,6 @@ pub async fn azure_access_token() -> Result<String> {
     Ok(token.to_string())
 }
 
-fn validate_gcp_metadata_url(url: &str) -> Result<()> {
-    let parsed =
-        Url::parse(url).map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
-    if parsed.scheme() != "http" {
-        return Err(Error::ConfigurationError(
-            "GCP metadata URL must use HTTP".into(),
-        ));
-    }
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| Error::ConfigurationError("Missing host in URL".into()))?;
-    if host != "metadata.google.internal" {
-        return Err(Error::ConfigurationError(format!(
-            "Unexpected GCP metadata host: {host}"
-        )));
-    }
-    Ok(())
-}
-
 fn validate_azure_metadata_url(url: &str) -> Result<()> {
     let parsed =
         Url::parse(url).map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
@@ -155,26 +157,13 @@ fn validate_azure_metadata_url(url: &str) -> Result<()> {
 #[cfg(test)]
 #[allow(clippy::await_holding_lock)]
 mod tests {
-    use super::{
-        azure_access_token, gcp_access_token, validate_azure_metadata_url,
-        validate_gcp_metadata_url,
-    };
+    use super::{azure_access_token, gcp_access_token, validate_azure_metadata_url};
     use std::env;
     use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
-    }
-
-    #[test]
-    fn gcp_metadata_url_validation() {
-        assert!(validate_gcp_metadata_url(
-            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
-        )
-        .is_ok());
-        assert!(validate_gcp_metadata_url("https://metadata.google.internal/").is_err());
-        assert!(validate_gcp_metadata_url("http://example.com").is_err());
     }
 
     #[test]

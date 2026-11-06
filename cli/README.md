@@ -1,27 +1,6 @@
 # Tangle CLI
 
-Create, run, and operate blueprints on the Tangle EVM and EigenLayer.
-
-## Table of Contents
-
-- [Tangle CLI](#tangle-cli)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Installation](#installation)
-    - [Feature flags](#feature-flags)
-  - [Creating a New Blueprint](#creating-a-new-blueprint)
-  - [Running a Blueprint on Tangle](#running-a-blueprint-on-tangle)
-  - [Registering an Operator](#registering-an-operator)
-  - [Service Lifecycle Commands](#service-lifecycle-commands)
-  - [Cloud Deployment](#cloud-deployment)
-    - [Configure Cloud Provider](#configure-cloud-provider)
-    - [Cost Estimation](#cost-estimation)
-    - [Deploy Blueprint to Cloud](#deploy-blueprint-to-cloud)
-    - [Monitor Cloud Deployments](#monitor-cloud-deployments)
-  - [Key Management](#key-management)
-  - [EigenLayer Helpers](#eigenlayer-helpers)
-  - [Generating Keys from the Command Line](#generating-keys-from-the-command-line)
-    - [Flags](#flags)
+Create, run, and operate blueprints on Tangle EVM.
 
 ## Overview
 
@@ -31,8 +10,6 @@ The CLI bundles every workflow needed for the EVM-only SDK:
 - `cargo tangle blueprint run --protocol tangle` boots a manager connected to the Tangle v2 contracts.
 - `cargo tangle blueprint register-tangle` registers an operator against `ITangle`, `MultiAssetDelegation`, and `OperatorStatusRegistry`.
 - `cargo tangle key *` manages local and remote k256 keys via `blueprint-keystore`.
-
-All Substrate helpers have been removed; the CLI now targets EVM-first flows only.
 
 ## Installation
 
@@ -44,28 +21,27 @@ cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --f
 
 ### Feature flags
 
-The CLI supports optional features that can be enabled at build time:
+Source installs enable `full` by default, including blueprint development,
+registration, operator and key commands. Release archives and the shell
+installer also enable `remote-providers`, which adds `cargo tangle cloud`;
+add it to a source install with `--features remote-providers`. `vm-debug`
+adds the Linux VM sandbox.
 
-**`remote-providers`** - Enables cloud deployment functionality
-
-Adds support for deploying blueprints to AWS, GCP, Azure, DigitalOcean, and Vultr. This enables the `cargo tangle cloud` subcommand and the `--remote` flag for blueprint deployment.
+The release also includes `cargo-tangle-cloud-<target>.tar.xz` and its
+`.sha256` file for native Linux x86_64 and aarch64. These archives contain
+`cargo-tangle` built from the same source with `--no-default-features --features
+cloud-only`. They expose only the cloud commands, with the same providers as the
+standard archives, and have no Anvil, testcontainers or cargo-generate in the
+production dependency graph. Chain and key libraries still link, because the
+provider and pricing crates depend on them. Standard archives carry the full CLI
+with cloud commands. Install the cloud-only flavor from source:
 
 ```bash
 cargo install cargo-tangle --git https://github.com/tangle-network/blueprint \
-  --features remote-providers --force
+  --no-default-features --features cloud-only --force
 ```
 
-Without this feature, cloud commands are not available and using `--remote` will show:
-```
-❌ Remote deployment requires the 'remote-providers' feature.
-   Build with: cargo build --features remote-providers
-```
-
-**`vm-debug`** - Enables VM sandbox debugging (Linux only)
-
-```bash
-cargo build --features vm-debug
-```
+Verify the downloaded `.sha256` file before extracting the archive.
 
 ## Creating a New Blueprint
 
@@ -432,13 +408,15 @@ env → `http://127.0.0.1:9000`. The pre-authorization persists in
 a pin/whitelist during a maintenance window and walk away — a restart of
 the manager rebuilds the state cleanly.
 
-## Cloud Deployment
+## Cloud Commands
 
-> **Note:** Cloud deployment requires the `remote-providers` feature flag. See [Feature flags](#feature-flags) for installation instructions.
+> **Note:** Release archives include cloud commands; source installs need the `remote-providers` feature. See [Feature flags](#feature-flags).
 
-The Tangle CLI supports deploying blueprints to cloud providers for scalable, distributed execution:
+The cloud commands configure providers, quote live prices, and inspect and terminate deployments recorded in the deployment tracker. No CLI command allocates capacity, updates a running deployment or reads its logs, and `cargo tangle blueprint run` cannot enable the manager's remote deployment path.
 
 ### Configure Cloud Provider
+
+`configure` saves a region and default provider. Credentials come from the environment, and for AWS also from `~/.aws/credentials`. `configure` names the variables a provider needs; it never stores a credential. A token can also come from the Compute Engine metadata server for GCP, and from a managed identity or `az login` for Azure.
 
 ```bash
 # Configure AWS
@@ -466,28 +444,29 @@ cargo tangle cloud estimate --provider aws --duration 30d
 cargo tangle cloud estimate --provider gcp --gpu 1 --cpu 8 --memory 32
 ```
 
-### Deploy Blueprint to Cloud
+### Deployment Policy
 
 ```bash
-# Deploy with remote deployment flag
-cargo tangle blueprint deploy tangle --remote --package my_blueprint
-
-# Deploy with specific policy
+# Rank providers for the manager's remote deployments
 cargo tangle cloud policy --gpu-providers gcp,aws --cost-providers vultr,do
-cargo tangle blueprint deploy tangle --remote --package my_blueprint
 ```
 
 ### Monitor Cloud Deployments
+
+`status` and `terminate` read the tracker at `TANGLE_DEPLOYMENT_TRACKER_PATH`, by default `~/.tangle/remote_deployments`. Both reach each provider in the region its record names, and a provider that is missing a variable affects only its own deployments. `status` shows `unknown` when the provider cannot answer, and `status <id>` also says why. `terminate` exits non-zero if any deployment is not confirmed terminated, and that deployment stays tracked.
 
 ```bash
 # Check status of all deployments
 cargo tangle cloud status
 
 # Check specific deployment
-cargo tangle cloud status --deployment-id dep-abc123
+cargo tangle cloud status dep-abc123
 
-# Terminate deployment
-cargo tangle cloud terminate --deployment-id dep-abc123
+# Terminate one deployment
+cargo tangle cloud terminate dep-abc123
+
+# Terminate every tracked deployment
+cargo tangle cloud terminate --all
 ```
 
 ### Preflight and TEE Readiness
@@ -544,10 +523,6 @@ cargo tangle key list --keystore-path ./keystore
 
 The keystore supports filesystem, in-memory, and remote HSM backends through `blueprint-keystore`.
 
-## EigenLayer Helpers
-
-EigenLayer support remains available under `cargo tangle blueprint eigenlayer <subcommand>`. Use it to register AVSs, list allocations, or run the EigenLayer manager by supplying the addresses exported from the EigenLayer contracts.
-
 ## Operator Status
 
 Inspect the latest heartbeat/online status from `OperatorStatusRegistry`:
@@ -568,137 +543,4 @@ cargo tangle operator status \
 
 Omit `--operator` to query the locally configured operator. Add `--json` for machine-friendly output (timestamp, raw status code, online boolean).
 
-## Need More?
-
 - End-to-end demos and advanced options live on the [CLI reference](https://docs.tangle.tools/developers/cli/reference).
-- For pricing/QoS flows, combine the CLI with `crates/pricing-engine` and the new `OPERATOR_*` env vars described in that README.
-
-```bash
-cargo tangle blueprint run \
-  --protocol eigenlayer \
-  --config ./config.toml
-```
-
-The manager will:
-- Read all active AVS registrations from `~/.tangle/eigenlayer_registrations.json`
-- Spawn a separate blueprint instance for each AVS
-- Monitor rewards and slashing events
-- Auto-restart failed blueprints
-
-#### 5. Deregister from an AVS
-
-```bash
-cargo tangle blueprint eigenlayer deregister \
-  --service-manager 0x... \
-  --keystore-uri ./keystore
-```
-
-### EigenLayer Command Reference
-
-#### `eigenlayer register`
-
-Register with a new EigenLayer AVS.
-
-```bash
-cargo tangle blueprint eigenlayer register \
-  --config <CONFIG_FILE> \
-  --keystore-uri <KEYSTORE_PATH> \
-  [--runtime <RUNTIME>] \
-  [--verify]
-```
-
-**Arguments**:
-- `--config`: Path to JSON configuration file
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-- `--runtime`: Runtime target (`native`, `hypervisor`, `container`) - overrides config file
-- `--verify`: Perform on-chain verification (optional)
-
-**Aliases**: `reg`
-
-#### `eigenlayer deregister`
-
-Deregister from an EigenLayer AVS.
-
-```bash
-cargo tangle blueprint eigenlayer deregister \
-  --service-manager <ADDRESS> \
-  --keystore-uri <KEYSTORE_PATH>
-```
-
-**Arguments**:
-- `--service-manager`: Service manager contract address
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-
-**Aliases**: `dereg`
-
-#### `eigenlayer list`
-
-List all registered AVS services.
-
-```bash
-cargo tangle blueprint eigenlayer list \
-  [--active-only] \
-  [--format <FORMAT>]
-```
-
-**Arguments**:
-- `--active-only`: Show only active registrations
-- `--format`: Output format: `table` (default) or `json`
-
-**Aliases**: `ls`
-
-#### `eigenlayer sync`
-
-Synchronize local registrations with on-chain state.
-
-```bash
-cargo tangle blueprint eigenlayer sync \
-  --http-rpc-url <URL> \
-  --keystore-uri <KEYSTORE_PATH> \
-  [--settings-file <FILE>]
-```
-
-**Arguments**:
-- `--http-rpc-url`: HTTP RPC endpoint (default: `http://127.0.0.1:8545`)
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-- `--settings-file`: Protocol settings file (optional)
-
-### Runtime Targets
-
-Each AVS can specify its execution runtime:
-
-- **`native`** - Bare process (no sandbox)
-  - Fastest startup and lowest overhead
-  - For testing only - no isolation
-  - Direct process execution
-
-- **`hypervisor`** - cloud-hypervisor VM (default)
-  - Production-ready VM isolation
-  - Strong security boundaries
-  - Resource limits enforced
-  - Recommended for production
-
-- **`container`** - Docker/Kata containers (Coming Soon)
-  - Not yet implemented
-  - For now, use `native` for testing or `hypervisor` for production
-
-Set via config file or override via CLI `--runtime` flag.
-
-## Generating Keys from the Command Line
-
-The following command will generate a keypair for a given key type:
-
-```shell
-cargo tangle blueprint generate-keys -k <KEY_TYPE> -p <PATH> -s <SURI/SEED> --show-secret
-```
-
-where it is optional to include the path, seed, or the show-secret flags.
-
-### Flags
-
-- `-k` or `--key-type`: Required flag. The key type to generate (sr25519, ecdsa, bls_bn254, ed25519, bls381).
-- `-p` or `--path`: The path to write the generated keypair to. If not provided, the keypair will be written solely to stdout.
-- `-s` or `--seed`: The suri/seed to generate the keypair from. If not provided, a random keypair will be generated.
-- `--show-secret`: Denotes that the Private Key should also be printed to stdout. If not provided, only the public key will be printed.
-
-For all of our features for created and using keys, see the [key management](https://docs.tangle.tools/developers/cli/keys) section of our CLI docs.

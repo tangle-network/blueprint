@@ -31,7 +31,6 @@
 //! }
 //! ```
 
-
 extern crate alloc;
 
 pub mod dedup;

@@ -1,486 +1,232 @@
-//! Cloud deployment status monitoring.
-//!
-//! This module provides real-time monitoring and management of deployed Blueprint instances
-//! across cloud providers, including status checking, health monitoring, and termination.
+//! Cloud deployment status and termination, read from the deployment tracker and the provider.
 
-use color_eyre::Result;
+use super::open_tracker;
+use blueprint_remote_providers::{CloudProvider, CloudProvisioner, deployment::DeploymentRecord};
+use chrono::Utc;
+use color_eyre::{
+    Result,
+    eyre::{WrapErr, ensure, eyre},
+};
+use dialoguer::Confirm;
+use futures::future::join_all;
 use std::time::Duration;
 
-use super::CloudProvider;
-
-#[cfg(feature = "remote-providers")]
-use blueprint_remote_providers::{CloudProvisioner, DeploymentTracker, HealthMonitor};
-
-#[derive(Debug)]
-struct DeploymentStatus {
-    id: String,
-    provider: String,
-    region: String,
-    status: String,
-    health: Option<String>,
-    ip: String,
-    uptime: String,
-    ttl: String,
-}
-
-/// Show deployment status.
-///
-/// Displays the current status of cloud deployments, either for a specific deployment
-/// or all active deployments. Supports watch mode for real-time updates.
-///
-/// # Arguments
-///
-/// * `deployment_id` - Optional specific deployment to monitor
-/// * `watch` - Enable continuous monitoring with auto-refresh
-///
-/// # Errors
-///
-/// Returns an error if deployment information cannot be retrieved.
-///
-/// # Examples
-///
-/// ```bash
-/// # Show all deployments
-/// cargo tangle cloud status
-///
-/// # Watch specific deployment
-/// cargo tangle cloud status --deployment-id dep-abc123 --watch
-/// ```
-pub async fn show_status(deployment_id: Option<String>, watch: bool) -> Result<()> {
-    if watch {
-        // Watch mode - refresh every 5 seconds
-        loop {
+/// Show every tracked deployment or one of them, refreshing every five seconds when watching.
+pub async fn show_status(service_id: Option<String>, watch: bool) -> Result<()> {
+    loop {
+        if watch {
             print!("\x1B[2J\x1B[1;1H"); // Clear screen
-            display_status(deployment_id.as_deref()).await?;
-            tokio::time::sleep(Duration::from_secs(5)).await;
         }
-    } else {
-        display_status(deployment_id.as_deref()).await
+        display_status(service_id.as_deref()).await?;
+        if !watch {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
 }
 
-async fn display_status(deployment_id: Option<&str>) -> Result<()> {
-    println!("📊 Cloud Deployment Status\n");
-
-    if let Some(id) = deployment_id {
-        // Show specific deployment
-        show_deployment_details(id).await?;
-    } else {
-        // Show all deployments
-        show_all_deployments().await?;
-    }
-
-    Ok(())
-}
-
-async fn show_deployment_details(id: &str) -> Result<()> {
-    // Mock data for demo
-    println!("Deployment: {}", id);
-    println!("{}", "─".repeat(50));
-    println!("Provider:       AWS");
-    println!("Region:         us-east-1");
-    println!("Instance Type:  t3.xlarge");
-    println!("Status:         🟢 Running");
-    println!("Public IP:      54.123.45.67");
-    println!("Private IP:     10.0.1.42");
-    println!("Created:        2024-01-15 10:30:00");
-    println!("Uptime:         2h 45m");
-    println!("TTL:            21h 15m remaining");
-    println!();
-
-    println!("Resources:");
-    println!("  CPU:          4 cores (23% usage)");
-    println!("  Memory:       16 GB (8.2 GB used)");
-    println!("  Storage:      100 GB (12 GB used)");
-    println!("  Network In:   1.2 GB");
-    println!("  Network Out:  3.4 GB");
-    println!();
-
-    println!("Blueprint:");
-    println!("  ID:           123");
-    println!("  Name:         my-blueprint");
-    println!("  Version:      0.1.0");
-    println!("  Jobs Executed: 42");
-    println!("  Last Job:     5 minutes ago");
-    println!();
-
-    println!("Health Checks:");
-    println!("  HTTP /health: ✅ 200 OK (32ms)");
-    println!("  TCP port 8080: ✅ Open");
-    println!("  Process:      ✅ Running (PID 1234)");
-    println!();
-
-    println!("Logs (last 5 lines):");
-    println!("  [10:45:23] INFO  Starting job execution");
-    println!("  [10:45:24] INFO  Job 42 completed successfully");
-    println!("  [10:45:25] DEBUG Metrics updated");
-    println!("  [10:45:30] INFO  Health check passed");
-    println!("  [10:45:35] INFO  Waiting for next job");
-
-    Ok(())
-}
-
-async fn show_all_deployments() -> Result<()> {
-    #[cfg(feature = "remote-providers")]
-    let deployments = {
-        match load_real_deployments().await {
-            Ok(deployments) => deployments,
-            Err(e) => {
-                println!("⚠️  Failed to load deployments from tracker: {}", e);
-                get_mock_deployments()
-            }
-        }
-    };
-
-    #[cfg(not(feature = "remote-providers"))]
-    let deployments = get_mock_deployments();
-
-    if deployments.is_empty() {
-        println!("No active deployments.");
-        println!("\nDeploy a blueprint with:");
-        println!("  cargo tangle cloud deploy --provider aws");
-    } else {
-        // Display deployments in formatted table
-        println!(
-            "{:<15} {:<15} {:<12} {:<15} {:<15} {:<10} {:<10}",
-            "ID", "Provider", "Region", "Status", "IP", "Uptime", "TTL"
+async fn display_status(service_id: Option<&str>) -> Result<()> {
+    let mut records = open_tracker().await?.list_all().await?;
+    records.sort_by(|left, right| left.id.cmp(&right.id));
+    let provisioner = CloudProvisioner::new().await?;
+    if let Some(id) = service_id {
+        let record = find(records, id)?;
+        let state = provider_state(&provisioner, &record).await;
+        print_details(
+            &record,
+            &state.unwrap_or_else(|error| format!("unknown ({error:#})")),
         );
-        println!("{}", "-".repeat(92));
-
-        for dep in &deployments {
-            println!(
-                "{:<15} {:<15} {:<12} {:<15} {:<15} {:<10} {:<10}",
-                dep.id, dep.provider, dep.region, dep.status, dep.ip, dep.uptime, dep.ttl
-            );
-        }
-
-        println!("\nSummary:");
-        let running = deployments
+        return Ok(());
+    }
+    if records.is_empty() {
+        println!("No tracked deployments.");
+        return Ok(());
+    }
+    let states = join_all(
+        records
             .iter()
-            .filter(|d| d.status.contains("Running"))
-            .count();
-        let total = deployments.len();
-        println!("  {} running, {} total deployments", running, total);
-
-        // Calculate total hourly cost (mock)
-        let total_cost = running as f32 * 0.42;
-        println!("  Estimated cost: ${:.2}/hour", total_cost);
-
-        println!("\nCommands:");
-        println!("  View details:   cargo tangle cloud status --deployment-id <id>");
-        println!("  Watch status:   cargo tangle cloud status --watch");
-        println!("  Terminate:      cargo tangle cloud terminate --deployment-id <id>");
-    }
-
-    Ok(())
-}
-
-/// Terminate cloud deployments.
-///
-/// Safely terminates cloud deployments with confirmation prompts.
-/// Can terminate individual deployments or all active deployments.
-///
-/// # Arguments
-///
-/// * `deployment_id` - Optional specific deployment to terminate
-/// * `all` - Terminate all active deployments
-/// * `yes` - Skip confirmation prompts
-///
-/// # Errors
-///
-/// Returns an error if:
-/// * Deployment cannot be found
-/// * Termination fails
-/// * User cancels the operation
-///
-/// # Examples
-///
-/// ```bash
-/// # Terminate specific deployment
-/// cargo tangle cloud terminate --deployment-id dep-abc123
-///
-/// # Terminate all with confirmation
-/// cargo tangle cloud terminate --all
-/// ```
-pub async fn terminate(deployment_id: Option<String>, all: bool, yes: bool) -> Result<()> {
-    println!("🛑 Terminating Cloud Deployments\n");
-
-    if all {
-        // Terminate all deployments
-        if !yes {
-            use dialoguer::Confirm;
-            if !Confirm::new()
-                .with_prompt("Are you sure you want to terminate ALL deployments?")
-                .default(false)
-                .interact()?
-            {
-                println!("Termination cancelled.");
-                return Ok(());
-            }
-        }
-
-        println!("Terminating all deployments...");
-        let pb = indicatif::ProgressBar::new(4);
-        pb.set_style(
-            indicatif::ProgressStyle::default_bar().template("[{bar:40}] {pos}/{len} {msg}")?,
-        );
-
-        for i in 0..4 {
-            pb.set_message(format!("Terminating dep-{}", i));
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            pb.inc(1);
-        }
-        pb.finish_with_message("All deployments terminated");
-    } else if let Some(id) = deployment_id {
-        // Terminate specific deployment
-        if !yes {
-            use dialoguer::Confirm;
-            if !Confirm::new()
-                .with_prompt(format!("Terminate deployment {}?", id))
-                .default(true)
-                .interact()?
-            {
-                println!("Termination cancelled.");
-                return Ok(());
-            }
-        }
-
-        println!("Terminating {}...", id);
-        let spinner = indicatif::ProgressBar::new_spinner();
-        spinner.set_style(indicatif::ProgressStyle::default_spinner().template("{spinner} {msg}")?);
-
-        #[cfg(feature = "remote-providers")]
-        {
-            spinner.set_message("Initializing cloud provisioner...");
-            match CloudProvisioner::new().await {
-                Ok(provisioner) => {
-                    spinner.set_message("Terminating instance...");
-                    // TODO: Get provider from deployment tracker
-                    // For now, we need to load deployment info to get the provider
-                    if let Err(e) = terminate_real_deployment(&provisioner, &id).await {
-                        spinner
-                            .finish_with_message(format!("❌ Failed to terminate {}: {}", id, e));
-                        return Ok(());
-                    }
-                }
-                Err(e) => {
-                    spinner
-                        .finish_with_message(format!("❌ Failed to initialize provisioner: {}", e));
-                    return Ok(());
-                }
-            }
-        }
-
-        #[cfg(not(feature = "remote-providers"))]
-        {
-            spinner.set_message("Stopping services...");
-            tokio::time::sleep(Duration::from_secs(1)).await;
-
-            spinner.set_message("Deallocating resources...");
-            tokio::time::sleep(Duration::from_secs(1)).await;
-
-            spinner.set_message("Cleaning up...");
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-
-        spinner.finish_with_message(format!("✅ {} terminated", id));
-    } else {
-        println!("No deployment specified.");
-        println!("\nUsage:");
-        println!("  Terminate one:  cargo tangle cloud terminate --deployment-id <id>");
-        println!("  Terminate all:  cargo tangle cloud terminate --all");
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "remote-providers")]
-async fn load_real_deployments() -> Result<Vec<DeploymentStatus>> {
-    use std::path::PathBuf;
-
-    // Try to load from default deployment tracker path
-    let tracker_path = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".tangle")
-        .join("remote_deployments");
-
-    if !tracker_path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let tracker = DeploymentTracker::new(&tracker_path)
-        .await
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize deployment tracker: {}", e))?;
-
-    // Initialize health monitor for real-time health checks
-    let provisioner = std::sync::Arc::new(
-        CloudProvisioner::new()
-            .await
-            .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize provisioner: {}", e))?,
+            .map(|record| provider_state(&provisioner, record)),
+    )
+    .await;
+    println!(
+        "{:<40} {:<14} {:<14} {:<12} {:<12} {:<16} {:<10} {:<10}",
+        "ID", "Provider", "Region", "Tracked", "Provider", "IP", "Uptime", "TTL"
     );
-    let tracker_arc = std::sync::Arc::new(tracker);
-    let health_monitor = HealthMonitor::new(provisioner, tracker_arc.clone());
-
-    let mut deployments = Vec::new();
-    let all_deployments = tracker_arc
-        .list_all()
-        .await
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to load deployments: {}", e))?;
-
-    for deployment in all_deployments {
-        // Perform health check for the deployment
-        let health_status = match health_monitor.is_healthy(&deployment.id).await {
-            Ok(true) => Some("💚 Healthy".to_string()),
-            Ok(false) => Some("❤️ Unhealthy".to_string()),
-            Err(_) => Some("❓ Unknown".to_string()),
-        };
-
-        use blueprint_remote_providers::deployment::tracker::DeploymentStatus as DS;
-        let status_icon = match deployment.status {
-            DS::Active => "🟢",
-            DS::Terminating => "🟡",
-            DS::Terminated => "🔴",
-            DS::Failed => "🔴",
-            DS::Unknown => "⚪",
-        };
-
-        let status_str = match deployment.status {
-            DS::Active => "active",
-            DS::Terminating => "terminating",
-            DS::Terminated => "terminated",
-            DS::Failed => "failed",
-            DS::Unknown => "unknown",
-        };
-
-        let duration = chrono::Utc::now().signed_duration_since(deployment.deployed_at);
-        let uptime = format!("{}h {}m", duration.num_hours(), duration.num_minutes() % 60);
-
-        deployments.push(DeploymentStatus {
-            id: deployment.id.clone(),
-            provider: format!("{:?}", deployment.provider),
-            region: deployment
-                .region
-                .clone()
-                .unwrap_or_else(|| "unknown".to_string()),
-            status: format!("{} {}", status_icon, status_str),
-            health: health_status,
-            ip: deployment
-                .metadata
-                .get("public_ip")
-                .cloned()
-                .unwrap_or_else(|| "Pending".to_string()),
-            uptime,
-            ttl: deployment
-                .expires_at
-                .map(|expires| {
-                    let remaining = expires.signed_duration_since(chrono::Utc::now());
-                    if remaining.num_seconds() > 0 {
-                        format!(
-                            "{}h {}m",
-                            remaining.num_hours(),
-                            (remaining.num_minutes() % 60)
-                        )
-                    } else {
-                        "Expired".to_string()
-                    }
-                })
-                .unwrap_or_else(|| "Never".to_string()),
-        });
+    for (record, state) in records.iter().zip(states) {
+        println!(
+            "{:<40} {:<14} {:<14} {:<12} {:<12} {:<16} {:<10} {:<10}",
+            record.id,
+            provider_name(record),
+            record.region.as_deref().unwrap_or("unknown"),
+            tracked_state(record),
+            state.unwrap_or_else(|_| "unknown".to_owned()),
+            public_ip(record),
+            uptime(record),
+            ttl(record),
+        );
     }
-
-    Ok(deployments)
-}
-
-#[cfg(feature = "remote-providers")]
-async fn terminate_real_deployment(
-    provisioner: &CloudProvisioner,
-    instance_id: &str,
-) -> Result<()> {
-    use std::path::PathBuf;
-
-    // Load deployment tracker to get the provider info
-    let tracker_path = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".tangle")
-        .join("remote_deployments");
-
-    if !tracker_path.exists() {
-        return Err(color_eyre::eyre::eyre!("No deployment tracker found"));
-    }
-
-    let tracker = DeploymentTracker::new(&tracker_path)
-        .await
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to initialize deployment tracker: {}", e))?;
-
-    let deployment = tracker
-        .get_by_instance_id(instance_id)
-        .await
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to find deployment: {}", e))?
-        .ok_or_else(|| color_eyre::eyre::eyre!("Deployment {} not found", instance_id))?;
-
-    // Terminate the instance
-    if let Some(provider) = deployment.provider {
-        let cloud_id = deployment
-            .resource_ids
-            .get("instance_id")
-            .map(|s| s.as_str())
-            .unwrap_or(instance_id);
-        provisioner
-            .terminate(provider, cloud_id)
-            .await
-            .map_err(|e| color_eyre::eyre::eyre!("Failed to terminate instance: {}", e))?;
-    }
-
-    // Remove from tracker
-    tracker
-        .remove_by_instance_id(instance_id)
-        .await
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to remove from tracker: {}", e))?;
-
+    println!("\n{} tracked deployments", records.len());
+    println!("  View details:  cargo tangle cloud status <id>");
+    println!("  Terminate:     cargo tangle cloud terminate <id>");
     Ok(())
 }
 
-fn get_mock_deployments() -> Vec<DeploymentStatus> {
-    vec![
-        DeploymentStatus {
-            id: "dep-abc123".to_string(),
-            provider: "AWS".to_string(),
-            region: "us-east-1".to_string(),
-            status: "🟢 Running".to_string(),
-            health: Some("💚 Healthy".to_string()),
-            ip: "54.123.45.67".to_string(),
-            uptime: "2h 45m".to_string(),
-            ttl: "21h 15m".to_string(),
-        },
-        DeploymentStatus {
-            id: "dep-def456".to_string(),
-            provider: "GCP".to_string(),
-            region: "us-central1".to_string(),
-            status: "🟢 Running".to_string(),
-            health: Some("💚 Healthy".to_string()),
-            ip: "35.222.33.44".to_string(),
-            uptime: "5d 3h".to_string(),
-            ttl: "Never".to_string(),
-        },
-        DeploymentStatus {
-            id: "dep-ghi789".to_string(),
-            provider: "DigitalOcean".to_string(),
-            region: "nyc3".to_string(),
-            status: "🟡 Starting".to_string(),
-            health: Some("❓ Unknown".to_string()),
-            ip: "Pending".to_string(),
-            uptime: "0m".to_string(),
-            ttl: "24h".to_string(),
-        },
-        DeploymentStatus {
-            id: "dep-jkl012".to_string(),
-            provider: "Vultr".to_string(),
-            region: "ewr".to_string(),
-            status: "🔴 Stopped".to_string(),
-            health: Some("❤️ Unhealthy".to_string()),
-            ip: "N/A".to_string(),
-            uptime: "N/A".to_string(),
-            ttl: "Expired".to_string(),
-        },
-    ]
+fn print_details(record: &DeploymentRecord, state: &str) {
+    println!("Deployment:      {}", record.id);
+    println!("Blueprint:       {}", record.blueprint_id);
+    println!("Type:            {:?}", record.deployment_type);
+    println!("Provider:        {}", provider_name(record));
+    println!(
+        "Region:          {}",
+        record.region.as_deref().unwrap_or("unknown")
+    );
+    println!(
+        "Instance:        {}",
+        instance_id(record).unwrap_or("unknown")
+    );
+    println!("Public IP:       {}", public_ip(record));
+    println!("Tracked state:   {}", tracked_state(record));
+    println!("Provider state:  {state}");
+    println!("Deployed:        {}", record.deployed_at.to_rfc3339());
+    println!("Uptime:          {}", uptime(record));
+    println!("TTL:             {}", ttl(record));
+}
+
+/// Terminate one tracked deployment, or all of them, through its provider.
+///
+/// A deployment leaves the tracker only after its provider confirms termination, and any
+/// failure makes the command fail so a caller cannot read it as a stopped deployment.
+pub async fn terminate(service_id: Option<String>, yes: bool) -> Result<()> {
+    let tracker = open_tracker().await?;
+    let mut records = tracker.list_all().await?;
+    if let Some(id) = service_id {
+        records = vec![find(records, &id)?];
+    }
+    if records.is_empty() {
+        println!("No tracked deployments.");
+        return Ok(());
+    }
+    records.sort_by(|left, right| left.id.cmp(&right.id));
+    let ids: Vec<_> = records.iter().map(|record| record.id.as_str()).collect();
+    if !yes
+        && !Confirm::new()
+            .with_prompt(format!("Terminate {}?", ids.join(", ")))
+            .default(false)
+            .interact()?
+    {
+        println!("Termination cancelled.");
+        return Ok(());
+    }
+    let provisioner = CloudProvisioner::new().await?;
+    let outcomes = join_all(
+        records
+            .iter()
+            .map(|record| terminate_instance(&provisioner, record)),
+    )
+    .await;
+    let mut failed = 0;
+    for (record, outcome) in records.iter().zip(outcomes) {
+        let removed = match outcome {
+            Ok(()) => tracker
+                .remove_by_instance_id(&record.id)
+                .await
+                .wrap_err("terminated, but its tracker record could not be removed"),
+            Err(error) => Err(error),
+        };
+        match removed {
+            Ok(()) => println!("Terminated {}", record.id),
+            Err(error) => {
+                eprintln!("Failed to terminate {}: {error:#}", record.id);
+                failed += 1;
+            }
+        }
+    }
+    ensure!(
+        failed == 0,
+        "{failed} of {} deployments were not terminated",
+        records.len()
+    );
+    Ok(())
+}
+
+async fn terminate_instance(
+    provisioner: &CloudProvisioner,
+    record: &DeploymentRecord,
+) -> Result<()> {
+    let (provider, instance) = target(record)?;
+    Ok(provisioner
+        .terminate_in(provider, instance, record.region.as_deref())
+        .await?)
+}
+
+fn target(record: &DeploymentRecord) -> Result<(CloudProvider, &str)> {
+    let provider = record
+        .provider
+        .clone()
+        .ok_or_else(|| eyre!("its record names no cloud provider"))?;
+    let instance = instance_id(record).ok_or_else(|| eyre!("its record names no instance"))?;
+    Ok((provider, instance))
+}
+
+fn find(records: Vec<DeploymentRecord>, id: &str) -> Result<DeploymentRecord> {
+    records
+        .into_iter()
+        .find(|record| record.id == id || record.blueprint_id == id)
+        .ok_or_else(|| eyre!("Deployment {id} is not in the deployment tracker"))
+}
+
+/// The provider's answer for a record, or why it could not give one.
+async fn provider_state(
+    provisioner: &CloudProvisioner,
+    record: &DeploymentRecord,
+) -> Result<String> {
+    let (provider, instance) = target(record)?;
+    let state = provisioner
+        .get_status_in(provider, instance, record.region.as_deref())
+        .await?;
+    Ok(format!("{state:?}").to_lowercase())
+}
+
+fn instance_id(record: &DeploymentRecord) -> Option<&str> {
+    record.resource_ids.get("instance_id").map(String::as_str)
+}
+
+fn provider_name(record: &DeploymentRecord) -> String {
+    record
+        .provider
+        .as_ref()
+        .map_or_else(|| "none".to_owned(), |provider| format!("{provider:?}"))
+}
+
+fn tracked_state(record: &DeploymentRecord) -> String {
+    format!("{:?}", record.status).to_lowercase()
+}
+
+fn public_ip(record: &DeploymentRecord) -> &str {
+    record
+        .resource_ids
+        .get("public_ip")
+        .or_else(|| record.metadata.get("public_ip"))
+        .map_or("unknown", String::as_str)
+}
+
+fn uptime(record: &DeploymentRecord) -> String {
+    let elapsed = Utc::now().signed_duration_since(record.deployed_at);
+    format!("{}h {}m", elapsed.num_hours(), elapsed.num_minutes() % 60)
+}
+
+fn ttl(record: &DeploymentRecord) -> String {
+    let Some(expires) = record.expires_at else {
+        return "never".to_owned();
+    };
+    let remaining = expires.signed_duration_since(Utc::now());
+    if remaining.num_seconds() > 0 {
+        format!(
+            "{}h {}m",
+            remaining.num_hours(),
+            remaining.num_minutes() % 60
+        )
+    } else {
+        "expired".to_owned()
+    }
 }

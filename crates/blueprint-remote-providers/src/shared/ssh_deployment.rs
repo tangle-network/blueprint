@@ -295,6 +295,17 @@ impl SshDeploymentConfig {
         }
     }
 
+    /// OVH Public Cloud's Ubuntu images log in as `ubuntu`.
+    pub fn ovh() -> Self {
+        Self {
+            username: "ubuntu".to_string(),
+            key_path: std::env::var("OVH_SSH_KEY_PATH").ok(),
+            namespace: "blueprint-ovh".to_string(),
+            provider_name: "ovh".to_string(),
+            additional_metadata: HashMap::new(),
+        }
+    }
+
     /// Create Crusoe Cloud SSH configuration
     pub fn crusoe() -> Self {
         Self {

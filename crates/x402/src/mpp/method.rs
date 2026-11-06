@@ -24,6 +24,7 @@ use mpp::protocol::core::{PaymentCredential, Receipt};
 use mpp::protocol::intents::ChargeRequest;
 use mpp::protocol::traits::{ChargeMethod, ErrorCode, VerificationError};
 use x402_axum::facilitator_client::FacilitatorClient;
+use x402_chain_eip155::chain::AssetTransferMethod;
 use x402_chain_eip155::v1_eip155_exact::types::{
     ExactScheme, PaymentPayload as ExactPaymentPayload, PaymentRequirements as ExactRequirements,
     PaymentRequirementsExtra, VerifyRequest as ExactVerifyRequest,
@@ -240,16 +241,11 @@ impl ChargeMethod for BlueprintEvmChargeMethod {
                 )
             })?;
 
-            let extra = if token.transfer_method == "eip3009" {
-                Some(PaymentRequirementsExtra {
-                    name: token
-                        .eip3009_name
-                        .clone()
-                        .unwrap_or_else(|| "USD Coin".into()),
-                    version: token.eip3009_version.clone().unwrap_or_else(|| "2".into()),
-                })
-            } else {
-                None
+            let extra = match token.asset_transfer_method() {
+                AssetTransferMethod::Eip3009 { name, version } => {
+                    Some(PaymentRequirementsExtra { name, version })
+                }
+                AssetTransferMethod::Permit2 { .. } => None,
             };
 
             // x402 v1 PaymentRequirements expects the chain's wire-format
@@ -403,8 +399,8 @@ mod tests {
             rate_per_native_unit: Decimal::from(3200u32),
             markup_bps: 0,
             transfer_method: "eip3009".into(),
-            eip3009_name: Some("USD Coin".into()),
-            eip3009_version: Some("2".into()),
+            eip712_name: "USD Coin".into(),
+            eip712_version: "2".into(),
         }
     }
 

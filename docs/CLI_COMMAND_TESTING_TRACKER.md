@@ -595,9 +595,7 @@ cargo tangle blueprint list services \
 | `cloud configure-policy` | Configure deployment policies and preferences | ❌ | | | |
 | `cloud show-policy` | Display the current deployment policy | ❌ | | | |
 | `cloud estimate` | Estimate costs for a deployment across providers | ❌ | | | |
-| `cloud logs` | View logs from a cloud deployment | ❌ | | | |
 | `cloud status` | Check the status of a cloud deployment | ❌ | | | |
-| `cloud update` | Update an existing cloud deployment | ❌ | | | |
 
 ---
 

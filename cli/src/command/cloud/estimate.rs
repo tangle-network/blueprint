@@ -39,18 +39,9 @@ pub async fn estimate(opts: EstimateOptions) -> Result<()> {
         opts.cpu.is_finite() && opts.cpu > 0.0 && opts.memory.is_finite() && opts.memory > 0.0,
         "Resource requirements must be finite and positive"
     );
-    #[cfg(feature = "remote-providers")]
-    {
-        estimate_live(opts, hours).await
-    }
-    #[cfg(not(feature = "remote-providers"))]
-    {
-        let _ = (opts, hours);
-        Err(eyre!("Enable remote-providers for live VM pricing"))
-    }
+    estimate_live(opts, hours).await
 }
 
-#[cfg(feature = "remote-providers")]
 async fn estimate_live(opts: EstimateOptions, hours: f64) -> Result<()> {
     use super::config::CloudConfig;
     use blueprint_remote_providers::{
