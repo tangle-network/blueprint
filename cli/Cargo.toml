@@ -21,7 +21,8 @@ blueprint-testing-utils = { optional = true, workspace = true, features = ["anvi
 blueprint-contexts = { optional = true, workspace = true }
 blueprint-clients = { optional = true, workspace = true, features = ["tangle", "evm", "std"] }
 blueprint-client-tangle = { optional = true, workspace = true, features = ["std"] }
-blueprint-remote-providers = { workspace = true, optional = true, features = ["std"] }
+# Its default set (AWS, TEE attestation) is what every cloud-enabled build ships.
+blueprint-remote-providers = { workspace = true, optional = true, default-features = true }
 blueprint-crypto = { optional = true, workspace = true, features = ["k256", "bls", "bn254"] }
 blueprint-crypto-core = { optional = true, workspace = true, features = ["clap"] }
 blueprint-keystore = { optional = true, workspace = true, features = [

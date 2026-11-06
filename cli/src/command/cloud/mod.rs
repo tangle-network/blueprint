@@ -1,8 +1,7 @@
-//! Cloud deployment commands for Blueprint services.
+//! Cloud commands for Blueprint services.
 //!
-//! This module provides commands for deploying Blueprint services to various cloud providers
-//! including AWS, GCP, Azure, DigitalOcean, and Vultr. It enables remote deployment of
-//! Blueprint instances with resource configuration, cost estimation, and lifecycle management.
+//! These commands configure providers, quote live prices, and inspect, update and terminate
+//! deployments recorded in the deployment tracker. None of them allocates capacity.
 //!
 //! # Examples
 //!
@@ -26,18 +25,17 @@
 //! ```bash
 //! cargo tangle cloud show
 //! ```
-//!
-//! Deploy a blueprint (uses configured policy):
-//! ```bash
-//! cargo tangle blueprint deploy tangle --remote
-//! ```
 
 #![allow(unexpected_cfgs)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use blueprint_remote_providers::DeploymentTracker;
 use clap::Subcommand;
-use color_eyre::Result;
+use color_eyre::{
+    Result,
+    eyre::{WrapErr, eyre},
+};
 use std::path::PathBuf;
 use url::Url;
 
@@ -116,7 +114,7 @@ pub enum CloudCommands {
     /// Check deployment status
     #[command(visible_alias = "s")]
     Status {
-        /// Service ID (shows all if not specified)
+        /// Deployment or service ID (shows all if not specified)
         service_id: Option<String>,
 
         /// Watch for changes
@@ -124,13 +122,14 @@ pub enum CloudCommands {
         watch: bool,
     },
 
-    /// Terminate cloud deployments
+    /// Terminate tracked deployments through their provider
     #[command(visible_alias = "term")]
     Terminate {
-        /// Service ID to terminate
+        /// Deployment or service ID to terminate
+        #[arg(required_unless_present = "all")]
         service_id: Option<String>,
 
-        /// Terminate all deployments
+        /// Terminate every tracked deployment
         #[arg(long, conflicts_with = "service_id")]
         all: bool,
 
@@ -239,6 +238,17 @@ pub enum CloudCommands {
     },
 }
 
+/// Open the deployment tracker at the manager's path; a missing one tracks nothing.
+async fn open_tracker() -> Result<DeploymentTracker> {
+    let path = std::env::var_os("TANGLE_DEPLOYMENT_TRACKER_PATH")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|home| home.join(".tangle/remote_deployments")))
+        .ok_or_else(|| eyre!("Could not find the home directory"))?;
+    DeploymentTracker::new(&path)
+        .await
+        .wrap_err("Failed to read the deployment tracker")
+}
+
 /// Execute cloud commands.
 ///
 /// # Arguments
@@ -288,11 +298,12 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
 
         CloudCommands::Status { service_id, watch } => status::show_status(service_id, watch).await,
 
+        // Clap requires `service_id` unless `--all`, so no ID here means every deployment.
         CloudCommands::Terminate {
             service_id,
-            all,
+            all: _,
             yes,
-        } => status::terminate(service_id, all, yes).await,
+        } => status::terminate(service_id, yes).await,
 
         CloudCommands::Update {
             service_id,

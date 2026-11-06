@@ -1,6 +1,6 @@
 //! Remote deployment preflight checks and bootstrap helpers.
 
-use super::config::{CloudConfig, CloudProvider};
+use super::config::{CloudConfig, CloudProvider, credentials_present};
 use color_eyre::{Result, eyre::eyre};
 use std::fmt::Write as _;
 use std::net::IpAddr;
@@ -154,44 +154,6 @@ fn provider_supports_tee(provider: CloudProvider) -> bool {
         provider,
         CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure
     )
-}
-
-fn credentials_present(provider: CloudProvider) -> bool {
-    match provider {
-        CloudProvider::AWS => {
-            let env_ok = std::env::var("AWS_ACCESS_KEY_ID").is_ok()
-                && std::env::var("AWS_SECRET_ACCESS_KEY").is_ok();
-            let file_ok = dirs::home_dir()
-                .map(|home| home.join(".aws").join("credentials"))
-                .map(|path| path.exists())
-                .unwrap_or(false);
-            env_ok || file_ok
-        }
-        CloudProvider::GCP => {
-            std::env::var("GCP_PROJECT_ID").is_ok()
-                && std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-                    .ok()
-                    .map(PathBuf::from)
-                    .map(|path| path.exists())
-                    .unwrap_or(false)
-        }
-        CloudProvider::Azure => {
-            std::env::var("AZURE_SUBSCRIPTION_ID").is_ok()
-                && std::env::var("AZURE_CLIENT_ID").is_ok()
-                && std::env::var("AZURE_CLIENT_SECRET").is_ok()
-                && std::env::var("AZURE_TENANT_ID").is_ok()
-        }
-        CloudProvider::DigitalOcean => std::env::var("DIGITALOCEAN_TOKEN").is_ok(),
-        CloudProvider::Vultr => std::env::var("VULTR_API_KEY").is_ok(),
-        CloudProvider::Hetzner => std::env::var("HETZNER_API_TOKEN").is_ok(),
-        CloudProvider::RunPod => std::env::var("RUNPOD_API_KEY").is_ok(),
-        CloudProvider::LambdaLabs => std::env::var("LAMBDA_LABS_API_KEY").is_ok(),
-        CloudProvider::PrimeIntellect => std::env::var("PRIME_INTELLECT_API_KEY").is_ok(),
-        CloudProvider::VastAi => std::env::var("VAST_AI_API_KEY").is_ok(),
-        CloudProvider::Crusoe => {
-            std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok()
-        }
-    }
 }
 
 fn gcp_cidr_prerequisites_met() -> bool {

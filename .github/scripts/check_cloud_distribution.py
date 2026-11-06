@@ -12,6 +12,10 @@ import tempfile
 import tomllib
 
 
+FULL_ONLY = ("attest", "blueprint", "delegator", "dev", "harness", "key", "operator")
+AWS_SDKS = {"aws-sdk-ec2", "aws-sdk-pricing"}
+
+
 def check(binary=None):
     tree = subprocess.run([
         "cargo", "tree", "--locked", "-p", "cargo-tangle", "--no-default-features",
@@ -23,18 +27,17 @@ def check(binary=None):
         "cargo-generate", "blueprint-cargo-generate", "testcontainers",
     } or (name.startswith("blueprint-") and ("anvil" in name or "testing-utils" in name))}
     assert not forbidden, f"development tools in production graph: {sorted(forbidden)}"
+    assert AWS_SDKS <= names, f"cloud-only lost AWS: {sorted(AWS_SDKS - names)}"
     if binary:
         binary = str(Path(binary).resolve(strict=True))
         with tempfile.TemporaryDirectory(prefix="cargo-tangle-cloud-proof-") as folder:
             for args in (["--help"], ["cloud", "--help"], ["tangle", "cloud", "--help"]):
                 result = subprocess.run([binary, *args], cwd=folder, text=True, capture_output=True, check=True)
                 assert "cloud" in result.stdout.lower(), result.stdout
-                if args == ["--help"]:
-                    for omitted in ("blueprint", "delegator", "operator", "harness", "attest"):
-                        assert not any(line.lstrip().startswith(omitted + " ") for line in result.stdout.splitlines())
-            result = subprocess.run([binary, "blueprint", "--help"], cwd=folder, text=True, capture_output=True)
-            assert result.returncode != 0 and result.stdout == "", result
-            assert "unrecognized subcommand" in result.stderr, result.stderr
+            for omitted in FULL_ONLY:
+                result = subprocess.run([binary, omitted, "--help"], cwd=folder, text=True, capture_output=True)
+                assert result.returncode != 0 and result.stdout == "", result
+                assert "unrecognized subcommand" in result.stderr, result.stderr
     print(json.dumps({"profile": "cloud-only", "production_packages": len(names),
                       "development_tools": sorted(forbidden), "binary_exercised": bool(binary)}))
 

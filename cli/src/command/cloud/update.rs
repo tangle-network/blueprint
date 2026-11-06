@@ -1,8 +1,6 @@
 //! Update and rollback commands for cloud deployments
 
-#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
-    DeploymentTracker,
     deployment::{DeploymentRecord, DeploymentVersion, UpdateManager, UpdateStrategy},
     infra::{
         provisioner::CloudProvisioner,
@@ -59,17 +57,7 @@ pub async fn update(
     // Get current deployment
     let provisioner = CloudProvisioner::new().await?;
 
-    let tracker_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".tangle")
-        .join("remote_deployments");
-
-    let deployments = if tracker_path.exists() {
-        let tracker = DeploymentTracker::new(&tracker_path).await?;
-        tracker.list_all().await?
-    } else {
-        Vec::new()
-    };
+    let deployments = super::open_tracker().await?.list_all().await?;
 
     let current = deployments
         .iter()
@@ -197,17 +185,7 @@ pub async fn rollback(service_id: String, version: Option<String>, yes: bool) ->
     // Get deployment history
     let provisioner = CloudProvisioner::new().await?;
 
-    let tracker_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".tangle")
-        .join("remote_deployments");
-
-    let deployments = if tracker_path.exists() {
-        let tracker = DeploymentTracker::new(&tracker_path).await?;
-        tracker.list_all().await?
-    } else {
-        Vec::new()
-    };
+    let deployments = super::open_tracker().await?.list_all().await?;
 
     let current = deployments
         .iter()

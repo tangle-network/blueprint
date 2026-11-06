@@ -1,8 +1,6 @@
 //! Log streaming command for cloud deployments
 
-#[cfg(feature = "remote-providers")]
 use blueprint_remote_providers::{
-    DeploymentTracker,
     deployment::ssh::SshDeploymentClient,
     infra::provisioner::CloudProvisioner,
     monitoring::logs::{LogAggregator, LogFilters, LogLevel, LogSource, LogStreamer},
@@ -44,17 +42,7 @@ pub async fn stream_logs(
         .map(|d| SystemTime::now() - d);
 
     // Get deployment information
-    let tracker_path = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".tangle")
-        .join("remote_deployments");
-
-    let deployments = if tracker_path.exists() {
-        let tracker = DeploymentTracker::new(&tracker_path).await?;
-        tracker.list_all().await?
-    } else {
-        Vec::new()
-    };
+    let deployments = super::open_tracker().await?.list_all().await?;
 
     let deployment = deployments
         .iter()

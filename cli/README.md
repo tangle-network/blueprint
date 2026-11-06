@@ -28,11 +28,13 @@ add it to a source install with `--features remote-providers`. `vm-debug`
 adds the Linux VM sandbox.
 
 The release also includes `cargo-tangle-cloud-<target>.tar.xz` and its
-`.sha256` file for native Linux x86_64 and aarch64. These archives contain the
-same `cargo-tangle` executable built with `--no-default-features --features
-cloud-only`. They expose the cloud commands without Anvil, testcontainers or
-cargo-generate in the production dependency graph. Standard archives carry
-the full CLI with cloud commands. Install the cloud-only flavor from source:
+`.sha256` file for native Linux x86_64 and aarch64. These archives contain
+`cargo-tangle` built from the same source with `--no-default-features --features
+cloud-only`. They expose only the cloud commands, with the same providers as the
+standard archives, and have no Anvil, testcontainers or cargo-generate in the
+production dependency graph. Chain and key libraries still link, because the
+provider and pricing crates depend on them. Standard archives carry the full CLI
+with cloud commands. Install the cloud-only flavor from source:
 
 ```bash
 cargo install cargo-tangle --git https://github.com/tangle-network/blueprint \
@@ -406,13 +408,15 @@ env → `http://127.0.0.1:9000`. The pre-authorization persists in
 a pin/whitelist during a maintenance window and walk away — a restart of
 the manager rebuilds the state cleanly.
 
-## Cloud Deployment
+## Cloud Commands
 
 > **Note:** Release archives include cloud commands; source installs need the `remote-providers` feature. See [Feature flags](#feature-flags).
 
-The Tangle CLI supports deploying blueprints to cloud providers for scalable, distributed execution:
+The cloud commands configure providers, quote live prices, and inspect, update and terminate deployments recorded in the deployment tracker. No CLI command allocates capacity, and `cargo tangle blueprint run` cannot enable the manager's remote deployment path.
 
 ### Configure Cloud Provider
+
+`configure` saves a region and default provider. Credentials come from the environment, and for AWS also from `~/.aws/credentials`. `configure` names the variables a provider needs; it never stores a credential.
 
 ```bash
 # Configure AWS
@@ -440,28 +444,29 @@ cargo tangle cloud estimate --provider aws --duration 30d
 cargo tangle cloud estimate --provider gcp --gpu 1 --cpu 8 --memory 32
 ```
 
-### Deploy Blueprint to Cloud
+### Deployment Policy
 
 ```bash
-# Deploy with remote deployment flag
-cargo tangle blueprint deploy tangle --remote --package my_blueprint
-
-# Deploy with specific policy
+# Rank providers for the manager's remote deployments
 cargo tangle cloud policy --gpu-providers gcp,aws --cost-providers vultr,do
-cargo tangle blueprint deploy tangle --remote --package my_blueprint
 ```
 
 ### Monitor Cloud Deployments
+
+`status` and `terminate` read the tracker at `TANGLE_DEPLOYMENT_TRACKER_PATH`, by default `~/.tangle/remote_deployments`. `status` also asks the provider for its state, shown as `unknown` without credentials. `terminate` exits non-zero if any deployment is not confirmed terminated, and that deployment stays tracked.
 
 ```bash
 # Check status of all deployments
 cargo tangle cloud status
 
 # Check specific deployment
-cargo tangle cloud status --deployment-id dep-abc123
+cargo tangle cloud status dep-abc123
 
-# Terminate deployment
-cargo tangle cloud terminate --deployment-id dep-abc123
+# Terminate one deployment
+cargo tangle cloud terminate dep-abc123
+
+# Terminate every tracked deployment
+cargo tangle cloud terminate --all
 ```
 
 ### Preflight and TEE Readiness

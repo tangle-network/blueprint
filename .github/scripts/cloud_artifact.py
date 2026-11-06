@@ -85,7 +85,10 @@ def build(target):
     checksum = digest(archive)
     archive.with_suffix(archive.suffix + ".sha256").write_text(f"{checksum}  {archive.name}\n")
     inspect_archive(archive, target, execute=True)
-    print(f"built and executed {archive.name}; sha256 {checksum}")
+    used = sum(path.stat().st_size for path in target_dir.rglob("*") if path.is_file())
+    # The standard dist build runs next on the same runner disk.
+    shutil.rmtree(target_dir)
+    print(f"built and executed {archive.name}; sha256 {checksum}; removed {used} byte target")
 
 
 if __name__ == "__main__":
