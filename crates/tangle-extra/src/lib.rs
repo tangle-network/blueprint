@@ -46,7 +46,6 @@
 //! let round_handle = RoundKeeper::start(config.clone(), shutdown.subscribe());
 //! ```
 
-#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
