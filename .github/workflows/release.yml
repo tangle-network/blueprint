@@ -43,6 +43,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
           ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - name: Use this workflow revision's release tooling
+        run: git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install dist
         shell: bash
         run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/astral-sh/cargo-dist/releases/download/v0.28.7-prerelease.1/cargo-dist-installer.sh | sh"
@@ -92,6 +94,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
           ref: refs/tags/${{ needs.plan.outputs.tag }}
+      - name: Use this workflow revision's release tooling
+        run: git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |
@@ -158,6 +162,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
           ref: refs/tags/${{ needs.plan.outputs.tag }}
+      - name: Use this workflow revision's release tooling
+        run: git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
@@ -204,6 +210,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
           ref: refs/tags/${{ needs.plan.outputs.tag }}
+      - name: Use this workflow revision's release tooling
+        run: git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
@@ -252,18 +260,3 @@ jobs:
           gh release upload "$RELEASE_TAG" target/distrib/release-source.json --clobber
           python3 .github/scripts/verify_release_tags.py --artifacts check --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
           echo "source-bound artifacts uploaded and verified"
-
-  announce:
-    needs:
-      - plan
-      - host
-    if: ${{ always() && needs.host.result == 'success' }}
-    runs-on: "ubuntu-latest"
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          submodules: recursive
-          ref: refs/tags/${{ needs.plan.outputs.tag }}

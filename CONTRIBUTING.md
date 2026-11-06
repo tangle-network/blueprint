@@ -100,10 +100,10 @@ the same workflow with an existing CLI version tag:
 gh-drew workflow run release.yml --ref main -f "tag=cargo-tangle-v<VERSION>"
 ```
 
-Recovery requires a tag containing the artifact verifier. Every build checks out
-that tag; per-tag concurrency queues duplicates without cancelling active runs.
+Every job builds the tag's source with this workflow revision's verifier and
+`dist-workspace.toml`, so recovery also rebuilds tags cut before either changed.
+Per-tag concurrency queues duplicates without cancelling active runs.
 `release-source.json` binds the source commit to the planned artifact digests.
 A complete matching release skips rebuilding. Missing assets rebuild; unknown
 GitHub responses or a different recorded source fail closed. Inspect the named
-run and artifact receipt before claiming delivery. Missing historical runs do not
-establish why their event or build is absent.
+run and artifact receipt before claiming delivery.
