@@ -8,9 +8,17 @@ use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
 #[cfg(feature = "gcp")]
+use crate::security::auth;
+#[cfg(feature = "gcp")]
 use blueprint_core::{info, warn};
 #[cfg(feature = "gcp")]
 use blueprint_std::collections::HashMap;
+
+/// Compute Engine's API root, honoring the variable `gcloud` reads for a private endpoint.
+fn compute_api() -> String {
+    std::env::var("CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE")
+        .unwrap_or_else(|_| "https://compute.googleapis.com/compute/v1/".to_owned())
+}
 
 /// GCP Compute Engine provisioner
 pub struct GcpProvisioner {
@@ -18,66 +26,24 @@ pub struct GcpProvisioner {
     project_id: String,
     #[allow(dead_code)]
     client: reqwest::Client,
-    #[cfg(feature = "gcp")]
-    access_token: Option<String>,
 }
 
 impl GcpProvisioner {
     /// Create new GCP provisioner
     #[cfg(feature = "gcp")]
     pub async fn new(project_id: String) -> Result<Self> {
-        // In production, would use google-cloud-auth crate
-        // Use environment variable or GCE metadata service for authentication
-        let access_token = Self::get_access_token().await?;
-
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| Error::ConfigurationError(e.to_string()))?;
 
-        Ok(Self {
-            project_id,
-            client,
-            access_token: Some(access_token),
-        })
+        Ok(Self { project_id, client })
     }
 
     #[cfg(not(feature = "gcp"))]
     pub async fn new(_project_id: String) -> Result<Self> {
         Err(Error::ConfigurationError(
             "GCP support not enabled. Enable the 'gcp' feature".into(),
-        ))
-    }
-
-    /// Get access token from environment or metadata service
-    #[cfg(feature = "gcp")]
-    async fn get_access_token() -> Result<String> {
-        // Try environment variable first
-        if let Ok(token) = std::env::var("GCP_ACCESS_TOKEN") {
-            return Ok(token);
-        }
-
-        // Try metadata service (for GCE instances)
-        {
-            let metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
-            let client = reqwest::Client::new();
-            let response = client
-                .get(metadata_url)
-                .header("Metadata-Flavor", "Google")
-                .send()
-                .await;
-
-            if let Ok(resp) = response {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(token) = json["access_token"].as_str() {
-                        return Ok(token.to_string());
-                    }
-                }
-            }
-        }
-
-        Err(Error::ConfigurationError(
-            "No GCP credentials found. Set GCP_ACCESS_TOKEN or use service account".into(),
         ))
     }
 
@@ -159,18 +125,18 @@ impl GcpProvisioner {
 
         // Create the instance
         let url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances",
-            self.project_id, zone
+            "{}projects/{}/zones/{}/instances",
+            compute_api(),
+            self.project_id,
+            zone
         );
 
-        let access_token = self.access_token.as_ref().ok_or_else(|| {
-            Error::ConfigurationError("GCP access token not available".to_string())
-        })?;
+        let access_token = auth::gcp_access_token().await?;
 
         let response = self
             .client
             .post(&url)
-            .bearer_auth(access_token)
+            .bearer_auth(&access_token)
             .json(&instance_config)
             .send()
             .await
@@ -202,14 +168,17 @@ impl GcpProvisioner {
 
         // Get instance details
         let instance_url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
-            self.project_id, zone, config.name
+            "{}projects/{}/zones/{}/instances/{}",
+            compute_api(),
+            self.project_id,
+            zone,
+            config.name
         );
 
         let instance_response = self
             .client
             .get(&instance_url)
-            .bearer_auth(access_token)
+            .bearer_auth(&access_token)
             .send()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get instance: {}", e)))?;
@@ -288,9 +257,7 @@ impl GcpProvisioner {
         let max_attempts = 60;
         let mut attempts = 0;
 
-        let access_token = self.access_token.as_ref().ok_or_else(|| {
-            Error::ConfigurationError("GCP access token not available".to_string())
-        })?;
+        let access_token = auth::gcp_access_token().await?;
 
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -298,7 +265,7 @@ impl GcpProvisioner {
             let response = self
                 .client
                 .get(operation_url)
-                .bearer_auth(access_token)
+                .bearer_auth(&access_token)
                 .send()
                 .await
                 .map_err(|e| {
@@ -409,18 +376,19 @@ impl GcpProvisioner {
     #[cfg(feature = "gcp")]
     pub async fn terminate_instance(&self, instance_name: &str, zone: &str) -> Result<()> {
         let url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
-            self.project_id, zone, instance_name
+            "{}projects/{}/zones/{}/instances/{}",
+            compute_api(),
+            self.project_id,
+            zone,
+            instance_name
         );
 
-        let access_token = self.access_token.as_ref().ok_or_else(|| {
-            Error::ConfigurationError("GCP access token not available".to_string())
-        })?;
+        let access_token = auth::gcp_access_token().await?;
 
         let response = self
             .client
             .delete(&url)
-            .bearer_auth(access_token)
+            .bearer_auth(&access_token)
             .send()
             .await
             .map_err(|e| {

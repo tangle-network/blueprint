@@ -56,6 +56,24 @@ pub trait CloudProviderAdapter: Send + Sync {
     /// Get the current status of an instance
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus>;
 
+    /// Terminate an instance in the region its deployment record names.
+    ///
+    /// Providers whose instance IDs are global ignore the region.
+    async fn terminate_instance_in(&self, instance_id: &str, _region: Option<&str>) -> Result<()> {
+        self.terminate_instance(instance_id).await
+    }
+
+    /// Get an instance's status in the region its deployment record names.
+    ///
+    /// Providers whose instance IDs are global ignore the region.
+    async fn get_instance_status_in(
+        &self,
+        instance_id: &str,
+        _region: Option<&str>,
+    ) -> Result<InstanceStatus> {
+        self.get_instance_status(instance_id).await
+    }
+
     /// Get full instance details including public IP (may not be implemented by all providers)
     async fn get_instance_details(&self, _instance_id: &str) -> Result<ProvisionedInstance> {
         // Default implementation returns error - providers should override if they support this

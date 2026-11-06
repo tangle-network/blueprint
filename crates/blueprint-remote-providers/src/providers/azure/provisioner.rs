@@ -40,60 +40,7 @@ impl AzureProvisioner {
             return Ok(token.clone());
         }
 
-        // Try managed identity first
-        let token_url = "http://169.254.169.254/metadata/identity/oauth2/token";
-        let params = [
-            ("api-version", "2018-02-01"),
-            ("resource", "https://management.azure.com/"),
-        ];
-
-        let response = self
-            .client
-            .get(token_url)
-            .header("Metadata", "true")
-            .query(&params)
-            .send()
-            .await;
-
-        if let Ok(resp) = response {
-            if resp.status().is_success() {
-                let json: serde_json::Value = resp.json().await.map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to parse token: {e}"))
-                })?;
-                if let Some(token) = json["access_token"].as_str() {
-                    self.access_token = Some(token.to_string());
-                    return Ok(token.to_string());
-                }
-            }
-        }
-
-        // Fall back to Azure CLI
-        use std::process::Command;
-        let output = Command::new("az")
-            .args([
-                "account",
-                "get-access-token",
-                "--query",
-                "accessToken",
-                "-o",
-                "tsv",
-            ])
-            .output()
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to get Azure token via CLI: {e}"))
-            })?;
-
-        if !output.status.success() {
-            return Err(Error::ConfigurationError(
-                "Failed to get Azure access token".into(),
-            ));
-        }
-
-        let token = String::from_utf8(output.stdout)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid token format: {e}")))?
-            .trim()
-            .to_string();
-
+        let token = crate::security::auth::azure_access_token().await?;
         self.access_token = Some(token.clone());
         Ok(token)
     }

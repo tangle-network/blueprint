@@ -113,6 +113,7 @@ pub enum DeploymentType {
     RenderDispersedNode,
     BittensorLiumMiner,
     HetznerServer,
+    OvhInstance,
     CrusoeVm,
 
     // Other

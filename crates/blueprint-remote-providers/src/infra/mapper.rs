@@ -9,6 +9,7 @@ use crate::providers::fluidstack::FluidstackInstanceMapper;
 use crate::providers::hetzner::HetznerInstanceMapper;
 use crate::providers::io_net::IoNetInstanceMapper;
 use crate::providers::lambda_labs::LambdaLabsInstanceMapper;
+use crate::providers::ovh::OvhInstanceMapper;
 use crate::providers::paperspace::PaperspaceInstanceMapper;
 use crate::providers::prime_intellect::PrimeIntellectInstanceMapper;
 use crate::providers::render::RenderInstanceMapper;
@@ -62,6 +63,7 @@ impl InstanceTypeMapper {
                 Self::from_common(BittensorLiumInstanceMapper::map(spec))
             }
             CloudProvider::Hetzner => Self::from_common(HetznerInstanceMapper::map(spec)),
+            CloudProvider::Ovh => Self::from_common(OvhInstanceMapper::map(spec)),
             CloudProvider::Crusoe => Self::from_common(CrusoeInstanceMapper::map(spec)),
             _ => Self::map_generic_instance(spec),
         }

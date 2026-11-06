@@ -13,6 +13,7 @@ use blueprint_core::{info, warn};
 /// AWS EC2 provisioner
 pub struct AwsProvisioner {
     pub(crate) ec2_client: aws_sdk_ec2::Client,
+    sdk_config: aws_config::SdkConfig,
     #[cfg(feature = "aws-eks")]
     #[allow(
         dead_code,
@@ -32,6 +33,7 @@ impl AwsProvisioner {
 
         Ok(Self {
             ec2_client,
+            sdk_config: config,
             #[cfg(feature = "aws-eks")]
             eks_client,
         })
@@ -166,7 +168,28 @@ impl AwsProvisioner {
 
     /// Terminate an EC2 instance
     pub async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        self.ec2_client
+        self.terminate_instance_in(instance_id, None).await
+    }
+
+    /// The EC2 client for a region, or for the ambient region when the caller names none.
+    fn ec2_in(&self, region: Option<&str>) -> aws_sdk_ec2::Client {
+        let Some(region) = region else {
+            return self.ec2_client.clone();
+        };
+        aws_sdk_ec2::Client::from_conf(
+            aws_sdk_ec2::config::Builder::from(&self.sdk_config)
+                .region(aws_sdk_ec2::config::Region::new(region.to_owned()))
+                .build(),
+        )
+    }
+
+    /// Terminate an EC2 instance in a named region
+    pub async fn terminate_instance_in(
+        &self,
+        instance_id: &str,
+        region: Option<&str>,
+    ) -> Result<()> {
+        self.ec2_in(region)
             .terminate_instances()
             .instance_ids(instance_id)
             .send()
@@ -181,8 +204,17 @@ impl AwsProvisioner {
         &self,
         instance_id: &str,
     ) -> Result<crate::infra::types::InstanceStatus> {
+        self.get_instance_status_in(instance_id, None).await
+    }
+
+    /// Get an EC2 instance's status in a named region
+    pub async fn get_instance_status_in(
+        &self,
+        instance_id: &str,
+        region: Option<&str>,
+    ) -> Result<crate::infra::types::InstanceStatus> {
         let describe_result = self
-            .ec2_client
+            .ec2_in(region)
             .describe_instances()
             .instance_ids(instance_id)
             .send()

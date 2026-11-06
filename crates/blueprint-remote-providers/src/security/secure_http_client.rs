@@ -25,7 +25,14 @@ impl SecureHttpClient {
             .timeout(Duration::from_secs(30))
             .user_agent("blueprint-remote-providers/1.0.0")
             .use_rustls_tls() // Use rustls instead of native-tls for consistency
-            .https_only(true) // Force HTTPS
+            // `validate_url` admits plain HTTP only to loopback; redirects must stay on HTTPS.
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                if attempt.url().scheme() == "https" && attempt.previous().len() < 10 {
+                    attempt.follow()
+                } else {
+                    attempt.stop()
+                }
+            }))
             .tcp_keepalive(Duration::from_secs(60))
             .connection_verbose(false) // Disable verbose logging in production
             .build()
@@ -50,11 +57,11 @@ impl SecureHttpClient {
         let parsed_url = self.validate_url(url)?;
 
         // Build request
-        let mut request_builder = self.client.request(method, parsed_url.clone());
+        let mut request_builder = self.client.request(method.clone(), parsed_url.clone());
 
         // Add authentication
         request_builder =
-            self.add_authentication(request_builder, auth, &parsed_url, body.as_ref())?;
+            self.add_authentication(request_builder, auth, &method, &parsed_url, body.as_ref())?;
 
         // Add security headers
         request_builder = request_builder
@@ -96,18 +103,19 @@ impl SecureHttpClient {
         let parsed =
             Url::parse(url).map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
 
-        // Must be HTTPS
-        if parsed.scheme() != "https" {
-            return Err(Error::ConfigurationError("Only HTTPS URLs allowed".into()));
-        }
-
-        // Validate hostname
         let host = parsed
             .host_str()
             .ok_or_else(|| Error::ConfigurationError("No hostname in URL".into()))?;
-
-        // Check against allowlist of known cloud provider domains
-        if !self.is_allowed_domain(host) {
+        // A local peer, such as a test double for a provider's API, never leaves the machine.
+        let loopback = match parsed.host() {
+            Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+            Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+            _ => host == "localhost",
+        };
+        if parsed.scheme() != "https" && !(loopback && parsed.scheme() == "http") {
+            return Err(Error::ConfigurationError("Only HTTPS URLs allowed".into()));
+        }
+        if !loopback && !self.is_allowed_domain(host) {
             return Err(Error::ConfigurationError(format!(
                 "Domain not in allowlist: {host}"
             )));
@@ -166,6 +174,13 @@ impl SecureHttpClient {
             "api.render.com",
             // Bittensor/Lium domains
             "api.lium.ai",
+            "api.hetzner.cloud",
+            "api.crusoecloud.com",
+            "rest.runpod.io",
+            "api.rendernetwork.com",
+            // OVHcloud: eu.api.ovh.com, ca.api.ovh.com and the US API
+            "api.ovh.com",
+            "api.us.ovhcloud.com",
             // Kubernetes domains (for EKS/GKE/AKS)
             "kubernetes.default.svc",
             "kubernetes.default.svc.cluster.local",
@@ -182,6 +197,7 @@ impl SecureHttpClient {
         &self,
         mut request_builder: reqwest::RequestBuilder,
         auth: &ApiAuthentication,
+        method: &reqwest::Method,
         url: &Url,
         body: Option<&serde_json::Value>,
     ) -> Result<reqwest::RequestBuilder> {
@@ -192,17 +208,33 @@ impl SecureHttpClient {
             ApiAuthentication::ApiKey { key, header_name } => {
                 request_builder = request_builder.header(header_name, key);
             }
-            ApiAuthentication::AwsSignatureV4 {
-                access_key,
-                secret_key,
-                region,
-                service,
+            ApiAuthentication::Ovh {
+                application_key,
+                application_secret,
+                consumer_key,
+                timestamp,
             } => {
-                // Implement AWS Signature v4 (simplified version)
-                let auth_header = self.generate_aws_signature_v4(
-                    access_key, secret_key, region, service, url, body,
-                )?;
-                request_builder = request_builder.header(header::AUTHORIZATION, auth_header);
+                use sha1::{Digest, Sha1};
+                // OVH signs the exact URL and body sent; `json()` below serializes the same way.
+                let body = body.map(ToString::to_string).unwrap_or_default();
+                let timestamp = timestamp.to_string();
+                let signed = [
+                    application_secret.as_str(),
+                    consumer_key,
+                    method.as_str(),
+                    url.as_str(),
+                    &body,
+                    &timestamp,
+                ]
+                .join("+");
+                request_builder = request_builder
+                    .header("X-Ovh-Application", application_key)
+                    .header("X-Ovh-Consumer", consumer_key)
+                    .header("X-Ovh-Timestamp", timestamp)
+                    .header(
+                        "X-Ovh-Signature",
+                        format!("$1${}", hex::encode(Sha1::digest(signed))),
+                    );
             }
             ApiAuthentication::None => {
                 warn!("Making unauthenticated request to: {}", url);
@@ -210,21 +242,6 @@ impl SecureHttpClient {
         }
 
         Ok(request_builder)
-    }
-
-    /// Generate AWS Signature v4 authorization header (simplified)
-    fn generate_aws_signature_v4(
-        &self,
-        _access_key: &str,
-        _secret_key: &str,
-        _region: &str,
-        _service: &str,
-        _url: &Url,
-        _body: Option<&serde_json::Value>,
-    ) -> Result<String> {
-        // Simplified AWS signature - production should use official AWS SDK
-        warn!("AWS Signature v4 implementation is simplified - use official AWS SDK in production");
-        Ok("AWS4-HMAC-SHA256 Credential=simplified".to_string())
     }
 
     /// Validate request before sending
@@ -349,12 +366,12 @@ pub enum ApiAuthentication {
     Bearer { token: String },
     /// API key in custom header
     ApiKey { key: String, header_name: String },
-    /// AWS Signature v4 authentication
-    AwsSignatureV4 {
-        access_key: String,
-        secret_key: String,
-        region: String,
-        service: String,
+    /// OVH's signed headers; `timestamp` is OVH's clock, from `/auth/time`.
+    Ovh {
+        application_key: String,
+        application_secret: String,
+        consumer_key: String,
+        timestamp: i64,
     },
     /// No authentication
     None,
@@ -372,15 +389,7 @@ impl std::fmt::Debug for ApiAuthentication {
                 .field("key", &"[REDACTED]")
                 .field("header_name", header_name)
                 .finish(),
-            Self::AwsSignatureV4 {
-                region, service, ..
-            } => f
-                .debug_struct("AwsSignatureV4")
-                .field("access_key", &"[REDACTED]")
-                .field("secret_key", &"[REDACTED]")
-                .field("region", region)
-                .field("service", service)
-                .finish(),
+            Self::Ovh { .. } => f.debug_struct("Ovh").finish_non_exhaustive(),
             Self::None => write!(f, "None"),
         }
     }
@@ -395,16 +404,6 @@ impl ApiAuthentication {
     /// Create Google Cloud API authentication
     pub fn google_cloud(token: String) -> Self {
         Self::Bearer { token }
-    }
-
-    /// Create AWS authentication
-    pub fn aws(access_key: String, secret_key: String, region: String, service: String) -> Self {
-        Self::AwsSignatureV4 {
-            access_key,
-            secret_key,
-            region,
-            service,
-        }
     }
 
     /// Create Azure authentication
@@ -554,18 +553,5 @@ mod tests {
         // Disallowed domains
         assert!(!client.is_allowed_domain("evil.com"));
         assert!(!client.is_allowed_domain("malicious.site"));
-    }
-
-    #[test]
-    fn test_authentication_types() {
-        let _do_auth = ApiAuthentication::digitalocean("test-token".to_string());
-        let _aws_auth = ApiAuthentication::aws(
-            "access".to_string(),
-            "secret".to_string(),
-            "us-east-1".to_string(),
-            "ec2".to_string(),
-        );
-        let _gcp_auth = ApiAuthentication::google_cloud("gcp-token".to_string());
-        let _azure_auth = ApiAuthentication::azure("azure-token".to_string());
     }
 }

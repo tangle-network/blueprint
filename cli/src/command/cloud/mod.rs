@@ -1,8 +1,7 @@
-//! Cloud deployment commands for Blueprint services.
+//! Cloud commands for Blueprint services.
 //!
-//! This module provides commands for deploying Blueprint services to various cloud providers
-//! including AWS, GCP, Azure, DigitalOcean, and Vultr. It enables remote deployment of
-//! Blueprint instances with resource configuration, cost estimation, and lifecycle management.
+//! These commands configure providers, quote live prices, and inspect and terminate deployments
+//! recorded in the deployment tracker. None of them allocates capacity.
 //!
 //! # Examples
 //!
@@ -26,28 +25,20 @@
 //! ```bash
 //! cargo tangle cloud show
 //! ```
-//!
-//! Deploy a blueprint (uses configured policy):
-//! ```bash
-//! cargo tangle blueprint deploy tangle --remote
-//! ```
 
-#![allow(unexpected_cfgs)]
-#![allow(unused_imports)]
-#![allow(dead_code)]
-
+use blueprint_remote_providers::DeploymentTracker;
 use clap::Subcommand;
-use color_eyre::Result;
+use color_eyre::{
+    Result,
+    eyre::{WrapErr, eyre},
+};
 use std::path::PathBuf;
-use url::Url;
 
 mod config;
 mod estimate;
-mod logs;
 mod policy;
 mod preflight;
 mod status;
-mod update;
 
 pub use config::CloudProvider;
 pub use policy::{CostOptimization, RemoteDeploymentPolicy};
@@ -115,7 +106,7 @@ pub enum CloudCommands {
     /// Check deployment status
     #[command(visible_alias = "s")]
     Status {
-        /// Service ID (shows all if not specified)
+        /// Deployment or service ID (shows all if not specified)
         service_id: Option<String>,
 
         /// Watch for changes
@@ -123,95 +114,20 @@ pub enum CloudCommands {
         watch: bool,
     },
 
-    /// Terminate cloud deployments
+    /// Terminate tracked deployments through their provider
     #[command(visible_alias = "term")]
     Terminate {
-        /// Service ID to terminate
+        /// Deployment or service ID to terminate
+        #[arg(required_unless_present = "all")]
         service_id: Option<String>,
 
-        /// Terminate all deployments
+        /// Terminate every tracked deployment
         #[arg(long, conflicts_with = "service_id")]
         all: bool,
 
         /// Skip confirmation
         #[arg(short, long)]
         yes: bool,
-    },
-
-    /// Update deployed blueprint to new version
-    #[command(visible_alias = "up")]
-    Update {
-        /// Service ID to update
-        service_id: String,
-
-        /// New blueprint image to deploy
-        #[arg(short, long)]
-        image: String,
-
-        /// Update strategy (blue-green, rolling, canary, recreate)
-        #[arg(short = 's', long, default_value = "blue-green")]
-        strategy: String,
-
-        /// Environment variables (KEY=VALUE)
-        #[arg(short, long)]
-        env: Vec<String>,
-
-        /// Skip health checks
-        #[arg(long)]
-        skip_health_check: bool,
-    },
-
-    /// Rollback blueprint to previous version
-    #[command(visible_alias = "rb")]
-    Rollback {
-        /// Service ID to rollback
-        service_id: String,
-
-        /// Target version to rollback to (defaults to previous)
-        #[arg(short, long)]
-        version: Option<String>,
-
-        /// Skip confirmation
-        #[arg(short, long)]
-        yes: bool,
-    },
-
-    /// View deployment history
-    #[command(visible_alias = "hist")]
-    History {
-        /// Service ID
-        service_id: String,
-
-        /// Number of versions to show
-        #[arg(short = 'n', long, default_value = "10")]
-        limit: usize,
-    },
-
-    /// Stream logs from deployed blueprint
-    #[command(visible_alias = "logs")]
-    Logs {
-        /// Service ID
-        service_id: String,
-
-        /// Follow log output (like tail -f)
-        #[arg(short, long)]
-        follow: bool,
-
-        /// Filter by log level (debug, info, warn, error)
-        #[arg(short, long)]
-        level: Option<String>,
-
-        /// Search for specific text
-        #[arg(short, long)]
-        search: Option<String>,
-
-        /// Show logs since duration (e.g., 5m, 1h, 1d)
-        #[arg(long)]
-        since: Option<String>,
-
-        /// Number of lines to show (when not following)
-        #[arg(short = 'n', long, default_value = "100")]
-        lines: usize,
     },
 
     /// List configured providers
@@ -237,6 +153,17 @@ pub enum CloudCommands {
         #[arg(long)]
         write_env_file: Option<PathBuf>,
     },
+}
+
+/// Open the deployment tracker at the manager's path; a missing one tracks nothing.
+async fn open_tracker() -> Result<DeploymentTracker> {
+    let path = std::env::var_os("TANGLE_DEPLOYMENT_TRACKER_PATH")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|home| home.join(".tangle/remote_deployments")))
+        .ok_or_else(|| eyre!("Could not find the home directory"))?;
+    DeploymentTracker::new(&path)
+        .await
+        .wrap_err("Failed to read the deployment tracker")
 }
 
 /// Execute cloud commands.
@@ -288,36 +215,12 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
 
         CloudCommands::Status { service_id, watch } => status::show_status(service_id, watch).await,
 
+        // Clap requires `service_id` unless `--all`, so no ID here means every deployment.
         CloudCommands::Terminate {
             service_id,
-            all,
+            all: _,
             yes,
-        } => status::terminate(service_id, all, yes).await,
-
-        CloudCommands::Update {
-            service_id,
-            image,
-            strategy,
-            env,
-            skip_health_check,
-        } => update::update(service_id, image, strategy, env, skip_health_check).await,
-
-        CloudCommands::Rollback {
-            service_id,
-            version,
-            yes,
-        } => update::rollback(service_id, version, yes).await,
-
-        CloudCommands::History { service_id, limit } => update::history(service_id, limit).await,
-
-        CloudCommands::Logs {
-            service_id,
-            follow,
-            level,
-            search,
-            since,
-            lines,
-        } => logs::stream_logs(service_id, follow, level, search, since, lines).await,
+        } => status::terminate(service_id, yes).await,
 
         CloudCommands::List => config::list_providers().await,
 

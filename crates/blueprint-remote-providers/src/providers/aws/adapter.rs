@@ -145,6 +145,22 @@ impl CloudProviderAdapter for AwsAdapter {
         self.provisioner.get_instance_status(instance_id).await
     }
 
+    async fn terminate_instance_in(&self, instance_id: &str, region: Option<&str>) -> Result<()> {
+        self.provisioner
+            .terminate_instance_in(instance_id, region)
+            .await
+    }
+
+    async fn get_instance_status_in(
+        &self,
+        instance_id: &str,
+        region: Option<&str>,
+    ) -> Result<InstanceStatus> {
+        self.provisioner
+            .get_instance_status_in(instance_id, region)
+            .await
+    }
+
     async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
         // Check QoS gRPC endpoint health
         if let Some(qos_endpoint) = deployment.qos_grpc_endpoint() {

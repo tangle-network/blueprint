@@ -28,6 +28,7 @@ shell-escape = { workspace = true }
 aes-gcm = { workspace = true }
 blake3 = { workspace = true }
 hex = { workspace = true }
+sha1 = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
 url = { workspace = true }
 jsonwebtoken = { workspace = true }
