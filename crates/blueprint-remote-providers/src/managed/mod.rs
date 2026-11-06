@@ -1,6 +1,7 @@
 //! One native provider primitive for SDK leases and external orchestrators.
 
 mod credentials;
+mod metadata;
 mod operations;
 mod ownership;
 mod quotes;
@@ -8,6 +9,7 @@ mod types;
 
 pub use blueprint_core::resources::ManagedLeaseIdentity;
 pub use credentials::ProviderCredentials;
+pub use metadata::ManagedMetadata;
 pub use quotes::rank_quotes;
 pub use types::*;
 
