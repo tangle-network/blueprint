@@ -232,6 +232,9 @@ impl OperatorSigner {
 fn proto_to_native_job_quote(
     details: &crate::pricing_engine::JobQuoteDetails,
 ) -> Result<jq::JobQuoteDetails> {
+    if details.price.len() > 32 {
+        return Err(PricingError::Signing("price exceeds uint256".into()));
+    }
     let price = if details.price.is_empty() {
         U256::ZERO
     } else {
@@ -278,12 +281,13 @@ fn proto_to_native_job_quote(
         price,
         timestamp: details.timestamp,
         expiry: details.expiry,
-        confidentiality: u8::try_from(details.confidentiality).map_err(|_| {
-            PricingError::Signing(format!(
-                "confidentiality {} exceeds u8 range (max 255)",
-                details.confidentiality
-            ))
-        })?,
+        confidentiality: u8::from(
+            Confidentiality::try_from(
+                u8::try_from(details.confidentiality)
+                    .map_err(|_| PricingError::Signing("invalid confidentiality policy".into()))?,
+            )
+            .map_err(|e| PricingError::Signing(e.to_string()))?,
+        ),
         inputs_hash,
     })
 }
@@ -304,7 +308,21 @@ pub fn job_quote_digest_eip712(
     domain: QuoteSigningDomain,
 ) -> Result<[u8; 32]> {
     let native = proto_to_native_job_quote(details)?;
-    Ok(jq::job_quote_digest_eip712(&native, to_jq_domain(domain)))
+    if details.gpu_class.is_empty() && details.gpu_count == 0 && details.duration_secs == 0 {
+        Ok(jq::job_quote_digest_eip712(&native, to_jq_domain(domain)))
+    } else {
+        let resource = jq::GpuResourceCommitment::new(
+            &details.gpu_class,
+            details.gpu_count,
+            details.duration_secs,
+        )
+        .map_err(|e| PricingError::Signing(e.to_string()))?;
+        Ok(jq::gpu_job_quote_digest_eip712(
+            &native,
+            &resource,
+            to_jq_domain(domain),
+        ))
+    }
 }
 
 /// Build the on-chain ABI `QuoteDetails` from the proto details and a validated requester.

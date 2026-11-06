@@ -384,16 +384,10 @@ impl PricingEngine for PricingEngineService {
         let proto_resources: Vec<ProtoResourcePricing> = price_resources
             .iter()
             .map(|rp| {
-                let rate = rp.price_per_unit_rate.to_f64().ok_or_else(|| {
-                    Status::internal(format!(
-                        "Price rate {} for {:?} exceeds f64 range",
-                        rp.price_per_unit_rate, rp.kind
-                    ))
-                })?;
                 Ok(ProtoResourcePricing {
                     kind: format!("{:?}", rp.kind),
                     count: rp.count,
-                    price_per_unit_rate: rate,
+                    price_per_unit: super::quote_request::usd18(rp.price_per_unit_rate)?,
                 })
             })
             .collect::<std::result::Result<Vec<_>, Status>>()?;
@@ -418,7 +412,7 @@ impl PricingEngine for PricingEngineService {
         };
 
         let confidentiality = if require_tee {
-            crate::signer::Confidentiality::Required
+            crate::signer::Confidentiality::TeeRequired
         } else {
             crate::signer::Confidentiality::Any
         };
@@ -526,13 +520,22 @@ impl PricingEngine for PricingEngineService {
             return Err(Status::invalid_argument("Invalid proof of work"));
         }
 
-        // Reject TEE requests if operator doesn't support TEE
-        let require_tee = req.require_tee;
-        if require_tee && !self.tee_config.available {
+        let confidentiality = super::quote_request::policy(&req)?;
+        let gpu = super::quote_request::gpu(&req)?;
+        if job_index > u32::from(u8::MAX) {
+            return Err(Status::invalid_argument("job_index exceeds uint8"));
+        }
+        use crate::signer::Confidentiality;
+        if confidentiality == Confidentiality::TeeRequired && !self.tee_config.available {
             return Err(Status::unavailable(
                 "TEE execution is not available on this operator",
             ));
         }
+        let use_tee = self.tee_config.available
+            && matches!(
+                confidentiality,
+                Confidentiality::TeeRequired | Confidentiality::TeePreferred
+            );
 
         // Look up per-job price from config
         let job_pricing = self.job_pricing_config.lock().await;
@@ -550,38 +553,50 @@ impl PricingEngine for PricingEngineService {
         };
         drop(job_pricing);
 
-        // Apply TEE multiplier to the wei price if TEE is requested.
-        let price = if require_tee {
-            // Convert U256 → Decimal, apply multiplier, convert back
-            let price_dec = rust_decimal::Decimal::from_str_exact(&price.to_string())
-                .map_err(|e| Status::internal(format!("price→Decimal: {e}")))?;
-            let adjusted = price_dec * self.tee_config.multiplier;
-            let adjusted_str = adjusted.floor().to_string();
-            alloy_primitives::U256::from_str_radix(&adjusted_str, 10)
-                .map_err(|e| Status::internal(format!("Decimal→U256: {e}")))?
+        let price = if let Some(resource) = &gpu {
+            let rate = self
+                .config
+                .gpu_pricing
+                .get(resource.class())
+                .filter(|rate| !rate.is_zero())
+                .ok_or_else(|| Status::not_found("no operator rate for this GPU class"))?;
+            rate.checked_mul(alloy_primitives::U256::from(resource.count()))
+                .and_then(|rate| {
+                    rate.checked_mul(alloy_primitives::U256::from(resource.duration_secs()))
+                })
+                .and_then(|gpu_price| gpu_price.checked_add(price))
+                .ok_or_else(|| Status::out_of_range("GPU quote price exceeds uint256"))?
         } else {
             price
         };
-
-        let (tee_attested, tee_provider) = if require_tee && self.tee_config.available {
+        let price = if use_tee {
+            super::quote_request::premium(price, self.tee_config.multiplier)?
+        } else {
+            price
+        };
+        let (tee_attested, tee_provider) = if use_tee {
             (true, self.tee_config.provider.clone())
         } else {
             (false, String::new())
         };
-
         let timestamp = current_timestamp;
-        let expiry = timestamp + self.config.quote_validity_duration_secs;
-
-        let confidentiality = if require_tee { 1u32 } else { 0u32 };
+        let expiry = timestamp
+            .checked_add(self.config.quote_validity_duration_secs)
+            .ok_or_else(|| Status::failed_precondition("quote validity exceeds uint64"))?;
         let proto_details = ProtoJobQuoteDetails {
             service_id,
             job_index,
             price: price.to_be_bytes_vec(),
             timestamp,
             expiry,
-            confidentiality,
+            confidentiality: u32::from(u8::from(confidentiality)),
             requester: requester.0.to_vec(),
             inputs_hash: inputs_hash.to_vec(),
+            gpu_class: gpu
+                .as_ref()
+                .map_or_else(String::new, |resource| resource.class().into()),
+            gpu_count: gpu.as_ref().map_or(0, |resource| resource.count()),
+            duration_secs: gpu.as_ref().map_or(0, |resource| resource.duration_secs()),
         };
 
         // Generate proof of work for response

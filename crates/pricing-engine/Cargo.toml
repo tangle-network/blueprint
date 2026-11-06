@@ -82,6 +82,7 @@ tower-http = { workspace = true, features = ["cors"] }
 sha2 = { workspace = true }
 
 [dev-dependencies]
+alloy-dyn-abi = { workspace = true }
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true, features = ["net"] }

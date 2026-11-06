@@ -3477,6 +3477,7 @@ dependencies = [
 name = "blueprint-pricing-engine"
 version = "0.3.0-alpha.24"
 dependencies = [
+ "alloy-dyn-abi",
  "alloy-network",
  "alloy-primitives",
  "alloy-provider",
