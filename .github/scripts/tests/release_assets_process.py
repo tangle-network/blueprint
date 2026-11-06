@@ -89,8 +89,9 @@ sys.stdout.write(values[i])
         fixture["fail"] = True
         invoke(expected=2)
         fixture["fail"] = False
-        result = invoke("dispatch")
-        assert '99' in result.stdout, result.stdout
+        assert "dispatch_skipped" in invoke("dispatch").stdout
+        fixture["complete"] = False
+        assert '99' in invoke("dispatch").stdout
         requests = [json.loads(line) for line in (root / "argv.jsonl").read_text().splitlines()]
         assert ["api", "--method", "POST", "repos/tangle-network/blueprint/actions/workflows/release.yml/dispatches", "-H", "X-GitHub-Api-Version: 2026-03-10", "-f", "ref=main", "-f", f"inputs[tag]={TAG}"] in requests
         (root / "release.json").write_text(json.dumps([{"package_name": "cargo-tangle", "version": "0.5.0-alpha.28", "tag": "main"}]))
@@ -131,8 +132,7 @@ sys.stdout.write(values[i])
         assert set(live["published"])==set(content)|{"release-source.json"}, live
         assert "source-bound artifacts uploaded and verified" in result.stdout
         assert next(a[3] for a in map(json.loads, (root / "argv.jsonl").read_text().splitlines()) if a[:2]==["release","upload"]).endswith("release-source.json")
-        print(json.dumps({"cases":13,"missing_assets":"incomplete","unrecorded_assets":"error","wrong_source":"error",
-                          "bad_checksum":"incomplete","unknown_github":"error","dispatch_receipt":99,"workflow_publication":"complete_after_upload"}))
+        print(json.dumps({"cases":14,"dispatch_skipped":"recorded","dispatch_receipt":99,"workflow_publication":"complete_after_upload"}))
 
 
 if __name__ == "__main__":
