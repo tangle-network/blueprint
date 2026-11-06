@@ -650,3 +650,6 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
 
 #[path = "native_gpu_http/adoption.rs"]
 mod adoption;
+
+#[path = "native_gpu_http/leases.rs"]
+mod leases;
