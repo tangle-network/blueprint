@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.24](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.23...blueprint-pricing-engine-v0.3.0-alpha.24) - 2026-11-06
+
+### Other
+
+- Use one live VM price source and reject unknown estimates (#1626)
+
 ## [0.3.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.22...blueprint-pricing-engine-v0.3.0-alpha.23) - 2026-11-03
 
 ### Other

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.25](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.2.0-alpha.24...blueprint-remote-providers-v0.2.0-alpha.25) - 2026-11-06
+
+### Added
+
+- *(core)* publish the canonical GPU catalog (#1622)
+
+### Other
+
+- *(remote)* restore supported clippy checks (#1629)
+- Use one live VM price source and reject unknown estimates (#1626)
+
 ## [0.2.0-alpha.24](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.2.0-alpha.23...blueprint-remote-providers-v0.2.0-alpha.24) - 2026-11-03
 
 ### Other
