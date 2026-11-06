@@ -132,3 +132,7 @@ full = [
 cloud-only = ["remote-providers"]
 vm-debug = ["full", "blueprint-manager/vm-sandbox"]
 remote-providers = ["dep:blueprint-remote-providers", "blueprint-manager?/remote-providers"]
+
+[[test]]
+name = "deploy_definition"
+required-features = ["full"]

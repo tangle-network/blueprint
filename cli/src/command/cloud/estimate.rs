@@ -1,15 +1,10 @@
-//! Cost estimation for cloud deployments.
-//!
-//! This module provides cost estimation and comparison functionality across different
-//! cloud providers, helping users make informed decisions about deployment costs.
-
-use clap::Args;
-use color_eyre::Result;
-
+//! Live provider estimates for the selected native VM SKU.
 use super::CloudProvider;
-
-#[cfg(feature = "remote-providers")]
-use blueprint_remote_providers::monitoring::discovery::{CloudCredentials, MachineTypeDiscovery};
+use clap::Args;
+use color_eyre::{
+    Result,
+    eyre::{ensure, eyre},
+};
 
 #[derive(Debug, Args)]
 pub struct EstimateOptions {
@@ -18,7 +13,7 @@ pub struct EstimateOptions {
     pub compare: bool,
 
     /// Specific provider to estimate
-    #[arg(short, long, value_enum)]
+    #[arg(short, long)]
     pub provider: Option<CloudProvider>,
 
     /// CPU cores
@@ -42,420 +37,117 @@ pub struct EstimateOptions {
     pub spot: bool,
 }
 
-#[derive(Debug)]
-struct CostEstimate {
-    provider: String,
-    instance_type: String,
-    hourly_cost: String,
-    daily_cost: String,
-    monthly_cost: String,
-    total_cost: String,
-}
-
-/// Estimate deployment costs across cloud providers.
-///
-/// Provides detailed cost breakdowns including hourly, daily, and monthly rates.
-/// Can compare costs across all providers or estimate for a specific provider.
-///
-/// # Arguments
-///
-/// * `opts` - Estimation options including resources, duration, and provider selection
-///
-/// # Errors
-///
-/// Returns an error if:
-/// * Invalid duration format is provided
-/// * Resource specifications are invalid
-///
-/// # Examples
-///
-/// ```bash
-/// # Compare all providers
-/// cargo tangle cloud estimate --compare --cpu 4 --memory 16
-///
-/// # Estimate with spot pricing
-/// cargo tangle cloud estimate --provider aws --spot --duration 30d
-/// ```
 pub async fn estimate(opts: EstimateOptions) -> Result<()> {
-    println!("💰 Cost Estimation\n");
-
-    // Parse duration
     let hours = parse_duration(&opts.duration)?;
-
-    // Show configuration
-    println!("Configuration:");
-    println!("  CPU: {} cores", opts.cpu);
-    println!("  Memory: {} GB", opts.memory);
-    if let Some(gpu) = opts.gpu {
-        println!("  GPU: {} units", gpu);
-    }
-    println!("  Duration: {} ({:.1} hours)", opts.duration, hours);
-    if opts.spot {
-        println!("  Instance Type: Spot/Preemptible");
-    }
-    println!();
-
+    ensure!(
+        opts.cpu.is_finite() && opts.cpu > 0.0 && opts.memory.is_finite() && opts.memory > 0.0,
+        "Resource requirements must be finite and positive"
+    );
+    ensure!(
+        !opts.spot,
+        "No live spot quote is available for this estimate"
+    );
     #[cfg(feature = "remote-providers")]
-    let discovery_result = {
-        let discovery = MachineTypeDiscovery::new();
-        let credentials = CloudCredentials::default(); // TODO: Load real credentials
-        Some((discovery, credentials))
-    };
-
+    {
+        estimate_live(opts, hours).await
+    }
     #[cfg(not(feature = "remote-providers"))]
-    let discovery_result: Option<()> = None;
-
-    if opts.compare {
-        // Compare all providers
-        let providers = vec![
-            CloudProvider::AWS,
-            CloudProvider::GCP,
-            CloudProvider::Azure,
-            CloudProvider::DigitalOcean,
-            CloudProvider::Vultr,
-            CloudProvider::Hetzner,
-            CloudProvider::RunPod,
-            CloudProvider::LambdaLabs,
-            CloudProvider::PrimeIntellect,
-            CloudProvider::VastAi,
-            CloudProvider::Crusoe,
-        ];
-
-        let mut estimates = Vec::new();
-
-        for provider in providers {
-            let (instance_type, hourly_price) = get_best_instance_and_price(
-                provider,
-                opts.cpu,
-                opts.memory,
-                opts.gpu,
-                opts.spot,
-                discovery_result.as_ref(),
-            )
-            .await;
-
-            let (hourly, daily, monthly, total) = calculate_costs_from_price(hourly_price, hours);
-
-            estimates.push(CostEstimate {
-                provider: provider.to_string(),
-                instance_type,
-                hourly_cost: format!("${:.2}", hourly),
-                daily_cost: format!("${:.2}", daily),
-                monthly_cost: format!("${:.2}", monthly),
-                total_cost: format!("${:.2}", total),
-            });
-        }
-
-        // Sort by total cost
-        estimates.sort_by(|a, b| {
-            let a_val: f32 = a.total_cost.trim_start_matches('$').parse().unwrap_or(0.0);
-            let b_val: f32 = b.total_cost.trim_start_matches('$').parse().unwrap_or(0.0);
-            a_val.partial_cmp(&b_val).unwrap()
-        });
-
-        // Display results in formatted output
-        println!(
-            "{:<20} {:<20} {:<10} {:<10} {:<12} {:<12}",
-            "Provider", "Instance Type", "$/hour", "$/day", "$/month", "Total"
-        );
-        println!("{}", "-".repeat(84));
-
-        for est in &estimates {
-            println!(
-                "{:<20} {:<20} {:<10} {:<10} {:<12} {:<12}",
-                est.provider,
-                est.instance_type,
-                est.hourly_cost,
-                est.daily_cost,
-                est.monthly_cost,
-                est.total_cost
-            );
-        }
-
-        // Highlight cheapest
-        if let Some(cheapest) = estimates.first() {
-            println!(
-                "\n✨ Cheapest: {} at {}",
-                cheapest.provider, cheapest.total_cost
-            );
-        }
-    } else {
-        // Estimate for single provider
-        let provider = opts.provider.unwrap_or(CloudProvider::AWS);
-        let (instance_type, hourly_price) = get_best_instance_and_price(
-            provider,
-            opts.cpu,
-            opts.memory,
-            opts.gpu,
-            opts.spot,
-            discovery_result.as_ref(),
-        )
-        .await;
-
-        let (hourly, daily, monthly, total) = calculate_costs_from_price(hourly_price, hours);
-
-        println!("Provider: {}", provider);
-        println!("Instance Type: {}", instance_type);
-        println!("\nCost Breakdown:");
-        println!("  Hourly:  ${:.2}", hourly);
-        println!("  Daily:   ${:.2}", daily);
-        println!("  Monthly: ${:.2}", monthly);
-        println!("\nTotal for {}: ${:.2}", opts.duration, total);
-
-        if opts.spot {
-            let regular_total = total / 0.7;
-            println!("Spot Savings: ${:.2} (30% off)", regular_total - total);
-        }
+    {
+        let _ = (opts, hours);
+        Err(eyre!("Enable remote-providers for live VM pricing"))
     }
-
-    // Show tips
-    println!("\n💡 Cost Optimization Tips:");
-    if !opts.spot {
-        println!("  • Use spot instances for 30% savings (add --spot)");
-    }
-    println!("  • Consider lower resource tiers if workload allows");
-    println!("  • Set TTL to auto-terminate unused instances");
-    println!("  • Use Vultr or DigitalOcean for lower costs");
-
-    Ok(())
-}
-
-fn parse_duration(duration_str: &str) -> Result<f32> {
-    let duration = duration_str.to_lowercase();
-
-    if let Some(hours) = duration.strip_suffix('h') {
-        hours
-            .parse::<f32>()
-            .map_err(|_| color_eyre::eyre::eyre!("Invalid hours value"))
-    } else if let Some(days) = duration.strip_suffix('d') {
-        Ok(days
-            .parse::<f32>()
-            .map_err(|_| color_eyre::eyre::eyre!("Invalid days value"))?
-            * 24.0)
-    } else if let Some(weeks) = duration.strip_suffix('w') {
-        Ok(weeks
-            .parse::<f32>()
-            .map_err(|_| color_eyre::eyre::eyre!("Invalid weeks value"))?
-            * 168.0)
-    } else if let Some(months) = duration.strip_suffix('m') {
-        Ok(months
-            .parse::<f32>()
-            .map_err(|_| color_eyre::eyre::eyre!("Invalid months value"))?
-            * 730.0)
-    } else {
-        duration
-            .parse::<f32>()
-            .map_err(|_| color_eyre::eyre::eyre!("Invalid duration value"))
-    }
-}
-
-fn get_instance_type(provider: CloudProvider, cpu: f32, memory: f32, gpu: Option<u32>) -> String {
-    if gpu.is_some() {
-        match provider {
-            CloudProvider::AWS => "p3.2xlarge",
-            CloudProvider::GCP => "n1-standard-8-nvidia-t4",
-            CloudProvider::Azure => "NC6s_v3",
-            CloudProvider::RunPod => "NVIDIA A100 80GB PCIe",
-            CloudProvider::LambdaLabs => "gpu_1x_a100",
-            CloudProvider::VastAi => "RTX 4090",
-            CloudProvider::PrimeIntellect => "a100-80gb",
-            CloudProvider::Hetzner => "GX11",
-            CloudProvider::Crusoe => "a100.1x",
-            _ => "GPU Instance",
-        }
-        .to_string()
-    } else {
-        match provider {
-            CloudProvider::AWS => if cpu <= 2.0 && memory <= 8.0 {
-                "t3.medium"
-            } else if cpu <= 4.0 && memory <= 16.0 {
-                "t3.xlarge"
-            } else if cpu <= 8.0 && memory <= 32.0 {
-                "t3.2xlarge"
-            } else {
-                "c5.4xlarge"
-            }
-            .to_string(),
-            CloudProvider::GCP => if cpu <= 2.0 && memory <= 8.0 {
-                "n2-standard-2"
-            } else if cpu <= 4.0 && memory <= 16.0 {
-                "n2-standard-4"
-            } else if cpu <= 8.0 && memory <= 32.0 {
-                "n2-standard-8"
-            } else {
-                "n2-standard-16"
-            }
-            .to_string(),
-            CloudProvider::Azure => if cpu <= 2.0 && memory <= 8.0 {
-                "Standard_D2s_v3"
-            } else if cpu <= 4.0 && memory <= 16.0 {
-                "Standard_D4s_v3"
-            } else if cpu <= 8.0 && memory <= 32.0 {
-                "Standard_D8s_v3"
-            } else {
-                "Standard_D16s_v3"
-            }
-            .to_string(),
-            CloudProvider::DigitalOcean => if cpu <= 2.0 && memory <= 4.0 {
-                "s-2vcpu-4gb"
-            } else if cpu <= 4.0 && memory <= 8.0 {
-                "s-4vcpu-8gb"
-            } else if cpu <= 8.0 && memory <= 16.0 {
-                "s-8vcpu-16gb"
-            } else {
-                "s-16vcpu-32gb"
-            }
-            .to_string(),
-            CloudProvider::Vultr => if cpu <= 2.0 && memory <= 4.0 {
-                "vc2-2c-4gb"
-            } else if cpu <= 4.0 && memory <= 8.0 {
-                "vc2-4c-8gb"
-            } else if cpu <= 6.0 && memory <= 16.0 {
-                "vc2-6c-16gb"
-            } else {
-                "vc2-8c-32gb"
-            }
-            .to_string(),
-            CloudProvider::Hetzner => if cpu <= 2.0 && memory <= 4.0 {
-                "cpx11"
-            } else if cpu <= 4.0 && memory <= 8.0 {
-                "cpx21"
-            } else if cpu <= 8.0 && memory <= 16.0 {
-                "cpx31"
-            } else {
-                "cpx41"
-            }
-            .to_string(),
-            // GPU-focused providers — CPU-only instances aren't their primary offering
-            CloudProvider::RunPod
-            | CloudProvider::LambdaLabs
-            | CloudProvider::VastAi
-            | CloudProvider::PrimeIntellect
-            | CloudProvider::Crusoe => "CPU Instance".to_string(),
-        }
-    }
-}
-
-fn calculate_costs(
-    provider: CloudProvider,
-    cpu: f32,
-    memory: f32,
-    gpu: Option<u32>,
-    spot: bool,
-    hours: f32,
-) -> (f32, f32, f32, f32) {
-    // Base costs per provider (simplified)
-    let base_hourly = match provider {
-        CloudProvider::AWS => 0.10 * cpu + 0.008 * memory,
-        CloudProvider::GCP => 0.09 * cpu + 0.007 * memory,
-        CloudProvider::Azure => 0.11 * cpu + 0.009 * memory,
-        CloudProvider::DigitalOcean => 0.08 * cpu + 0.006 * memory,
-        CloudProvider::Vultr => 0.07 * cpu + 0.005 * memory,
-        CloudProvider::Hetzner => 0.05 * cpu + 0.004 * memory,
-        CloudProvider::RunPod => 0.06 * cpu + 0.005 * memory,
-        CloudProvider::LambdaLabs => 0.08 * cpu + 0.006 * memory,
-        CloudProvider::PrimeIntellect => 0.07 * cpu + 0.005 * memory,
-        CloudProvider::VastAi => 0.04 * cpu + 0.003 * memory,
-        CloudProvider::Crusoe => 0.08 * cpu + 0.006 * memory,
-    };
-
-    // Add GPU costs
-    let gpu_hourly = if let Some(gpu_count) = gpu {
-        match provider {
-            CloudProvider::AWS => 3.06 * gpu_count as f32,
-            CloudProvider::GCP => 2.48 * gpu_count as f32,
-            CloudProvider::Azure => 2.88 * gpu_count as f32,
-            CloudProvider::RunPod => 1.19 * gpu_count as f32,
-            CloudProvider::LambdaLabs => 1.29 * gpu_count as f32,
-            CloudProvider::VastAi => 0.80 * gpu_count as f32,
-            CloudProvider::PrimeIntellect => 1.10 * gpu_count as f32,
-            CloudProvider::Hetzner => 1.99 * gpu_count as f32,
-            CloudProvider::Crusoe => 2.06 * gpu_count as f32,
-            _ => 2.50 * gpu_count as f32,
-        }
-    } else {
-        0.0
-    };
-
-    let hourly = base_hourly + gpu_hourly;
-    let final_hourly = if spot { hourly * 0.7 } else { hourly };
-
-    let daily = final_hourly * 24.0;
-    let monthly = final_hourly * 730.0;
-    let total = final_hourly * hours;
-
-    (final_hourly, daily, monthly, total)
 }
 
 #[cfg(feature = "remote-providers")]
-async fn get_best_instance_and_price(
-    provider: CloudProvider,
-    cpu: f32,
-    memory: f32,
-    gpu: Option<u32>,
-    spot: bool,
-    discovery_result: Option<&(MachineTypeDiscovery, CloudCredentials)>,
-) -> (String, f32) {
-    use blueprint_remote_providers::core::remote::CloudProvider as RemoteCloudProvider;
-
-    // Convert CLI CloudProvider to remote providers CloudProvider
-    let remote_provider = match provider {
-        CloudProvider::AWS => RemoteCloudProvider::AWS,
-        CloudProvider::GCP => RemoteCloudProvider::GCP,
-        CloudProvider::Azure => RemoteCloudProvider::Azure,
-        CloudProvider::DigitalOcean => RemoteCloudProvider::DigitalOcean,
-        CloudProvider::Vultr => RemoteCloudProvider::Vultr,
-        CloudProvider::Hetzner => RemoteCloudProvider::Hetzner,
-        CloudProvider::RunPod => RemoteCloudProvider::RunPod,
-        CloudProvider::LambdaLabs => RemoteCloudProvider::LambdaLabs,
-        CloudProvider::PrimeIntellect => RemoteCloudProvider::PrimeIntellect,
-        CloudProvider::VastAi => RemoteCloudProvider::VastAi,
-        CloudProvider::Crusoe => RemoteCloudProvider::Crusoe,
+async fn estimate_live(opts: EstimateOptions, hours: f64) -> Result<()> {
+    use super::config::CloudConfig;
+    use blueprint_remote_providers::{
+        ResourceSpec,
+        infra::mapper::InstanceTypeMapper,
+        pricing::{PricingError, PricingFetcher},
     };
-
-    if let Some((discovery, _credentials)) = discovery_result {
-        // Try to find best match using cached machine types
-        if let Some(machine) = discovery.find_best_match(
-            &remote_provider,
-            cpu as u32,
-            memory as f64,
-            gpu.unwrap_or(0) > 0,
-            None, // No price limit for estimation
-        ) {
-            let price = if spot {
-                machine
-                    .spot_price
-                    .unwrap_or(machine.hourly_price.unwrap_or(0.0) * 0.7)
-            } else {
-                machine.hourly_price.unwrap_or(0.0)
-            };
-            return (machine.name, price as f32);
+    let config = CloudConfig::load()?;
+    let requested = opts
+        .provider
+        .or(config.default_provider)
+        .unwrap_or(CloudProvider::AWS);
+    let providers: Vec<_> = if opts.compare {
+        config.providers.keys().cloned().collect()
+    } else {
+        vec![requested]
+    };
+    let pricing = PricingFetcher::from_env().await?;
+    let spec = ResourceSpec {
+        cpu: opts.cpu,
+        memory_gb: opts.memory,
+        gpu_count: opts.gpu,
+        ..ResourceSpec::recommended()
+    };
+    spec.validate().map_err(|error| eyre!(error))?;
+    let mut estimates = Vec::new();
+    for provider in providers {
+        let settings = config
+            .providers
+            .get(&provider)
+            .ok_or_else(|| eyre!("Configure a provider region before requesting its live price"))?;
+        let native = provider.clone();
+        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &native);
+        match pricing
+            .quote_instance(native, &settings.region, &selection.instance_type)
+            .await
+        {
+            Ok(Some(price)) => estimates.push((provider, selection.instance_type, price)),
+            Err(PricingError::AuthRejected) => {
+                return Err(eyre!("Provider rejected its pricing credential"));
+            }
+            Err(error) if !opts.compare => return Err(error.into()),
+            Ok(None) if !opts.compare => {
+                return Err(eyre!("No live price is available for this SKU and region"));
+            }
+            Ok(None) => {}
+            Err(error) => eprintln!("{provider}: {error}"),
         }
     }
-
-    // Fallback to hardcoded values
-    let instance_type = get_instance_type(provider, cpu, memory, gpu);
-    let (hourly, _daily, _monthly, _total) = calculate_costs(provider, cpu, memory, gpu, spot, 1.0);
-    (instance_type, hourly)
+    ensure!(
+        !estimates.is_empty(),
+        "No configured provider has a known live price"
+    );
+    estimates.sort_by(|left, right| left.2.total_cmp(&right.2));
+    if opts.compare {
+        println!(
+            "{:<20} {:<25} {:<12} Total",
+            "Provider", "Instance Type", "USD/hour"
+        );
+        for (provider, sku, hourly) in estimates {
+            println!(
+                "{provider:<20} {sku:<25} {hourly:<12.4} ${:.4}",
+                hourly * hours
+            );
+        }
+    } else {
+        let (provider, sku, hourly) = estimates.remove(0);
+        println!("Provider: {provider}\nInstance Type: {sku}\nHourly: ${hourly:.4}");
+        println!("Total for {}: ${:.4}", opts.duration, hourly * hours);
+    }
+    Ok(())
 }
 
-#[cfg(not(feature = "remote-providers"))]
-async fn get_best_instance_and_price(
-    provider: CloudProvider,
-    cpu: f32,
-    memory: f32,
-    gpu: Option<u32>,
-    spot: bool,
-    _discovery_result: &Option<()>,
-) -> (String, f32) {
-    let instance_type = get_instance_type(provider, cpu, memory, gpu);
-    let (hourly, _daily, _monthly, _total) = calculate_costs(provider, cpu, memory, gpu, spot, 1.0);
-    (instance_type, hourly)
-}
-
-fn calculate_costs_from_price(hourly_price: f32, hours: f32) -> (f32, f32, f32, f32) {
-    let daily = hourly_price * 24.0;
-    let monthly = hourly_price * 730.0;
-    let total = hourly_price * hours;
-    (hourly_price, daily, monthly, total)
+fn parse_duration(value: &str) -> Result<f64> {
+    let value = value.to_ascii_lowercase();
+    let (number, multiplier) = match value.chars().last() {
+        Some('h') => (&value[..value.len() - 1], 1.0),
+        Some('d') => (&value[..value.len() - 1], 24.0),
+        Some('w') => (&value[..value.len() - 1], 168.0),
+        Some('m') => (&value[..value.len() - 1], 720.0),
+        _ => (value.as_str(), 1.0),
+    };
+    let hours = number
+        .parse::<f64>()
+        .map_err(|_| eyre!("Invalid duration"))?
+        * multiplier;
+    ensure!(
+        hours.is_finite() && hours > 0.0,
+        "Duration must be finite and positive"
+    );
+    Ok(hours)
 }

@@ -120,7 +120,7 @@ std = [
     "blueprint-keystore/std",
     "blueprint-pricing-engine/std",
 ]
-aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling", "dep:aws-sdk-cloudwatchlogs"]
+aws = ["blueprint-pricing-engine/aws", "dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling", "dep:aws-sdk-cloudwatchlogs"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
 gcp = []  # GCP support via REST API
 azure = []  # Azure support via REST API

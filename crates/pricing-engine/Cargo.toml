@@ -38,6 +38,9 @@ hex = { workspace = true }
 anyhow = { workspace = true }
 toml = { workspace = true }
 url = { workspace = true }
+zeroize = { workspace = true, features = ["alloc"] }
+aws-config = { workspace = true, optional = true, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-pricing = { workspace = true, optional = true }
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-rpc-types = { workspace = true }
@@ -98,6 +101,7 @@ protobuf-src = { workspace = true }
 [features]
 default = ["std"]
 std = []
+aws = ["dep:aws-config", "dep:aws-sdk-pricing"]
 pricing-engine-e2e-tests = []
 
 [lints]

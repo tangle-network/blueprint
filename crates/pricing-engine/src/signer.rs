@@ -36,19 +36,7 @@ pub struct SignableQuote {
     abi_details: ITangleTypes::QuoteDetails,
 }
 
-/// Confidentiality level for EIP-712 quote signing.
-///
-/// Prevents replay: a non-TEE quote can't be submitted for a TEE-required service.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Confidentiality {
-    /// No TEE required.
-    Any = 0,
-    /// TEE is required.
-    Required = 1,
-    /// TEE is preferred but not mandatory.
-    Preferred = 2,
-}
+pub use blueprint_tangle_extra::job_quote::Confidentiality;
 
 impl SignableQuote {
     /// Create a new signable quote with default confidentiality (Any = 0).
