@@ -25,7 +25,6 @@ pub use core::{CloudProvider, Error, ResourceSpec, Result};
 pub use deployment::{DeploymentTracker, SshDeploymentClient};
 pub use infra::{CloudProvisioner, InstanceStatus, ProvisionedInstance};
 pub use monitoring::{HealthCheckResult, HealthMonitor, HealthStatus};
-pub use pricing::{PricingService, ServiceCostReport as CostReport};
 pub use providers::{ProvisionedInfrastructure, ProvisioningConfig};
 
 #[cfg(feature = "aws")]

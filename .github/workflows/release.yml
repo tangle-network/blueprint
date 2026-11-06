@@ -4,45 +4,46 @@
 # Copyright 2025 Astral Software Inc.
 # SPDX-License-Identifier: MIT or Apache-2.0
 #
-# CI that:
-#
-# * checks for a Git Tag that looks like a release
-# * builds artifacts with dist (archives, installers, hashes)
-# * uploads those artifacts to temporary workflow zip
-# * on success, uploads the artifacts to a GitHub Release
-#
-# Note that a GitHub Release with this tag is assumed to exist as a draft
-# with the appropriate title/body, and will be undrafted for you.
 
 name: Release
+run-name: cargo-tangle artifacts ${{ inputs.tag || github.ref_name }}
 permissions:
   "contents": "write"
 
 on:
   push:
     tags:
-      # Cargo dist packages only the CLI; release-plz handles library crates.
       - 'cargo-tangle-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing cargo-tangle version tag to build or recover
+        required: true
+        type: string
+
+concurrency:
+  group: cargo-tangle-artifacts-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
     runs-on: "ubuntu-latest"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
-      tag: ${{ github.ref_name }}
-      tag-flag: ${{ format('--tag={0}', github.ref_name) }}
+      tag: ${{ inputs.tag || github.ref_name }}
+      tag-flag: ${{ format('--tag={0}', inputs.tag || github.ref_name) }}
+      complete: ${{ steps.complete.outputs.complete }}
+      source-sha: ${{ steps.plan.outputs.source_sha }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
           submodules: recursive
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
       - name: Install dist
-        # we specify bash to get pipefail; it guards against the `curl` command
-        # failing. otherwise `sh` won't catch that `curl` returned non-0
         shell: bash
         run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/astral-sh/cargo-dist/releases/download/v0.28.7-prerelease.1/cargo-dist-installer.sh | sh"
       - name: Cache dist
@@ -50,42 +51,35 @@ jobs:
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/dist
-          # The `build-global-artifacts` and `host` jobs download this binary in
-          # the same run. No later run reads it, and the installer step above
-          # makes it again. Keep it 1 day to stay inside the Actions storage
-          # allowance. Add this line again after you run `dist generate`.
           retention-days: 1
       - id: plan
         run: |
-          dist host --steps=create --tag="$RELEASE_TAG" --output-format=json > plan-dist-manifest.json
-          echo "dist ran successfully"
-          cat plan-dist-manifest.json
+          dist plan --tag="$RELEASE_TAG" --output-format=json > plan-dist-manifest.json
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: Check existing source-bound artifacts
+        id: complete
+        run: |
+          if python3 .github/scripts/verify_release_tags.py --artifacts check --plan plan-dist-manifest.json --tag "$RELEASE_TAG"; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          else
+            status=$?
+            if [ "$status" -ne 3 ]; then exit "$status"; fi
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@v4
         with:
           name: artifacts-plan-dist-manifest
           path: plan-dist-manifest.json
 
-  # Build and packages all the platform-specific things
   build-local-artifacts:
     name: build-local-artifacts (${{ join(matrix.targets, ', ') }})
-    # Let the initial task tell us to not run (currently very blunt)
     needs:
       - plan
-    if: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null }}
+    if: ${{ needs.plan.outputs.complete == 'false' && fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix.include != null }}
     strategy:
       fail-fast: false
-      # Target platforms/runners are computed by dist in create-release.
-      # Each member of the matrix has the following arguments:
-      #
-      # - runner: the github runner
-      # - dist-args: cli flags to pass to dist
-      # - install-dist: expression to run to install dist on the runner
-      #
-      # Typically there will be:
-      # - 1 "global" task that builds universal installers
-      # - N "local" tasks that build each platform's binaries and platform-specific installers
       matrix: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix }}
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container && matrix.container.image || null }}
@@ -93,19 +87,17 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
     steps:
-      - name: enable windows longpaths
-        run: |
-          git config --global core.longpaths true
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
           submodules: recursive
+          ref: refs/tags/${{ needs.plan.outputs.tag }}
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |
           if ! command -v cargo > /dev/null 2>&1; then
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           fi
       - name: "install protobuf and gmp (Linux)"
         if: "runner.os == 'Linux'"
@@ -134,7 +126,6 @@ jobs:
           path: target/cloud-artifacts/cargo-tangle-cloud-*
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
-      # Get the dist-manifest
       - name: Fetch local artifacts
         uses: actions/download-artifact@v4
         with:
@@ -146,20 +137,13 @@ jobs:
           ${{ matrix.packages_install }}
       - name: Build artifacts
         run: |
-          # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
-          echo "dist ran successfully"
       - id: cargo-dist
         name: Post-build
-        # We force bash here just because github makes it really hard to get values up
-        # to "real" actions without writing to env-vars, and writing to env-vars has
-        # inconsistent syntax between shell and powershell.
         shell: bash
         run: |
-          # Parse out what we just built and upload it to scratch storage
-          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          dist print-upload-files-from-manifest --manifest dist-manifest.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          upload_paths=$(dist print-upload-files-from-manifest --manifest dist-manifest.json)
+          printf 'paths<<EOF\n%s\nEOF\n' "$upload_paths" >> "$GITHUB_OUTPUT"
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
       - name: "Upload artifacts"
@@ -170,8 +154,8 @@ jobs:
             ${{ steps.cargo-dist.outputs.paths }}
             ${{ env.BUILD_MANIFEST_NAME }}
 
-  # Build and package all the platform-agnostic(ish) things
   build-global-artifacts:
+    if: needs.plan.outputs.complete == 'false'
     needs:
       - plan
       - build-local-artifacts
@@ -184,13 +168,13 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+          ref: refs/tags/${{ needs.plan.outputs.tag }}
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
-      # Get all the local artifacts for the global tasks to use (for e.g. checksums)
       - name: Fetch local artifacts
         uses: actions/download-artifact@v4
         with:
@@ -201,12 +185,9 @@ jobs:
         shell: bash
         run: |
           dist build ${{ needs.plan.outputs.tag-flag }} --output-format=json "--artifacts=global" > dist-manifest.json
-          echo "dist ran successfully"
 
-          # Parse out what we just built and upload it to scratch storage
-          echo "paths<<EOF" >> "$GITHUB_OUTPUT"
-          jq --raw-output ".upload_files[]" dist-manifest.json >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          upload_paths=$(jq --raw-output ".upload_files[]" dist-manifest.json)
+          printf 'paths<<EOF\n%s\nEOF\n' "$upload_paths" >> "$GITHUB_OUTPUT"
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
       - name: "Upload artifacts"
@@ -216,16 +197,15 @@ jobs:
           path: |
             ${{ steps.cargo-dist.outputs.paths }}
             ${{ env.BUILD_MANIFEST_NAME }}
-  # Publish and announce only after the release artifacts succeed.
   host:
     needs:
       - plan
       - build-local-artifacts
       - build-global-artifacts
-    # Local and global builds must succeed; skipped artifact groups are allowed.
-    if: ${{ always() && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.complete == 'false' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
     runs-on: "ubuntu-latest"
     outputs:
       val: ${{ steps.host.outputs.manifest }}
@@ -234,13 +214,13 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+          ref: refs/tags/${{ needs.plan.outputs.tag }}
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
-      # Fetch artifacts from scratch-storage
       - name: Fetch artifacts
         uses: actions/download-artifact@v4
         with:
@@ -250,17 +230,15 @@ jobs:
       - id: host
         shell: bash
         run: |
+          python3 .github/scripts/verify_release_tags.py --artifacts record --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
           dist host ${{ needs.plan.outputs.tag-flag }} --steps=upload --steps=release --output-format=json > dist-manifest.json
-          echo "artifacts uploaded and released successfully"
-          cat dist-manifest.json
+          echo "artifact manifest prepared"
           echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@v4
         with:
-          # Overwrite the previous copy
           name: artifacts-dist-manifest
           path: dist-manifest.json
-      # Create a GitHub Release while uploading all files to it
       - name: "Download GitHub Artifacts"
         uses: actions/download-artifact@v4
         with:
@@ -269,25 +247,27 @@ jobs:
           merge-multiple: true
       - name: Cleanup
         run: |
-          # Remove the granular manifests
           rm -f artifacts/*-dist-manifest.json
       - name: Create GitHub Release
         env:
           PRERELEASE_FLAG: "${{ fromJson(steps.host.outputs.manifest).announcement_is_prerelease && '--prerelease' || '' }}"
-          RELEASE_COMMIT: "${{ github.sha }}"
+          RELEASE_COMMIT: "${{ needs.plan.outputs.source-sha }}"
         run: |
-          # If we're editing a release in place, we need to upload things ahead of time
-          gh release upload "${{ needs.plan.outputs.tag }}" artifacts/*
+          gh release upload "$RELEASE_TAG" artifacts/* --clobber
 
-          gh release edit "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --draft=false
+          prerelease_args=()
+          if [ -n "$PRERELEASE_FLAG" ]; then
+            prerelease_args+=("$PRERELEASE_FLAG")
+          fi
+          gh release edit "$RELEASE_TAG" --target "$RELEASE_COMMIT" "${prerelease_args[@]}" --draft=false
+          gh release upload "$RELEASE_TAG" target/distrib/release-source.json --clobber
+          python3 .github/scripts/verify_release_tags.py --artifacts check --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
+          echo "source-bound artifacts uploaded and verified"
 
   announce:
     needs:
       - plan
       - host
-    # use "always() && ..." to allow us to wait for all publish jobs while
-    # still allowing individual publish jobs to skip themselves (for prereleases).
-    # "host" however must run to completion, no skipping allowed!
     if: ${{ always() && needs.host.result == 'success' }}
     runs-on: "ubuntu-latest"
     env:
@@ -297,3 +277,4 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+          ref: refs/tags/${{ needs.plan.outputs.tag }}

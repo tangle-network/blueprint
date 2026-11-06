@@ -145,7 +145,7 @@ async fn test_deployment_ttl_tracking() {
     assert_eq!(deployments.len(), 0);
 }
 
-/// Test AWS and Azure pricing via Vantage.sh API
+/// Exercise exported AWS and Azure pricing clients
 #[tokio::test]
 #[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_pricing_apis_available() {
@@ -285,31 +285,5 @@ fn test_instance_selection_deterministic() {
         let i2 = select_instance_type(CloudProvider::AWS, &spec);
         prop_assert_eq!(i1.instance_type, i2.instance_type);
         prop_assert_eq!(i1.estimated_cost, i2.estimated_cost);
-    });
-}
-
-/// Verify cost increases with resource requirements
-#[test]
-fn test_cost_scaling() {
-    use proptest::prelude::*;
-    
-    proptest!(|(cpu in 1.0f32..4.0, memory in 2.0f32..16.0)| {
-        let small = ResourceSpec {
-            cpu,
-            memory_gb: memory,
-            ..Default::default()
-        };
-        
-        let large = ResourceSpec {
-            cpu: cpu * 2.0,
-            memory_gb: memory * 2.0,
-            ..Default::default()
-        };
-        
-        let small_cost = small.estimate_hourly_cost();
-        let large_cost = large.estimate_hourly_cost();
-        
-        prop_assert!(large_cost >= small_cost);
-        prop_assert!(large_cost <= small_cost * 4.0);
     });
 }

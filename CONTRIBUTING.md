@@ -12,25 +12,13 @@ This document defines how we ship high-confidence changes in this repository.
    # macOS
    brew install openssl cmake
    ```
-2. Install Rust toolchain `1.88` (see `rust-toolchain.toml`).
-   ```bash
-   rustup toolchain install 1.88
-   rustup default 1.88
-   rustup component add rustfmt clippy rust-src
-   ```
-3. Clone and enter the repository.
+2. Clone and enter the repository, then use its Nix development shell or
+   install the toolchain and components declared in `rust-toolchain.toml`.
    ```bash
    git clone https://github.com/tangle-network/blueprint.git
    cd blueprint
+   nix develop
    ```
-
-## Repository Layout
-
-- `cli/`: `cargo-tangle` CLI.
-- `crates/`: SDK crates (`core`, `manager`, `networking`, `stores`, `testing-utils`, etc.).
-- `examples/`: reference blueprints that must stay buildable.
-- `docs/`: long-form specifications, RFCs, and operator guides.
-- `.github/`: CI workflows and PR automation.
 
 ## Branches and Commits
 
@@ -93,3 +81,29 @@ Reviewers should prioritize:
 4. Operational observability and rollback safety.
 
 For questions, open an issue or use Discord: <https://discord.com/invite/cv8EfJu3Tn>.
+
+## SDK and CLI Releases
+
+[Release Plz](.github/workflows/release-plz.yml) owns version PRs, tags and
+batched crate publication. Merge the generated version PR through the repository
+gate. For recovery, dispatch that same workflow; do not publish crates by hand:
+
+```bash
+gh-drew workflow run release-plz.yml --ref main
+```
+
+[Release](.github/workflows/release.yml) keeps its CLI tag-push trigger. Release
+Plz also dispatches it and records the accepted run URL. An artifact recovery uses
+the same workflow with an existing CLI version tag:
+
+```bash
+gh-drew workflow run release.yml --ref main -f "tag=cargo-tangle-v<VERSION>"
+```
+
+Recovery requires a tag containing the artifact verifier. Every build checks out
+that tag; per-tag concurrency queues duplicates without cancelling active runs.
+`release-source.json` binds the source commit to the planned artifact digests.
+A complete matching release skips rebuilding. Missing assets rebuild; unknown
+GitHub responses or a different recorded source fail closed. Inspect the named
+run and artifact receipt before claiming delivery. Missing historical runs do not
+establish why their event or build is absent.

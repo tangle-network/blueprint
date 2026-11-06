@@ -2028,6 +2028,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-pricing"
+version = "1.98.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad412d28334aca7659a02261015e3c5964c1c749955e50af8d729cd9e93dd507"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "http 1.4.0",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-sts"
 version = "1.99.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2962,6 +2986,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.16.1",
  "pin-project-lite",
+ "serde",
  "serde_json",
  "tiny-keccak",
  "tokio",
@@ -3461,6 +3486,8 @@ dependencies = [
  "alloy-sol-types",
  "anyhow",
  "async-trait",
+ "aws-config",
+ "aws-sdk-pricing",
  "bincode",
  "blueprint-anvil-testing-utils",
  "blueprint-client-tangle",
@@ -3507,6 +3534,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid 1.23.1",
+ "zeroize",
 ]
 
 [[package]]

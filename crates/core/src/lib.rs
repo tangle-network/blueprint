@@ -17,6 +17,7 @@ pub mod error;
 pub mod ext_traits;
 pub mod extensions;
 pub mod extract;
+pub mod gpu;
 pub mod job;
 pub mod metadata;
 

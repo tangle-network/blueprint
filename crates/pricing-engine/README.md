@@ -202,17 +202,36 @@ If your blueprint uses RFQ pricing (instead of or alongside fixed `setJobEventRa
 
 The on-chain protocol handles verification, replay protection, payment collection, and distribution. See `tnt-core/docs/PRICING.md` for the full protocol-level pricing reference.
 
+## VM provider prices
+
+[`cloud/vm.rs`](src/cloud/vm.rs) owns VM rate requests. The remote providers
+crate re-exports `PricingFetcher`. Each request reads the provider API; it
+keeps no price cache and has no handwritten rate or spot multiplier.
+
+Use `with_digitalocean_token`, `with_vultr_token`, or, with the optional `aws`
+feature, `with_aws_config`. Library callers supply credentials; the CLI uses
+an explicit environment bridge. Credentials are redacted and rejected
+credentials remain errors. `with_endpoint` accepts an HTTPS gateway or a
+loopback HTTP peer; AWS gateways are supplied in its SDK config.
+
+`quote_instance(provider, region, native_sku)` returns a total in USD per
+node-hour. `None` means that allocation cannot be priced. AWS uses signed
+[GetProducts](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetProducts.html),
+Azure uses the [Retail Prices API](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices),
+and DigitalOcean uses [Sizes](https://docs.digitalocean.com/reference/api/reference/sizes/).
+GCP machine types have no complete component SKU mapping here.
+[Vultr plans](https://github.com/vultr/govultr/blob/master/plan.go) expose a
+monthly amount without a complete regional hourly binding. Both remain
+unpriced; monthly caps are never converted into guessed hourly quotes.
+
 ## Testing
 
+These public HTTP and SDK boundary tests create no billable resources:
+
 ```bash
-# Signer roundtrip + EIP-712 compatibility
-cargo test -p blueprint-pricing-engine signer_test
-
-# RPC server unit tests (18 tests covering success, errors, signature verification)
-cargo test -p blueprint-pricing-engine -- server
-
-# All tests
-cargo test -p blueprint-pricing-engine
+cargo test -p blueprint-pricing-engine --test cloud_vm_quotes
+cargo test -p blueprint-pricing-engine --features aws --test cloud_vm_quotes
+cargo test -p blueprint-remote-providers --no-default-features --features std --test vm_price_discovery
 ```
 
 ## Security

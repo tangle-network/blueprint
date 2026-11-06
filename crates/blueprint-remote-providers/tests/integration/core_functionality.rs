@@ -111,27 +111,6 @@ fn test_provider_properties() {
     assert!(CloudProvider::Generic.requires_tunnel());
 }
 
-/// Verify cost estimation scales with resource requirements
-#[test]
-fn test_cost_estimation() {
-    let minimal = ResourceSpec::minimal();
-    let basic = ResourceSpec::basic();
-    let performance = ResourceSpec::performance();
-    
-    let min_cost = minimal.estimate_hourly_cost();
-    let basic_cost = basic.estimate_hourly_cost();
-    let perf_cost = performance.estimate_hourly_cost();
-    
-    // Costs should increase with resources
-    assert!(min_cost > 0.0);
-    assert!(basic_cost > min_cost);
-    assert!(perf_cost > basic_cost);
-    
-    // Sanity checks
-    assert!(min_cost < 1.0);  // Minimal should be cheap
-    assert!(perf_cost < 10.0); // Even performance shouldn't be crazy
-}
-
 /// Verify GPU instances are selected when GPU count > 0
 #[test]
 fn test_gpu_instance_selection() {
@@ -156,7 +135,7 @@ fn test_gpu_instance_selection() {
     );
 }
 
-/// Test Vantage.sh pricing API for AWS instances
+/// Exercise the exported AWS pricing client
 #[tokio::test]
 #[ignore] // Requires network - run with: cargo test -- --ignored
 async fn test_pricing_api_integration() {

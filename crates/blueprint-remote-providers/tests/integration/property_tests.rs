@@ -82,42 +82,6 @@ proptest! {
     }
 }
 
-/// Test cost estimation consistency
-proptest! {
-    #[test]
-    fn test_cost_estimation_consistency(
-        cpu in 1.0f32..16.0,
-        memory in 1.0f32..64.0,
-        hours in 1u32..744, // Up to 1 month
-    ) {
-        let spec = ResourceSpec {
-            cpu,
-            memory_gb: memory,
-            ..Default::default()
-        };
-        
-        let hourly_cost = spec.estimate_hourly_cost();
-        
-        // Cost should scale with resources
-        prop_assert!(hourly_cost > 0.0);
-        prop_assert!(hourly_cost < 100.0); // Sanity check
-        
-        // Larger specs should cost more
-        let larger_spec = ResourceSpec {
-            cpu: cpu * 2.0,
-            memory_gb: memory * 2.0,
-            ..Default::default()
-        };
-        
-        let larger_cost = larger_spec.estimate_hourly_cost();
-        prop_assert!(larger_cost >= hourly_cost);
-        
-        // Monthly cost should be hourly * hours
-        let total_cost = hourly_cost * hours as f64;
-        prop_assert!((total_cost - (hourly_cost * hours as f64)).abs() < 0.01);
-    }
-}
-
 /// Test that K8s resource conversion preserves ratios
 proptest! {
     #[test]
@@ -207,38 +171,6 @@ proptest! {
         let gcp = select_instance_type(CloudProvider::GCP, &spec);
         
         prop_assert_ne!(aws, gcp);
-    }
-}
-
-/// Test pricing fetcher caching behavior
-proptest! {
-    #[test]
-    fn test_pricing_cache_effectiveness(
-        cpu in 1.0f32..4.0,
-        memory in 2.0f32..8.0,
-        max_price in 0.05f64..1.0,
-    ) {
-        // This would test with mocked pricing data
-        // Verifying that cached results are consistent
-        
-        let spec = ResourceSpec {
-            cpu,
-            memory_gb: memory,
-            ..Default::default()
-        };
-        
-        // Verify price constraints are respected
-        let estimated_cost = spec.estimate_hourly_cost();
-        
-        if estimated_cost <= max_price {
-            // Should find an instance
-            prop_assert!(estimated_cost > 0.0);
-        }
-        
-        // Verify caching doesn't affect results
-        let cost1 = spec.estimate_hourly_cost();
-        let cost2 = spec.estimate_hourly_cost();
-        prop_assert_eq!(cost1, cost2);
     }
 }
 

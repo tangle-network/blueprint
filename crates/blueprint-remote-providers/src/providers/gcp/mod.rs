@@ -391,39 +391,13 @@ impl GcpProvisioner {
         InstanceSelection {
             instance_type: instance_type.to_string(),
             spot_capable: spec.allow_spot && !instance_type.starts_with("e2"),
-            estimated_hourly_cost: Self::estimate_cost(instance_type),
+            estimated_hourly_cost: None,
         }
-    }
-
-    fn estimate_cost(instance_type: &str) -> Option<f64> {
-        Some(match instance_type {
-            "e2-micro" => 0.008,
-            "e2-small" => 0.021,
-            "e2-medium" => 0.042,
-            "e2-standard-2" => 0.084,
-            "n2-standard-4" => 0.194,
-            "n2-standard-8" => 0.388,
-            "n2-standard-16" => 0.776,
-            "n2-highmem-4" => 0.260,
-            "n2-highmem-8" => 0.520,
-            "n2-highmem-16" => 1.040,
-            "n2-highcpu-4" => 0.143,
-            "n2-highcpu-8" => 0.286,
-            "n2-highcpu-16" => 0.572,
-            "n1-standard-4" => 0.190,
-            "n1-standard-8" => 0.380,
-            _ => 0.10,
-        })
     }
 
     /// Get instance type recommendation and cost estimate for given specifications
     pub fn get_instance_recommendation(&self, spec: &ResourceSpec) -> InstanceSelection {
         Self::map_instance(spec)
-    }
-
-    /// Get cost estimate for a specific instance type
-    pub fn get_cost_estimate(&self, instance_type: &str) -> Option<f64> {
-        Self::estimate_cost(instance_type)
     }
 
     /// Get the startup script used for instance initialization
@@ -499,11 +473,5 @@ mod tests {
         spec.gpu_count = Some(1);
         let result = GcpProvisioner::map_instance(&spec);
         assert!(result.instance_type.starts_with("n1"));
-    }
-
-    #[test]
-    fn test_cost_estimation() {
-        assert!(GcpProvisioner::estimate_cost("e2-micro").unwrap() < 0.01);
-        assert!(GcpProvisioner::estimate_cost("n2-standard-16").unwrap() > 0.5);
     }
 }
