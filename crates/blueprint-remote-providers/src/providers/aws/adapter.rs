@@ -104,6 +104,7 @@ impl CloudProviderAdapter for AwsAdapter {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         };
 
         // Ensure security group is created and configured

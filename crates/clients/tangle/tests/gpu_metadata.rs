@@ -1,5 +1,6 @@
 use blueprint_client_tangle::blueprint_metadata::{
-    inject_execution_profile, resolve_execution_profile_from_profiling_data,
+    extract_job_profiles_blob, inject_execution_profile,
+    resolve_execution_profile_from_profiling_data,
 };
 
 #[test]
@@ -18,6 +19,14 @@ fn registration_metadata_preserves_class_and_legacy_gpu_requirements() {
         for (key, value) in expected.as_object().unwrap() {
             assert_eq!(&output["execution_profile"]["gpu"][key], value);
         }
+        let profile = resolve_execution_profile_from_profiling_data(&input)
+            .unwrap()
+            .unwrap();
+        let wrapped = inject_execution_profile("existing-compressed-profiles", profile);
+        assert_eq!(
+            extract_job_profiles_blob(&wrapped).as_deref(),
+            Some("existing-compressed-profiles")
+        );
     }
     for gpu in [
         r#"{"policy":"required","class":"nvidia-unknown","min_count":1}"#,
@@ -27,5 +36,22 @@ fn registration_metadata_preserves_class_and_legacy_gpu_requirements() {
     ] {
         let input = format!(r#"{{"execution_profile":{{"gpu":{gpu}}}}}"#);
         assert!(resolve_execution_profile_from_profiling_data(&input).is_err());
+    }
+    assert!(
+        resolve_execution_profile_from_profiling_data("")
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        resolve_execution_profile_from_profiling_data(r#"{"other_metadata":1}"#)
+            .unwrap()
+            .is_none()
+    );
+    for invalid in [
+        "not-json",
+        "[]",
+        r#"{"execution_profile":{"unexpected":true}}"#,
+    ] {
+        assert!(resolve_execution_profile_from_profiling_data(invalid).is_err());
     }
 }

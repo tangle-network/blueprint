@@ -3,58 +3,13 @@
 //! This module handles the configuration and authentication setup for various cloud providers.
 //! It provides interactive setup flows, credential management, and persistent configuration storage.
 
-use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
 use dialoguer::{Input, Password, Select, theme::ColorfulTheme};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Supported cloud providers for Blueprint deployment.
-#[derive(Debug, Clone, Copy, ValueEnum, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
-pub enum CloudProvider {
-    #[value(name = "aws")]
-    AWS,
-    #[value(name = "gcp")]
-    GCP,
-    #[value(name = "azure")]
-    Azure,
-    #[value(name = "digitalocean", alias = "do")]
-    DigitalOcean,
-    #[value(name = "vultr")]
-    Vultr,
-    #[value(name = "hetzner")]
-    Hetzner,
-    #[value(name = "runpod")]
-    RunPod,
-    #[value(name = "lambda", alias = "lambda-labs")]
-    LambdaLabs,
-    #[value(name = "prime-intellect", alias = "pi")]
-    PrimeIntellect,
-    #[value(name = "vast", alias = "vast-ai")]
-    VastAi,
-    #[value(name = "crusoe")]
-    Crusoe,
-}
-
-impl std::fmt::Display for CloudProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::AWS => write!(f, "AWS"),
-            Self::GCP => write!(f, "Google Cloud"),
-            Self::Azure => write!(f, "Azure"),
-            Self::DigitalOcean => write!(f, "DigitalOcean"),
-            Self::Vultr => write!(f, "Vultr"),
-            Self::Hetzner => write!(f, "Hetzner"),
-            Self::RunPod => write!(f, "RunPod"),
-            Self::LambdaLabs => write!(f, "Lambda Labs"),
-            Self::PrimeIntellect => write!(f, "Prime Intellect"),
-            Self::VastAi => write!(f, "Vast.ai"),
-            Self::Crusoe => write!(f, "Crusoe"),
-        }
-    }
-}
+pub use blueprint_core::resources::CloudProvider;
 
 /// Cloud configuration storage.
 ///
@@ -169,7 +124,7 @@ pub async fn configure(
     let region = if let Some(r) = region {
         r
     } else {
-        prompt_region(provider)?
+        prompt_region(&provider)?
     };
 
     // Provider-specific setup
@@ -185,6 +140,11 @@ pub async fn configure(
         CloudProvider::PrimeIntellect => configure_prime_intellect().await?,
         CloudProvider::VastAi => configure_vast_ai().await?,
         CloudProvider::Crusoe => configure_crusoe().await?,
+        _ => {
+            return Err(color_eyre::eyre::eyre!(
+                "Interactive configuration is unavailable for {provider}"
+            ));
+        }
     }
 
     // Save settings
@@ -199,16 +159,16 @@ pub async fn configure(
         settings.project_id = Some(Input::new().with_prompt("GCP Project ID").interact()?);
     }
 
-    config.providers.insert(provider, settings);
+    config.providers.insert(provider.clone(), settings);
 
     if set_default || config.default_provider.is_none() {
-        config.default_provider = Some(provider);
+        config.default_provider = Some(provider.clone());
     }
 
     config.save()?;
 
     println!("\n✅ {} configured successfully!", provider);
-    if config.default_provider == Some(provider) {
+    if config.default_provider.as_ref() == Some(&provider) {
         println!("   Set as default provider");
     }
 
@@ -569,7 +529,7 @@ async fn configure_crusoe() -> Result<()> {
 }
 
 /// Prompt for region selection
-fn prompt_region(provider: CloudProvider) -> Result<String> {
+fn prompt_region(provider: &CloudProvider) -> Result<String> {
     let regions = match provider {
         CloudProvider::AWS => vec![
             ("us-east-1", "US East (N. Virginia)"),
@@ -630,6 +590,7 @@ fn prompt_region(provider: CloudProvider) -> Result<String> {
             ("us-central1", "US Central"),
             ("us-northwest1", "US Northwest"),
         ],
+        _ => return Ok(Input::new().with_prompt("Provider region").interact()?),
     };
 
     let display_regions: Vec<String> = regions
@@ -672,7 +633,7 @@ pub async fn list_providers() -> Result<()> {
     println!("Configured providers:\n");
 
     for (provider, settings) in &config.providers {
-        let default = if Some(*provider) == config.default_provider {
+        let default = if Some(provider) == config.default_provider.as_ref() {
             " (default)"
         } else {
             ""

@@ -28,3 +28,31 @@ fn public_resource_requests_preserve_gpu_identity_and_enforce_catalog_limits() {
         );
     }
 }
+
+#[test]
+fn weight_identity_and_alternative_arms_cross_the_same_public_request_boundary() {
+    let input = json!({
+        "cpu": 2.0, "memory_gb": 16.0, "storage_gb": 100.0,
+        "allowSpot": true, "maxHourlyUsd": 10.0,
+        "weights": {"manifestSha":"a".repeat(64),"sizeBytes":1_000_000},
+        "arms": [{"family":"example","arm":"fp4","gpu_class":"nvidia-b200", "gpu_count":8,"tp":8,"replicas":1}]
+    });
+    let spec: ResourceSpec = serde_json::from_value(input.clone()).unwrap();
+    assert!(spec.validate().is_ok());
+    let wire = serde_json::to_value(spec).unwrap();
+    assert_eq!(wire["weights"], input["weights"]);
+    assert_eq!(wire["arms"][0]["gpu_class"], "nvidia-b200");
+    assert_eq!(wire["max_hourly_cost_usd"], 10.0);
+    for (pointer, value) in [
+        ("/weights/manifestSha", json!("unknown")),
+        ("/arms/0/gpu_class", json!("NVIDIA B200")),
+        ("/arms/0/gpu_count", json!(9)),
+        ("/arms/0/tp", json!(0)),
+        ("/arms/0/replicas", json!(2)),
+    ] {
+        let mut invalid = input.clone();
+        *invalid.pointer_mut(pointer).unwrap() = value;
+        let spec: ResourceSpec = serde_json::from_value(invalid).unwrap();
+        assert!(spec.validate().is_err());
+    }
+}
