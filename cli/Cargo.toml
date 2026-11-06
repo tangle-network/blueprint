@@ -14,76 +14,72 @@ workspace = true
 
 [dependencies]
 blueprint-core = { workspace = true, features = ["tracing"] }
-blueprint-runner = { workspace = true, features = ["networking", "tangle"] }
+blueprint-runner = { optional = true, workspace = true, features = ["networking", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
-blueprint-chain-setup = { workspace = true, features = ["anvil", "std"] }
-blueprint-testing-utils = { workspace = true, features = ["anvil"] }
-blueprint-contexts = { workspace = true }
-blueprint-clients = { workspace = true, features = ["tangle", "evm", "std"] }
-blueprint-client-tangle = { workspace = true, features = ["std"] }
-blueprint-remote-providers = { workspace = true, optional = true }
-blueprint-crypto = { workspace = true, features = [
-    "k256",
-    "bls",
-    "bn254",
+blueprint-chain-setup = { optional = true, workspace = true, features = ["anvil", "std"] }
+blueprint-testing-utils = { optional = true, workspace = true, features = ["anvil"] }
+blueprint-contexts = { optional = true, workspace = true }
+blueprint-clients = { optional = true, workspace = true, features = ["tangle", "evm", "std"] }
+blueprint-client-tangle = { optional = true, workspace = true, features = ["std"] }
+blueprint-remote-providers = { workspace = true, optional = true, features = ["std"] }
+blueprint-crypto = { optional = true, workspace = true, features = ["k256", "bls", "bn254"] }
+blueprint-crypto-core = { optional = true, workspace = true, features = ["clap"] }
+blueprint-keystore = { optional = true, workspace = true, features = [
+  "bls",
+  "bn254",
+  "evm",
+  "sr25519-schnorrkel",
+  "std",
+  "zebra",
 ] }
-blueprint-crypto-core = { workspace = true, features = ["clap"] }
-blueprint-keystore = { workspace = true, features = [
-    "bls",
-    "bn254",
-    "evm",
-    "sr25519-schnorrkel",
-    "std",
-    "zebra",
-] }
-blueprint-manager = { workspace = true, features = ["containers", "tee"] }
+blueprint-manager = { optional = true, workspace = true, features = ["containers", "tee"] }
 
-anyhow = { workspace = true }
+anyhow = { optional = true, workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 clap-cargo = { workspace = true, features = ["clap"] }
-cargo-generate = { workspace = true, features = ["vendored-libgit2"] }
+cargo-generate = { optional = true, workspace = true, features = ["vendored-libgit2"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "ansi"] }
 color-eyre = { workspace = true, features = ["color-spantrace", "track-caller"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc", "preserve_order"] }
-serde_yaml = { workspace = true }
+serde_yaml = { optional = true, workspace = true }
 tokio = { workspace = true, features = ["full"] }
-hex = { workspace = true }
+hex = { optional = true, workspace = true }
 tracing = { workspace = true, features = ["log"] }
-thiserror = { workspace = true }
+thiserror = { optional = true, workspace = true }
 colored = { workspace = true }
 futures = { workspace = true }
-bip39 = { workspace = true, features = ["rand_core", "rand"] }
-dotenv = { workspace = true }
+bip39 = { optional = true, workspace = true, features = ["rand_core", "rand"] }
+dotenv = { optional = true, workspace = true }
 url = { workspace = true }
-rustls = { workspace = true }
+rustls = { workspace = true, features = ["ring"] }
 toml = { workspace = true }
 indicatif = { workspace = true }
 dialoguer = { workspace = true, default-features = true }
-blueprint-evm-extra = { workspace = true }
-testcontainers = { workspace = true }
-tempfile = { workspace = true }
-alloy-json-abi = { workspace = true, features = ["serde_json"] }
-alloy-network = { workspace = true }
-alloy-sol-types = { workspace = true }
-alloy-signer-local = { workspace = true }
-alloy-primitives = { workspace = true }
-alloy-contract = { workspace = true }
-alloy-provider = { workspace = true }
-alloy-transport = { workspace = true }
-# Direct workspace deps that carry the =2.0.5 MSRV hold into published installs.
+blueprint-evm-extra = { optional = true, workspace = true }
+testcontainers = { optional = true, workspace = true }
+tempfile = { optional = true, workspace = true }
+alloy-json-abi = { optional = true, workspace = true, features = ["serde_json"] }
+alloy-network = { optional = true, workspace = true }
+alloy-sol-types = { optional = true, workspace = true }
+alloy-signer-local = { optional = true, workspace = true }
+alloy-primitives = { optional = true, workspace = true }
+alloy-contract = { optional = true, workspace = true }
+alloy-provider = { optional = true, workspace = true }
+alloy-transport = { optional = true, workspace = true }
+# Preserve workspace dependency constraints in published installs.
 alloy-eips = { workspace = true }
 alloy-json-rpc = { workspace = true }
 alloy-rpc-client = { workspace = true }
 alloy-transport-http = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 alloy-dyn-abi = { workspace = true }
-reqwest = { workspace = true, features = ["multipart", "json", "rustls-tls"] }
-sha2 = { workspace = true, features = ["std"] }
-nix = { workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
-walkdir = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
-rand = { workspace = true }
+reqwest = { optional = true, workspace = true, features = ["multipart", "json", "rustls-tls"] }
+sha2 = { optional = true, workspace = true, features = ["std"] }
+nix = { optional = true, workspace = true, features = ["process", "signal", "ioctl", "term", "fs"] }
+walkdir = { optional = true, workspace = true }
+uuid = { optional = true, workspace = true, features = ["v4"] }
+rand = { optional = true, workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
 
@@ -92,11 +88,47 @@ dirs = { workspace = true }
 # Cargo strips path-only dev-deps from published manifests.
 blueprint-keystore = { path = "../crates/keystore", features = ["bn254"] }
 tempfile = { workspace = true }
-blueprint-testing-utils = { path = "../crates/testing-utils", features = ["anvil"] }
 alloy-contract = { workspace = true }
 assert_cmd = "2.0"
 
 [features]
-default = []
-vm-debug = ["blueprint-manager/vm-sandbox"]
-remote-providers = ["dep:blueprint-remote-providers", "blueprint-manager/remote-providers"]
+default = ["full"]
+full = [
+  "dep:blueprint-runner",
+  "dep:blueprint-chain-setup",
+  "dep:blueprint-testing-utils",
+  "dep:blueprint-contexts",
+  "dep:blueprint-clients",
+  "dep:blueprint-client-tangle",
+  "dep:blueprint-crypto",
+  "dep:blueprint-crypto-core",
+  "dep:blueprint-keystore",
+  "dep:blueprint-manager",
+  "dep:anyhow",
+  "dep:cargo-generate",
+  "dep:serde_yaml",
+  "dep:hex",
+  "dep:thiserror",
+  "dep:bip39",
+  "dep:dotenv",
+  "dep:blueprint-evm-extra",
+  "dep:testcontainers",
+  "dep:tempfile",
+  "dep:alloy-json-abi",
+  "dep:alloy-network",
+  "dep:alloy-sol-types",
+  "dep:alloy-signer-local",
+  "dep:alloy-primitives",
+  "dep:alloy-contract",
+  "dep:alloy-provider",
+  "dep:alloy-transport",
+  "dep:reqwest",
+  "dep:sha2",
+  "dep:nix",
+  "dep:walkdir",
+  "dep:uuid",
+  "dep:rand",
+]
+cloud-only = ["remote-providers"]
+vm-debug = ["full", "blueprint-manager/vm-sandbox"]
+remote-providers = ["dep:blueprint-remote-providers", "blueprint-manager?/remote-providers"]

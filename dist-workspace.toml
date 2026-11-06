@@ -31,6 +31,17 @@ pr-run-mode = "skip"
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.28.7-prerelease.1"
 
+# Native Linux jobs build the cloud-only flavor through github-build-setup.
+# The global cargo-dist phase verifies and uploads these alongside the full CLI.
+[[dist.extra-artifacts]]
+build = ["python3", ".github/scripts/cloud_artifact.py", "verify"]
+artifacts = [
+  "target/verified-cloud-artifacts/cargo-tangle-cloud-x86_64-unknown-linux-gnu.tar.xz",
+  "target/verified-cloud-artifacts/cargo-tangle-cloud-x86_64-unknown-linux-gnu.tar.xz.sha256",
+  "target/verified-cloud-artifacts/cargo-tangle-cloud-aarch64-unknown-linux-gnu.tar.xz",
+  "target/verified-cloud-artifacts/cargo-tangle-cloud-aarch64-unknown-linux-gnu.tar.xz.sha256",
+]
+
 [dist.github-custom-runners]
 global = "ubuntu-latest"
 # Custom runners to use for each target platform
