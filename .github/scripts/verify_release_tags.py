@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Verify that each released crate version is available from the Cargo index."""
+"""Verify crate availability and source-bound CLI release artifacts."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
+import re
+import time
+import tomllib
 import json
 from pathlib import Path
 import subprocess
@@ -14,10 +19,11 @@ import urllib.request
 SPARSE_INDEX = "https://index.crates.io"
 USER_AGENT = "tangle-blueprint-release-verify (hello@tangle.tools)"
 DEFAULT_TIMEOUT = 20
+CLI_TAG = re.compile(r"cargo-tangle-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?")
 
 
-class RegistryLookupError(RuntimeError):
-    """The registry could not provide a complete sparse index shard."""
+class ReleaseVerificationError(RuntimeError):
+    """A release source or registry response could not be verified."""
 
 
 def normalize(name: str) -> str:
@@ -44,17 +50,17 @@ def parse_index(body: str, name: str) -> dict[str, bool]:
         try:
             entry = json.loads(line)
         except json.JSONDecodeError as error:
-            raise RegistryLookupError(
+            raise ReleaseVerificationError(
                 f"{name} index contains invalid JSON on line {line_number}"
             ) from error
         version = entry.get("vers") if isinstance(entry, dict) else None
         if not isinstance(version, str):
-            raise RegistryLookupError(
+            raise ReleaseVerificationError(
                 f"{name} index entry on line {line_number} has no version"
             )
         versions[version] = bool(entry.get("yanked", False))
     if not versions:
-        raise RegistryLookupError(f"{name} index shard is empty")
+        raise ReleaseVerificationError(f"{name} index shard is empty")
     return versions
 
 
@@ -68,10 +74,10 @@ def fetch_index(name: str, timeout: float = DEFAULT_TIMEOUT) -> dict[str, bool] 
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return None
-        raise RegistryLookupError(f"{name} index returned HTTP {error.code}") from error
+        raise ReleaseVerificationError(f"{name} index returned HTTP {error.code}") from error
     except (urllib.error.URLError, TimeoutError, OSError, UnicodeDecodeError) as error:
         reason = getattr(error, "reason", error)
-        raise RegistryLookupError(f"{name} index request failed: {reason}") from error
+        raise ReleaseVerificationError(f"{name} index request failed: {reason}") from error
 
 
 def workspace_versions() -> dict[str, str]:
@@ -80,7 +86,7 @@ def workspace_versions() -> dict[str, str]:
             ["cargo", "metadata", "--format-version", "1", "--no-deps"], text=True
         )
     except (OSError, subprocess.CalledProcessError) as error:
-        raise RegistryLookupError(f"cargo metadata failed: {error}") from error
+        raise ReleaseVerificationError(f"cargo metadata failed: {error}") from error
 
     metadata = json.loads(raw)
     members = set(metadata.get("workspace_members", []))
@@ -106,7 +112,7 @@ def tagged_workspace_names(versions: dict[str, str]) -> list[str]:
     try:
         tags = set(subprocess.check_output(["git", "tag", "--list"], text=True).splitlines())
     except (OSError, subprocess.CalledProcessError) as error:
-        raise RegistryLookupError(f"git tag listing failed: {error}") from error
+        raise ReleaseVerificationError(f"git tag listing failed: {error}") from error
     return [
         name
         for name, version in versions.items()
@@ -143,7 +149,7 @@ def verify(
             continue
         try:
             shard = fetch_index(name)
-        except RegistryLookupError as error:
+        except ReleaseVerificationError as error:
             unverified.append((name, version, str(error)))
             continue
         if shard is None:
@@ -193,6 +199,107 @@ def report_unverified(problems: list[tuple[str, str, str]]) -> str:
     return "\n".join(lines)
 
 
+def github(*args: str, raw: bool = False, timeout: float = 15):
+    result = subprocess.run(["gh", *args], capture_output=True, timeout=timeout)
+    if result.returncode:
+        try:
+            if json.loads(result.stdout).get("status") == "404":
+                return None
+        except (ValueError, AttributeError):
+            pass
+        raise ReleaseVerificationError(f"GitHub command failed (exit {result.returncode})")
+    return result.stdout if raw else json.loads(result.stdout)
+
+
+def artifact_context(tag: str, plan_path: str):
+    if not CLI_TAG.fullmatch(tag or ""):
+        raise ReleaseVerificationError("invalid cargo-tangle release tag")
+    package = tomllib.loads(Path("cli/Cargo.toml").read_text())["package"]
+    if tag != f"cargo-tangle-v{package['version']}":
+        raise ReleaseVerificationError("tag and checked-out CLI version differ")
+    source = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    tagged = subprocess.check_output(["git", "rev-parse", "--verify", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", source) or source != tagged:
+        raise ReleaseVerificationError("checkout is not the requested tag source")
+    plan = json.loads(Path(plan_path).read_text())
+    names = plan["artifacts"]
+    if plan["announcement_tag"] != tag or not names or any(Path(name).name != name for name in names):
+        raise ReleaseVerificationError("invalid artifact plan")
+    return source, plan
+
+
+def artifact_mode(args) -> int:
+    repo = os.environ["GITHUB_REPOSITORY"]
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise ReleaseVerificationError("invalid repository")
+    if args.artifacts == "dispatch":
+        rows = json.loads(Path(args.release_json).read_text())
+        rows = rows.get("releases", []) if isinstance(rows, dict) else rows
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ReleaseVerificationError("invalid release output")
+        rows = [row for row in rows if row.get("package_name") == "cargo-tangle"]
+        if any(row.get("tag") != f"cargo-tangle-v{row.get('version')}" for row in rows):
+            raise ReleaseVerificationError("invalid cargo-tangle release output")
+        tags = {row["tag"] for row in rows}
+        if not tags:
+            print("No cargo-tangle release to dispatch")
+            return 0
+        if len(tags) != 1:
+            raise ReleaseVerificationError("multiple cargo-tangle releases in one batch")
+        tag = tags.pop()
+        if not CLI_TAG.fullmatch(tag):
+            raise ReleaseVerificationError("invalid dispatch tag")
+        listing = ["run", "list", "--repo", repo, "--workflow", "release.yml", "--event", "workflow_dispatch",
+                   "--limit", "50", "--json", "databaseId,displayTitle,url"]
+        previous = {row["databaseId"] for row in github(*listing)}
+        github("workflow", "run", "release.yml", "--repo", repo, "--ref", "main", "--field", f"tag={tag}", raw=True)
+        deadline = time.monotonic() + 40
+        while time.monotonic() < deadline:
+            for row in github(*listing, timeout=min(10, max(1, deadline - time.monotonic()))):
+                if row["databaseId"] not in previous and row["displayTitle"] == f"cargo-tangle artifacts {tag}":
+                    print(json.dumps({"tag": tag, "dispatch_accepted": True, "run_id": row["databaseId"], "url": row["url"]}))
+                    return 0
+            time.sleep(min(2, max(0, deadline - time.monotonic())))
+        raise ReleaseVerificationError(f"dispatch accepted for {tag}, but run receipt not observed within 40 seconds")
+    source, plan = artifact_context(args.tag, args.plan)
+    if args.artifacts == "record":
+        files = {name: hashlib.sha256((Path("target/distrib") / name).read_bytes()).hexdigest()
+                 for name in plan["artifacts"]}
+        record = {"schema_version": 1, "tag": args.tag, "source_sha": source, "sha256": files}
+        Path("target/distrib/release-source.json").write_text(json.dumps(record, sort_keys=True) + "\n")
+        print(json.dumps({"source_sha": source, "artifacts_recorded": len(files)}))
+        return 0
+    release = github("api", f"repos/{repo}/releases/tags/{args.tag}")
+    assets = {row["name"]: row for row in (release or {}).get("assets", [])}
+    if "release-source.json" not in assets or not set(plan["artifacts"]).issubset(assets):
+        print("Release artifact set is incomplete")
+        return 3
+    def download(name):
+        return github("api", f"repos/{repo}/releases/assets/{assets[name]['id']}", "-H", "Accept: application/octet-stream", raw=True)
+    data = download("release-source.json")
+    if data is None:
+        return 3
+    record = json.loads(data)
+    hashes = record.get("sha256", {})
+    if record.get("schema_version") != 1 or record.get("tag") != args.tag or record.get("source_sha") != source:
+        raise ReleaseVerificationError("published record belongs to a different source or schema; release a new version")
+    if set(hashes) != set(plan["artifacts"]):
+        return 3
+    if assets["release-source.json"].get("digest") != "sha256:" + hashlib.sha256(data).hexdigest():
+        return 3
+    for name, digest in hashes.items():
+        if not re.fullmatch(r"[0-9a-f]{64}", digest) or assets[name].get("digest") != "sha256:" + digest:
+            return 3
+        checksum = plan["artifacts"][name].get("checksum") or (name + ".sha256" if name + ".sha256" in hashes else None)
+        if checksum:
+            payload = download(checksum)
+            parts = payload.decode().strip().split(maxsplit=1) if payload is not None else []
+            if len(parts) != 2 or parts[0] != digest or parts[1].removeprefix("*") != name:
+                return 3
+    print(json.dumps({"complete": True, "tag": args.tag, "source_sha": source, "artifacts": len(hashes)}))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -201,7 +308,16 @@ def main(argv: list[str] | None = None) -> int:
         default="release-output.json",
         help="release-plz output written by release-plz.yml",
     )
+    parser.add_argument("--artifacts", choices=["check", "record", "dispatch"])
+    parser.add_argument("--plan")
+    parser.add_argument("--tag")
     args = parser.parse_args(argv)
+    if args.artifacts:
+        try:
+            return artifact_mode(args)
+        except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError, subprocess.TimeoutExpired, ReleaseVerificationError) as error:
+            print(f"ARTIFACT VERIFICATION INCOMPLETE: {error}", file=sys.stderr)
+            return 2
 
     try:
         versions = workspace_versions()
@@ -213,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
         if not names:
             print("No tagged workspace releases, nothing to verify")
             return 0
-    except (OSError, json.JSONDecodeError, RegistryLookupError) as error:
+    except (OSError, json.JSONDecodeError, ReleaseVerificationError) as error:
         print(f"RELEASE VERIFICATION INCOMPLETE: {error}", file=sys.stderr)
         return 2
 

@@ -5,6 +5,7 @@ permissions:
   contents: write
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -39,6 +40,9 @@ jobs:
 
   release-plz:
     name: Release-plz
+    permissions:
+      actions: write
+      contents: read
     needs: check-release-enabled
     if: needs.check-release-enabled.outputs.enabled == 'true'
     runs-on: ubuntu-22.04
@@ -81,9 +85,9 @@ jobs:
 
       - name: Save release output for batch publishing
         if: steps.release-plz.outputs.releases_created == 'true'
-        run: |
-          echo '${{ steps.release-plz.outputs.releases }}' > release-output.json
-          cat release-output.json
+        env:
+          RELEASES_JSON: ${{ steps.release-plz.outputs.releases }}
+        run: printf '%s\n' "$RELEASES_JSON" > release-output.json
 
       - name: Batch publish to crates.io (with rate limiting)
         if: steps.release-plz.outputs.releases_created == 'true'
@@ -92,11 +96,12 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      - name: Verify released crates resolve on crates.io
-        if: steps.release-plz.outputs.releases_created == 'true'
-        run: |
-          python3 .github/scripts/verify_release_tags.py release-output.json
-
       - name: Verify every released crate is on crates.io
         if: always() && !cancelled() && steps.release-plz.outputs.releases_created == 'true'
         run: python3 .github/scripts/verify_release_tags.py release-output.json
+
+      - name: Dispatch CLI artifacts and record the run
+        if: always() && !cancelled() && steps.release-plz.outputs.releases_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/verify_release_tags.py --artifacts dispatch release-output.json
