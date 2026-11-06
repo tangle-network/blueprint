@@ -188,7 +188,6 @@ pub enum CloudCommands {
     },
 
     /// Stream logs from deployed blueprint
-    #[command(visible_alias = "logs")]
     Logs {
         /// Service ID
         service_id: String,
