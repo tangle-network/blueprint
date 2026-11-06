@@ -16,7 +16,9 @@ pub struct SchemaVersion(
     u32,
 );
 
-fn deserialize_version<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+fn deserialize_version<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> core::result::Result<u32, D::Error> {
     let value = u32::deserialize(deserializer)?;
     if value != SCHEMA_VERSION {
         return Err(serde::de::Error::custom("unsupported schema version"));

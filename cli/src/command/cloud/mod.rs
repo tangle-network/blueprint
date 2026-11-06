@@ -1,36 +1,6 @@
-//! Cloud deployment commands for Blueprint services.
+//! Cloud deployment commands and the SDK-owned GPU rental JSON boundary.
 //!
-//! This module provides commands for deploying Blueprint services to various cloud providers
-//! including AWS, GCP, Azure, DigitalOcean, and Vultr. It enables remote deployment of
-//! Blueprint instances with resource configuration, cost estimation, and lifecycle management.
-//!
-//! # Examples
-//!
-//! Configure a cloud provider:
-//! ```bash
-//! cargo tangle cloud configure aws --region us-east-1 --set-default
-//! ```
-//!
-//! Configure deployment policy:
-//! ```bash
-//! cargo tangle cloud policy --gpu-providers gcp,aws --cost-providers vultr,do
-//! ```
-//!
-//! Configure serverless FaaS settings:
-//! ```bash
-//! cargo tangle cloud policy --serverless true --faas-provider aws-lambda
-//! cargo tangle cloud policy --faas-memory 1024 --faas-timeout 600
-//! ```
-//!
-//! View current policy:
-//! ```bash
-//! cargo tangle cloud show
-//! ```
-//!
-//! Deploy a blueprint (uses configured policy):
-//! ```bash
-//! cargo tangle blueprint deploy tangle --remote
-//! ```
+//! `catalog --json` describes the shared types used by the rental verbs.
 
 #![allow(unexpected_cfgs)]
 #![allow(unused_imports)]

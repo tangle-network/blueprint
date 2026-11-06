@@ -33,7 +33,10 @@ fn read(operation: &str) -> Option<BoundaryRequest> {
         serde_json::from_slice(&input).ok()?
     };
     let object = value.as_object_mut()?;
-    if object.contains_key("operation") {
+    if object
+        .get("operation")
+        .is_some_and(|value| value.as_str() != Some(operation))
+    {
         return None;
     }
     object.insert("operation".into(), Value::String(operation.into()));

@@ -1,20 +1,4 @@
-//! Shared helpers for GPU-focused cloud provider adapters.
-//!
-//! Every GPU cloud provider in this crate (Lambda Labs, RunPod, Vast.ai, CoreWeave,
-//! Paperspace, Fluidstack, TensorDock, Akash, io.net, Spheron, Nosana, Prime Intellect,
-//! Render, Bittensor) shares the same adapter skeleton: provision an instance via REST,
-//! wait for it to become SSH-reachable, then hand it off to `SharedSshDeployment` for
-//! the actual blueprint deployment. This module captures the common parts so each
-//! adapter is a thin provider-specific shell.
-//!
-//! Key hardening primitives exported by this module:
-//! - [`provision_with_cleanup`] — wraps provision+deploy with automatic instance
-//!   termination on deploy failure (prevents billing leaks).
-//! - [`poll_until_with_retry`] — polling helper that distinguishes transient from
-//!   permanent errors and applies exponential backoff + jitter.
-//! - [`classify_http_error`] — turns a reqwest response into a typed error
-//!   (transient/permanent/rate-limited).
-//! - [`RetryPolicy`] — exponential backoff with jitter and max retries.
+//! Shared HTTP, polling and SSH helpers for native provider adapters.
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;

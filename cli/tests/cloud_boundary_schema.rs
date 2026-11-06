@@ -99,12 +99,36 @@ fn catalog_emits_a_deterministic_complete_boundary_without_user_configuration() 
         }),
         "provider failures must have one closed generated code enum"
     );
-    let second = invoke("catalog", &json!({}));
+    let second = invoke("catalog", &json!({"operation":"catalog"}));
     assert!(second.status.success());
     assert_eq!(
         first.stdout, second.stdout,
         "catalog depends on process state"
     );
+}
+
+#[test]
+fn caller_credentials_work_without_process_global_tls_setup() {
+    let output = invoke(
+        "quote",
+        &json!({
+            "schema_version":1,
+            "credentials":[{"provider":"runpod","api_key":"caller-canary-secret","endpoint":"http://127.0.0.1:0"}],
+            "spec":{"cpu":1,"memory_gb":2,"storage_gb":8,"gpu_count":1,"gpu_class":"nvidia-h200","gpu_vram_gb":140,"allow_spot":false}
+        }),
+    );
+    assert!(
+        output.status.success(),
+        "fresh factory process: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let response: Value = serde_json::from_slice(&output.stdout).expect("one quote envelope");
+    assert_eq!(response["ok"], true);
+    assert!(response["data"]["quotes"].as_array().unwrap().is_empty());
+    assert!(!response["data"]["errors"].as_array().unwrap().is_empty());
+    for bytes in [&output.stdout, &output.stderr] {
+        assert!(!String::from_utf8_lossy(bytes).contains("caller-canary-secret"));
+    }
 }
 
 #[test]
