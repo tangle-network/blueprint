@@ -2,6 +2,7 @@
 
 mod boundary;
 mod credentials;
+mod metadata;
 mod operations;
 mod ownership;
 mod quotes;
@@ -10,6 +11,7 @@ mod types;
 pub use blueprint_core::resources::ManagedLeaseIdentity;
 pub use boundary::*;
 pub use credentials::ProviderCredentials;
+pub use metadata::ManagedMetadata;
 pub use quotes::rank_quotes;
 pub use types::*;
 
