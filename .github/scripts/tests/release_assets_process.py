@@ -22,6 +22,7 @@ def proof():
         (root / "target/distrib").mkdir(parents=True)
         plan = {"announcement_tag": TAG, "artifacts": {"cli.tar.xz": {"checksum": "cli.tar.xz.sha256"}, "cli.tar.xz.sha256": {}}}
         (root / "plan.json").write_text(json.dumps(plan))
+        (root / "target/distrib/plan-dist-manifest.json").write_text(json.dumps(plan))
         (root / "release.json").write_text(json.dumps([{"package_name": "cargo-tangle", "version": "0.5.0-alpha.28", "tag": TAG}]))
         content = {"cli.tar.xz": "artifact fixture input", "cli.tar.xz.sha256": ""}
         content["cli.tar.xz.sha256"] = hashlib.sha256(content["cli.tar.xz"].encode()).hexdigest() + " *cli.tar.xz\n"
