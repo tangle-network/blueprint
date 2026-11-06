@@ -26,6 +26,8 @@ def inspect_archive(archive, target, execute=False):
     with tarfile.open(archive, "r:xz") as source:
         member = source.getmember(f"cargo-tangle-cloud-{target}/cargo-tangle")
         assert member.isfile() and member.size > 64, "missing CLI executable"
+        for notice in ("LICENSE-MIT", "LICENSE-APACHE"):
+            assert source.getmember(f"cargo-tangle-cloud-{target}/{notice}").isfile(), "missing license notice"
         with source.extractfile(member) as binary:
             header = binary.read(20)
             assert header[:6] == b"\x7fELF\x02\x01", "expected little-endian ELF64"
@@ -73,7 +75,9 @@ def build(target):
     stem = f"cargo-tangle-cloud-{target}"
     archive = OUTPUT / f"{stem}.tar.xz"
     with tarfile.open(archive, "w:xz") as out:
-        for source, filename in ((binary, "cargo-tangle"), (ROOT / "cli/README.md", "README.md")):
+        files = ((binary, "cargo-tangle"), (ROOT / "cli/README.md", "README.md"))
+        files += tuple((ROOT / name, name) for name in ("LICENSE-MIT", "LICENSE-APACHE"))
+        for source, filename in files:
             out.add(source, arcname=f"{stem}/{filename}")
     checksum = digest(archive)
     archive.with_suffix(archive.suffix + ".sha256").write_text(f"{checksum}  {archive.name}\n")

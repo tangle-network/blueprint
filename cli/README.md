@@ -2,24 +2,6 @@
 
 Create, run, and operate blueprints on Tangle EVM.
 
-## Table of Contents
-
-- [Tangle CLI](#tangle-cli)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Installation](#installation)
-    - [Feature flags](#feature-flags)
-  - [Creating a New Blueprint](#creating-a-new-blueprint)
-  - [Running a Blueprint on Tangle](#running-a-blueprint-on-tangle)
-  - [Registering an Operator](#registering-an-operator)
-  - [Service Lifecycle Commands](#service-lifecycle-commands)
-  - [Cloud Deployment](#cloud-deployment)
-    - [Configure Cloud Provider](#configure-cloud-provider)
-    - [Cost Estimation](#cost-estimation)
-    - [Deploy Blueprint to Cloud](#deploy-blueprint-to-cloud)
-    - [Monitor Cloud Deployments](#monitor-cloud-deployments)
-  - [Key Management](#key-management)
-
 ## Overview
 
 The CLI bundles every workflow needed for the EVM-only SDK:

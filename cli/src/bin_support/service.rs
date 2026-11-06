@@ -16,6 +16,7 @@ use cargo_tangle::command::tangle::{
 use cargo_tangle::settings::RuntimePreferences;
 use clap::Subcommand;
 use color_eyre::eyre::{Context, Result, ensure, eyre};
+use serde_json::json;
 use std::{fs, path::PathBuf, str::FromStr};
 use url::Url;
 
