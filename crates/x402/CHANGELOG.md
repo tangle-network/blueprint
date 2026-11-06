@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.22](https://github.com/tangle-network/blueprint/compare/blueprint-x402-v0.2.0-alpha.21...blueprint-x402-v0.2.0-alpha.22) - 2026-11-06
+
+### Other
+
+- updated the following local packages: blueprint-core, blueprint-router, blueprint-runner
+
 ## [0.2.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-x402-v0.2.0-alpha.20...blueprint-x402-v0.2.0-alpha.21) - 2026-11-03
 
 ### Other

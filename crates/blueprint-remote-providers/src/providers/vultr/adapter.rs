@@ -64,6 +64,7 @@ impl CloudProviderAdapter for VultrAdapter {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         };
 
         let instance_name = format!("blueprint-{}", uuid::Uuid::new_v4());

@@ -2,8 +2,8 @@
 
 use crate::error::{PricingError, Result};
 use blueprint_core::info;
-use rand::rngs::StdRng;
 use rand::RngExt;
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};

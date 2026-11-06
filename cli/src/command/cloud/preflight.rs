@@ -1,6 +1,6 @@
 //! Remote deployment preflight checks and bootstrap helpers.
 
-use super::config::{CloudConfig, CloudProvider, credentials_present};
+use super::config::{CloudConfig, CloudProvider};
 use color_eyre::{Result, eyre::eyre};
 use std::fmt::Write as _;
 use std::net::IpAddr;
@@ -36,8 +36,8 @@ pub async fn run(
 
     for selected in &providers {
         let configured = config.providers.contains_key(selected);
-        let credentials_ok = credentials_present(*selected).await;
-        let supports_tee = provider_supports_tee(*selected);
+        let credentials_ok = credentials_present(selected);
+        let supports_tee = selected.supports_tee();
         let tee_ok = !tee_required || supports_tee;
         let gcp_cidrs_ok = if *selected == CloudProvider::GCP {
             gcp_cidr_prerequisites_met()
@@ -108,7 +108,7 @@ pub async fn run(
     if bootstrap_env || write_env_file.is_some() {
         let env_output = render_bootstrap_env(
             &config,
-            providers[0],
+            &providers[0],
             tee_required,
             &attestation_policy,
             cryptographic_cmd.as_deref(),
@@ -137,10 +137,10 @@ fn selected_providers(config: &CloudConfig, provider: Option<CloudProvider>) -> 
     if let Some(p) = provider {
         return vec![p];
     }
-    if let Some(default) = config.default_provider {
-        return vec![default];
+    if let Some(default) = &config.default_provider {
+        return vec![default.clone()];
     }
-    let mut providers: Vec<_> = config.providers.keys().copied().collect();
+    let mut providers: Vec<_> = config.providers.keys().cloned().collect();
     providers.sort_by_key(|p| p.to_string());
     providers
 }
@@ -149,11 +149,43 @@ fn yes_no(v: bool) -> &'static str {
     if v { "yes" } else { "no" }
 }
 
-fn provider_supports_tee(provider: CloudProvider) -> bool {
-    matches!(
-        provider,
-        CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure
-    )
+fn credentials_present(provider: &CloudProvider) -> bool {
+    match provider {
+        CloudProvider::AWS => {
+            let env_ok = std::env::var("AWS_ACCESS_KEY_ID").is_ok()
+                && std::env::var("AWS_SECRET_ACCESS_KEY").is_ok();
+            let file_ok = dirs::home_dir()
+                .map(|home| home.join(".aws").join("credentials"))
+                .map(|path| path.exists())
+                .unwrap_or(false);
+            env_ok || file_ok
+        }
+        CloudProvider::GCP => {
+            std::env::var("GCP_PROJECT_ID").is_ok()
+                && std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
+                    .ok()
+                    .map(PathBuf::from)
+                    .map(|path| path.exists())
+                    .unwrap_or(false)
+        }
+        CloudProvider::Azure => {
+            std::env::var("AZURE_SUBSCRIPTION_ID").is_ok()
+                && std::env::var("AZURE_CLIENT_ID").is_ok()
+                && std::env::var("AZURE_CLIENT_SECRET").is_ok()
+                && std::env::var("AZURE_TENANT_ID").is_ok()
+        }
+        CloudProvider::DigitalOcean => std::env::var("DIGITALOCEAN_TOKEN").is_ok(),
+        CloudProvider::Vultr => std::env::var("VULTR_API_KEY").is_ok(),
+        CloudProvider::Hetzner => std::env::var("HETZNER_API_TOKEN").is_ok(),
+        CloudProvider::RunPod => std::env::var("RUNPOD_API_KEY").is_ok(),
+        CloudProvider::LambdaLabs => std::env::var("LAMBDA_LABS_API_KEY").is_ok(),
+        CloudProvider::PrimeIntellect => std::env::var("PRIME_INTELLECT_API_KEY").is_ok(),
+        CloudProvider::VastAi => std::env::var("VAST_AI_API_KEY").is_ok(),
+        CloudProvider::Crusoe => {
+            std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok()
+        }
+        _ => false,
+    }
 }
 
 fn gcp_cidr_prerequisites_met() -> bool {
@@ -243,7 +275,7 @@ fn is_executable_file(path: &Path) -> bool {
 
 fn render_bootstrap_env(
     config: &CloudConfig,
-    provider: CloudProvider,
+    provider: &CloudProvider,
     tee_required: bool,
     attestation_policy: &str,
     cryptographic_cmd: Option<&str>,
@@ -271,7 +303,7 @@ fn render_bootstrap_env(
             let _ = writeln!(&mut out, "TEE_BACKEND={backend}");
         }
     }
-    if provider == CloudProvider::GCP {
+    if *provider == CloudProvider::GCP {
         let _ = writeln!(&mut out, "BLUEPRINT_ALLOWED_SSH_CIDRS=10.0.0.0/8");
         let _ = writeln!(&mut out, "BLUEPRINT_ALLOWED_QOS_CIDRS=10.0.0.0/8");
     }
@@ -285,7 +317,7 @@ fn render_bootstrap_env(
     out
 }
 
-fn region_env_var(provider: CloudProvider) -> &'static str {
+fn region_env_var(provider: &CloudProvider) -> &'static str {
     match provider {
         CloudProvider::AWS => "AWS_DEFAULT_REGION",
         CloudProvider::GCP => "GCP_DEFAULT_REGION",
@@ -298,18 +330,19 @@ fn region_env_var(provider: CloudProvider) -> &'static str {
         CloudProvider::PrimeIntellect => "PRIME_INTELLECT_REGION",
         CloudProvider::VastAi => "VAST_AI_REGION",
         CloudProvider::Crusoe => "CRUSOE_REGION",
+        _ => "BLUEPRINT_CLOUD_REGION",
     }
 }
 
-fn region_for_provider(config: &CloudConfig, provider: CloudProvider) -> String {
+fn region_for_provider(config: &CloudConfig, provider: &CloudProvider) -> String {
     config
         .providers
-        .get(&provider)
+        .get(provider)
         .map(|s| s.region.clone())
         .unwrap_or_else(|| default_region(provider).to_string())
 }
 
-fn default_region(provider: CloudProvider) -> &'static str {
+fn default_region(provider: &CloudProvider) -> &'static str {
     match provider {
         CloudProvider::AWS => "us-east-1",
         CloudProvider::GCP => "us-central1",
@@ -322,21 +355,15 @@ fn default_region(provider: CloudProvider) -> &'static str {
         CloudProvider::PrimeIntellect => "us-east",
         CloudProvider::VastAi => "any",
         CloudProvider::Crusoe => "us-east1",
+        _ => "",
     }
 }
 
-fn default_tee_backend(provider: CloudProvider) -> Option<&'static str> {
+fn default_tee_backend(provider: &CloudProvider) -> Option<&'static str> {
     match provider {
         CloudProvider::AWS => Some("aws-nitro"),
         CloudProvider::GCP => Some("gcp-confidential"),
         CloudProvider::Azure => Some("azure-skr"),
-        CloudProvider::DigitalOcean
-        | CloudProvider::Vultr
-        | CloudProvider::Hetzner
-        | CloudProvider::RunPod
-        | CloudProvider::LambdaLabs
-        | CloudProvider::PrimeIntellect
-        | CloudProvider::VastAi
-        | CloudProvider::Crusoe => None,
+        _ => None,
     }
 }

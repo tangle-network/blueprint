@@ -89,19 +89,44 @@ def validate_tags(releases: list[dict], source: str) -> None:
             raise ValueError(f'{expected_tag}: tag resolves to {actual}, expected {source}')
 
 
+def from_tags(metadata: dict) -> list[dict]:
+    tags = set(subprocess.check_output(['git', 'tag', '--list'], text=True).split())
+    members = set(metadata['workspace_members'])
+    packages = {p['name']: p for p in metadata['packages'] if p['id'] in members}
+    releases = [
+        {'package_name': name, 'version': package['version']}
+        for name, package in sorted(packages.items())
+        if package.get('publish') != [] and f"{name}-v{package['version']}" in tags
+    ]
+    if not releases:
+        raise ValueError('no workspace package version has a tag')
+    return releases
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('manifest', type=Path)
+    parser.add_argument('manifest', type=Path, nargs='?')
+    parser.add_argument('--from-tags', action='store_true',
+                        help='write a release manifest from the workspace versions that carry tags')
     parser.add_argument('--verify-tags', action='store_true')
     parser.add_argument('--check-external', action='store_true')
     args = parser.parse_args()
+    if args.from_tags and args.manifest:
+        parser.error('--from-tags takes no manifest file')
+    metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--format-version', '1', '--no-deps'], text=True))
+    if args.from_tags:
+        releases = from_tags(metadata)
+        json.dump(releases, sys.stdout, indent=2)
+        print()
+        return 0
+    if not args.manifest:
+        parser.error('a manifest file is required without --from-tags')
     payload = json.loads(args.manifest.read_text())
     releases = payload['releases'] if isinstance(payload, dict) else payload
     if args.verify_tags:
         if not isinstance(payload, dict) or not isinstance(payload.get('source_sha'), str):
             raise ValueError('tag verification requires source_sha')
         validate_tags(releases, payload['source_sha'])
-    metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--format-version', '1', '--no-deps'], text=True))
     ordered = plan(releases, metadata)
     if args.check_external:
         check_external_dependencies(releases, metadata)

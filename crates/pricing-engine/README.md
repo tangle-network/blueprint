@@ -1,206 +1,70 @@
-# Operator RFQ Pricing Server
+# Operator RFQ pricing
 
-gRPC server that generates EIP-712 signed price quotes for Tangle services and jobs. Operators run this alongside their blueprint node. Service consumers request quotes via gRPC, then submit them on-chain.
+Run the pricing server beside an operator blueprint, or embed
+`PricingEngineService` in its binary. Consumers request quotes over gRPC or
+gRPC-Web and submit the signed result through Tangle's RFQ entry points.
 
-## Two RFQ Modes
+## Service and job quotes
 
-### Service Creation RFQ (`GetPrice`)
+`GetPrice` prices service creation from benchmark profiles and configured resource
+rates. `GetJobPrice` prices one job from `JobPricingConfig`. Both bind the
+requester; job quotes also bind the hash of the exact submitted inputs. A missing
+job rate returns `NOT_FOUND`.
 
-Used with `createServiceFromQuotes()` on the Tangle contract. The operator quotes a `totalCost` for running an entire service instance for a given TTL.
+The [protobuf definition](proto/pricing.proto) owns the request/response fields.
+The [configuration loaders](src/pricing.rs) own resource, subscription, TEE and
+per-job pricing input. The [operator configuration](src/config.rs) owns server,
+keystore, quote validity and GPU class rates. Rates are operator configuration,
+separate from live cloud rental prices.
 
-```
-Consumer → GetPrice(blueprint_id, ttl_blocks) → Operator
-Operator → signs QuoteDetails{totalCost, blueprintId, ttlBlocks, securityCommitments, resourceCommitments}
-Consumer → createServiceFromQuotes(blueprintId, [signedQuotes], config, callers, ttl)
-```
+## GPU job quotes
 
-Price is computed from the operator's resource pricing config (`default_pricing.toml`) and node benchmarks. The engine automatically benchmarks CPU/memory/storage/GPU and multiplies by configured rates.
+Provide `gpu_class`, `gpu_count` and `duration_secs` together in `GetJobPrice`.
+Class ids and count caps come from the [SDK catalog](../core/gpu-catalog.json).
+The operator's `gpu_pricing` TOML table maps each supported class id to a positive
+decimal-string integer rate in the settlement asset's smallest units per
+GPU-second. The quoted job price is its configured base plus this rate multiplied
+by count and duration. Arithmetic overflow fails the request.
 
-### Per-Job RFQ (`GetJobPrice`)
+A GPU quote signs `GpuJobQuoteDetails` with a nested `GpuResourceCommitment`.
+Class, count and duration are returned in the signed quote details. Unknown
+classes or invalid allocations are refused; a known class without an operator
+rate returns `NOT_FOUND`. Omitting the allocation retains the legacy job schema.
 
-Used with `submitJobFromQuote()` on the Tangle contract. The operator quotes a specific price for a single job execution.
+`confidentiality` uses the shared
+[`job_quote::Confidentiality`](../tangle-extra/src/job_quote.rs) enum, matching
+Tangle's four policies. An explicit policy cannot weaken `require_tee`. Required
+TEE fails when unavailable; preferred TEE can use standard execution.
 
-```
-Consumer → GetJobPrice(service_id, job_index, requester) → Operator
-Operator → signs JobQuoteDetails{requester, serviceId, jobIndex, price, timestamp, expiry, confidentiality}
-Consumer → submitJobFromQuote(serviceId, jobIndex, inputs, [signedQuotes])
-```
+## Exact resource prices
 
-Since tnt-core v0.13.0, every quote is bound to a specific `requester`
-address (audit Round 2 economic F1, PRs #124 and #125). The on-chain
-verifier rejects `requester == address(0)` and rejects any submitter
-whose `msg.sender` doesn't match. The gRPC layer enforces non-zero
-`requester` at the boundary.
+`ResourcePricing.price_per_unit` contains USD18 as exactly 32 big-endian bytes.
+Zero is 32 zero bytes. Negative rates and amounts finer than USD18 are refused.
+The old floating resource-price field is reserved; regenerate clients from the
+proto when adopting this wire change. The legacy service `total_cost_rate`
+display field remains a double. Job quote prices are integer base-unit amounts.
 
-Price is looked up from the operator's per-job pricing config: a `(service_id, job_index) → price_in_wei` map.
+The [public gRPC proof](tests/gpu_quote_rpc.rs) verifies the transmitted signatures
+with an independent JSON EIP-712 encoder and exercises allocation tampering,
+integer precision, invalid requests and policy binding.
 
-## Pricing Configuration
+## Standalone signing
 
-### Resource pricing (`default_pricing.toml`)
-
-Controls service creation quotes. Operators set per-resource rates in USD:
-
-```toml
-# Default rates for all blueprints
-[default]
-resources = [
-  { kind = "CPU", count = 1, price_per_unit_rate = 0.001 },
-  { kind = "MemoryMB", count = 1024, price_per_unit_rate = 0.00005 },
-  { kind = "StorageMB", count = 1024, price_per_unit_rate = 0.00002 },
-  { kind = "GPU", count = 1, price_per_unit_rate = 0.005 },
-]
-
-# Override for a specific blueprint ID
-[42]
-resources = [
-  { kind = "CPU", count = 1, price_per_unit_rate = 0.0015 },
-  { kind = "GPU", count = 2, price_per_unit_rate = 0.007 },
-]
-```
-
-Supported resource kinds: `CPU`, `MemoryMB`, `StorageMB`, `NetworkEgressMB`, `NetworkIngressMB`, `GPU`, `Request`, `Invocation`, `ExecutionTimeMS`.
-
-### Per-job pricing (`config/job_pricing.toml`)
-
-Controls job RFQ quotes. Each section is a service ID, keys are job indices, values are prices in wei (strings for large numbers):
-
-```toml
-# Service 1
-[1]
-0 = "1000000000000000"       # Job 0: 0.001 ETH
-1 = "5000000000000000"       # Job 1: 0.005 ETH
-6 = "20000000000000000"      # Job 6: 0.02 ETH (e.g. LLM prompt)
-7 = "250000000000000000"     # Job 7: 0.25 ETH (e.g. agent task)
-```
-
-Pass via CLI: `--job-pricing-config config/job_pricing.toml` or env `JOB_PRICING_CONFIG_PATH`. If not provided, `GetJobPrice` returns `NOT_FOUND` for all jobs.
-
-For programmatic use (e.g. dynamic pricing in a custom operator binary), use `PricingEngineService::with_job_pricing()`:
-
-```rust
-let job_config = load_job_pricing_from_toml(&std::fs::read_to_string("job_pricing.toml")?)?;
-let service = PricingEngineService::with_job_pricing(
-    config, benchmark_cache, pricing_config,
-    Arc::new(Mutex::new(job_config)),
-    signer,
-);
-```
-
-To enable subscription/event-driven `GetPrice` requests, attach a subscription config:
-
-```rust
-let service = service.with_subscription_pricing(subscription_config);
-```
-
-### Operator config (`operator.toml`)
-
-```toml
-# RocksDB path for benchmark cache
-database_path = "data/pricing-engine"
-
-# Benchmark settings
-benchmark_duration = 60    # seconds per benchmark run
-benchmark_interval = 5     # seconds between samples
-
-# Operator keystore (k256 keypair for EIP-712 signing)
-keystore_path = "data/keystore"
-
-# gRPC server
-rpc_bind_address = "0.0.0.0"
-rpc_port = 50051
-rpc_timeout = 30           # seconds
-rpc_max_connections = 256
-
-# How long signed quotes remain valid
-quote_validity_duration_secs = 300
-```
+Enable `blueprint-tangle-extra`'s `keepers` feature and use
+[`JobQuoteSigner`](../tangle-extra/src/job_quote.rs). `sign` retains the legacy
+job type; `sign_with_resources` accepts a validated `GpuResourceCommitment`.
+The [Tangle signature library](https://github.com/tangle-network/tnt-core/blob/main/src/libraries/SignatureLib.sol)
+owns the protocol's typed-data names and domain. GPU submission uses the existing
+signed job tuple plus the allocation as the overload's fifth argument, returned
+by `SignedGpuJobQuote::into_abi_parts`. The `blueprint-sdk` `tangle` feature
+re-exports these signing types through `blueprint_sdk::tangle::job_quote`.
 
 ## Running
 
-```bash
-OPERATOR_HTTP_RPC=https://rpc.tangle.tools \
-OPERATOR_WS_RPC=wss://rpc.tangle.tools \
-OPERATOR_TANGLE_CONTRACT=0x... \
-OPERATOR_STAKING_CONTRACT=0x... \
-OPERATOR_STATUS_REGISTRY_CONTRACT=0x... \
-cargo run -p blueprint-pricing-engine --bin pricing-engine-server
-```
-
-All CLI flags:
-
-| Flag | Env | Description |
-|------|-----|-------------|
-| `--config` | `OPERATOR_CONFIG_PATH` | Path to `operator.toml` |
-| `--pricing-config` | `PRICING_CONFIG_PATH` | Resource pricing table (TOML) |
-| `--job-pricing-config` | `JOB_PRICING_CONFIG_PATH` | Per-job pricing table (TOML) |
-| `--http-rpc-endpoint` | `OPERATOR_HTTP_RPC` | Tangle EVM HTTP RPC endpoint |
-| `--ws-rpc-endpoint` | `OPERATOR_WS_RPC` | Tangle EVM WebSocket endpoint |
-| `--blueprint-id` | `OPERATOR_BLUEPRINT_ID` | Blueprint ID to watch for activations |
-| `--service-id` | `OPERATOR_SERVICE_ID` | Optional: fixed service ID to benchmark |
-| `--tangle-contract` | `OPERATOR_TANGLE_CONTRACT` | ITangle proxy contract address |
-| `--staking-contract` | `OPERATOR_STAKING_CONTRACT` | MultiAssetDelegation contract |
-| `--status-registry-contract` | `OPERATOR_STATUS_REGISTRY_CONTRACT` | OperatorStatusRegistry contract |
-
-## How It Works Internally
-
-1. **Bootstrap** — reads `operator.toml`, loads pricing table, initializes RocksDB benchmark cache, derives operator Ethereum address from k256 keystore
-2. **Event ingestion** — polls `ITangle::ServiceActivated` / `ServiceTerminated` logs, enqueues benchmarks for each new activation
-3. **Benchmark** — runs CPU/memory/storage/GPU benchmarks, caches profiles per blueprint
-4. **RPC handling** — verifies proof-of-work, computes price (service quotes use benchmarks + resource rates; job quotes use the `JobPricingConfig` map)
-5. **Signing** — hashes ABI-encoded structs with EIP-712 (`TangleQuote` domain, version `1`), signs with k256 ECDSA
-
-## EIP-712 Signing Details
-
-Both quote types use the same EIP-712 domain:
-
-```
-name:              "TangleQuote"
-version:           "1"
-chainId:           <chain_id>
-verifyingContract: <tangle_proxy_address>
-```
-
-**Service quotes** use `QUOTE_TYPEHASH` (tnt-core v0.13.0+):
-```
-QuoteDetails(address requester,uint64 blueprintId,uint64 ttlBlocks,uint256 totalCost,uint64 timestamp,uint64 expiry,uint8 confidentiality,AssetSecurityCommitment[] securityCommitments,ResourceCommitment[] resourceCommitments)
-```
-
-**Job quotes** use `JOB_QUOTE_TYPEHASH` (tnt-core v0.13.0+):
-```
-JobQuoteDetails(address requester,uint64 serviceId,uint8 jobIndex,uint256 price,uint64 timestamp,uint64 expiry,uint8 confidentiality)
-```
-
-`requester` MUST be non-zero — wildcard quotes are rejected by the
-on-chain verifier. The address is bound into the EIP-712 signature so a
-quote can only be redeemed by the buyer it was issued to.
-
-For standalone signing without the full pricing engine, use `JobQuoteSigner` from `blueprint-tangle-extra`:
-
-```rust
-use blueprint_tangle_extra::job_quote::{JobQuoteSigner, JobQuoteDetails, QuoteSigningDomain};
-
-let signer = JobQuoteSigner::new(keypair, QuoteSigningDomain { chain_id, verifying_contract });
-let signed = signer.sign(&JobQuoteDetails {
-    requester: buyer_address, // MUST be non-zero
-    service_id: 1,
-    job_index: 7,
-    price: U256::from(250_000_000_000_000_000u64),
-    timestamp: now,
-    expiry: now + 3600,
-    confidentiality: 0,
-});
-```
-
-## For Blueprint Developers
-
-If your blueprint uses RFQ pricing (instead of or alongside fixed `setJobEventRates`):
-
-1. **Embed or run the pricing engine** — either integrate `PricingEngineService` into your operator binary or run it as a sidecar
-2. **Define job prices** — populate `JobPricingConfig` with `(service_id, job_index) → price` entries based on your blueprint's job types and cost structure
-3. **Expose operator config** — let operators tune prices via your blueprint's config file (model costs, resource multipliers, margins)
-4. **Fixed rates vs RFQ** — you can use both: set `setJobEventRates()` on-chain for standard pricing, and support RFQ for jobs where operators want custom pricing (premium models, large batches, etc.)
-
-The on-chain protocol handles verification, replay protection, payment collection, and distribution. See `tnt-core/docs/PRICING.md` for the full protocol-level pricing reference.
+`pricing-engine-server --help` lists the required operator configuration, pricing
+files and chain endpoints. The [binary](src/main.rs) owns its CLI and environment
+bindings. Programmatic callers use `PricingEngineService::with_job_pricing`,
+with the same operator configuration and signer as the standalone server.
 
 ## VM provider prices
 
@@ -223,21 +87,3 @@ GCP machine types have no complete component SKU mapping here.
 [Vultr plans](https://github.com/vultr/govultr/blob/master/plan.go) expose a
 monthly amount without a complete regional hourly binding. Both remain
 unpriced; monthly caps are never converted into guessed hourly quotes.
-
-## Testing
-
-These public HTTP and SDK boundary tests create no billable resources:
-
-```bash
-cargo test -p blueprint-pricing-engine --test cloud_vm_quotes
-cargo test -p blueprint-pricing-engine --features aws --test cloud_vm_quotes
-cargo test -p blueprint-remote-providers --no-default-features --features std --test vm_price_discovery
-```
-
-## Security
-
-- **Proof-of-work** — SHA-256 challenge prevents gRPC abuse
-- **EIP-712 signatures** — quotes are signed with the operator's k256 key and verified on-chain by the Tangle contract
-- **Replay protection** — each quote digest is marked as used on-chain after submission
-- **Expiry** — quotes have explicit `expiry` timestamps; the `maxQuoteAge` protocol parameter (default 1 hour) rejects stale quotes
-- Keystore keys never leave disk. Keep keystore path and contract addresses private.

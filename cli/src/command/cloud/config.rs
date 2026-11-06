@@ -3,59 +3,13 @@
 //! This module handles the configuration and authentication setup for various cloud providers.
 //! It provides interactive setup flows, credential management, and persistent configuration storage.
 
-use blueprint_remote_providers::security::auth;
-use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
-use dialoguer::{Select, theme::ColorfulTheme};
+use dialoguer::{Input, Password, Select, theme::ColorfulTheme};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Supported cloud providers for Blueprint deployment.
-#[derive(Debug, Clone, Copy, ValueEnum, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
-pub enum CloudProvider {
-    #[value(name = "aws")]
-    AWS,
-    #[value(name = "gcp")]
-    GCP,
-    #[value(name = "azure")]
-    Azure,
-    #[value(name = "digitalocean", alias = "do")]
-    DigitalOcean,
-    #[value(name = "vultr")]
-    Vultr,
-    #[value(name = "hetzner")]
-    Hetzner,
-    #[value(name = "runpod")]
-    RunPod,
-    #[value(name = "lambda", alias = "lambda-labs")]
-    LambdaLabs,
-    #[value(name = "prime-intellect", alias = "pi")]
-    PrimeIntellect,
-    #[value(name = "vast", alias = "vast-ai")]
-    VastAi,
-    #[value(name = "crusoe")]
-    Crusoe,
-}
-
-impl std::fmt::Display for CloudProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::AWS => write!(f, "AWS"),
-            Self::GCP => write!(f, "Google Cloud"),
-            Self::Azure => write!(f, "Azure"),
-            Self::DigitalOcean => write!(f, "DigitalOcean"),
-            Self::Vultr => write!(f, "Vultr"),
-            Self::Hetzner => write!(f, "Hetzner"),
-            Self::RunPod => write!(f, "RunPod"),
-            Self::LambdaLabs => write!(f, "Lambda Labs"),
-            Self::PrimeIntellect => write!(f, "Prime Intellect"),
-            Self::VastAi => write!(f, "Vast.ai"),
-            Self::Crusoe => write!(f, "Crusoe"),
-        }
-    }
-}
+pub use blueprint_core::resources::CloudProvider;
 
 /// Cloud configuration storage.
 ///
@@ -76,6 +30,9 @@ pub struct ProviderSettings {
     /// GCP project ID (only used for Google Cloud)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
+    /// Internal flag indicating if provider is fully configured
+    #[serde(skip)]
+    pub configured: bool,
 }
 
 impl CloudConfig {
@@ -126,10 +83,10 @@ impl Default for CloudConfig {
     }
 }
 
-/// Record a provider's region and default status, and report its credentials.
+/// Configure a cloud provider with interactive setup.
 ///
-/// Provider credentials come from the environment, and for AWS also its shared credentials
-/// file. This command names what is missing and never stores a credential.
+/// This function guides the user through provider-specific authentication setup,
+/// including credential configuration, region selection, and default settings.
 ///
 /// # Arguments
 ///
@@ -141,7 +98,8 @@ impl Default for CloudConfig {
 ///
 /// Returns an error if:
 /// * Configuration directory cannot be created
-/// * A required prompt has no terminal to read from
+/// * Credentials are invalid or cannot be saved
+/// * Provider-specific CLI tools are not available
 ///
 /// # Examples
 ///
@@ -166,81 +124,412 @@ pub async fn configure(
     let region = if let Some(r) = region {
         r
     } else {
-        prompt_region(provider)?
+        prompt_region(&provider)?
     };
 
-    if credentials_present(provider).await {
-        println!("✓ Found {provider} credentials");
-    } else {
-        println!(
-            "⚠️  {provider} credentials not found. Export {} before running cloud commands; \
-             cargo-tangle reads them from the environment and does not store them.",
-            credential_variables(provider).join(", ")
-        );
+    // Provider-specific setup
+    match provider {
+        CloudProvider::AWS => configure_aws().await?,
+        CloudProvider::GCP => configure_gcp().await?,
+        CloudProvider::Azure => configure_azure().await?,
+        CloudProvider::DigitalOcean => configure_digitalocean().await?,
+        CloudProvider::Vultr => configure_vultr().await?,
+        CloudProvider::Hetzner => configure_hetzner().await?,
+        CloudProvider::RunPod => configure_runpod().await?,
+        CloudProvider::LambdaLabs => configure_lambda_labs().await?,
+        CloudProvider::PrimeIntellect => configure_prime_intellect().await?,
+        CloudProvider::VastAi => configure_vast_ai().await?,
+        CloudProvider::Crusoe => configure_crusoe().await?,
+        _ => {
+            return Err(color_eyre::eyre::eyre!(
+                "Interactive configuration is unavailable for {provider}"
+            ));
+        }
     }
 
-    let settings = ProviderSettings {
+    // Save settings
+    let mut settings = ProviderSettings {
         region,
-        project_id: std::env::var("GCP_PROJECT_ID")
-            .ok()
-            .filter(|_| provider == CloudProvider::GCP),
+        project_id: None,
+        configured: true,
     };
-    config.providers.insert(provider, settings);
+
+    // GCP needs project ID
+    if provider == CloudProvider::GCP {
+        settings.project_id = Some(Input::new().with_prompt("GCP Project ID").interact()?);
+    }
+
+    config.providers.insert(provider.clone(), settings);
 
     if set_default || config.default_provider.is_none() {
-        config.default_provider = Some(provider);
+        config.default_provider = Some(provider.clone());
     }
 
     config.save()?;
 
-    println!("\n✅ {} region saved", provider);
-    if config.default_provider == Some(provider) {
+    println!("\n✅ {} configured successfully!", provider);
+    if config.default_provider.as_ref() == Some(&provider) {
         println!("   Set as default provider");
     }
 
     Ok(())
 }
 
-/// Environment variables that authenticate each provider.
-fn credential_variables(provider: CloudProvider) -> &'static [&'static str] {
-    match provider {
-        CloudProvider::AWS => &["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
-        CloudProvider::GCP => &["GCP_PROJECT_ID", "GCP_ACCESS_TOKEN"],
-        CloudProvider::Azure => &["AZURE_SUBSCRIPTION_ID", "AZURE_ACCESS_TOKEN"],
-        CloudProvider::DigitalOcean => &["DIGITALOCEAN_TOKEN"],
-        CloudProvider::Vultr => &["VULTR_API_KEY"],
-        CloudProvider::Hetzner => &["HETZNER_API_TOKEN"],
-        CloudProvider::RunPod => &["RUNPOD_API_KEY"],
-        CloudProvider::LambdaLabs => &["LAMBDA_LABS_API_KEY"],
-        CloudProvider::PrimeIntellect => &["PRIME_INTELLECT_API_KEY"],
-        CloudProvider::VastAi => &["VAST_AI_API_KEY"],
-        CloudProvider::Crusoe => &["CRUSOE_API_KEY", "CRUSOE_API_SECRET", "CRUSOE_PROJECT_ID"],
+/// Configure AWS credentials
+async fn configure_aws() -> Result<()> {
+    // Check for existing AWS CLI config
+    let aws_config = dirs::home_dir()
+        .map(|h| h.join(".aws").join("credentials"))
+        .filter(|p| p.exists());
+
+    if aws_config.is_some() {
+        println!("✓ Found AWS credentials in ~/.aws/credentials");
+        return Ok(());
     }
+
+    // Check environment variables
+    if std::env::var("AWS_ACCESS_KEY_ID").is_ok() {
+        println!("✓ Found AWS credentials in environment");
+        return Ok(());
+    }
+
+    // Prompt for credentials
+    println!("No AWS credentials found. Please provide:");
+    println!("(These will be stored in ~/.aws/credentials)");
+
+    let access_key = Input::<String>::new()
+        .with_prompt("AWS Access Key ID")
+        .interact()?;
+
+    let secret_key = Password::new()
+        .with_prompt("AWS Secret Access Key")
+        .interact()?;
+
+    // Save to ~/.aws/credentials
+    let aws_dir = dirs::home_dir()
+        .ok_or_else(|| color_eyre::eyre::eyre!("Could not find home directory"))?
+        .join(".aws");
+
+    std::fs::create_dir_all(&aws_dir)?;
+
+    let credentials = format!(
+        "[default]\naws_access_key_id = {}\naws_secret_access_key = {}\n",
+        access_key, secret_key
+    );
+
+    std::fs::write(aws_dir.join("credentials"), credentials)?;
+
+    Ok(())
 }
 
-/// Whether a provider's credentials are available to this process.
-///
-/// GCP and Azure ask the token lookup their adapters use, because a metadata server or
-/// `az login` can stand in for an exported token.
-pub(super) async fn credentials_present(provider: CloudProvider) -> bool {
-    let exported = |names: &[&str]| names.iter().all(|name| std::env::var_os(name).is_some());
-    match provider {
-        CloudProvider::AWS => {
-            exported(credential_variables(provider))
-                || dirs::home_dir().is_some_and(|home| home.join(".aws/credentials").exists())
+/// Configure GCP credentials  
+async fn configure_gcp() -> Result<()> {
+    // Check for gcloud CLI
+    if std::process::Command::new("gcloud")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
+        println!("✓ Found gcloud CLI");
+
+        // Check if already authenticated
+        let output = std::process::Command::new("gcloud")
+            .args(&[
+                "auth",
+                "list",
+                "--filter=status:ACTIVE",
+                "--format=value(account)",
+            ])
+            .output()?;
+
+        if !output.stdout.is_empty() {
+            let account = String::from_utf8_lossy(&output.stdout);
+            println!("✓ Authenticated as {}", account.trim());
+            return Ok(());
         }
-        CloudProvider::GCP => {
-            exported(&["GCP_PROJECT_ID"]) && auth::gcp_access_token().await.is_ok()
-        }
-        CloudProvider::Azure => {
-            exported(&["AZURE_SUBSCRIPTION_ID"]) && auth::azure_access_token().await.is_ok()
-        }
-        _ => exported(credential_variables(provider)),
+
+        // Run gcloud auth
+        println!("Running gcloud auth login...");
+        std::process::Command::new("gcloud")
+            .args(&["auth", "application-default", "login"])
+            .status()?;
+    } else {
+        println!("⚠️  gcloud CLI not found");
+        println!("   Please install: https://cloud.google.com/sdk/docs/install");
+        println!("   Or set GOOGLE_APPLICATION_CREDENTIALS to a service account key file");
     }
+
+    Ok(())
+}
+
+/// Configure Azure credentials
+async fn configure_azure() -> Result<()> {
+    // Check for az CLI
+    if std::process::Command::new("az")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
+        println!("✓ Found Azure CLI");
+
+        // Check if logged in
+        let output = std::process::Command::new("az")
+            .args(&["account", "show"])
+            .output()?;
+
+        if output.status.success() {
+            println!("✓ Already logged in to Azure");
+            return Ok(());
+        }
+
+        // Run az login
+        println!("Running az login...");
+        std::process::Command::new("az").arg("login").status()?;
+    } else {
+        println!("⚠️  Azure CLI not found");
+        println!("   Please install: https://aka.ms/azure-cli");
+    }
+
+    Ok(())
+}
+
+/// Configure DigitalOcean credentials
+async fn configure_digitalocean() -> Result<()> {
+    if std::env::var("DIGITALOCEAN_TOKEN").is_ok() {
+        println!("✓ Found DigitalOcean token in environment");
+        return Ok(());
+    }
+
+    println!("Get your API token from: https://cloud.digitalocean.com/account/api/tokens");
+
+    let token = Password::new()
+        .with_prompt("DigitalOcean API Token")
+        .interact()?;
+
+    // Save to .env file
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("DIGITALOCEAN_TOKEN") {
+        content.push_str(&format!("\nDIGITALOCEAN_TOKEN={}\n", token));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Vultr credentials
+async fn configure_vultr() -> Result<()> {
+    if std::env::var("VULTR_API_KEY").is_ok() {
+        println!("✓ Found Vultr API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://my.vultr.com/settings/#settingsapi");
+
+    let api_key = Password::new().with_prompt("Vultr API Key").interact()?;
+
+    // Save to .env file
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("VULTR_API_KEY") {
+        content.push_str(&format!("\nVULTR_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Hetzner Cloud credentials
+async fn configure_hetzner() -> Result<()> {
+    if std::env::var("HETZNER_API_TOKEN").is_ok() {
+        println!("✓ Found Hetzner API token in environment");
+        return Ok(());
+    }
+
+    println!(
+        "Get your API token from: https://console.hetzner.cloud/projects/default/security/tokens"
+    );
+
+    let token = Password::new()
+        .with_prompt("Hetzner API Token")
+        .interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("HETZNER_API_TOKEN") {
+        content.push_str(&format!("\nHETZNER_API_TOKEN={}\n", token));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure RunPod credentials
+async fn configure_runpod() -> Result<()> {
+    if std::env::var("RUNPOD_API_KEY").is_ok() {
+        println!("✓ Found RunPod API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://www.runpod.io/console/user/settings");
+
+    let api_key = Password::new().with_prompt("RunPod API Key").interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("RUNPOD_API_KEY") {
+        content.push_str(&format!("\nRUNPOD_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Lambda Labs credentials
+async fn configure_lambda_labs() -> Result<()> {
+    if std::env::var("LAMBDA_LABS_API_KEY").is_ok() {
+        println!("✓ Found Lambda Labs API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://cloud.lambdalabs.com/api-keys");
+
+    let api_key = Password::new()
+        .with_prompt("Lambda Labs API Key")
+        .interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("LAMBDA_LABS_API_KEY") {
+        content.push_str(&format!("\nLAMBDA_LABS_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Prime Intellect credentials
+async fn configure_prime_intellect() -> Result<()> {
+    if std::env::var("PRIME_INTELLECT_API_KEY").is_ok() {
+        println!("✓ Found Prime Intellect API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://app.primeintellect.ai/settings/api-keys");
+
+    let api_key = Password::new()
+        .with_prompt("Prime Intellect API Key")
+        .interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("PRIME_INTELLECT_API_KEY") {
+        content.push_str(&format!("\nPRIME_INTELLECT_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Vast.ai credentials
+async fn configure_vast_ai() -> Result<()> {
+    if std::env::var("VAST_AI_API_KEY").is_ok() {
+        println!("✓ Found Vast.ai API key in environment");
+        return Ok(());
+    }
+
+    println!("Get your API key from: https://cloud.vast.ai/account/");
+
+    let api_key = Password::new().with_prompt("Vast.ai API Key").interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("VAST_AI_API_KEY") {
+        content.push_str(&format!("\nVAST_AI_API_KEY={}\n", api_key));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
+}
+
+/// Configure Crusoe Cloud credentials
+async fn configure_crusoe() -> Result<()> {
+    if std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok() {
+        println!("✓ Found Crusoe credentials in environment");
+        return Ok(());
+    }
+
+    println!("Get your API credentials from: https://console.crusoecloud.com/settings/api-keys");
+
+    let api_key = Input::<String>::new()
+        .with_prompt("Crusoe API Key")
+        .interact()?;
+
+    let api_secret = Password::new()
+        .with_prompt("Crusoe API Secret")
+        .interact()?;
+
+    let env_file = std::env::current_dir()?.join(".env");
+    let mut content = if env_file.exists() {
+        std::fs::read_to_string(&env_file)?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("CRUSOE_API_KEY") {
+        content.push_str(&format!("\nCRUSOE_API_KEY={}\n", api_key));
+        content.push_str(&format!("CRUSOE_API_SECRET={}\n", api_secret));
+        std::fs::write(env_file, content)?;
+        println!("✓ Saved to .env file");
+    }
+
+    Ok(())
 }
 
 /// Prompt for region selection
-fn prompt_region(provider: CloudProvider) -> Result<String> {
+fn prompt_region(provider: &CloudProvider) -> Result<String> {
     let regions = match provider {
         CloudProvider::AWS => vec![
             ("us-east-1", "US East (N. Virginia)"),
@@ -301,6 +590,7 @@ fn prompt_region(provider: CloudProvider) -> Result<String> {
             ("us-central1", "US Central"),
             ("us-northwest1", "US Northwest"),
         ],
+        _ => return Ok(Input::new().with_prompt("Provider region").interact()?),
     };
 
     let display_regions: Vec<String> = regions
@@ -343,7 +633,7 @@ pub async fn list_providers() -> Result<()> {
     println!("Configured providers:\n");
 
     for (provider, settings) in &config.providers {
-        let default = if Some(*provider) == config.default_provider {
+        let default = if Some(provider) == config.default_provider.as_ref() {
             " (default)"
         } else {
             ""

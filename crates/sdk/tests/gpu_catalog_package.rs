@@ -4,7 +4,7 @@ use std::{collections::BTreeSet, path::Path, process::Command};
 
 #[test]
 fn published_core_contains_one_hardware_catalog() {
-    let directory = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../core");
     let package = Command::new("cargo")
         .args([
             "package",

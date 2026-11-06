@@ -135,8 +135,10 @@ message ResourcePricing {
   string kind = 1;
   // Quantity of the resource
   uint64 count = 2;
-  // Price per unit in USD with decimal precision (e.g., 0.00005 USD per MB)
-  double price_per_unit_rate = 3;
+  reserved 3;
+  reserved "price_per_unit_rate";
+  // USD18 per unit: exactly 32 big-endian bytes, including all-zero for zero.
+  bytes price_per_unit = 4;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -163,6 +165,12 @@ message GetJobPriceRequest {
   // (32 bytes, required). Bound into the EIP-712 signature; tnt-core v0.18.0+
   // reverts JobQuoteInputsMismatch when the submitted inputs hash differently.
   bytes inputs_hash = 7;
+  // Canonical SDK catalog id; all three allocation fields are required together.
+  string gpu_class = 8;
+  uint64 gpu_count = 9;
+  uint64 duration_secs = 10;
+  // Types.ConfidentialityPolicy. If require_tee is true, this must be TeeRequired.
+  optional uint32 confidentiality = 11;
 }
 
 // Response message for GetJobPrice RPC
@@ -217,7 +225,7 @@ message JobQuoteDetails {
   uint64 timestamp = 4;
   // Expiry timestamp for the quote
   uint64 expiry = 5;
-  // Confidentiality level (0=Any, 1=Required, 2=Preferred).
+  // Canonical Types.ConfidentialityPolicy value (0 through 3).
   // Bound into the EIP-712 signature to prevent replay of
   // a non-TEE quote for a TEE-required service.
   uint32 confidentiality = 6;
@@ -230,4 +238,8 @@ message JobQuoteDetails {
   // EIP-712 signature; tnt-core v0.18.0+ reverts JobQuoteInputsMismatch when
   // the submitted inputs hash differently.
   bytes inputs_hash = 8;
+  // Non-empty selects GpuJobQuoteDetails with GpuResourceCommitment typed data.
+  string gpu_class = 9;
+  uint64 gpu_count = 10;
+  uint64 duration_secs = 11;
 }

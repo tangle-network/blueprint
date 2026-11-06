@@ -347,7 +347,7 @@ Types.BlueprintFieldType memory field = Types.BlueprintFieldType({
 
 #### 2.1 Update TLV Encoder
 
-**File:** `cli/src/command/deploy/definition.rs`
+**File:** `cli/src/command/deploy/definition/schema.rs`
 
 Update `encode_json_schema_to_tlv()` to write version 2 format with names.
 
@@ -635,6 +635,6 @@ Accept that object-format params don't work.
 
 - `tnt-core/src/v2/libraries/SchemaLib.sol` - Schema encoding/validation
 - `tnt-core/src/v2/libraries/Types.sol` - Type definitions
-- `blueprint/cli/src/command/deploy/definition.rs` - CLI TLV encoder
+- `blueprint/cli/src/command/deploy/definition/schema.rs` - CLI TLV encoder
 - `blueprint/cli/src/command/jobs/helpers.rs` - CLI TLV decoder
 - `blueprint/docs/JOB_SYSTEM_TEST_PROGRESS.md` - Test 2.3 discovery context

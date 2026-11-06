@@ -311,6 +311,7 @@ impl CloudProviderAdapter for AkashAdapter {
                     gpu_count: Some(1),
                     allow_spot: false,
                     qos: Default::default(),
+                    ..Default::default()
                 },
                 &[],
             )

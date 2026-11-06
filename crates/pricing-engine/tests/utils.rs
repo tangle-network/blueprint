@@ -1,6 +1,5 @@
 use blueprint_pricing_engine_lib::CpuBenchmarkResult;
 use blueprint_pricing_engine_lib::pricing::ResourcePricing;
-use blueprint_pricing_engine_lib::pricing_engine;
 use blueprint_pricing_engine_lib::types::ResourceUnit;
 use blueprint_pricing_engine_lib::{BenchmarkProfile, OperatorConfig};
 use rust_decimal::Decimal;
@@ -19,33 +18,7 @@ pub fn create_test_config() -> OperatorConfig {
         rpc_timeout: 30,
         rpc_max_connections: 100,
         quote_validity_duration_secs: 300,
-    }
-}
-
-pub fn create_test_quote_details() -> pricing_engine::QuoteDetails {
-    let resource = pricing_engine::ResourcePricing {
-        kind: "CPU".to_string(),
-        count: 2,
-        price_per_unit_rate: 0.000001,
-    };
-
-    let security_commitment = pricing_engine::AssetSecurityCommitment {
-        asset: Some(pricing_engine::Asset {
-            asset_type: Some(pricing_engine::asset::AssetType::Erc20(vec![0u8; 20])),
-        }),
-        exposure_percent: 50,
-    };
-
-    pricing_engine::QuoteDetails {
-        blueprint_id: 12345,
-        ttl_blocks: 100,
-        total_cost_rate: 0.0001,
-        timestamp: 1_650_000_000,
-        expiry: 1_650_001_000,
-        resources: vec![resource],
-        security_commitments: vec![security_commitment],
-        // Non-zero placeholder; tnt-core v0.13.0+ rejects wildcard quotes.
-        requester: test_requester_bytes(),
+        ..OperatorConfig::default()
     }
 }
 
@@ -58,15 +31,6 @@ pub fn test_requester_bytes() -> Vec<u8> {
     bytes[18] = 0xbe;
     bytes[19] = 0xef;
     bytes
-}
-
-/// Same address as `test_requester_bytes` but as `alloy_primitives::Address`.
-#[allow(dead_code)]
-pub fn test_requester_address() -> alloy_primitives::Address {
-    let mut bytes = [0u8; 20];
-    bytes[18] = 0xbe;
-    bytes[19] = 0xef;
-    alloy_primitives::Address::from(bytes)
 }
 
 #[allow(dead_code)]

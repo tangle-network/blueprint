@@ -32,6 +32,14 @@ pub struct OperatorConfig {
 
     /// Validity duration for generated quotes (in seconds)
     pub quote_validity_duration_secs: u64,
+
+    /// Canonical GPU class -> integer payment-asset base units per GPU-second, encoded as decimal strings in TOML.
+    #[serde(
+        default,
+        with = "gpu_pricing",
+        skip_serializing_if = "std::collections::HashMap::is_empty"
+    )]
+    pub gpu_pricing: std::collections::HashMap<String, alloy_primitives::U256>,
 }
 
 impl Default for OperatorConfig {
@@ -45,7 +53,8 @@ impl Default for OperatorConfig {
             rpc_port: 9000,
             rpc_timeout: 30,
             rpc_max_connections: 100,
-            quote_validity_duration_secs: 300, // Default to 5 minutes
+            quote_validity_duration_secs: 300,
+            gpu_pricing: std::collections::HashMap::new(),
         }
     }
 }
@@ -73,4 +82,41 @@ pub fn load_config_from_path<P: AsRef<Path>>(path: P) -> Result<OperatorConfig> 
     })?;
 
     Ok(config)
+}
+
+mod gpu_pricing {
+    use alloy_primitives::U256;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
+    use std::collections::HashMap;
+
+    pub fn serialize<S: Serializer>(
+        rates: &HashMap<String, U256>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        rates
+            .iter()
+            .map(|(class, rate)| (class, rate.to_string()))
+            .collect::<HashMap<_, _>>()
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<HashMap<String, U256>, D::Error> {
+        HashMap::<String, String>::deserialize(deserializer)?
+            .into_iter()
+            .map(|(class, value)| {
+                if blueprint_core::gpu::find(&class).is_none() {
+                    return Err(D::Error::custom(format!("unknown GPU class: {class}")));
+                }
+                let rate = U256::from_str_radix(&value, 10).map_err(D::Error::custom)?;
+                if rate.is_zero() {
+                    return Err(D::Error::custom(format!(
+                        "GPU rate must be positive: {class}"
+                    )));
+                }
+                Ok((class, rate))
+            })
+            .collect()
+    }
 }

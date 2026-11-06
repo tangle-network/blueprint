@@ -6,6 +6,11 @@ permissions:
 
 on:
   workflow_dispatch:
+    inputs:
+      recover-tagged:
+        description: Publish versions whose tags exist but are not on crates.io; creates no new releases
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -13,13 +18,18 @@ on:
       - dist-workspace.toml
       - .github/**
 
+# Concurrent release runs race on tag creation ("Reference already exists", e.g. #1630) and on the registry.
+concurrency:
+  group: release-plz
+  cancel-in-progress: false
+
 env:
   RELEASE_PLZ_LOG: TRACE
 
 jobs:
   check-release-enabled:
     name: Check if releases are enabled
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
     steps:
@@ -45,7 +55,7 @@ jobs:
       contents: read
     needs: check-release-enabled
     if: needs.check-release-enabled.outputs.enabled == 'true'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     # Bound a stalled publish run while leaving room for registry rate limits.
     timeout-minutes: 90
     steps:
@@ -62,6 +72,9 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.generate-token.outputs.token }}
+      - name: Checkout the newest release commit (recovery)
+        if: inputs.recover-tagged == true
+        run: git checkout --detach "$(git for-each-ref --sort=-creatordate --format='%(objectname)' refs/tags | head -1)"
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -77,11 +90,16 @@ jobs:
 
       - uses: ./.github/actions/free-disk-space
       - name: Run release-plz (creates tags & releases, but doesn't publish)
+        if: inputs.recover-tagged != true
         id: release-plz
         uses: release-plz/action@v0.5
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Recover release output from existing tags
+        if: inputs.recover-tagged == true
+        run: git checkout "$GITHUB_SHA" -- .github/scripts/crate-publish-plan.py && python3 .github/scripts/crate-publish-plan.py --from-tags > release-output.json
 
       - name: Save release output for batch publishing
         if: steps.release-plz.outputs.releases_created == 'true'
@@ -90,18 +108,18 @@ jobs:
         run: printf '%s\n' "$RELEASES_JSON" > release-output.json
 
       - name: Batch publish to crates.io (with rate limiting)
-        if: steps.release-plz.outputs.releases_created == 'true'
+        if: steps.release-plz.outputs.releases_created == 'true' || inputs.recover-tagged == true
         run: |
           ./.github/scripts/batch-publish.sh release-output.json
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Verify every released crate is on crates.io
-        if: always() && !cancelled() && steps.release-plz.outputs.releases_created == 'true'
+        if: always() && !cancelled() && (steps.release-plz.outputs.releases_created == 'true' || inputs.recover-tagged == true)
         run: python3 .github/scripts/verify_release_tags.py release-output.json
 
       - name: Dispatch CLI artifacts and record the run
-        if: success() && steps.release-plz.outputs.releases_created == 'true'
+        if: success() && (steps.release-plz.outputs.releases_created == 'true' || inputs.recover-tagged == true)
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/verify_release_tags.py --artifacts dispatch release-output.json

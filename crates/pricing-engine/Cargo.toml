@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-pricing-engine"
-version = "0.3.0-alpha.23"
+version = "0.3.0-alpha.24"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -82,6 +82,8 @@ tower-http = { workspace = true, features = ["cors"] }
 sha2 = { workspace = true }
 
 [dev-dependencies]
+alloy-dyn-abi = { workspace = true }
+blueprint-sdk = { path = "../sdk", default-features = false, features = ["std", "tangle"] }
 test-log = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true, features = ["net"] }
