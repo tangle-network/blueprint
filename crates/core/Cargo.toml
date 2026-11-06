@@ -21,8 +21,8 @@ serde = { workspace = true, features = ["alloc", "derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
-# Path-only dev-dep on the umbrella SDK. The workspace declares
-# `blueprint-sdk = { version = "...", path = "./crates/sdk" }`, but a
+# Path-only test dependency avoids a publish-time cycle through the SDK.
+blueprint-sdk = { version = "...", path = "./crates/sdk" }`, but a
 # circular dev-dep on the umbrella crate breaks `cargo publish`: cargo
 # would carry the version constraint into this published manifest and
 # then fail to resolve `blueprint-sdk = "^0.2.0-alpha.X"` against

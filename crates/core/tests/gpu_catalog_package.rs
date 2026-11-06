@@ -65,6 +65,17 @@ fn published_core_contains_one_hardware_catalog() {
             .sku("prime-intellect", 5)
             .is_none()
     );
+    for (id, provider, count, sku) in [
+        ("nvidia-rtx-a4000", "fluidstack", 1, "rtx_a4000"),
+        ("nvidia-v100-16gb", "aws", 4, "p3.8xlarge"),
+    ] {
+        assert_eq!(
+            blueprint_sdk::core::gpu::find(id)
+                .unwrap()
+                .sku(provider, count),
+            Some(sku)
+        );
+    }
     let b200 = classes
         .iter()
         .find(|class| class["id"] == "nvidia-b200")
