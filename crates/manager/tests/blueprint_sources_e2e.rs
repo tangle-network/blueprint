@@ -136,24 +136,31 @@ fn github_manifest(peer: &Peer) -> Value {
             format!("{ARCHIVE}.sha256"):{"name":format!("{ARCHIVE}.sha256"),"kind":"checksum"}}})
 }
 
-async fn github_digest_fixture(
+async fn github_fixture(
     expected: BlueprintBinary,
+    native_only: bool,
+    unchecked_attestations: bool,
 ) -> (Peer, GithubBinaryFetcher, TempDir, TempDir) {
     let peer = Peer::new().await;
     peer.serve(
         &format!("{RELEASE}/dist-manifest.json"),
         serde_json::to_vec(&github_manifest(&peer)).unwrap(),
     );
-    let bytes = archive(&[("cargo-tangle", PAYLOAD)]);
+    let bytes = archive(&[(
+        &format!("{}/cargo-tangle", ARCHIVE.trim_end_matches(".tar.xz")),
+        PAYLOAD,
+    )]);
     peer.serve(&format!("{RELEASE}/{ARCHIVE}"), bytes.clone());
-    // Also serve the old guessed URL, isolating digest enforcement from selection.
-    peer.serve(
-        &format!(
-            "{RELEASE}/cargo-tangle-linux-{}.tar.xz",
-            std::env::consts::ARCH
-        ),
-        bytes.clone(),
-    );
+    if !native_only {
+        // Isolate digest enforcement from the independently reproduced selection bug.
+        peer.serve(
+            &format!(
+                "{RELEASE}/cargo-tangle-linux-{}.tar.xz",
+                std::env::consts::ARCH
+            ),
+            bytes.clone(),
+        );
+    }
     peer.serve(
         &format!("{RELEASE}/{ARCHIVE}.sha256"),
         format!("{}  {ARCHIVE}\n", hex::encode(Sha256::digest(&bytes))),
@@ -167,8 +174,8 @@ async fn github_digest_fixture(
             binaries: vec![expected],
         },
         77,
-        "digest HTTP boundary".into(),
-        true,
+        "public GitHub HTTP boundary".into(),
+        unchecked_attestations,
     )
     .with_release_base_url(peer.base.clone())
     .with_http_client(reqwest::Client::new())
@@ -180,7 +187,7 @@ async fn github_digest_fixture(
 async fn github_rejects_wrong_pinned_digest_even_with_unchecked_attestations() {
     let mut expected = binary("cargo-tangle");
     expected.sha256 = [0xff; 32];
-    let (_peer, mut source, cache, tools) = github_digest_fixture(expected).await;
+    let (_peer, mut source, cache, tools) = github_fixture(expected, false, true).await;
     std::fs::write(tools.path().join("gh"), "#!/bin/sh\nexit 1\n").unwrap();
     assert!(matches!(
         source.fetch(cache.path()).await,
@@ -190,7 +197,8 @@ async fn github_rejects_wrong_pinned_digest_even_with_unchecked_attestations() {
 
 #[tokio::test]
 async fn github_rechecks_the_pinned_digest_on_resolved_cache_hits() {
-    let (_peer, mut source, cache, _tools) = github_digest_fixture(binary("cargo-tangle")).await;
+    let (_peer, mut source, cache, _tools) =
+        github_fixture(binary("cargo-tangle"), false, true).await;
     let executable = source.fetch(cache.path()).await.unwrap();
     std::fs::write(executable, b"changed cached executable").unwrap();
     assert!(matches!(
@@ -201,7 +209,8 @@ async fn github_rechecks_the_pinned_digest_on_resolved_cache_hits() {
 
 #[tokio::test]
 async fn github_rejects_a_mismatched_declared_archive_checksum() {
-    let (peer, mut source, cache, _tools) = github_digest_fixture(binary("cargo-tangle")).await;
+    let (peer, mut source, cache, _tools) =
+        github_fixture(binary("cargo-tangle"), false, true).await;
     peer.serve(
         &format!("{RELEASE}/{ARCHIVE}.sha256"),
         format!("{}  {ARCHIVE}\n", "00".repeat(32)),
@@ -214,33 +223,8 @@ async fn github_rejects_a_mismatched_declared_archive_checksum() {
 
 #[tokio::test]
 async fn github_fetches_the_manifest_target_archive_and_executes_the_pinned_asset() {
-    let peer = Peer::new().await;
-    let archive = archive(&[(
-        &format!("{}/cargo-tangle", ARCHIVE.trim_end_matches(".tar.xz")),
-        PAYLOAD,
-    )]);
-    peer.serve(
-        &format!("{RELEASE}/dist-manifest.json"),
-        serde_json::to_vec(&github_manifest(&peer)).unwrap(),
-    );
-    peer.serve(
-        &format!("{RELEASE}/{ARCHIVE}.sha256"),
-        format!("{}  {ARCHIVE}\n", hex::encode(Sha256::digest(&archive))),
-    );
-    peer.serve(&format!("{RELEASE}/{ARCHIVE}"), archive);
-    let cache = tempdir().unwrap();
-    let tools = tempdir().unwrap();
-    let gh = gh_tool(tools.path());
-    let fetcher = GithubFetcher {
-        owner: "tangle-network".into(),
-        repo: "blueprint".into(),
-        tag: "cargo-tangle-v0.5.0-alpha.28".into(),
-        binaries: vec![binary("cargo-tangle")],
-    };
-    let mut source = GithubBinaryFetcher::new(fetcher, 77, "public fetch".into(), false)
-        .with_release_base_url(peer.base.clone())
-        .with_http_client(reqwest::Client::new())
-        .with_github_cli(gh.clone());
+    let (peer, mut source, cache, tools) =
+        github_fixture(binary("cargo-tangle"), true, false).await;
     let result = source.fetch(cache.path()).await;
     assert!(
         result.is_ok(),
@@ -253,7 +237,7 @@ async fn github_fetches_the_manifest_target_archive_and_executes_the_pinned_asse
     assert!(run.status.success());
     assert_eq!(run.stdout, b"fetched cargo-dist\n");
     assert!(peer.seen().contains(&format!("{RELEASE}/{ARCHIVE}")));
-    let args = std::fs::read_to_string(gh.with_extension("args")).unwrap();
+    let args = std::fs::read_to_string(tools.path().join("gh.args")).unwrap();
     assert!(args.starts_with("attestation\nverify\n"));
     assert!(args.ends_with("--repo\ntangle-network/blueprint\n"));
 }
