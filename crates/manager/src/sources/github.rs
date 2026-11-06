@@ -1,6 +1,6 @@
 use super::{
     BlueprintArgs, BlueprintEnvVars, BlueprintSourceHandler, is_safe_archive_path,
-    unpack_archive_safely,
+    remote::verify_binary_digest, unpack_archive_safely,
 };
 use crate::blueprint::native::get_blueprint_binary;
 use crate::config::BlueprintManagerContext;
@@ -24,7 +24,6 @@ pub struct GithubBinaryFetcher {
     pub blueprint_id: u64,
     pub blueprint_name: String,
     allow_unchecked_attestations: bool,
-    resolved_binary_path: Option<PathBuf>,
     http: reqwest::Client,
     release_base_url: Url,
     github_cli: PathBuf,
@@ -43,7 +42,6 @@ impl GithubBinaryFetcher {
             blueprint_id,
             blueprint_name,
             allow_unchecked_attestations,
-            resolved_binary_path: None,
             http: reqwest::Client::new(),
             release_base_url: Url::parse("https://github.com/").expect("static GitHub URL"),
             github_cli: PathBuf::from("gh"),
@@ -79,23 +77,11 @@ impl GithubBinaryFetcher {
     ) -> Result<(PathBuf, PathBuf, String)> {
         let release_url = release_url(&self.release_base_url, &self.fetcher)?;
         let manifest_path = cache_dir.join("dist.json");
-        let contents = if manifest_path.is_file() {
-            tokio::fs::read(&manifest_path).await?
-        } else {
-            let url = release_url
-                .join("dist-manifest.json")
-                .map_err(|_| Error::NoMatchingBinary)?;
-            let bytes = self
-                .http
-                .get(url)
-                .send()
-                .await?
-                .error_for_status()?
-                .bytes()
-                .await?;
-            tokio::fs::write(&manifest_path, &bytes).await?;
-            bytes.to_vec()
-        };
+        let url = release_url
+            .join("dist-manifest.json")
+            .map_err(|_| Error::NoMatchingBinary)?;
+        self.download_if_missing(url, &manifest_path).await?;
+        let contents = tokio::fs::read(&manifest_path).await?;
         let manifest: DistManifest = serde_json::from_slice(&contents)?;
         let platform = if cfg!(all(target_os = "linux", target_env = "musl")) {
             "unknown-linux-musl".into()
@@ -158,9 +144,53 @@ impl GithubBinaryFetcher {
             return Err(Error::NoMatchingBinary);
         }
         let archive_path = cache_dir.join(name.as_str());
-        if !archive_path.is_file() {
-            info!("Downloading binary archive from {url}");
-            let archive = self
+        self.download_if_missing(url, &archive_path).await?;
+        let inline = artifact
+            .checksums
+            .iter()
+            .find(|(algorithm, _)| algorithm.as_str() == "sha256")
+            .map(|(_, value)| value.as_str().to_owned());
+        let checksum = if let Some(id) = &artifact.checksum {
+            let checksum = manifest.artifacts.get(id).ok_or(Error::NoMatchingBinary)?;
+            if !release.artifacts.contains(id) || !matches!(checksum.kind, ArtifactKind::Checksum) {
+                return Err(Error::NoMatchingBinary);
+            }
+            let filename = checksum.name.as_ref().ok_or(Error::NoMatchingBinary)?;
+            if !filename.ends_with(".sha256") {
+                return Err(Error::NoMatchingBinary);
+            }
+            let url = artifact_url(&release_url, filename.as_str())?;
+            let path = cache_dir.join(filename.as_str());
+            self.download_if_missing(url, &path).await?;
+            let contents = tokio::fs::read_to_string(path).await?;
+            let fields: Vec<_> = contents.split_whitespace().collect();
+            let [digest, filename] = fields.as_slice() else {
+                return Err(Error::NoMatchingBinary);
+            };
+            if filename.strip_prefix('*').unwrap_or(filename) != name.as_str()
+                || inline
+                    .as_ref()
+                    .is_some_and(|value| !value.eq_ignore_ascii_case(digest))
+            {
+                return Err(Error::NoMatchingBinary);
+            }
+            Some((*digest).to_owned())
+        } else {
+            inline
+        };
+        if let Some(checksum) = checksum {
+            let digest: [u8; 32] = hex::decode(checksum)
+                .map_err(|_| Error::NoMatchingBinary)?
+                .try_into()
+                .map_err(|_| Error::NoMatchingBinary)?;
+            verify_binary_digest(&archive_path, &digest, None)?;
+        }
+        Ok((archive_path, asset_path, stem.into()))
+    }
+    async fn download_if_missing(&self, url: Url, path: &Path) -> Result<()> {
+        if !path.is_file() {
+            info!("Downloading release artifact from {url}");
+            let bytes = self
                 .http
                 .get(url)
                 .send()
@@ -168,9 +198,9 @@ impl GithubBinaryFetcher {
                 .error_for_status()?
                 .bytes()
                 .await?;
-            tokio::fs::write(&archive_path, &archive).await?;
+            tokio::fs::write(path, bytes).await?;
         }
-        Ok((archive_path, asset_path, stem.into()))
+        Ok(())
     }
 }
 
@@ -180,10 +210,13 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
             .ok_or(Error::NoMatchingBinary)?
             .clone();
         let identity = serde_json::to_vec(&(
+            self.release_base_url.as_str(),
             &self.fetcher.owner,
             &self.fetcher.repo,
             &self.fetcher.tag,
             &binary.name,
+            &binary.os,
+            &binary.arch,
             binary.sha256,
             binary.blake3,
         ))?;
@@ -194,10 +227,6 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
         } else {
             "binary"
         });
-        if self.resolved_binary_path.as_ref() == Some(&output) && output.is_file() {
-            return Ok(output);
-        }
-        self.resolved_binary_path = None;
         let (archive_path, asset_path, archive_root) = self.get_binary(&binary, &cache_dir).await?;
         if let Err(error) = verify_attestation(
             &self.github_cli,
@@ -208,6 +237,10 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
             if !self.allow_unchecked_attestations {
                 return Err(error);
             }
+        }
+        if output.is_file() {
+            verify_binary_digest(&output, &binary.sha256, binary.blake3.as_ref())?;
+            return Ok(output);
         }
         let extracted = tempfile::tempdir_in(&cache_dir)?;
         let tar = XzDecoder::new(File::open(&archive_path)?);
@@ -220,9 +253,9 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
         let [binary_path] = matches.as_slice() else {
             return Err(Error::NoMatchingBinary);
         };
+        verify_binary_digest(binary_path, &binary.sha256, binary.blake3.as_ref())?;
         let binary_path = make_executable(binary_path)?;
         tokio::fs::rename(binary_path, &output).await?;
-        self.resolved_binary_path = Some(output.clone());
         Ok(output)
     }
 
@@ -265,6 +298,13 @@ impl BlueprintSourceHandler for GithubBinaryFetcher {
 }
 
 fn release_url(base: &Url, fetcher: &GithubFetcher) -> Result<Url> {
+    if !base.username().is_empty()
+        || base.password().is_some()
+        || base.query().is_some()
+        || base.fragment().is_some()
+    {
+        return Err(Error::NoMatchingBinary);
+    }
     let mut url = base.clone();
     url.path_segments_mut()
         .map_err(|_| Error::NoMatchingBinary)?

@@ -237,9 +237,25 @@ async fn github_fetches_the_manifest_target_archive_and_executes_the_pinned_asse
     assert!(run.status.success());
     assert_eq!(run.stdout, b"fetched cargo-dist\n");
     assert!(peer.seen().contains(&format!("{RELEASE}/{ARCHIVE}")));
+    assert!(peer.seen().contains(&format!("{RELEASE}/{ARCHIVE}.sha256")));
+    let downloaded = peer.seen();
+    assert_eq!(source.fetch(cache.path()).await.unwrap(), executable);
+    assert_eq!(peer.seen(), downloaded);
     let args = std::fs::read_to_string(tools.path().join("gh.args")).unwrap();
     assert!(args.starts_with("attestation\nverify\n"));
     assert!(args.ends_with("--repo\ntangle-network/blueprint\n"));
+}
+
+#[tokio::test]
+async fn github_retains_required_attestation_on_the_native_archive() {
+    let (peer, mut source, cache, tools) =
+        github_fixture(binary("cargo-tangle"), true, false).await;
+    std::fs::write(tools.path().join("gh"), "#!/bin/sh\nexit 1\n").unwrap();
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::AttestationFailed)
+    ));
+    assert!(peer.seen().contains(&format!("{RELEASE}/{ARCHIVE}")));
 }
 
 async fn remote_fixture(binary: BlueprintBinary) -> (Peer, RemoteBinaryFetcher, TempDir) {
