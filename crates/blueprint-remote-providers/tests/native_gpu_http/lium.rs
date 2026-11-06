@@ -43,7 +43,7 @@ async fn lium_native_peer() -> MockServer {
                     state.0+=1;let id=format!("00000000-0000-4000-8000-{:012}",state.0);
                     state.2.insert(id.clone(),json!({"id":id,"template":template,"pod_name":body["pod_name"],"status":"RUNNING",
                         "ssh_keys":[{"name":"synthetic","public_key":body["user_public_key"]}],
-                        "gpu_name":"B200","gpu_count":"8","price":48.3,"created_at":"2026-11-06T10:00:00Z",
+                        "gpu_name":"B200","gpu_count":"8","price":48.24,"created_at":"2026-11-06T10:00:00Z",
                         "ssh_connect_cmd":"ssh -p 22345 root@192.0.2.13","termination_hours":body["termination_hours"],
                         "executor":{"location":{"region":"NSW"},"executor_ip_address":"192.0.2.13"}}));
                     ResponseTemplate::new(200).set_body_json(json!({"success":true,"pod_id":id}))
@@ -199,7 +199,7 @@ async fn lium_rents_the_recorded_executor_with_the_requested_count_and_lifetime(
         .unwrap();
     assert_eq!(status.gpu_count, Some(8));
     assert_eq!(status.gpu_vram_gb, Some(180));
-    assert_eq!(status.hourly_cost_usd, Some(48.3));
+    assert_eq!(status.hourly_cost_usd, Some(48.24));
     assert_eq!(
         status.ssh_endpoint.as_deref(),
         Some("ssh://root@192.0.2.13:22345")

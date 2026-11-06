@@ -318,7 +318,7 @@ async fn vast_search_and_bid_preserve_native_query_fields_and_requested_class() 
                     state.insert(id,json!({"id":id,"label":body["label"],"gpu_name":"B200","num_gpus":8,
                         "actual_status":if id==8002 {"stopped"} else {"running"},"intended_status":"running","is_bid":true,
                         "public_ipaddr":"192.0.2.12","ssh_host":"ssh.synthetic.invalid","ssh_port":22001,
-                        "dph_total":0.47,"geolocation":"synthetic-region","start_date":1793959200}));
+                        "dph_total":body["price"],"geolocation":"synthetic-region","start_date":1793959200}));
                     ResponseTemplate::new(200).set_body_json(json!({"success":true,"new_contract":id}))
                 },
                 ("GET", "/v1/instances") => {
@@ -410,7 +410,7 @@ async fn vast_search_and_bid_preserve_native_query_fields_and_requested_class() 
         .unwrap()
         .unwrap();
     assert!(status.preempted);
-    assert_eq!(status.hourly_cost_usd, Some(0.47));
+    assert_eq!(status.hourly_cost_usd, Some(0.45));
     assert_eq!(
         status.ssh_endpoint.as_deref(),
         Some("ssh://root@ssh.synthetic.invalid:22001")
