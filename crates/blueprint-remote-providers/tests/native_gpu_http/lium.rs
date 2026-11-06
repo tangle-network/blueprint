@@ -435,7 +435,10 @@ async fn lium_prices_the_recorded_eight_b300_nodes_through_catalog_aliases() {
         pc.quotes[0].offer.native_id,
         "efebd441-6d29-4582-934c-9dbadd17a018"
     );
-    assert_eq!(pc.quotes[0].offer.hourly_cost_usd, 52.0);
+    assert_eq!(
+        pc.quotes[0].offer.hourly_cost_usd.to_bits(),
+        52.0_f64.to_bits()
+    );
     assert_eq!(pc.quotes[0].offer.gpu_count, 8);
     assert_eq!(pc.quotes[0].offer.gpu_class, "nvidia-b300");
     spec.allow_spot = false;

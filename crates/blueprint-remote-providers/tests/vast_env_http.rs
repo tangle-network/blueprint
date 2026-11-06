@@ -146,7 +146,10 @@ async fn vast_accepts_native_bids_above_128_within_the_callers_cap() {
         "synthetic native bid129 plus storage1 is selectable under cap140; no live stock claim"
     );
     assert!(book.quotes[0].offer.spot);
-    assert_eq!(book.quotes[0].offer.hourly_cost_usd, 130.0);
+    assert_eq!(
+        book.quotes[0].offer.hourly_cost_usd.to_bits(),
+        130.0_f64.to_bits()
+    );
     spec.max_hourly_cost_usd = Some(129.0);
     assert!(provisioner.quotes(&spec).await.unwrap().quotes.is_empty());
     spec.max_hourly_cost_usd = Some(140.0);
