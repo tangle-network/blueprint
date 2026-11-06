@@ -1,11 +1,15 @@
 pub mod command;
+#[cfg(feature = "full")]
 pub mod foundry;
+#[cfg(feature = "full")]
 pub mod settings;
 pub mod telemetry;
+#[cfg(feature = "full")]
 pub mod utils;
+#[cfg(feature = "full")]
 pub mod workspace;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "full"))]
 mod tests;
 
 /// This force installs the default crypto provider.

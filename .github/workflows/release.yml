@@ -121,6 +121,17 @@ jobs:
         uses: "KyleMayes/install-llvm-action@v2"
         with:
           "version": "19.1.7"
+      - name: Build cloud-only CLI artifact
+        if: runner.os == 'Linux'
+        env:
+          CLOUD_TARGET: ${{ matrix.targets[0] }}
+        run: python3 .github/scripts/cloud_artifact.py build "$CLOUD_TARGET"
+      - name: Upload cloud-only artifact to cargo-dist
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-cloud-${{ matrix.targets[0] }}
+          path: target/cloud-artifacts/cargo-tangle-cloud-*
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest

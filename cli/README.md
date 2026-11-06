@@ -43,28 +43,27 @@ cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --f
 
 ### Feature flags
 
-The CLI supports optional features that can be enabled at build time:
+Source installs enable `full` by default, including blueprint development,
+registration, operator and key commands. Add `remote-providers` for cloud
+commands, or `vm-debug` for the Linux VM sandbox.
 
-**`remote-providers`** - Enables cloud deployment functionality
-
-Adds support for deploying blueprints to AWS, GCP, Azure, DigitalOcean, and Vultr. This enables the `cargo tangle cloud` subcommand and the `--remote` flag for blueprint deployment.
+The release also includes `cargo-tangle-cloud-<target>.tar.xz` and its
+`.sha256` file for native Linux x86_64 and aarch64. These archives contain the
+same `cargo-tangle` executable built with `--no-default-features --features
+cloud-only`. They expose the cloud commands without Anvil, testcontainers or
+cargo-generate in the production dependency graph. Standard archives retain
+the full CLI. The cloud-only flavor can also be installed from source:
 
 ```bash
 cargo install cargo-tangle --git https://github.com/tangle-network/blueprint \
-  --features remote-providers --force
+  --no-default-features --features cloud-only --force
 ```
 
-Without this feature, cloud commands are not available and using `--remote` will show:
-```
-❌ Remote deployment requires the 'remote-providers' feature.
-   Build with: cargo build --features remote-providers
-```
-
-**`vm-debug`** - Enables VM sandbox debugging (Linux only)
-
-```bash
-cargo build --features vm-debug
-```
+Cargo-dist's existing [build setup](../.github/workflows/build-setup.yml) builds
+and checks the native cloud archives. Its `extra-artifacts` declaration in
+[dist-workspace.toml](../dist-workspace.toml) verifies their checksums and
+includes them in the same maintained release. Verify the downloaded `.sha256`
+file before extracting the archive. Release-plz owns versions and tags.
 
 ## Creating a New Blueprint
 
