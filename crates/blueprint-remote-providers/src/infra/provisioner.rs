@@ -306,7 +306,7 @@ impl CloudProvisioner {
         let adapter = self
             .providers
             .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
+            .ok_or(Error::ProviderNotConfigured(provider))?;
 
         adapter.terminate_instance(instance_id).await?;
 
@@ -358,7 +358,7 @@ impl CloudProvisioner {
         let adapter = self
             .providers
             .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
+            .ok_or(Error::ProviderNotConfigured(provider))?;
 
         adapter.get_instance_status(instance_id).await
     }
