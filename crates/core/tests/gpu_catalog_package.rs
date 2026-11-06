@@ -30,8 +30,11 @@ fn published_core_contains_one_hardware_catalog() {
         "published blueprint-core has no GPU catalog"
     );
     let source = std::fs::read_to_string(directory.join("gpu-catalog.json")).unwrap();
+    assert_eq!(source, blueprint_core::gpu::CATALOG_JSON);
     let data: Value = serde_json::from_str(&source).unwrap();
     assert_eq!(data["schemaVersion"], 1);
+    assert_eq!(data["units"]["vramGb"], "GB (decimal)");
+    assert_eq!(data["units"]["memoryBandwidthGbps"], "GB/s");
     let classes = data["gpus"].as_array().unwrap();
     let ids: BTreeSet<_> = classes
         .iter()

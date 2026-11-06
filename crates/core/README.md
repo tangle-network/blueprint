@@ -1,6 +1,11 @@
 # blueprint-core
 
-Core runtime primitives used across the Blueprint SDK.
+Core runtime primitives and the canonical GPU catalog used across the Blueprint SDK.
+
+`gpu::CATALOG_JSON` exports the [packaged catalog](gpu-catalog.json). GPU class ids,
+hardware properties, decimal GB per GPU, node caps, and provider SKU mappings live
+there. Prices come from live provider APIs. Provider descriptors are generated
+from the credential factory and adapter implementations.
 
 ## What lives here
 
