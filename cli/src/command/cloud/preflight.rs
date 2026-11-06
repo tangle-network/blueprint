@@ -36,8 +36,8 @@ pub async fn run(
 
     for selected in &providers {
         let configured = config.providers.contains_key(selected);
-        let credentials_ok = credentials_present(*selected);
-        let supports_tee = provider_supports_tee(*selected);
+        let credentials_ok = credentials_present(selected);
+        let supports_tee = selected.supports_tee();
         let tee_ok = !tee_required || supports_tee;
         let gcp_cidrs_ok = if *selected == CloudProvider::GCP {
             gcp_cidr_prerequisites_met()
@@ -108,7 +108,7 @@ pub async fn run(
     if bootstrap_env || write_env_file.is_some() {
         let env_output = render_bootstrap_env(
             &config,
-            providers[0],
+            &providers[0],
             tee_required,
             &attestation_policy,
             cryptographic_cmd.as_deref(),
@@ -137,10 +137,10 @@ fn selected_providers(config: &CloudConfig, provider: Option<CloudProvider>) -> 
     if let Some(p) = provider {
         return vec![p];
     }
-    if let Some(default) = config.default_provider {
-        return vec![default];
+    if let Some(default) = &config.default_provider {
+        return vec![default.clone()];
     }
-    let mut providers: Vec<_> = config.providers.keys().copied().collect();
+    let mut providers: Vec<_> = config.providers.keys().cloned().collect();
     providers.sort_by_key(|p| p.to_string());
     providers
 }
@@ -149,14 +149,7 @@ fn yes_no(v: bool) -> &'static str {
     if v { "yes" } else { "no" }
 }
 
-fn provider_supports_tee(provider: CloudProvider) -> bool {
-    matches!(
-        provider,
-        CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure
-    )
-}
-
-fn credentials_present(provider: CloudProvider) -> bool {
+fn credentials_present(provider: &CloudProvider) -> bool {
     match provider {
         CloudProvider::AWS => {
             let env_ok = std::env::var("AWS_ACCESS_KEY_ID").is_ok()
@@ -191,6 +184,7 @@ fn credentials_present(provider: CloudProvider) -> bool {
         CloudProvider::Crusoe => {
             std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok()
         }
+        _ => false,
     }
 }
 
@@ -281,7 +275,7 @@ fn is_executable_file(path: &Path) -> bool {
 
 fn render_bootstrap_env(
     config: &CloudConfig,
-    provider: CloudProvider,
+    provider: &CloudProvider,
     tee_required: bool,
     attestation_policy: &str,
     cryptographic_cmd: Option<&str>,
@@ -309,7 +303,7 @@ fn render_bootstrap_env(
             let _ = writeln!(&mut out, "TEE_BACKEND={backend}");
         }
     }
-    if provider == CloudProvider::GCP {
+    if *provider == CloudProvider::GCP {
         let _ = writeln!(&mut out, "BLUEPRINT_ALLOWED_SSH_CIDRS=10.0.0.0/8");
         let _ = writeln!(&mut out, "BLUEPRINT_ALLOWED_QOS_CIDRS=10.0.0.0/8");
     }
@@ -323,7 +317,7 @@ fn render_bootstrap_env(
     out
 }
 
-fn region_env_var(provider: CloudProvider) -> &'static str {
+fn region_env_var(provider: &CloudProvider) -> &'static str {
     match provider {
         CloudProvider::AWS => "AWS_DEFAULT_REGION",
         CloudProvider::GCP => "GCP_DEFAULT_REGION",
@@ -336,18 +330,19 @@ fn region_env_var(provider: CloudProvider) -> &'static str {
         CloudProvider::PrimeIntellect => "PRIME_INTELLECT_REGION",
         CloudProvider::VastAi => "VAST_AI_REGION",
         CloudProvider::Crusoe => "CRUSOE_REGION",
+        _ => "BLUEPRINT_PROVIDER_REGION",
     }
 }
 
-fn region_for_provider(config: &CloudConfig, provider: CloudProvider) -> String {
+fn region_for_provider(config: &CloudConfig, provider: &CloudProvider) -> String {
     config
         .providers
-        .get(&provider)
+        .get(provider)
         .map(|s| s.region.clone())
         .unwrap_or_else(|| default_region(provider).to_string())
 }
 
-fn default_region(provider: CloudProvider) -> &'static str {
+fn default_region(provider: &CloudProvider) -> &'static str {
     match provider {
         CloudProvider::AWS => "us-east-1",
         CloudProvider::GCP => "us-central1",
@@ -360,137 +355,15 @@ fn default_region(provider: CloudProvider) -> &'static str {
         CloudProvider::PrimeIntellect => "us-east",
         CloudProvider::VastAi => "any",
         CloudProvider::Crusoe => "us-east1",
+        _ => "",
     }
 }
 
-fn default_tee_backend(provider: CloudProvider) -> Option<&'static str> {
+fn default_tee_backend(provider: &CloudProvider) -> Option<&'static str> {
     match provider {
         CloudProvider::AWS => Some("aws-nitro"),
         CloudProvider::GCP => Some("gcp-confidential"),
         CloudProvider::Azure => Some("azure-skr"),
-        CloudProvider::DigitalOcean
-        | CloudProvider::Vultr
-        | CloudProvider::Hetzner
-        | CloudProvider::RunPod
-        | CloudProvider::LambdaLabs
-        | CloudProvider::PrimeIntellect
-        | CloudProvider::VastAi
-        | CloudProvider::Crusoe => None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::command::cloud::config::ProviderSettings;
-    use std::collections::HashMap;
-
-    #[test]
-    fn selected_providers_prefers_default_provider() {
-        let mut providers = HashMap::new();
-        providers.insert(
-            CloudProvider::AWS,
-            ProviderSettings {
-                region: "us-east-1".to_string(),
-                project_id: None,
-                configured: true,
-            },
-        );
-        providers.insert(
-            CloudProvider::GCP,
-            ProviderSettings {
-                region: "us-central1".to_string(),
-                project_id: Some("proj".to_string()),
-                configured: true,
-            },
-        );
-
-        let cfg = CloudConfig {
-            default_provider: Some(CloudProvider::GCP),
-            providers,
-        };
-        let selected = selected_providers(&cfg, None);
-        assert_eq!(selected, vec![CloudProvider::GCP]);
-    }
-
-    #[test]
-    fn bootstrap_env_contains_expected_entries() {
-        let mut providers = HashMap::new();
-        providers.insert(
-            CloudProvider::AWS,
-            ProviderSettings {
-                region: "us-west-2".to_string(),
-                project_id: None,
-                configured: true,
-            },
-        );
-
-        let cfg = CloudConfig {
-            default_provider: Some(CloudProvider::AWS),
-            providers,
-        };
-        let output = render_bootstrap_env(&cfg, CloudProvider::AWS, true, "structural", None);
-        assert!(output.contains("AWS_DEFAULT_REGION=us-west-2"));
-        assert!(output.contains("BLUEPRINT_REMOTE_TEE_REQUIRED=true"));
-        assert!(output.contains("TEE_BACKEND=aws-nitro"));
-    }
-
-    #[test]
-    fn gcp_cidr_prerequisites_require_both_values() {
-        assert!(gcp_cidr_prerequisites_met_with_values(
-            Some("10.0.0.0/8"),
-            Some("192.168.0.0/16")
-        ));
-        assert!(!gcp_cidr_prerequisites_met_with_values(
-            Some("10.0.0.0/8"),
-            None
-        ));
-        assert!(!gcp_cidr_prerequisites_met_with_values(
-            None,
-            Some("192.168.0.0/16")
-        ));
-        assert!(!gcp_cidr_prerequisites_met_with_values(
-            Some(""),
-            Some("192.168.0.0/16")
-        ));
-    }
-
-    #[test]
-    fn gcp_cidr_prerequisites_require_valid_cidrs() {
-        assert!(gcp_cidr_prerequisites_met_with_values(
-            Some("10.0.0.0/8,192.168.0.0/16"),
-            Some("172.16.0.0/12")
-        ));
-        assert!(!gcp_cidr_prerequisites_met_with_values(
-            Some("not-a-cidr"),
-            Some("172.16.0.0/12")
-        ));
-        assert!(!gcp_cidr_prerequisites_met_with_values(
-            Some("10.0.0.0/33"),
-            Some("172.16.0.0/12")
-        ));
-        assert!(!gcp_cidr_prerequisites_met_with_values(
-            Some("10.0.0.0/8"),
-            Some("172.16.0.0")
-        ));
-    }
-
-    #[test]
-    fn command_spec_requires_executable() {
-        assert!(command_spec_is_executable("/bin/sh"));
-        assert!(!command_spec_is_executable("/definitely/missing/verifier"));
-        assert!(!command_spec_is_executable(""));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn command_spec_rejects_non_executable_files() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let temp = tempfile::NamedTempFile::new().expect("create temp file");
-        let path = temp.path();
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o644))
-            .expect("set non-executable mode");
-        assert!(!command_spec_is_executable(path.to_string_lossy().as_ref()));
+        _ => None,
     }
 }

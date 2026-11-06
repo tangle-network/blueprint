@@ -1,9 +1,7 @@
 //! AWS instance type mapping using real pricing API
 
 use crate::core::error::Result;
-use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-use crate::pricing::PricingFetcher;
 use crate::providers::common::InstanceSelection;
 
 /// Maps resource requirements to optimal AWS instance types using real pricing
@@ -12,40 +10,8 @@ pub struct AwsInstanceMapper;
 impl AwsInstanceMapper {
     /// Map resource spec to optimal AWS instance type using real pricing data
     pub async fn map_async(spec: &ResourceSpec, region: &str) -> Result<InstanceSelection> {
-        if spec.gpu_count.is_some() || spec.gpu_class.is_some() {
-            return Ok(crate::providers::common::gpu_adapter::catalog_selection(
-                spec, "aws",
-            ));
-        }
-        let mut fetcher = PricingFetcher::new_or_default();
-
-        // Set reasonable max price based on requirements
-        let max_price = if spec.gpu_count.is_some() {
-            50.0 // Higher for GPU instances
-        } else {
-            5.0 // Reasonable for CPU instances
-        };
-
-        match fetcher
-            .find_best_instance(
-                CloudProvider::AWS,
-                region,
-                spec.cpu,
-                spec.memory_gb,
-                max_price,
-            )
-            .await
-        {
-            Ok(instance) => Ok(InstanceSelection {
-                instance_type: instance.name,
-                spot_capable: spec.allow_spot,
-                estimated_hourly_cost: Some(instance.hourly_price),
-            }),
-            Err(_) => {
-                // Fallback to basic mapping
-                Ok(Self::fallback_mapping(spec))
-            }
-        }
+        use crate::infra::traits::CloudProviderAdapter;
+        super::AwsAdapter::new().await?.quote(spec, region).await
     }
 
     /// Legacy synchronous mapping - use map_async for real pricing
@@ -82,9 +48,10 @@ impl AwsInstanceMapper {
             && !matches!(instance_type, "t3.small" | "t3.medium"); // No small instances
 
         InstanceSelection {
+            gpu_class: spec.gpu_class.clone(),
             instance_type: instance_type.to_string(),
             spot_capable,
-            estimated_hourly_cost: None, // Use map_async for real pricing
+            estimated_hourly_cost: None,
         }
     }
 }

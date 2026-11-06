@@ -54,6 +54,7 @@ impl InstanceTypeMapper {
             // Confidential-compute SKUs are generally not spot-capable in managed flows.
             spot_capable: false,
             estimated_hourly_cost: None,
+            gpu_class: None,
         }
     }
 
@@ -109,6 +110,7 @@ impl InstanceTypeMapper {
             instance_type: instance_type.to_string(),
             spot_capable: spec.allow_spot && !instance_type.starts_with('p'), // No spot for GPU
             estimated_hourly_cost: None,
+            gpu_class: None,
         }
     }
 
@@ -130,6 +132,7 @@ impl InstanceTypeMapper {
             instance_type: instance_type.to_string(),
             spot_capable: spec.allow_spot,
             estimated_hourly_cost: None,
+            gpu_class: None,
         }
     }
 
@@ -148,6 +151,7 @@ impl InstanceTypeMapper {
             instance_type: instance_type.to_string(),
             spot_capable: spec.allow_spot,
             estimated_hourly_cost: None,
+            gpu_class: None,
         }
     }
 
@@ -166,6 +170,7 @@ impl InstanceTypeMapper {
             instance_type: instance_type.to_string(),
             spot_capable: false, // DigitalOcean doesn't have spot instances
             estimated_hourly_cost: None,
+            gpu_class: None,
         }
     }
 
@@ -183,6 +188,7 @@ impl InstanceTypeMapper {
             instance_type: instance_type.to_string(),
             spot_capable: false,
             estimated_hourly_cost: None,
+            gpu_class: None,
         }
     }
 
@@ -191,6 +197,7 @@ impl InstanceTypeMapper {
             instance_type: format!("{}cpu-{}gb", spec.cpu, spec.memory_gb),
             spot_capable: false,
             estimated_hourly_cost: None,
+            gpu_class: None,
         }
     }
 

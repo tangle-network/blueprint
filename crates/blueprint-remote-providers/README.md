@@ -52,11 +52,20 @@ longer has the resource.
 owns credentials. `with_endpoint` accepts an explicit provider gateway, scopes
 requests to its origin, and permits HTTP only for loopback test peers.
 
+External orchestrators use the same adapters through
+[`cargo tangle cloud … --json`](../../cli/README.md). SDK `create_managed` returns
+the native id immediately; `status_managed`, `list_managed`, and `destroy_managed`
+reconcile resources by namespace and lease identity. Managed creation has no
+SDK retirement timer: the caller owns its durable lease lifecycle. Unknown
+observed billing rates and start times remain absent.
+
 ## Deploy workloads
 
 The adapter deployment API supports SSH/container and Kubernetes workloads.
 Use the allocated instance's actual access endpoint. The manager's remote
-runtime deploys its binary or image onto the machine it rents.
+runtime uploads and starts its binary on the machine it rents. Azure allocation
+requires a caller-owned existing NIC. AWS callers supply the machine image.
+GCP machine types without a complete billing-SKU mapping remain unselectable.
 
 `require_tee` fails closed through [attestation](src/attestation/); read
 [AGENTS.md](AGENTS.md) before changing that boundary. A hardware attestation

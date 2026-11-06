@@ -435,6 +435,7 @@ alloy-signer-gcp = { version = "2.1", default-features = false }
 alloy-signer-ledger = { version = "2.1", default-features = false, features = ["eip712"] }
 aws-config = { version = "1", default-features = false }
 aws-sdk-ec2 = { version = "1", default-features = false }
+aws-sdk-pricing = { version = "1", default-features = false }
 aws-sdk-kms = { version = "1", default-features = false }
 gcloud-sdk = { version = "0.29", default-features = false }
 gcp_auth = { version = "0.12" }

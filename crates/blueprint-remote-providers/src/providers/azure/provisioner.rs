@@ -1,581 +1,262 @@
-//! Azure Resource Manager provisioning
-//!
-//! Provisions Azure Virtual Machines using Azure Resource Manager APIs
-
+//! Azure leases create only a VM, attached to a caller-owned NIC.
+//! Network setup belongs to the account; it cannot become an untracked lease side effect.
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
+use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
-use blueprint_core::{debug, info, warn};
+use crate::security::{ApiAuthentication, SecureHttpClient};
 
-/// Azure Resource Manager provisioner
 pub struct AzureProvisioner {
     subscription_id: String,
     resource_group: String,
-    client: reqwest::Client,
-    access_token: Option<String>,
+    client: SecureHttpClient,
+    auth: ApiAuthentication,
+    base_url: String,
 }
 
 impl AzureProvisioner {
-    /// Create new Azure provisioner
     pub async fn new() -> Result<Self> {
-        let subscription_id = std::env::var("AZURE_SUBSCRIPTION_ID")
-            .map_err(|_| Error::ConfigurationError("AZURE_SUBSCRIPTION_ID not set".into()))?;
+        let subscription = std::env::var("AZURE_SUBSCRIPTION_ID")
+            .map_err(|_| Error::ConfigurationError("AZURE_SUBSCRIPTION_ID required".into()))?;
+        let group =
+            std::env::var("AZURE_RESOURCE_GROUP").unwrap_or_else(|_| "blueprint-resources".into());
+        let token = crate::security::auth::azure_access_token().await?;
+        Self::with_credentials(subscription, group, token)
+    }
 
-        let resource_group = std::env::var("AZURE_RESOURCE_GROUP")
-            .unwrap_or_else(|_| "blueprint-resources".to_string());
-
-        let client = reqwest::Client::new();
-
+    pub fn with_credentials(
+        subscription_id: String,
+        resource_group: String,
+        token: String,
+    ) -> Result<Self> {
         Ok(Self {
             subscription_id,
             resource_group,
-            client,
-            access_token: None,
+            client: SecureHttpClient::new()?,
+            auth: ApiAuthentication::Bearer { token },
+            base_url: "https://management.azure.com".into(),
         })
     }
 
-    /// Get Azure access token
-    pub async fn get_access_token(&mut self) -> Result<String> {
-        if let Some(token) = &self.access_token {
-            return Ok(token.clone());
-        }
-
-        // Try managed identity first
-        let token_url = "http://169.254.169.254/metadata/identity/oauth2/token";
-        let params = [
-            ("api-version", "2018-02-01"),
-            ("resource", "https://management.azure.com/"),
-        ];
-
-        let response = self
-            .client
-            .get(token_url)
-            .header("Metadata", "true")
-            .query(&params)
-            .send()
-            .await;
-
-        if let Ok(resp) = response {
-            if resp.status().is_success() {
-                let json: serde_json::Value = resp.json().await.map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to parse token: {e}"))
-                })?;
-                if let Some(token) = json["access_token"].as_str() {
-                    self.access_token = Some(token.to_string());
-                    return Ok(token.to_string());
-                }
-            }
-        }
-
-        // Fall back to Azure CLI
-        use std::process::Command;
-        let output = Command::new("az")
-            .args([
-                "account",
-                "get-access-token",
-                "--query",
-                "accessToken",
-                "-o",
-                "tsv",
-            ])
-            .output()
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to get Azure token via CLI: {e}"))
-            })?;
-
-        if !output.status.success() {
-            return Err(Error::ConfigurationError(
-                "Failed to get Azure access token".into(),
-            ));
-        }
-
-        let token = String::from_utf8(output.stdout)
-            .map_err(|e| Error::ConfigurationError(format!("Invalid token format: {e}")))?
-            .trim()
-            .to_string();
-
-        self.access_token = Some(token.clone());
-        Ok(token)
+    pub fn with_endpoint(
+        subscription: String,
+        group: String,
+        token: String,
+        endpoint: &str,
+    ) -> Result<Self> {
+        let mut provisioner = Self::with_credentials(subscription, group, token)?;
+        provisioner.client = SecureHttpClient::with_endpoint(endpoint)?;
+        provisioner.base_url = endpoint.trim_end_matches('/').into();
+        Ok(provisioner)
     }
 
-    /// Provision an Azure VM
+    pub async fn get_access_token(&mut self) -> Result<String> {
+        match &self.auth {
+            ApiAuthentication::Bearer { token } => Ok(token.clone()),
+            _ => Err(Error::ConfigurationError(
+                "Azure bearer token unavailable".into(),
+            )),
+        }
+    }
+
+    fn vm_id(&self, name: &str) -> String {
+        format!(
+            "/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{name}",
+            self.subscription_id, self.resource_group
+        )
+    }
+
     pub async fn provision_instance(
         &mut self,
         spec: &ResourceSpec,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
-        let token = self.get_access_token().await?;
         spec.validate().map_err(Error::ConfigurationError)?;
-        let vm_name = config.name.clone();
-        let location = if config.region.is_empty() {
-            "eastus"
-        } else {
-            &config.region
-        };
-
-        // Validate SSH public key is provided
-        let ssh_public_key = std::env::var("AZURE_SSH_PUBLIC_KEY").map_err(|_| {
-            Error::ConfigurationError(
-                "AZURE_SSH_PUBLIC_KEY environment variable is required for Azure VM provisioning. \
-                 Generate a key with: ssh-keygen -t rsa -b 4096 -f ~/.ssh/azure_key"
-                    .into(),
-            )
-        })?;
-
-        // Create network interface first
-        let nic_name = format!("{vm_name}-nic");
-        let nic_id = self
-            .create_network_interface(&nic_name, location, &token)
-            .await?;
-
-        // Determine VM size based on spec
-        let vm_size = config
+        if config
+            .custom_config
+            .get("require_tee")
+            .is_some_and(|v| v == "true")
+        {
+            return Err(Error::ConfigurationError(
+                "Azure lease attestation forwarding is unavailable".into(),
+            ));
+        }
+        let key = spec
+            .ssh_public_key
+            .as_ref()
+            .ok_or_else(|| Error::ConfigurationError("Azure lease SSH key required".into()))?;
+        let nic = config.custom_config.get("network_interface_id")
+            .ok_or_else(||Error::ConfigurationError("Azure requires a caller-owned network_interface_id; no untracked NIC/IP will be created".into()))?;
+        let size = config
             .custom_config
             .get("vm_size")
             .cloned()
-            .unwrap_or_else(|| self.select_vm_size(spec).to_string());
-        let require_tee = config
-            .custom_config
-            .get("require_tee")
-            .is_some_and(|value| value.eq_ignore_ascii_case("true"));
-
-        // Create VM
-        let vm_body = serde_json::json!({
-            "location": location,
-            "properties": {
-                "hardwareProfile": {
-                    "vmSize": vm_size
-                },
-                "storageProfile": {
-                    "imageReference": {
-                        "publisher": "Canonical",
-                        "offer": "0001-com-ubuntu-server-jammy",
-                        "sku": "22_04-lts-gen2",
-                        "version": "latest"
-                    },
-                    "osDisk": {
-                        "createOption": "FromImage",
-                        "managedDisk": {
-                            "storageAccountType": "Premium_LRS"
-                        }
-                    }
-                },
-                "osProfile": {
-                    "computerName": vm_name,
-                    "adminUsername": "azureuser",
-                    "linuxConfiguration": {
-                        "disablePasswordAuthentication": true,
-                        "ssh": {
-                            "publicKeys": [{
-                                "path": "/home/azureuser/.ssh/authorized_keys",
-                                "keyData": ssh_public_key
-                            }]
-                        }
-                    }
-                },
-                "networkProfile": {
-                    "networkInterfaces": [{
-                        "id": nic_id,
-                        "properties": {
-                            "primary": true
-                        }
-                    }]
-                }
-            }
-        });
-        let mut vm_body = vm_body;
-        if require_tee {
-            vm_body["properties"]["securityProfile"] = serde_json::json!({
-                "securityType": "ConfidentialVM",
-                "uefiSettings": {
-                    "secureBootEnabled": true,
-                    "vTpmEnabled": true
-                }
-            });
-        }
-
-        let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, vm_name
-        );
-
-        let response = self
-            .client
-            .put(&url)
-            .bearer_auth(&token)
-            .json(&vm_body)
-            .send()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create VM: {e}")))?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!(
-                "Azure API error: {error_text}"
-            )));
-        }
-
-        // Wait for VM to be ready and get IP
-        let public_ip = self.wait_for_vm(&vm_name, &token).await?;
-
-        let mut metadata = std::collections::HashMap::new();
-        metadata.insert("vm_size".to_string(), vm_size.clone());
-        metadata.insert("location".to_string(), location.to_string());
-        metadata.insert("os".to_string(), "Ubuntu 22.04 LTS".to_string());
-        metadata.insert("require_tee".to_string(), require_tee.to_string());
-
-        // require_tee gate: verify the MAA attestation token before reporting
-        // this Confidential VM as a usable TEE deployment.
-        #[cfg(feature = "tee-attestation")]
-        if require_tee {
-            crate::attestation::gate_provisioned(
-                &crate::core::remote::CloudProvider::Azure,
-                Some(public_ip.as_str()),
-                &config.custom_config,
-                &mut metadata,
-            )
-            .await?;
-        }
-        // Fail-closed when the verifier is compiled out: a build without the
-        // attestation code can never reach the "TEE-trusted" verdict.
-        #[cfg(not(feature = "tee-attestation"))]
-        if require_tee {
+            .unwrap_or_else(|| self.select_vm_size(spec));
+        if spec.gpu_count.is_some()
+            && !crate::providers::common::gpu_adapter::catalog_skus(spec, "azure")?
+                .iter()
+                .any(|native| native == &size)
+        {
             return Err(Error::ConfigurationError(
-                "require_tee set but this binary was built without the `tee-attestation` \
-                 feature; refusing to report an unverified VM as a TEE deployment"
-                    .into(),
+                "GPU request does not match the provider SKU".into(),
             ));
         }
-
+        if size.is_empty() {
+            return Err(Error::ConfigurationError("No exact Azure VM SKU".into()));
+        }
+        let id = self.vm_id(&config.name);
+        let response = self.client.authenticated_request(reqwest::Method::PUT,&format!("{}{id}?api-version=2023-09-01",self.base_url),&self.auth,
+            Some(serde_json::json!({"location":config.region,"tags":{"blueprint-lease":"true"},"properties":{
+                "hardwareProfile":{"vmSize":size},
+                "storageProfile":{"imageReference":{"publisher":"Canonical","offer":"0001-com-ubuntu-server-jammy","sku":"22_04-lts-gen2","version":"latest"},
+                    "osDisk":{"createOption":"FromImage","deleteOption":"Delete","diskSizeGB":spec.storage_gb.ceil() as u64}},
+                "osProfile":{"computerName":config.name,"adminUsername":"blueprint","linuxConfiguration":{"disablePasswordAuthentication":true,
+                    "ssh":{"publicKeys":[{"path":"/home/blueprint/.ssh/authorized_keys","keyData":key}]}}},
+                "networkProfile":{"networkInterfaces":[{"id":nic,"properties":{"primary":true,"deleteOption":"Detach"}}]}
+            }}))).await?;
+        if !response.status().is_success() {
+            return Err(Error::HttpError(format!(
+                "Azure VM create HTTP {}",
+                response.status()
+            )));
+        }
         Ok(ProvisionedInfrastructure {
-            provider: crate::core::remote::CloudProvider::Azure,
-            instance_id: format!(
-                "/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{}",
-                self.subscription_id, self.resource_group, vm_name
-            ),
-            public_ip: Some(public_ip),
+            provider: crate::CloudProvider::Azure,
+            instance_id: id,
+            public_ip: None,
             private_ip: None,
-            region: location.to_string(),
-            instance_type: vm_size,
-            metadata,
+            region: config.region.clone(),
+            instance_type: size,
+            metadata: Default::default(),
         })
     }
 
-    /// Create network interface
-    async fn create_network_interface(
-        &self,
-        nic_name: &str,
-        location: &str,
-        token: &str,
-    ) -> Result<String> {
-        // First ensure we have a virtual network
-        let vnet_name = "blueprint-vnet";
-        let subnet_name = "default";
-        self.ensure_virtual_network(vnet_name, subnet_name, location, token)
+    pub async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        let id = if id.starts_with("/subscriptions/") {
+            id.to_string()
+        } else {
+            self.vm_id(id)
+        };
+        let response = self
+            .client
+            .get(
+                &format!(
+                    "{}{id}?api-version=2023-09-01&$expand=instanceView",
+                    self.base_url
+                ),
+                &self.auth,
+            )
             .await?;
-
-        // Create public IP
-        let pip_name = format!("{nic_name}-pip");
-        let pip_id = self.create_public_ip(&pip_name, location, token).await?;
-
-        // Create network interface
-        let subnet_id = format!(
-            "/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/virtualNetworks/{}/subnets/{}",
-            self.subscription_id, self.resource_group, vnet_name, subnet_name
-        );
-
-        let nic_body = serde_json::json!({
-            "location": location,
-            "properties": {
-                "ipConfigurations": [{
-                    "name": "ipconfig1",
-                    "properties": {
-                        "subnet": {
-                            "id": subnet_id
-                        },
-                        "privateIPAllocationMethod": "Dynamic",
-                        "publicIPAddress": {
-                            "id": pip_id
-                        }
-                    }
-                }]
-            }
-        });
-
-        let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkInterfaces/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, nic_name
-        );
-
-        let response = self
-            .client
-            .put(&url)
-            .bearer_auth(token)
-            .json(&nic_body)
-            .send()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create NIC: {e}")))?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!(
-                "Failed to create NIC: {error_text}"
-            )));
+        if response.status().as_u16() == 404 {
+            return Ok(ProvisionedInstance {
+                id,
+                provider: crate::CloudProvider::Azure,
+                instance_type: String::new(),
+                region: String::new(),
+                public_ip: None,
+                private_ip: None,
+                status: InstanceStatus::Terminated,
+            });
         }
-
-        Ok(format!(
-            "/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkInterfaces/{}",
-            self.subscription_id, self.resource_group, nic_name
-        ))
-    }
-
-    /// Ensure virtual network exists
-    async fn ensure_virtual_network(
-        &self,
-        vnet_name: &str,
-        subnet_name: &str,
-        location: &str,
-        token: &str,
-    ) -> Result<()> {
-        let vnet_body = serde_json::json!({
-            "location": location,
-            "properties": {
-                "addressSpace": {
-                    "addressPrefixes": ["10.0.0.0/16"]
-                },
-                "subnets": [{
-                    "name": subnet_name,
-                    "properties": {
-                        "addressPrefix": "10.0.1.0/24"
-                    }
-                }]
-            }
+        let vm = crate::providers::common::gpu_adapter::api_json(response).await?;
+        let statuses = vm["properties"]["instanceView"]["statuses"].as_array();
+        let power = statuses.and_then(|rows| {
+            rows.iter()
+                .filter_map(|r| r["code"].as_str())
+                .find(|s| s.starts_with("PowerState/"))
         });
-
-        let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/virtualNetworks/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, vnet_name
-        );
-
-        match self
-            .client
-            .put(&url)
-            .bearer_auth(token)
-            .json(&vnet_body)
-            .send()
-            .await
+        let status = match power {
+            Some("PowerState/running") => InstanceStatus::Running,
+            Some("PowerState/starting") => InstanceStatus::Starting,
+            Some("PowerState/stopped" | "PowerState/deallocated") => InstanceStatus::Stopped,
+            _ if vm["properties"]["provisioningState"] == "Creating"
+                || vm["properties"]["provisioningState"] == "Updating" =>
+            {
+                InstanceStatus::Starting
+            }
+            _ => InstanceStatus::Unknown,
+        };
+        let mut public_ip = None;
+        let mut private_ip = None;
+        if let Some(nic) = vm["properties"]["networkProfile"]["networkInterfaces"][0]["id"].as_str()
         {
-            Ok(_) => info!("Virtual network {} created successfully", vnet_name),
-            Err(e) => warn!("Failed to create virtual network {}: {}", vnet_name, e),
+            let network = self.resource(nic).await?;
+            private_ip =
+                network["properties"]["ipConfigurations"][0]["properties"]["privateIPAddress"]
+                    .as_str()
+                    .map(str::to_owned);
+            if let Some(pip) =
+                network["properties"]["ipConfigurations"][0]["properties"]["publicIPAddress"]["id"]
+                    .as_str()
+            {
+                public_ip = self.resource(pip).await?["properties"]["ipAddress"]
+                    .as_str()
+                    .map(str::to_owned);
+            }
         }
-
-        Ok(())
+        Ok(ProvisionedInstance {
+            id,
+            provider: crate::CloudProvider::Azure,
+            instance_type: vm["properties"]["hardwareProfile"]["vmSize"]
+                .as_str()
+                .unwrap_or_default()
+                .into(),
+            region: vm["location"].as_str().unwrap_or_default().into(),
+            public_ip,
+            private_ip,
+            status,
+        })
     }
 
-    /// Create public IP
-    async fn create_public_ip(
-        &self,
-        pip_name: &str,
-        location: &str,
-        token: &str,
-    ) -> Result<String> {
-        let pip_body = serde_json::json!({
-            "location": location,
-            "properties": {
-                "publicIPAllocationMethod": "Static",
-                "publicIPAddressVersion": "IPv4"
-            },
-            "sku": {
-                "name": "Standard"
-            }
-        });
-
-        let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/publicIPAddresses/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, pip_name
-        );
-
+    async fn resource(&self, id: &str) -> Result<serde_json::Value> {
+        if !id.starts_with("/subscriptions/") {
+            return Err(Error::HttpError("Invalid Azure resource reference".into()));
+        }
         let response = self
             .client
-            .put(&url)
-            .bearer_auth(token)
-            .json(&pip_body)
-            .send()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create public IP: {e}")))?;
-
-        if !response.status().is_success() {
-            return Err(Error::ConfigurationError(
-                "Failed to create public IP".into(),
-            ));
-        }
-
-        Ok(format!(
-            "/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/publicIPAddresses/{}",
-            self.subscription_id, self.resource_group, pip_name
-        ))
+            .get(
+                &format!("{}{id}?api-version=2023-09-01", self.base_url),
+                &self.auth,
+            )
+            .await?;
+        crate::providers::common::gpu_adapter::api_json(response).await
     }
 
-    /// Wait for VM to be ready and get public IP
-    async fn wait_for_vm(&self, vm_name: &str, token: &str) -> Result<String> {
-        let mut attempts = 0;
-        let max_attempts = 60;
-
-        loop {
-            if attempts >= max_attempts {
-                return Err(Error::ConfigurationError("VM provisioning timeout".into()));
-            }
-
-            // Get VM status
-            let url = format!(
-                "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{}/instanceView?api-version=2023-09-01",
-                self.subscription_id, self.resource_group, vm_name
-            );
-
-            let response = self.client.get(&url).bearer_auth(token).send().await;
-
-            if let Ok(resp) = response {
-                if resp.status().is_success() {
-                    let json: serde_json::Value = resp.json().await.map_err(|e| {
-                        Error::ConfigurationError(format!("Failed to parse response: {e}"))
-                    })?;
-
-                    if let Some(statuses) = json["statuses"].as_array() {
-                        let is_running = statuses
-                            .iter()
-                            .any(|s| s["code"].as_str() == Some("PowerState/running"));
-
-                        if is_running {
-                            // Get public IP
-                            let pip_name = format!("{vm_name}-nic-pip");
-                            let pip_url = format!(
-                                "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/publicIPAddresses/{}?api-version=2023-09-01",
-                                self.subscription_id, self.resource_group, pip_name
-                            );
-
-                            let pip_response = self
-                                .client
-                                .get(&pip_url)
-                                .bearer_auth(token)
-                                .send()
-                                .await
-                                .map_err(|e| {
-                                    Error::ConfigurationError(format!(
-                                        "Failed to get public IP: {e}"
-                                    ))
-                                })?;
-
-                            if pip_response.status().is_success() {
-                                let pip_json: serde_json::Value =
-                                    pip_response.json().await.map_err(|e| {
-                                        Error::ConfigurationError(format!(
-                                            "Failed to parse IP response: {e}"
-                                        ))
-                                    })?;
-
-                                if let Some(ip) = pip_json["properties"]["ipAddress"].as_str() {
-                                    return Ok(ip.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            attempts += 1;
+    pub(super) fn select_vm_size(&self, spec: &ResourceSpec) -> String {
+        if spec.gpu_count.is_some() {
+            return crate::providers::common::gpu_adapter::catalog_selection(spec, "azure")
+                .instance_type;
         }
-    }
-
-    /// Select VM size based on resource requirements
-    fn select_vm_size(&self, spec: &ResourceSpec) -> String {
-        if spec.gpu_count.is_some() || spec.gpu_class.is_some() {
-            return crate::providers::common::gpu_adapter::catalog_sku(spec, "azure")
-                .unwrap_or_default();
-        }
-        match (spec.cpu, spec.memory_gb, spec.gpu_count) {
-            // High memory
-            (cpu, mem, _) if mem > cpu * 8.0 => {
-                if mem <= 16.0 {
-                    "Standard_E2as_v5"
-                } else if mem <= 32.0 {
-                    "Standard_E4as_v5"
-                } else if mem <= 64.0 {
-                    "Standard_E8as_v5"
-                } else {
-                    "Standard_E16as_v5"
-                }
-            }
-
-            // High CPU
-            (cpu, _, _) if cpu >= 16.0 => "Standard_F16s_v2",
-            (cpu, _, _) if cpu >= 8.0 => "Standard_F8s_v2",
-            (cpu, _, _) if cpu >= 4.0 => "Standard_F4s_v2",
-
-            // Standard
-            (cpu, mem, _) if cpu <= 2.0 && mem <= 8.0 => "Standard_B2ms",
-            (cpu, mem, _) if cpu <= 4.0 && mem <= 16.0 => "Standard_B4ms",
-            _ => "Standard_D4s_v5",
+        match (spec.cpu, spec.memory_gb) {
+            (cpu, mem) if cpu <= 2.0 && mem <= 8.0 => "Standard_B2ms",
+            (cpu, mem) if cpu <= 4.0 && mem <= 16.0 => "Standard_B4ms",
+            (cpu, mem) if cpu <= 8.0 && mem <= 32.0 => "Standard_D8s_v5",
+            (cpu, mem) if cpu <= 16.0 && mem <= 64.0 => "Standard_D16s_v5",
+            _ => "",
         }
         .into()
     }
 
-    /// Terminate an Azure VM
-    pub async fn terminate_instance(&mut self, instance_id: &str) -> Result<()> {
-        let token = self.get_access_token().await?;
-        let vm_name = instance_id.split('/').next_back().unwrap_or(instance_id);
-
-        // Delete VM
-        let url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Compute/virtualMachines/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, vm_name
-        );
-
+    pub async fn terminate_instance(&mut self, id: &str) -> Result<()> {
+        let id = if id.starts_with("/subscriptions/") {
+            id.to_string()
+        } else {
+            self.vm_id(id)
+        };
         let response = self
             .client
-            .delete(&url)
-            .bearer_auth(&token)
-            .send()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to terminate VM: {e}")))?;
-
-        if !response.status().is_success() && response.status() != 404 {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!(
-                "Failed to terminate VM: {error_text}"
-            )));
+            .delete(
+                &format!("{}{id}?api-version=2023-09-01", self.base_url),
+                &self.auth,
+            )
+            .await?;
+        if response.status().is_success() || response.status().as_u16() == 404 {
+            Ok(())
+        } else {
+            Err(Error::HttpError(format!(
+                "Azure VM deletion HTTP {}",
+                response.status()
+            )))
         }
-
-        // Clean up associated resources
-        if let Err(e) = self.cleanup_vm_resources(vm_name, &token).await {
-            warn!("Failed to cleanup VM resources for {}: {}", vm_name, e);
-        }
-
-        Ok(())
-    }
-
-    /// Clean up VM resources (NIC, public IP, disks)
-    async fn cleanup_vm_resources(&self, vm_name: &str, token: &str) -> Result<()> {
-        // Delete NIC
-        let nic_name = format!("{vm_name}-nic");
-        let nic_url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/networkInterfaces/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, nic_name
-        );
-        if let Err(e) = self.client.delete(&nic_url).bearer_auth(token).send().await {
-            debug!("Failed to delete NIC (may not exist): {}", e);
-        }
-
-        // Delete public IP
-        let pip_name = format!("{vm_name}-nic-pip");
-        let pip_url = format!(
-            "https://management.azure.com/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Network/publicIPAddresses/{}?api-version=2023-09-01",
-            self.subscription_id, self.resource_group, pip_name
-        );
-        if let Err(e) = self.client.delete(&pip_url).bearer_auth(token).send().await {
-            debug!("Failed to delete public IP (may not exist): {}", e);
-        }
-
-        Ok(())
     }
 }

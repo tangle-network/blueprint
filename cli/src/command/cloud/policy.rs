@@ -542,22 +542,11 @@ async fn show_current_policy(policy: &RemoteDeploymentPolicy) -> Result<()> {
 fn parse_providers(input: &str) -> Result<Vec<CloudProvider>> {
     input
         .split(',')
-        .map(|s| {
-            let trimmed = s.trim().to_lowercase();
-            match trimmed.as_str() {
-                "aws" => Ok(CloudProvider::AWS),
-                "gcp" | "google" => Ok(CloudProvider::GCP),
-                "azure" => Ok(CloudProvider::Azure),
-                "digitalocean" | "do" => Ok(CloudProvider::DigitalOcean),
-                "vultr" => Ok(CloudProvider::Vultr),
-                "hetzner" => Ok(CloudProvider::Hetzner),
-                "runpod" => Ok(CloudProvider::RunPod),
-                "lambda" | "lambda-labs" | "lambdalabs" => Ok(CloudProvider::LambdaLabs),
-                "prime-intellect" | "primeintellect" | "pi" => Ok(CloudProvider::PrimeIntellect),
-                "vast" | "vast-ai" | "vastai" => Ok(CloudProvider::VastAi),
-                "crusoe" => Ok(CloudProvider::Crusoe),
-                _ => Err(color_eyre::eyre::eyre!("Unknown provider: {}", trimmed)),
-            }
+        .map(|value| {
+            value
+                .trim()
+                .parse()
+                .map_err(|error| color_eyre::eyre::eyre!("{error}"))
         })
         .collect()
 }

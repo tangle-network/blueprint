@@ -198,7 +198,7 @@ async fn vast_quote_uses_bearer_auth_and_top_level_offer_filters() {
         .and(header("Authorization", "Bearer synthetic-review-key"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "offers":[{"id":7,"dph_total":1.0,"reliability2":0.999,
-                "gpu_name":"B200","num_gpus":8,"gpu_ram":184320,"rentable":true,"rented":false}]
+                "gpu_name":"B200","num_gpus":8,"gpu_ram":184320,"rentable":true,"rented":false,"verification":"verified"}]
         })))
         .mount(&server)
         .await;

@@ -86,6 +86,7 @@ uuid = { workspace = true, features = ["v4"] }
 rand = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 # Path-only dev-deps to break publish cycles via testing-utils -> client-tangle -> cargo-tangle.
@@ -95,8 +96,9 @@ tempfile = { workspace = true }
 blueprint-testing-utils = { path = "../crates/testing-utils", features = ["anvil"] }
 alloy-contract = { workspace = true }
 assert_cmd = "2.0"
+wiremock = { workspace = true }
 
 [features]
-default = []
+default = ["remote-providers"]
 vm-debug = ["blueprint-manager/vm-sandbox"]
 remote-providers = ["dep:blueprint-remote-providers", "blueprint-manager/remote-providers"]

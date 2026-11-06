@@ -101,6 +101,39 @@ fn source_kind_label(source: &BlueprintSource) -> &'static str {
     }
 }
 
+fn build_source_handler(
+    source: &BlueprintSource,
+    blueprint_id: u64,
+    blueprint_name: String,
+    allow_unchecked_attestations: bool,
+) -> Box<DynBlueprintSource<'static>> {
+    match source {
+        BlueprintSource::Testing(fetcher) => DynBlueprintSource::new_box(TestSourceFetcher::new(
+            fetcher.clone(),
+            blueprint_id,
+            blueprint_name,
+        )),
+        BlueprintSource::Github(fetcher) => DynBlueprintSource::new_box(GithubBinaryFetcher::new(
+            fetcher.clone(),
+            blueprint_id,
+            blueprint_name,
+            allow_unchecked_attestations,
+        )),
+        BlueprintSource::Container(fetcher) => {
+            DynBlueprintSource::new_box(crate::sources::container::ContainerSource::new(
+                fetcher.clone(),
+                blueprint_id,
+                blueprint_name,
+            ))
+        }
+        BlueprintSource::Remote(fetcher) => DynBlueprintSource::new_box(RemoteBinaryFetcher::new(
+            fetcher.clone(),
+            blueprint_id,
+            blueprint_name,
+        )),
+    }
+}
+
 /// Generate a hex-encoded trace ID from the current system time (nanoseconds).
 /// Used to correlate all log lines within a single service lifecycle operation.
 fn gen_trace_id() -> String {

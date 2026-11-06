@@ -177,7 +177,7 @@ async fn deploy_binary(
     )?
     .with_port(endpoint.port().unwrap_or(22))?
     .with_key_path(&key_path)?
-    .with_known_hosts(&known_hosts);
+    .with_known_hosts(&known_hosts)?;
     let client = SecureSshClient::new(connection);
     let directory = format!("/tmp/blueprint-{}", lease.id);
     client

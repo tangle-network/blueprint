@@ -185,21 +185,44 @@ async fn prime_uses_a_live_offer_and_sends_eight_gpus_and_the_lease_key() {
 }
 
 #[tokio::test]
-async fn lium_rent_by_spec_preserves_eight_gpus_and_vram() {
+async fn lium_exact_node_rental_preserves_eight_gpus_and_native_lifetime() {
     let peer = MockServer::start().await;
+    let nodes: Value = serde_json::from_str(include_str!(
+        "fixtures/provider-api/lium-nodes-2026-11-06.json"
+    ))
+    .unwrap();
+    let pricing: Value = serde_json::from_str(include_str!(
+        "fixtures/provider-api/lium-pricing-2026-11-06.json"
+    ))
+    .unwrap();
+    Mock::given(method("GET"))
+        .and(path("/public/v1/nodes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(nodes))
+        .mount(&peer)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/pricing.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(pricing))
+        .mount(&peer)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/templates"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .mount(&peer)
+        .await;
     Mock::given(method("POST"))
-        .and(path("/executors/rent-by-spec"))
-        .and(body_partial_json(
-            json!({"gpu_type":"B200","gpu_count":8,"min_vram_gb":180,"dry_run":true,"termination_hours":26}),
-        ))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"price_per_hour":12.0})))
+        .and(path("/templates"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"id":"7c133b10-6fd3-422e-9605-46b42b9b5b62"})),
+        )
         .expect(1)
         .mount(&peer)
         .await;
     Mock::given(method("POST"))
-        .and(path("/executors/rent-by-spec"))
+        .and(path("/executors/b5864202-5da2-4707-886b-4805fecb4e3c/rent"))
         .and(body_partial_json(
-            json!({"gpu_type":"B200","gpu_count":8,"min_vram_gb":180,"dry_run":false,"termination_hours":26}),
+            json!({"gpu_count":8,"expected_price_per_gpu_hour":6.03,"termination_hours":26}),
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"pod_id":"lium-eight"})))
         .expect(1)
@@ -241,7 +264,7 @@ async fn lium_rent_by_spec_preserves_eight_gpus_and_vram() {
     let requests = peer.received_requests().await.unwrap();
     for request in requests
         .iter()
-        .filter(|request| request.url.path() == "/executors/rent-by-spec")
+        .filter(|request| request.url.path().ends_with("/rent"))
     {
         let body: Value = request.body_json().unwrap();
         assert_eq!(body["termination_hours"], 26);
@@ -480,4 +503,249 @@ async fn runpod_compares_qualifying_classes_and_can_quote_eight_b300_gpus() {
         .unwrap();
     assert_eq!(b300.instance_type, "NVIDIA B300 SXM6 AC");
     assert_eq!(b300.estimated_hourly_cost, Some(24.0));
+}
+
+#[cfg(feature = "kubernetes")]
+#[tokio::test]
+async fn coreweave_priced_gpu_lease_creates_access_and_confirms_retirement() {
+    use blueprint_remote_providers::{
+        InstanceStatus, pricing::DatedSkuPrice, providers::CoreWeaveAdapter,
+    };
+    let peer = MockServer::start().await;
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let config = kube::Config::new(peer.uri().parse().unwrap());
+    let client = kube::Client::try_from(config).unwrap();
+    let spec = gpu("nvidia-b200", 8, 180);
+    let adapter = CoreWeaveAdapter::with_client(client, "lease-test".into()).with_prices(vec![
+        DatedSkuPrice {
+            sku: "B200".into(),
+            region: "test-region".into(),
+            gpu_count: 8,
+            cpu: 4.0,
+            memory_gb: 16.0,
+            storage_gb: 100.0,
+            hourly_usd: Some(20.0),
+            as_of: "2026-11-06".into(),
+            source_url: "https://www.coreweave.com/pricing".into(),
+            note: "Account contract includes the requested compute, storage and SSH endpoint"
+                .into(),
+        },
+    ]);
+    Mock::given(method("GET")).and(path("/api/v1/nodes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"apiVersion":"v1","kind":"NodeList","items":[{
+            "metadata":{"name":"b200-node","labels":{"gpu.nvidia.com/class":"B200","topology.kubernetes.io/region":"test-region"}},
+            "status":{"allocatable":{"nvidia.com/gpu":"8"},"conditions":[{"type":"Ready","status":"True"}]}
+        }]}))).mount(&peer).await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/pods"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"apiVersion":"v1","kind":"PodList","items":[]})),
+        )
+        .mount(&peer)
+        .await;
+    Mock::given(method("POST")).and(path("/api/v1/namespaces/lease-test/pods"))
+        .and(body_partial_json(json!({"spec":{"nodeSelector":{"gpu.nvidia.com/class":"B200","topology.kubernetes.io/region":"test-region"},
+            "containers":[{"name":"gpu","resources":{"limits":{"nvidia.com/gpu":"8"}}}]}})))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":"lease-eight","uid":"pod-uid"},"spec":{"containers":[]}})))
+        .expect(1).mount(&peer).await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/namespaces/lease-test/services"))
+        .and(body_partial_json(
+            json!({"metadata":{"ownerReferences":[{"kind":"Pod","name":"lease-eight","uid":"pod-uid"}]},"spec":{"type":"LoadBalancer","ports":[{"port":22,"targetPort":22}]}}),
+        ))
+        .respond_with(ResponseTemplate::new(201).set_body_json(
+            json!({"apiVersion":"v1","kind":"Service","metadata":{"name":"lease-eight"}}),
+        ))
+        .expect(1)
+        .mount(&peer)
+        .await;
+    Mock::given(method("GET")).and(path("/api/v1/namespaces/lease-test/pods/lease-eight"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":"lease-eight","uid":"pod-uid"},
+            "spec":{"containers":[]},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}})))
+        .mount(&peer).await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/namespaces/lease-test/services/lease-eight"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            json!({"apiVersion":"v1","kind":"Service","metadata":{"name":"lease-eight"},
+            "status":{"loadBalancer":{"ingress":[{"ip":"203.0.113.8"}]}}}),
+        ))
+        .mount(&peer)
+        .await;
+    let selection = adapter.quote(&spec, "test-region").await.unwrap();
+    assert_eq!(selection.estimated_hourly_cost, Some(20.0));
+    assert!(
+        adapter
+            .quote(&gpu("nvidia-h200", 8, 141), "test-region")
+            .await
+            .is_err()
+    );
+    let instance = adapter
+        .provision_resources(&selection.instance_type, "test-region", &spec, false)
+        .await
+        .unwrap();
+    assert_eq!(instance.id, "lease-eight");
+    assert_eq!(instance.status, InstanceStatus::Starting);
+    adapter.prepare_access(&instance, &spec).await.unwrap();
+    let instance = adapter.get_instance_details(&instance.id).await.unwrap();
+    assert_eq!(instance.status, InstanceStatus::Running);
+    assert_eq!(
+        adapter.lease_endpoint(&instance).await.unwrap(),
+        "ssh://root@203.0.113.8:22"
+    );
+    let requests = peer.received_requests().await.unwrap();
+    let create: Value = requests
+        .iter()
+        .find(|r| r.url.path().ends_with("/pods") && r.method == wiremock::http::Method::POST)
+        .unwrap()
+        .body_json()
+        .unwrap();
+    assert_eq!(
+        create["spec"]["containers"][0]["env"][0]["value"],
+        spec.ssh_public_key.unwrap()
+    );
+    peer.reset().await;
+    for kind in ["pods", "services"] {
+        Mock::given(method("DELETE"))
+            .and(path(format!(
+                "/api/v1/namespaces/lease-test/{kind}/lease-eight"
+            )))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"apiVersion":"v1","kind":"Status","status":"Success"})),
+            )
+            .expect(1)
+            .mount(&peer)
+            .await;
+        Mock::given(method("GET")).and(path(format!("/api/v1/namespaces/lease-test/{kind}/lease-eight")))
+            .respond_with(ResponseTemplate::new(404).set_body_json(json!({"apiVersion":"v1","kind":"Status","status":"Failure","reason":"NotFound","code":404})))
+            .mount(&peer).await;
+    }
+    adapter.terminate_instance(&instance.id).await.unwrap();
+    assert_eq!(
+        adapter.get_instance_status(&instance.id).await.unwrap(),
+        InstanceStatus::Terminated
+    );
+}
+
+#[tokio::test]
+async fn akash_quotes_only_live_matching_usd_bids_and_passes_class_count_vram_to_the_chain_api() {
+    use blueprint_remote_providers::{InstanceStatus, providers::AkashAdapter};
+    let peer = MockServer::start().await;
+    let now = chrono::Utc::now();
+    Mock::given(method("GET"))
+        .and(path("/v1/blocks"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"height":100,"datetime":now.to_rfc3339()},
+            {"height":90,"datetime":(now-chrono::Duration::seconds(60)).to_rfc3339()}
+        ])))
+        .mount(&peer)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/deployments"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(
+            json!({"data":{"dseq":"123","manifest":"rendered manifest","signTx":{"code":0}}}),
+        ))
+        .expect(1)
+        .mount(&peer)
+        .await;
+    let offer = |provider: &str, amount: &str, denom: &str, ram: &str| {
+        json!({"bid":{
+            "id":{"owner":"akash-owner","dseq":"123","gseq":1,"oseq":1,"provider":provider,"bseq":1},
+            "state":"open","price":{"denom":denom,"amount":amount},
+            "resources_offer":[{"count":1,"resources":{"gpu":{"units":{"val":"8"},
+                "attributes":[{"key":format!("vendor/nvidia/model/h100/ram/{ram}"),"value":"true"}]},
+                "cpu":{"units":{"val":"4000"}},"memory":{"quantity":{"val":"17179869184"}},
+                "storage":[{"quantity":{"val":"107374182400"}}]}}]
+        }})
+    };
+    Mock::given(method("GET"))
+        .and(path("/v1/bids"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":[
+            offer("unpriced-uakt","1","uakt","80Gi"),offer("too-small-vram","1","uact","40Gi"),
+            offer("expensive","2000","uact","80Gi"),offer("cheapest","1000","uact","80Gi")
+        ]})))
+        .mount(&peer)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/leases"))
+        .and(body_partial_json(
+            json!({"leases":[{"dseq":"123","gseq":1,"oseq":1,"provider":"cheapest"}]}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":{"leases":[]}})))
+        .expect(1)
+        .mount(&peer)
+        .await;
+    Mock::given(method("GET")).and(path("/v1/deployments/123"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":{
+            "deployment":{"id":{"dseq":"123"},"state":"active"},"leases":[{"state":"active","status":{
+                "forwarded_ports":{"blueprint":[{"port":22,"externalPort":32222,"host":"provider.example","available":1}]}
+            }}]}}))).mount(&peer).await;
+    let mut spec = gpu("nvidia-h100", 8, 80);
+    spec.max_hourly_cost_usd = Some(2.0);
+    let adapter = AkashAdapter::with_endpoint("account-secret".into(), &peer.uri())
+        .unwrap()
+        .prepare_auction(&spec)
+        .await
+        .unwrap();
+    let selection = adapter.quote(&spec, "").await.unwrap();
+    assert!((selection.estimated_hourly_cost.unwrap() - 0.6).abs() < 0.000001);
+    assert!(adapter.quote(&gpu("nvidia-h100", 7, 80), "").await.is_err());
+    let instance = adapter
+        .provision_resources(&selection.instance_type, "", &spec, false)
+        .await
+        .unwrap();
+    assert_eq!(instance.status, InstanceStatus::Starting);
+    adapter.prepare_access(&instance, &spec).await.unwrap();
+    let instance = adapter.get_instance_details(&instance.id).await.unwrap();
+    assert_eq!(instance.status, InstanceStatus::Running);
+    assert_eq!(
+        adapter.lease_endpoint(&instance).await.unwrap(),
+        "ssh://root@provider.example:32222"
+    );
+    assert!(
+        adapter
+            .provision_resources(&selection.instance_type, "", &spec, false)
+            .await
+            .is_err(),
+        "one auction cannot be allocated twice"
+    );
+    let requests = peer.received_requests().await.unwrap();
+    let create: Value = requests
+        .iter()
+        .find(|r| r.url.path() == "/v1/deployments")
+        .unwrap()
+        .body_json()
+        .unwrap();
+    let sdl: serde_yaml::Value =
+        serde_yaml::from_str(create["data"]["sdl"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        sdl["profiles"]["compute"]["blueprint"]["resources"]["gpu"]["units"].as_u64(),
+        Some(8)
+    );
+    assert_eq!(sdl["profiles"]["compute"]["blueprint"]["resources"]["gpu"]["attributes"]["vendor"]["nvidia"][0]["model"].as_str(),Some("h100"));
+    assert_eq!(sdl["profiles"]["compute"]["blueprint"]["resources"]["gpu"]["attributes"]["vendor"]["nvidia"][0]["ram"].as_str(),Some("80Gi"));
+    assert!(
+        requests
+            .iter()
+            .all(|r| r.headers.get("x-api-key").is_some())
+    );
+    assert!(!create.to_string().contains("account-secret"));
+    peer.reset().await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/deployments/123"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":{"success":true}})))
+        .expect(1)
+        .mount(&peer)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/deployments/123"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&peer)
+        .await;
+    adapter.terminate_instance(&instance.id).await.unwrap();
+    assert_eq!(
+        adapter.get_instance_status(&instance.id).await.unwrap(),
+        InstanceStatus::Terminated
+    );
 }

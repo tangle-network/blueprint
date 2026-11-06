@@ -13,6 +13,7 @@ use zeroize::Zeroizing;
 pub struct ProviderQuote {
     pub provider: CloudProvider,
     pub region: String,
+    pub pricing_source: &'static str,
     pub selection: InstanceSelection,
 }
 
@@ -137,22 +138,69 @@ impl CloudProvisioner {
                         && (!spec.tee_required || provider.supports_tee())
                 })
                 .map(|(provider, adapter)| async move {
-                    let region = self.regions.get(provider).cloned().unwrap_or_default();
-                    let selection = adapter.quote(spec, &region).await.ok()?;
-                    let price = selection.estimated_hourly_cost?;
-                    (price.is_finite()
+                    let region = spec
+                        .region
+                        .clone()
+                        .or_else(|| self.regions.get(provider).cloned())
+                        .unwrap_or_default();
+                    let mut selection = match adapter.quote(spec, &region).await {
+                        Ok(selection) => selection,
+                        Err(Error::AuthRejected) => return Err(Error::AuthRejected),
+                        Err(_) => return Ok(None),
+                    };
+                    if let Some(count) = spec.gpu_count {
+                        if selection.gpu_class.is_none() {
+                            selection.gpu_class = blueprint_core::gpu::catalog()
+                                .into_iter()
+                                .find(|class| {
+                                    class.sku(provider.catalog_key(), count)
+                                        == Some(selection.instance_type.as_str())
+                                })
+                                .map(|class| class.id);
+                        }
+                        let Some(class) = selection.gpu_class.as_ref() else {
+                            return Ok(None);
+                        };
+                        if spec
+                            .gpu_class
+                            .as_ref()
+                            .is_some_and(|required| required != class)
+                        {
+                            return Ok(None);
+                        }
+                        let mut resolved = spec.clone();
+                        resolved.gpu_class = Some(class.clone());
+                        if resolved.validate().is_err() {
+                            return Ok(None);
+                        }
+                    }
+                    let Some(price) = selection.estimated_hourly_cost else {
+                        return Ok(None);
+                    };
+                    Ok((price.is_finite()
                         && price > 0.0
                         && spec.max_hourly_cost_usd.is_none_or(|cap| price <= cap)
                         && !selection.instance_type.is_empty())
                     .then(|| ProviderQuote {
                         provider: provider.clone(),
                         region,
+                        pricing_source: adapter.quote_pricing_source(),
                         selection,
-                    })
+                    }))
                 }),
         )
         .await;
-        let mut quotes: Vec<_> = results.into_iter().flatten().collect();
+        let auth_rejected = results
+            .iter()
+            .any(|result| matches!(result, Err(Error::AuthRejected)));
+        let mut quotes: Vec<_> = results
+            .into_iter()
+            .filter_map(Result::ok)
+            .flatten()
+            .collect();
+        if quotes.is_empty() && auth_rejected {
+            return Err(Error::AuthRejected);
+        }
         quotes.sort_by(|a, b| {
             a.selection
                 .estimated_hourly_cost
@@ -263,7 +311,7 @@ impl CloudProvisioner {
     }
 }
 
-async fn allocation_access(public_key: Option<&str>) -> Result<LeaseAccess> {
+pub(crate) async fn allocation_access(public_key: Option<&str>) -> Result<LeaseAccess> {
     if let Some(key) = public_key {
         if key.contains(['\r', '\n'])
             || !(key.starts_with("ssh-ed25519 ") || key.starts_with("ssh-rsa "))

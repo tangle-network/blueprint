@@ -16,16 +16,10 @@ use crate::providers::akash::AkashAdapter;
 use crate::providers::azure::adapter::AzureAdapter;
 use crate::providers::bittensor_lium::BittensorLiumAdapter;
 use crate::providers::coreweave::CoreWeaveAdapter;
-use crate::providers::crusoe::CrusoeAdapter;
 use crate::providers::digitalocean::adapter::DigitalOceanAdapter;
-use crate::providers::fluidstack::FluidstackAdapter;
 use crate::providers::gcp::GcpAdapter;
-use crate::providers::hetzner::HetznerAdapter;
-use crate::providers::io_net::IoNetAdapter;
 use crate::providers::lambda_labs::LambdaLabsAdapter;
-use crate::providers::paperspace::PaperspaceAdapter;
 use crate::providers::prime_intellect::PrimeIntellectAdapter;
-use crate::providers::render::RenderAdapter;
 use crate::providers::runpod::RunPodAdapter;
 use crate::providers::tensordock::TensorDockAdapter;
 use crate::providers::vast_ai::VastAiAdapter;
@@ -121,22 +115,6 @@ impl CloudProvisioner {
             );
         }
 
-        // Paperspace adapter
-        if std::env::var("PAPERSPACE_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Paperspace,
-                Box::new(PaperspaceAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        // Fluidstack adapter
-        if std::env::var("FLUIDSTACK_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Fluidstack,
-                Box::new(FluidstackAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
         // TensorDock adapter
         if std::env::var("TENSORDOCK_API_KEY").is_ok() {
             providers.insert(
@@ -146,18 +124,10 @@ impl CloudProvisioner {
         }
 
         // Akash adapter
-        if std::env::var("AKASH_RPC_URL").is_ok() {
+        if std::env::var("AKASH_API_KEY").is_ok() {
             providers.insert(
                 CloudProvider::Akash,
                 Box::new(AkashAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        // io.net adapter
-        if std::env::var("IO_NET_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::IoNet,
-                Box::new(IoNetAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
             );
         }
 
@@ -169,35 +139,11 @@ impl CloudProvisioner {
             );
         }
 
-        // Render adapter
-        if std::env::var("RENDER_API_KEY").is_ok() {
-            providers.insert(
-                CloudProvider::Render,
-                Box::new(RenderAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
         // Bittensor/Lium adapter
         if std::env::var("LIUM_API_KEY").is_ok() {
             providers.insert(
                 CloudProvider::BittensorLium,
                 Box::new(BittensorLiumAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        // Hetzner adapter
-        if std::env::var("HETZNER_API_TOKEN").is_ok() {
-            providers.insert(
-                CloudProvider::Hetzner,
-                Box::new(HetznerAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-            );
-        }
-
-        // Crusoe adapter
-        if std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok() {
-            providers.insert(
-                CloudProvider::Crusoe,
-                Box::new(CrusoeAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
             );
         }
 
@@ -373,7 +319,6 @@ impl CloudProvisioner {
             CloudProvider::GCP => SshDeploymentConfig::gcp("blueprint"),
             CloudProvider::Azure => SshDeploymentConfig::azure(),
             CloudProvider::DigitalOcean => SshDeploymentConfig::digitalocean(),
-            CloudProvider::Hetzner => SshDeploymentConfig::hetzner(),
             CloudProvider::RunPod => SshDeploymentConfig::runpod(),
             CloudProvider::LambdaLabs => SshDeploymentConfig::lambda_labs(),
             CloudProvider::VastAi => SshDeploymentConfig::vast_ai(),

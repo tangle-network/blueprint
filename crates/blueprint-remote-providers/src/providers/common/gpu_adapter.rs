@@ -1,20 +1,6 @@
 //! Shared helpers for GPU-focused cloud provider adapters.
 //!
-//! Every GPU cloud provider in this crate (Lambda Labs, RunPod, Vast.ai, CoreWeave,
-//! Paperspace, Fluidstack, TensorDock, Akash, io.net, Spheron, Nosana, Prime Intellect,
-//! Render, Bittensor) shares the same adapter skeleton: provision an instance via REST,
-//! wait for it to become SSH-reachable, then hand it off to `SharedSshDeployment` for
-//! the actual blueprint deployment. This module captures the common parts so each
-//! adapter is a thin provider-specific shell.
-//!
-//! Key hardening primitives exported by this module:
-//! - [`provision_with_cleanup`] — wraps provision+deploy with automatic instance
-//!   termination on deploy failure (prevents billing leaks).
-//! - [`poll_until_with_retry`] — polling helper that distinguishes transient from
-//!   permanent errors and applies exponential backoff + jitter.
-//! - [`classify_http_error`] — turns a reqwest response into a typed error
-//!   (transient/permanent/rate-limited).
-//! - [`RetryPolicy`] — exponential backoff with jitter and max retries.
+//! Provider HTTP, catalog selection, retirement and SSH deployment helpers.
 
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
@@ -489,6 +475,9 @@ pub fn catalog_selection(spec: &ResourceSpec, provider: &str) -> super::Instance
         instance_type: catalog_sku(spec, provider).unwrap_or_default(),
         spot_capable: false,
         estimated_hourly_cost: None,
+        gpu_class: catalog_sku(spec, provider)
+            .ok()
+            .and_then(|sku| catalog_class_for_sku(spec, provider, &sku).ok()),
     }
 }
 
@@ -502,7 +491,39 @@ pub fn quoted_selection(instance_type: String, price: f64) -> Result<super::Inst
         instance_type,
         spot_capable: false,
         estimated_hourly_cost: Some(price),
+        gpu_class: None,
     })
+}
+
+/// Resolve an exact native SKU to one canonical class; ambiguous SKUs need an explicit class.
+pub fn catalog_class_for_sku(spec: &ResourceSpec, provider: &str, sku: &str) -> Result<String> {
+    let classes: Vec<_> = blueprint_core::gpu::catalog()
+        .into_iter()
+        .filter(|class| {
+            spec.gpu_class.as_ref().is_none_or(|id| id == &class.id)
+                && class.vram_gb >= spec.gpu_vram_gb.unwrap_or(0)
+                && class.sku(provider, spec.gpu_count.unwrap_or(1)) == Some(sku)
+        })
+        .collect();
+    if classes.len() != 1 {
+        return Err(Error::ConfigurationError(
+            "Native GPU SKU does not resolve to one requested catalog class".into(),
+        ));
+    }
+    Ok(classes.into_iter().next().unwrap().id)
+}
+
+pub fn quoted_gpu_selection(
+    instance_type: String,
+    price: f64,
+    class_id: String,
+) -> Result<super::InstanceSelection> {
+    if blueprint_core::gpu::find(&class_id).is_none() {
+        return Err(Error::ConfigurationError("Unknown quote GPU class".into()));
+    }
+    let mut selection = quoted_selection(instance_type, price)?;
+    selection.gpu_class = Some(class_id);
+    Ok(selection)
 }
 
 /// Read provider errors without including response bodies that may echo credentials.
@@ -513,10 +534,22 @@ pub async fn api_json(response: reqwest::Response) -> Result<serde_json::Value> 
             response.status()
         )));
     }
-    response
-        .json()
+    let mut response = response;
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
         .await
-        .map_err(|e| Error::HttpError(format!("Provider JSON: {e}")))
+        .map_err(|_| Error::HttpError("Provider response read failed".into()))?
+    {
+        if body.len().saturating_add(chunk.len()) > 10 * 1024 * 1024 {
+            return Err(Error::HttpError(
+                "Provider response exceeds size limit".into(),
+            ));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&body)
+        .map_err(|_| Error::HttpError("Provider returned invalid JSON".into()))
 }
 
 /// A provider's not-found response is authoritative retirement evidence.
@@ -611,4 +644,201 @@ pub async fn wait_for_instance(
         },
     )
     .await
+}
+
+/// Stable ownership scope shared by provider names, native tags and reconciliation.
+pub fn managed_resource_prefix(namespace: &str) -> Result<String> {
+    if namespace.is_empty()
+        || namespace.len() > 128
+        || !namespace
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.:".contains(&b))
+    {
+        return Err(Error::ConfigurationError(
+            "Invalid GPU lease namespace".into(),
+        ));
+    }
+    let hash = aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, namespace.as_bytes());
+    Ok(format!("tangle-gpu-{}_", &hex::encode(hash.as_ref())[..12]))
+}
+
+pub fn managed_resource_name(namespace: &str, lease_id: &str) -> Result<String> {
+    if lease_id.is_empty()
+        || lease_id.len() > 40
+        || !lease_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+    {
+        return Err(Error::ConfigurationError(
+            "Invalid GPU lease ownership id".into(),
+        ));
+    }
+    Ok(format!("{}{lease_id}", managed_resource_prefix(namespace)?))
+}
+
+pub fn managed_lease_id(name: &str, namespace: &str) -> Option<String> {
+    let prefix = managed_resource_prefix(namespace).ok()?;
+    let lease_id = name.strip_prefix(&prefix)?;
+    (managed_resource_name(namespace, lease_id).ok()?.as_str() == name)
+        .then(|| lease_id.to_string())
+}
+
+/// Native VM cloud-init launches an image as a GPU container. Secrets are
+/// inherited by name from the child environment, never embedded in Docker argv.
+pub fn gpu_container_cloud_init(
+    image: &str,
+    env: &std::collections::BTreeMap<String, String>,
+    ports: &[u16],
+    command: Option<&[String]>,
+) -> Result<String> {
+    for key in env.keys() {
+        if key.is_empty()
+            || !key.bytes().enumerate().all(|(index, b)| {
+                b == b'_' || b.is_ascii_alphabetic() || (index > 0 && b.is_ascii_digit())
+            })
+        {
+            return Err(Error::ConfigurationError(
+                "Invalid container environment variable name".into(),
+            ));
+        }
+    }
+    let configuration =
+        serde_json::json!({"image":image,"env":env,"ports":ports,"command":command});
+    let launch = r#"import json, os, subprocess
+with open('/etc/tangle-gpu/workload.json', encoding='utf-8') as handle:
+    workload = json.load(handle)
+environment = dict(os.environ, **workload['env'])
+arguments = ['docker', 'run', '--detach', '--restart=unless-stopped', '--gpus=all', '--name=tangle-gpu-workload']
+for key in workload['env']:
+    arguments.extend(['--env', key])
+for port in workload['ports']:
+    arguments.extend(['--publish', str(port) + ':' + str(port)])
+command = workload.get('command')
+arguments.append(workload['image'])
+if command:
+    arguments.extend(command)
+subprocess.run(['systemctl', 'enable', '--now', 'docker'], check=True)
+subprocess.run(arguments, env=environment, check=True, stdout=subprocess.DEVNULL)
+"#;
+    let document = serde_json::json!({"write_files":[
+        {"path":"/etc/tangle-gpu/workload.json","owner":"root:root","permissions":"0600","content":configuration.to_string()},
+        {"path":"/usr/local/lib/tangle-gpu-start.py","owner":"root:root","permissions":"0700","content":launch}
+    ],"runcmd":[["python3","/usr/local/lib/tangle-gpu-start.py"]]});
+    Ok(format!(
+        "#cloud-config\n{}",
+        serde_yaml::to_string(&document)
+            .map_err(|_| Error::ConfigurationError("Invalid container cloud-init".into()))?
+    ))
+}
+
+pub fn provider_hourly_price(value: &serde_json::Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_str()?.parse().ok())
+        .filter(|v| v.is_finite() && *v > 0.0)
+}
+
+pub fn provider_created_at(value: &serde_json::Value) -> Option<chrono::DateTime<chrono::Utc>> {
+    if let Some(text) = value.as_str() {
+        return chrono::DateTime::parse_from_rfc3339(text)
+            .ok()
+            .map(|date| date.with_timezone(&chrono::Utc));
+    }
+    let seconds = value.as_f64()?;
+    if !seconds.is_finite() || seconds <= 0.0 || seconds > i64::MAX as f64 {
+        return None;
+    }
+    chrono::DateTime::from_timestamp(seconds as i64, 0)
+}
+
+/// Validate the actual worker TLS key pair before advertising a pinned endpoint.
+pub fn worker_tls_enabled(spec: &ResourceSpec) -> Result<bool> {
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+    let cert = spec.env.get("TANGLE_GPU_WORKER_TLS_CERT");
+    let key = spec.env.get("TANGLE_GPU_WORKER_TLS_KEY");
+    match (cert, key) {
+        (None, None) => Ok(false),
+        (Some(cert), Some(key)) => {
+            let cert = CertificateDer::from_pem_slice(cert.as_bytes()).map_err(|_| {
+                Error::ConfigurationError("Invalid worker TLS configuration".into())
+            })?;
+            let key = PrivateKeyDer::from_pem_slice(key.as_bytes()).map_err(|_| {
+                Error::ConfigurationError("Invalid worker TLS configuration".into())
+            })?;
+            rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(
+                rustls::crypto::aws_lc_rs::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .map_err(|_| Error::ConfigurationError("Invalid worker TLS configuration".into()))?
+            .with_no_client_auth()
+            .with_single_cert(vec![cert], key)
+            .map_err(|_| {
+                Error::ConfigurationError("Worker TLS certificate does not match its key".into())
+            })?;
+            Ok(true)
+        }
+        _ => Err(Error::ConfigurationError(
+            "Worker TLS requires both certificate and private key".into(),
+        )),
+    }
+}
+
+pub fn workload_environment(
+    spec: &ResourceSpec,
+    tls_mode: Option<&str>,
+) -> Result<std::collections::BTreeMap<String, String>> {
+    let mut environment = spec.env.clone();
+    environment.insert(
+        "TANGLE_GPU_REQUEST_FINGERPRINT".into(),
+        crate::managed::request_fingerprint(spec)?,
+    );
+    if let Some(port) = spec.endpoint_port {
+        environment.insert("TANGLE_GPU_LEASE_ENDPOINT_PORT".into(), port.to_string());
+    }
+    if let Some(mode) = tls_mode {
+        environment.insert("TANGLE_GPU_LEASE_TLS_MODE".into(), mode.into());
+    }
+    Ok(environment)
+}
+
+pub fn workload_ports(spec: &ResourceSpec, include_ssh: bool) -> Vec<u16> {
+    let mut ports = spec.ports.clone();
+    if let Some(port) = spec.endpoint_port {
+        ports.push(port);
+    }
+    if include_ssh {
+        ports.push(22);
+    }
+    ports.sort_unstable();
+    ports.dedup();
+    ports
+}
+
+/// Provider GPU memory in MiB must satisfy the catalog's nominal GB capacity.
+pub fn gpu_memory_mib(gb: u32) -> u64 {
+    (f64::from(gb) * 1_000_000_000.0 / 1_048_576.0).ceil() as u64
+}
+
+pub fn catalog_class_for_memory(
+    spec: &ResourceSpec,
+    provider: &str,
+    sku: &str,
+    reported_mib: f64,
+) -> Result<String> {
+    blueprint_core::gpu::catalog()
+        .into_iter()
+        .filter(|class| {
+            spec.gpu_class.as_ref().is_none_or(|id| id == &class.id)
+                && class.vram_gb >= spec.gpu_vram_gb.unwrap_or(0)
+                && class.sku(provider, spec.gpu_count.unwrap_or(1)) == Some(sku)
+                && reported_mib.is_finite()
+                && reported_mib >= gpu_memory_mib(class.vram_gb) as f64
+        })
+        .max_by_key(|class| class.vram_gb)
+        .map(|class| class.id)
+        .ok_or_else(|| {
+            Error::ConfigurationError(
+                "Native GPU memory does not prove requested catalog class".into(),
+            )
+        })
 }

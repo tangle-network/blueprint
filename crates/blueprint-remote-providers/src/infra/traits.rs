@@ -80,6 +80,10 @@ pub trait CloudProviderAdapter: Send + Sync {
         ))
     }
 
+    fn quote_pricing_source(&self) -> &'static str {
+        "live"
+    }
+
     /// Install access after creation, once the resource is durably tracked.
     async fn prepare_access(
         &self,
@@ -98,6 +102,26 @@ pub trait CloudProviderAdapter: Send + Sync {
             .ok_or_else(|| {
                 crate::core::error::Error::ConfigurationError("No lease endpoint".into())
             })
+    }
+
+    /// List only resources tagged with this caller namespace, including orphan firewalls.
+    async fn list_managed(&self, _namespace: &str) -> Result<Vec<super::types::ManagedResource>> {
+        Err(crate::Error::ConfigurationError(
+            "Managed listing unsupported".into(),
+        ))
+    }
+
+    /// Workload endpoint, independent of SSH access. Providers must verify TLS configuration.
+    async fn application_endpoint(
+        &self,
+        _instance: &ProvisionedInstance,
+        _spec: &ResourceSpec,
+    ) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    fn application_tls_mode(&self, _spec: &ResourceSpec) -> Option<super::types::TlsMode> {
+        None
     }
 
     /// Terminate an existing instance

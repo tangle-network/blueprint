@@ -1,10 +1,10 @@
 # Rent GPUs through the Blueprint SDK
 
-The Blueprint SDK owns decentralized GPU rental for the manager, GPU lease
-blueprints, and inference blueprints. Its
-[GPU catalog](../crates/core/gpu-catalog.json) also supplies the pinned copy in
-[centralized GPU leases](https://github.com/tangle-network/agent-container/tree/develop/apps/orchestrator/src/gpu-leases).
-Blueprints use SDK adapters whenever they need cloud capacity.
+`blueprint-remote-providers` owns Tangle's provider adapters. The manager, GPU
+lease blueprints, and inference blueprints use them through the Blueprint SDK.
+[Centralized GPU leases](https://github.com/tangle-network/agent-container/tree/develop/apps/orchestrator/src/gpu-leases)
+call the same adapters through the published `cargo-tangle` binary. Both paths
+read the SDK's [GPU catalog](../crates/core/gpu-catalog.json).
 
 ## Describe hardware once
 
@@ -39,9 +39,16 @@ with the allocator. The deployment tracker persists expiry and owns retirement;
 `Lease::terminate` retires early. Reopen the same state directory and call
 `resume_leases` after restarting the allocator process.
 
-The manager's remote runtime deploys its workload onto the selected machine.
-The duplicate event hook that provisioned an idle VM is removed. Operator-owned
-GPU allocation in gpu-lease-blueprint remains local; cloud capacity uses this SDK.
+The manager's remote runtime deploys its binary onto the selected machine.
+Operator-owned GPU allocation in gpu-lease-blueprint remains local; cloud
+capacity uses this SDK.
+
+External orchestrators use `cargo tangle cloud
+catalog/quote/create/status/destroy/list --json`; [CLI documentation](../cli/README.md)
+owns the process contract. Credentials and requests arrive on stdin. A managed
+create returns the native allocation id before readiness polling. Scoped native
+tags support adoption and orphan cleanup. The external orchestrator persists
+ownership and owns renewal, reconciliation, metering, and retirement.
 
 ## Bind quotes to the allocation
 
@@ -57,7 +64,8 @@ which evidence warrants a claim; tnt-core owns claim execution.
 ## Consume releases
 
 SDK libraries publish through [release-plz](../.github/workflows/release-plz.yml)
-and its batch publisher. Consumers pin the published SDK. The centralized
-runtime-contracts copy pins the catalog source commit in its header. Inference
+and its batch publisher. Consumers pin the published SDK. `cargo-tangle` uses its
+[maintained binary release](../.github/workflows/release.yml); central generates
+catalog types from the pinned binary's JSON output. Inference
 engine supervision and family recipes belong to
 [tangle-inference-core](https://github.com/tangle-network/tangle-inference-core).

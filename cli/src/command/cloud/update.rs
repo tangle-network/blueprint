@@ -134,7 +134,7 @@ pub async fn update(
             .unwrap_or(10.0),
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     // Convert DeploymentRecord to BlueprintDeploymentResult

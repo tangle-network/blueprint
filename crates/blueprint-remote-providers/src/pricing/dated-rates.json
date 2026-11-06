@@ -1,0 +1,76 @@
+{
+  "coreweave": [
+    {
+      "sku": "A100",
+      "region": "*",
+      "gpu_count": 0,
+      "cpu": 0,
+      "memory_gb": 0,
+      "storage_gb": 0,
+      "hourly_usd": null,
+      "as_of": "2026-11-06",
+      "source_url": "https://www.coreweave.com/pricing/classic",
+      "note": "Classic GPU, CPU, RAM and storage components differ from current CKS whole-node billing. A catalog class label does not identify an account contract; supply an all-in rate for the exact request."
+    },
+    {
+      "sku": "L40S",
+      "region": "*",
+      "gpu_count": 0,
+      "cpu": 0,
+      "memory_gb": 0,
+      "storage_gb": 0,
+      "hourly_usd": null,
+      "as_of": "2026-11-06",
+      "source_url": "https://www.coreweave.com/pricing",
+      "note": "Public L40 whole-node pricing does not establish L40S namespace workload pricing. Account contract required."
+    },
+    {
+      "sku": "H100",
+      "region": "*",
+      "gpu_count": 0,
+      "cpu": 0,
+      "memory_gb": 0,
+      "storage_gb": 0,
+      "hourly_usd": null,
+      "as_of": "2026-11-06",
+      "source_url": "https://www.coreweave.com/pricing",
+      "note": "Public CKS node and dedicated inference per-GPU prices are separate products. Supply the account's all-in namespace workload rate."
+    },
+    {
+      "sku": "H200",
+      "region": "*",
+      "gpu_count": 0,
+      "cpu": 0,
+      "memory_gb": 0,
+      "storage_gb": 0,
+      "hourly_usd": null,
+      "as_of": "2026-11-06",
+      "source_url": "https://www.coreweave.com/pricing",
+      "note": "Public CKS whole-node prices do not establish the account's namespace workload rate. Account contract required."
+    },
+    {
+      "sku": "B200",
+      "region": "*",
+      "gpu_count": 0,
+      "cpu": 0,
+      "memory_gb": 0,
+      "storage_gb": 0,
+      "hourly_usd": null,
+      "as_of": "2026-11-06",
+      "source_url": "https://www.coreweave.com/pricing",
+      "note": "Whole-node and dedicated inference per-GPU prices cannot be applied to an arbitrary namespace Pod. Account contract required."
+    },
+    {
+      "sku": "B300",
+      "region": "*",
+      "gpu_count": 0,
+      "cpu": 0,
+      "memory_gb": 0,
+      "storage_gb": 0,
+      "hourly_usd": null,
+      "as_of": "2026-11-06",
+      "source_url": "https://www.coreweave.com/pricing",
+      "note": "On-demand pricing requires contacting sales. Spot and dedicated inference prices do not establish an on-demand namespace workload price."
+    }
+  ]
+}

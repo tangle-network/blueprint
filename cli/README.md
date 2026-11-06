@@ -14,10 +14,6 @@ Create, run, and operate blueprints on the Tangle EVM and EigenLayer.
   - [Registering an Operator](#registering-an-operator)
   - [Service Lifecycle Commands](#service-lifecycle-commands)
   - [Cloud Deployment](#cloud-deployment)
-    - [Configure Cloud Provider](#configure-cloud-provider)
-    - [Cost Estimation](#cost-estimation)
-    - [Deploy Blueprint to Cloud](#deploy-blueprint-to-cloud)
-    - [Monitor Cloud Deployments](#monitor-cloud-deployments)
   - [Key Management](#key-management)
   - [EigenLayer Helpers](#eigenlayer-helpers)
   - [Generating Keys from the Command Line](#generating-keys-from-the-command-line)
@@ -44,22 +40,7 @@ cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --f
 
 ### Feature flags
 
-The CLI supports optional features that can be enabled at build time:
-
-**`remote-providers`** - Enables cloud deployment functionality
-
-Adds support for deploying blueprints to AWS, GCP, Azure, DigitalOcean, and Vultr. This enables the `cargo tangle cloud` subcommand and the `--remote` flag for blueprint deployment.
-
-```bash
-cargo install cargo-tangle --git https://github.com/tangle-network/blueprint \
-  --features remote-providers --force
-```
-
-Without this feature, cloud commands are not available and using `--remote` will show:
-```
-❌ Remote deployment requires the 'remote-providers' feature.
-   Build with: cargo build --features remote-providers
-```
+Cloud support (`remote-providers`) is enabled in the default build, including the distributed CLI. A build with `--no-default-features` omits cloud commands. Enable `remote-providers` explicitly when combining it with other selected features.
 
 **`vm-debug`** - Enables VM sandbox debugging (Linux only)
 
@@ -434,95 +415,35 @@ the manager rebuilds the state cleanly.
 
 ## Cloud Deployment
 
-> **Note:** Cloud deployment requires the `remote-providers` feature flag. See [Feature flags](#feature-flags) for installation instructions.
-
-The Tangle CLI supports deploying blueprints to cloud providers for scalable, distributed execution:
-
-### Configure Cloud Provider
+Cloud commands use the SDK's [provider implementation](../crates/blueprint-remote-providers/) and [GPU catalog](../crates/core/gpu-catalog.json). Estimates compare configured providers with known prices; an unavailable price cannot win selection.
 
 ```bash
-# Configure AWS
-cargo tangle cloud configure aws --region us-east-1 --set-default
-
-# Configure GCP
-cargo tangle cloud configure gcp --region us-central1
-
-# Configure other providers
-cargo tangle cloud configure digitalocean --region nyc1
-cargo tangle cloud configure vultr --region ewr
-cargo tangle cloud configure azure --region eastus
-```
-
-### Cost Estimation
-
-```bash
-# Compare costs across all providers
-cargo tangle cloud estimate --compare --cpu 4 --memory 16
-
-# Estimate for specific provider with spot pricing
-cargo tangle cloud estimate --provider aws --spot --duration 30d
-
-# GPU-enabled instances
-cargo tangle cloud estimate --provider gcp --gpu 1 --cpu 8 --memory 32
-```
-
-### Deploy Blueprint to Cloud
-
-```bash
-# Deploy with remote deployment flag
-cargo tangle blueprint deploy tangle --remote --package my_blueprint
-
-# Deploy with specific policy
-cargo tangle cloud policy --gpu-providers gcp,aws --cost-providers vultr,do
-cargo tangle blueprint deploy tangle --remote --package my_blueprint
-```
-
-### Monitor Cloud Deployments
-
-```bash
-# Check status of all deployments
+cargo tangle cloud configure runpod --region EU --set-default
+cargo tangle cloud estimate --compare --gpu-class nvidia-b200 --gpu 1 --gpu-vram 180
 cargo tangle cloud status
-
-# Check specific deployment
-cargo tangle cloud status --deployment-id dep-abc123
-
-# Terminate deployment
-cargo tangle cloud terminate --deployment-id dep-abc123
-```
-
-### Preflight and TEE Readiness
-
-```bash
-# Validate credentials/provider readiness and print manager bootstrap env
-cargo tangle cloud preflight --bootstrap-env
-
-# Validate fail-closed TEE readiness (including cryptographic verifier requirements)
+cargo tangle cloud status <deployment-id>
+cargo tangle cloud terminate <deployment-id>
 cargo tangle cloud preflight --tee-required --bootstrap-env
-
-# Write bootstrap env directly to file
-cargo tangle cloud preflight --tee-required --write-env-file .env.remote
 ```
 
-### Spawning a Service Runtime
-
-Kick off the blueprint manager using a specific runtime without re-running the full deploy flow:
+External lease orchestrators use the existing binary's JSON interface:
 
 ```bash
-cargo tangle blueprint service spawn \
-  --http-rpc-url https://rpc.tangle.tools \
-  --ws-rpc-url wss://rpc.tangle.tools \
-  --keystore-path ./keystore \
-  --tangle-contract 0xCf7E... \
-  --staking-contract 0xe7f1... \
-  --status-registry-contract 0xdC64... \
-  --blueprint-id 1 \
-  --service-id 2 \
-  --spawn-method vm \
-  --data-dir ./data \
-  --allow-unchecked-attestations
+cargo-tangle tangle cloud catalog --json
+cargo-tangle tangle cloud quote --json < request.json
+cargo-tangle tangle cloud create --json < request.json
+cargo-tangle tangle cloud status --json < request.json
+cargo-tangle tangle cloud list --json < request.json
+cargo-tangle tangle cloud destroy --json < request.json
 ```
 
-The command reuses the same manager wiring as `cargo tangle blueprint run`, so any RPC endpoint + runtime combo works (VM/native/container). For devnet, omit the overrides and the defaults point at the local harness.
+Each call emits one JSON record with `schema_version: 1`, `ok`, and either `data` or `error`. Errors exit nonzero and contain a fixed `code`, `message`, and `retryable` flag. Diagnostics go to stderr. Credentials enter through stdin and are never returned. `catalog` needs no stdin; it returns the embedded hardware classes and provider descriptors, including the capabilities supported by the JSON boundary.
+
+Other requests contain `schema_version: 1`, an optional canonical `provider`, and provider-keyed `credentials` objects with `api_key` plus optional `region` and `endpoint`. HTTPS endpoints are required except for loopback HTTP test peers. Quote and create accept the SDK's snake-case [ResourceSpec](../crates/core/src/resources.rs). Lifetime is `spec.lease_duration_secs`; worker environment, ports and optional command are passed to the provider. Omitting command preserves the image's entrypoint.
+
+Ownership belongs in the request envelope: `ownership: {namespace, lease_id}` for create, status and destroy; `ownership: {namespace}` for list. Status also requires `provider_id`. Repeating create with the same identity adopts its existing allocation. Destroy retires all resources for that identity and verifies their absence. The orchestrator retains billing state, TLS trust material, renewal and retirement scheduling; the CLI starts no lease timer. Unknown observed prices and start times remain null.
+
+The [JSON command module](src/command/cloud/json.rs) owns the envelope and projection. TLS certificates and worker tokens travel only in the workload environment on stdin. A native provider HTTPS proxy and a directly mapped TLS worker are distinct endpoint modes; the SDK reports the actual mode in `metadata.tls_mode`.
 
 ## Key Management
 

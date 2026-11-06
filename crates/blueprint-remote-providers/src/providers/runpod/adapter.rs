@@ -58,6 +58,19 @@ impl RunPodAdapter {
         Ok(adapter)
     }
 
+    async fn list_pods(&self) -> Result<Vec<serde_json::Value>> {
+        let value = crate::providers::common::gpu_adapter::api_json(
+            self.http
+                .get(&format!("{}/pods", self.base_url), &self.auth)
+                .await?,
+        )
+        .await?;
+        value
+            .as_array()
+            .cloned()
+            .ok_or_else(|| Error::HttpError("RunPod instance list is invalid".into()))
+    }
+
     async fn fetch_pod(&self, pod_id: &str) -> Result<serde_json::Value> {
         crate::providers::common::gpu_adapter::api_json(
             self.http
@@ -119,6 +132,107 @@ impl RunPodAdapter {
     }
 }
 
+fn runpod_application(
+    raw: &serde_json::Value,
+    requested: Option<u16>,
+) -> (Option<String>, Option<crate::infra::types::TlsMode>) {
+    use crate::infra::types::TlsMode;
+    let mut spec = ResourceSpec::default();
+    spec.env = serde_json::from_value(raw["env"].clone()).unwrap_or_default();
+    let ports: Vec<_> = raw["ports"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .chain(raw["runtime"]["ports"].as_array().into_iter().flatten())
+        .collect();
+    let mut http_ports: Vec<u16> = ports
+        .iter()
+        .filter_map(|item| item.as_str()?.strip_suffix("/http")?.parse().ok())
+        .collect();
+    http_ports.sort_unstable();
+    http_ports.dedup();
+    let port = requested
+        .or_else(|| {
+            spec.env
+                .get("TANGLE_GPU_LEASE_ENDPOINT_PORT")
+                .and_then(|p| p.parse().ok())
+        })
+        .or_else(|| {
+            if http_ports.len() == 1 {
+                http_ports.first().copied()
+            } else {
+                None
+            }
+        });
+    let Some(port) = port.filter(|p| *p > 0) else {
+        return (None, None);
+    };
+    let tls = match crate::providers::common::gpu_adapter::worker_tls_enabled(&spec) {
+        Ok(tls) => tls,
+        Err(_) => return (None, None),
+    };
+    if tls {
+        let external = raw["portMappings"][port.to_string()]
+            .as_u64()
+            .or_else(|| raw["portMappings"][port.to_string()].as_str()?.parse().ok())
+            .or_else(|| {
+                ports
+                    .iter()
+                    .find(|item| {
+                        item["privatePort"].as_u64() == Some(u64::from(port))
+                            && item["isIpPublic"].as_bool() == Some(true)
+                    })
+                    .and_then(|item| item["publicPort"].as_u64())
+            });
+        let Some(external) = external
+            .and_then(|p| u16::try_from(p).ok())
+            .filter(|p| *p > 0)
+        else {
+            return (None, None);
+        };
+        let Some(host) = raw["publicIp"].as_str() else {
+            return (None, None);
+        };
+        let host = if host.parse::<std::net::Ipv6Addr>().is_ok() {
+            format!("[{host}]")
+        } else {
+            host.to_string()
+        };
+        let Ok(url) = url::Url::parse(&format!("https://{host}:{external}")) else {
+            return (None, None);
+        };
+        return if url.username().is_empty() && url.password().is_none() {
+            (
+                Some(url.to_string().trim_end_matches('/').into()),
+                Some(TlsMode::Pinned),
+            )
+        } else {
+            (None, None)
+        };
+    }
+    let proxy = http_ports.contains(&port)
+        || ports.iter().any(|item| {
+            item["privatePort"].as_u64() == Some(u64::from(port))
+                && item["type"]
+                    .as_str()
+                    .is_some_and(|kind| kind.eq_ignore_ascii_case("http"))
+        });
+    let Some(id) = raw["id"]
+        .as_str()
+        .filter(|id| !id.is_empty() && id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-'))
+    else {
+        return (None, None);
+    };
+    if proxy {
+        (
+            Some(format!("https://{id}-{port}.proxy.runpod.net")),
+            Some(TlsMode::Public),
+        )
+    } else {
+        (None, None)
+    }
+}
+
 #[async_trait]
 impl CloudProviderAdapter for RunPodAdapter {
     async fn quote(
@@ -126,7 +240,14 @@ impl CloudProviderAdapter for RunPodAdapter {
         spec: &ResourceSpec,
         region: &str,
     ) -> Result<crate::providers::common::InstanceSelection> {
-        use crate::providers::common::gpu_adapter::{api_json, catalog_skus, quoted_selection};
+        use crate::providers::common::gpu_adapter::{
+            api_json, catalog_class_for_sku, catalog_skus, quoted_gpu_selection,
+        };
+        if spec.source_network.is_some() {
+            return Err(Error::ConfigurationError(
+                "RunPod cannot enforce caller source-network restrictions".into(),
+            ));
+        }
         let skus = catalog_skus(spec, "runpod")?;
         let filter = if skus.len() == 1 {
             serde_json::json!({"id":skus[0]})
@@ -142,7 +263,14 @@ impl CloudProviderAdapter for RunPodAdapter {
         if spec.image.is_none() {
             input["minCudaVersion"] = serde_json::json!("12.8");
         }
-        if !region.is_empty() {
+        let region = if region.is_empty() {
+            self.default_region.as_str()
+        } else {
+            region
+        };
+        if region.len() == 2 && region.bytes().all(|c| c.is_ascii_uppercase()) {
+            input["countryCode"] = serde_json::json!(region);
+        } else if !region.is_empty() {
             input["dataCenterIds"] = serde_json::json!([region]);
         }
         let json = api_json(self.http.post_json(&self.pricing_url, &self.auth, serde_json::json!({
@@ -171,7 +299,8 @@ impl CloudProviderAdapter for RunPodAdapter {
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .ok_or_else(|| Error::ConfigurationError("RunPod has no priced in-stock GPU".into()))?;
-        quoted_selection(sku, price)
+        let class = catalog_class_for_sku(spec, "runpod", &sku)?;
+        quoted_gpu_selection(sku, price, class)
     }
 
     async fn provision_instance(
@@ -219,7 +348,89 @@ impl CloudProviderAdapter for RunPodAdapter {
                     .into(),
             ));
         }
-        let name = generate_instance_name("runpod");
+        if spec.source_network.is_some() {
+            return Err(Error::ConfigurationError(
+                "RunPod cannot enforce caller source-network restrictions".into(),
+            ));
+        }
+        let tls = crate::providers::common::gpu_adapter::worker_tls_enabled(spec)?;
+        let name = if let Some(ownership) = &spec.ownership {
+            let name = crate::providers::common::gpu_adapter::managed_resource_name(
+                &ownership.namespace,
+                &ownership.lease_id,
+            )?;
+            let existing: Vec<_> = self
+                .list_pods()
+                .await?
+                .into_iter()
+                .filter(|p| p["name"].as_str() == Some(name.as_str()))
+                .collect();
+            if existing.len() > 1 {
+                return Err(Error::ConfigurationError(
+                    "Multiple RunPod resources claim this lease identity".into(),
+                ));
+            }
+            if let Some(existing) = existing.first() {
+                let id = existing["id"]
+                    .as_str()
+                    .ok_or_else(|| Error::HttpError("Managed RunPod resource has no id".into()))?;
+                let existing = self.fetch_pod(id).await?;
+                let actual = Self::parse_pod(&existing, &self.default_region)?;
+                if existing["env"]["TANGLE_GPU_REQUEST_FINGERPRINT"].as_str()
+                    != Some(crate::managed::request_fingerprint(spec)?.as_str())
+                {
+                    return Err(Error::ConfigurationError(
+                        "Managed RunPod resource conflicts with requested allocation".into(),
+                    ));
+                }
+                if actual.instance_type != instance_type
+                    || existing["gpuCount"].as_u64() != spec.gpu_count.map(u64::from)
+                    || existing["imageName"].as_str().is_some_and(|image| {
+                        image
+                            != spec
+                                .image
+                                .as_deref()
+                                .unwrap_or(crate::providers::common::gpu_adapter::DEFAULT_GPU_IMAGE)
+                    })
+                {
+                    return Err(Error::ConfigurationError(
+                        "Managed RunPod lease conflicts with requested hardware/image".into(),
+                    ));
+                }
+                return Ok(actual);
+            }
+            name
+        } else {
+            generate_instance_name("runpod")
+        };
+        let mut environment = crate::providers::common::gpu_adapter::workload_environment(
+            spec,
+            spec.endpoint_port
+                .map(|_| if tls { "pinned" } else { "public" }),
+        )?;
+        if let Some(key) = &spec.ssh_public_key {
+            environment.insert("PUBLIC_KEY".into(), key.clone());
+        }
+        let mut ports = crate::providers::common::gpu_adapter::workload_ports(
+            spec,
+            spec.ssh_public_key.is_some(),
+        );
+        if ports.is_empty() {
+            ports.extend([22, 9615, 9944]);
+        }
+        let exposed: Vec<_> = ports
+            .into_iter()
+            .map(|port| {
+                format!(
+                    "{port}/{}",
+                    if Some(port) == spec.endpoint_port && !tls {
+                        "http"
+                    } else {
+                        "tcp"
+                    }
+                )
+            })
+            .collect();
         let mut payload = serde_json::json!({
             "name": name,
             "gpuTypeIds": [instance_type],
@@ -228,8 +439,8 @@ impl CloudProviderAdapter for RunPodAdapter {
             "containerDiskInGb": spec.storage_gb.ceil() as u32,
             "volumeInGb": 0,
             "imageName": spec.image.as_deref().unwrap_or(crate::providers::common::gpu_adapter::DEFAULT_GPU_IMAGE),
-            "env": {"PUBLIC_KEY":spec.ssh_public_key.as_deref().unwrap_or("")},
-            "ports": "22/tcp,9615/tcp,9944/tcp",
+            "env": environment,
+            "ports": exposed,
             "supportPublicIp": true,
         });
 
@@ -238,8 +449,18 @@ impl CloudProviderAdapter for RunPodAdapter {
         } else {
             region
         };
-        if !location.is_empty() {
+        if location.len() == 2 && location.bytes().all(|c| c.is_ascii_uppercase()) {
+            payload["countryCodes"] = serde_json::json!([location]);
+        } else if !location.is_empty() {
             payload["dataCenterIds"] = serde_json::json!([location]);
+        }
+        if let Some(command) = &spec.command {
+            if command.is_empty() {
+                return Err(Error::ConfigurationError(
+                    "Workload command cannot be empty".into(),
+                ));
+            }
+            payload["dockerStartCmd"] = serde_json::json!(command);
         }
         let create_url = format!("{}/pods", self.base_url);
         let json = crate::providers::common::gpu_adapter::api_json(
@@ -288,6 +509,62 @@ impl CloudProviderAdapter for RunPodAdapter {
             })
             .ok_or_else(|| Error::HttpError("RunPod has no public SSH port mapping".into()))?;
         Ok(format!("ssh://root@{public_ip}:{port}"))
+    }
+
+    fn application_tls_mode(&self, spec: &ResourceSpec) -> Option<crate::infra::types::TlsMode> {
+        spec.endpoint_port?;
+        crate::providers::common::gpu_adapter::worker_tls_enabled(spec)
+            .ok()
+            .map(|tls| {
+                if tls {
+                    crate::infra::types::TlsMode::Pinned
+                } else {
+                    crate::infra::types::TlsMode::Public
+                }
+            })
+    }
+    async fn application_endpoint(
+        &self,
+        instance: &ProvisionedInstance,
+        spec: &ResourceSpec,
+    ) -> Result<Option<String>> {
+        Ok(runpod_application(&self.fetch_pod(&instance.id).await?, spec.endpoint_port).0)
+    }
+
+    async fn list_managed(
+        &self,
+        namespace: &str,
+    ) -> Result<Vec<crate::infra::types::ManagedResource>> {
+        use crate::providers::common::gpu_adapter::{
+            managed_lease_id, managed_resource_prefix, provider_created_at, provider_hourly_price,
+        };
+        managed_resource_prefix(namespace)?;
+        let mut result = Vec::new();
+        for raw in self.list_pods().await? {
+            let Some(lease_id) = raw["name"]
+                .as_str()
+                .and_then(|name| managed_lease_id(name, namespace))
+            else {
+                continue;
+            };
+            let (endpoint, tls_mode) = runpod_application(&raw, None);
+            result.push(crate::infra::types::ManagedResource {
+                instance: Self::parse_pod(&raw, &self.default_region)?,
+                namespace: namespace.into(),
+                lease_id,
+                kind: crate::infra::types::ManagedResourceKind::Instance,
+                endpoint,
+                tls_mode,
+                request_fingerprint: raw["env"]["TANGLE_GPU_REQUEST_FINGERPRINT"]
+                    .as_str()
+                    .map(String::from),
+                expires_at: None,
+                expiry_source: None,
+                hourly_cost_usd: provider_hourly_price(&raw["costPerHr"]),
+                created_at: provider_created_at(&raw["lastStartedAt"]),
+            });
+        }
+        Ok(result)
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {

@@ -16,16 +16,59 @@ use blueprint_std::{collections::HashMap, sync::Arc};
 /// Azure adapter for Blueprint deployment
 pub struct AzureAdapter {
     provisioner: Arc<tokio::sync::Mutex<AzureProvisioner>>,
+    pricing: crate::pricing::PricingFetcher,
+    network_interface_id: Option<String>,
 }
 
 impl AzureAdapter {
     /// Create new Azure adapter
     pub async fn new() -> Result<Self> {
         let provisioner = AzureProvisioner::new().await?;
-
         Ok(Self {
             provisioner: Arc::new(tokio::sync::Mutex::new(provisioner)),
+            pricing: crate::pricing::PricingFetcher::new()
+                .map_err(|e| Error::ConfigurationError(e.to_string()))?,
+            network_interface_id: std::env::var("AZURE_NETWORK_INTERFACE_ID").ok(),
         })
+    }
+
+    pub fn with_credentials(subscription: String, group: String, token: String) -> Result<Self> {
+        Ok(Self {
+            provisioner: Arc::new(tokio::sync::Mutex::new(AzureProvisioner::with_credentials(
+                subscription,
+                group,
+                token,
+            )?)),
+            pricing: crate::pricing::PricingFetcher::new()
+                .map_err(|e| Error::ConfigurationError(e.to_string()))?,
+            network_interface_id: None,
+        })
+    }
+
+    pub fn with_endpoint(
+        subscription: String,
+        group: String,
+        token: String,
+        endpoint: &str,
+    ) -> Result<Self> {
+        Ok(Self {
+            provisioner: Arc::new(tokio::sync::Mutex::new(AzureProvisioner::with_endpoint(
+                subscription,
+                group,
+                token,
+                endpoint,
+            )?)),
+            pricing: crate::pricing::PricingFetcher::new()
+                .and_then(|p| p.with_endpoint(crate::CloudProvider::Azure, endpoint))
+                .map_err(|e| Error::ConfigurationError(e.to_string()))?,
+            network_interface_id: None,
+        })
+    }
+
+    /// Existing account network, retained when the lease VM is deleted.
+    pub fn with_network_interface(mut self, id: String) -> Self {
+        self.network_interface_id = Some(id);
+        self
     }
 
     fn env_require_tee() -> bool {
@@ -42,6 +85,72 @@ impl AzureAdapter {
 
 #[async_trait]
 impl CloudProviderAdapter for AzureAdapter {
+    async fn quote(
+        &self,
+        spec: &ResourceSpec,
+        region: &str,
+    ) -> Result<crate::providers::common::InstanceSelection> {
+        spec.validate().map_err(Error::ConfigurationError)?;
+        let sku = self.provisioner.lock().await.select_vm_size(spec);
+        let price = self
+            .pricing
+            .quote_instance(crate::CloudProvider::Azure, region, &sku)
+            .await
+            .map_err(|e| Error::HttpError(e.to_string()))?
+            .ok_or_else(|| Error::ConfigurationError("Azure exact VM SKU is unpriced".into()))?;
+        crate::providers::common::gpu_adapter::quoted_selection(sku, price)
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
+        require_tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        let mut custom_config = HashMap::new();
+        custom_config.insert("vm_size".into(), instance_type.into());
+        custom_config.insert("require_tee".into(), require_tee.to_string());
+        if let Some(id) = &self.network_interface_id {
+            custom_config.insert("network_interface_id".into(), id.clone());
+        }
+        let infra = self
+            .provisioner
+            .lock()
+            .await
+            .provision_instance(
+                spec,
+                &ProvisioningConfig {
+                    name: format!("blueprint-{}", uuid::Uuid::new_v4()),
+                    region: region.into(),
+                    custom_config,
+                    ..Default::default()
+                },
+            )
+            .await?;
+        Ok(ProvisionedInstance {
+            id: infra.instance_id,
+            provider: infra.provider,
+            instance_type: infra.instance_type,
+            region: infra.region,
+            public_ip: None,
+            private_ip: None,
+            status: InstanceStatus::Starting,
+        })
+    }
+
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        self.provisioner.lock().await.get_instance_details(id).await
+    }
+
+    async fn lease_endpoint(&self, instance: &ProvisionedInstance) -> Result<String> {
+        instance
+            .public_ip
+            .as_ref()
+            .map(|ip| format!("ssh://blueprint@{ip}:22"))
+            .ok_or_else(|| Error::ConfigurationError("Azure instance address unavailable".into()))
+    }
+
     async fn provision_instance(
         &self,
         instance_type: &str,
@@ -53,6 +162,7 @@ impl CloudProviderAdapter for AzureAdapter {
             memory_gb: 8.0,
             storage_gb: 128.0,
             gpu_count: None,
+            ssh_public_key: std::env::var("AZURE_SSH_PUBLIC_KEY").ok(),
             allow_spot: false,
             qos: Default::default(),
             ..Default::default()
@@ -69,6 +179,9 @@ impl CloudProviderAdapter for AzureAdapter {
             custom_config: {
                 let mut config = HashMap::new();
                 config.insert("vm_size".to_string(), instance_type.to_string());
+                if let Some(id) = &self.network_interface_id {
+                    config.insert("network_interface_id".into(), id.clone());
+                }
                 config.insert(
                     "require_tee".to_string(),
                     if require_tee { "true" } else { "false" }.to_string(),
@@ -102,65 +215,7 @@ impl CloudProviderAdapter for AzureAdapter {
     }
 
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        let vm_name = instance_id.split('/').next_back().unwrap_or(instance_id);
-
-        let subscription_id = std::env::var("AZURE_SUBSCRIPTION_ID")
-            .map_err(|_| Error::ConfigurationError("AZURE_SUBSCRIPTION_ID not set".into()))?;
-        let resource_group = std::env::var("AZURE_RESOURCE_GROUP")
-            .unwrap_or_else(|_| "blueprint-resources".to_string());
-
-        let url = format!(
-            "https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Compute/virtualMachines/{vm_name}/instanceView?api-version=2023-09-01"
-        );
-
-        let client = reqwest::Client::new();
-        let mut provisioner = self.provisioner.lock().await;
-        let token = provisioner.get_access_token().await?;
-
-        let response = client
-            .get(&url)
-            .bearer_auth(&token)
-            .send()
-            .await
-            .map_err(|e| Error::Other(format!("Failed to get instance status: {e}")))?;
-
-        if response.status() == 404 {
-            return Ok(InstanceStatus::Terminated);
-        }
-
-        if !response.status().is_success() {
-            return Err(Error::Other(format!(
-                "Failed to get instance status: {}",
-                response.status()
-            )));
-        }
-
-        let json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| Error::Other(format!("Failed to parse response: {e}")))?;
-
-        if let Some(statuses) = json["statuses"].as_array() {
-            for status in statuses {
-                if let Some(code) = status["code"].as_str() {
-                    if code.starts_with("PowerState/") {
-                        return match code {
-                            "PowerState/running" => Ok(InstanceStatus::Running),
-                            "PowerState/starting" => Ok(InstanceStatus::Starting),
-                            "PowerState/stopped" | "PowerState/deallocated" => {
-                                Ok(InstanceStatus::Stopped)
-                            }
-                            "PowerState/stopping" | "PowerState/deallocating" => {
-                                Ok(InstanceStatus::Stopping)
-                            }
-                            _ => Ok(InstanceStatus::Unknown),
-                        };
-                    }
-                }
-            }
-        }
-
-        Ok(InstanceStatus::Unknown)
+        Ok(self.get_instance_details(instance_id).await?.status)
     }
 
     async fn deploy_blueprint_with_target(
@@ -422,84 +477,5 @@ impl AzureAdapter {
                 "Kubernetes feature not enabled".to_string(),
             ))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_azure_adapter_creation() {
-        let result = AzureAdapter::new().await;
-        // Without credentials, may succeed or fail - just testing the method exists
-        assert!(result.is_ok() || result.is_err());
-    }
-
-    #[cfg(feature = "kubernetes")]
-    #[tokio::test]
-    async fn test_aks_deployment_structure() {
-        use crate::core::resources::ResourceSpec;
-
-        // Test that the method signature and structure are correct
-        // Note: This won't actually deploy without valid Azure credentials
-        let adapter = AzureAdapter::new()
-            .await
-            .expect("Failed to create Azure adapter");
-
-        let mut env_vars = HashMap::new();
-        env_vars.insert("TEST_VAR".to_string(), "test_value".to_string());
-
-        let result = adapter
-            .deploy_to_aks(
-                "test-cluster",
-                "test-namespace",
-                "test-image:latest",
-                &ResourceSpec::basic(),
-                env_vars,
-            )
-            .await;
-
-        // Without actual cluster, we expect an error but method should be callable
-        assert!(result.is_err());
-    }
-
-    #[cfg(feature = "kubernetes")]
-    #[tokio::test]
-    async fn test_generic_k8s_deployment_structure() {
-        use crate::core::resources::ResourceSpec;
-
-        let adapter = AzureAdapter::new()
-            .await
-            .expect("Failed to create Azure adapter");
-
-        let mut env_vars = HashMap::new();
-        env_vars.insert("API_KEY".to_string(), "secret123".to_string());
-
-        let result = adapter
-            .deploy_to_generic_k8s(
-                "test-namespace",
-                "nginx:latest",
-                &ResourceSpec::minimal(),
-                env_vars,
-            )
-            .await;
-
-        // Without actual cluster, we expect an error but method should be callable
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_env_vars_usage() {
-        // Verify env_vars parameter is properly typed
-        let mut env_vars = HashMap::new();
-        env_vars.insert(
-            "DATABASE_URL".to_string(),
-            "postgres://localhost".to_string(),
-        );
-        env_vars.insert("PORT".to_string(), "8080".to_string());
-
-        assert_eq!(env_vars.len(), 2);
-        assert_eq!(env_vars.get("PORT").unwrap(), "8080");
     }
 }

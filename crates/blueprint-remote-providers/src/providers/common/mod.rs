@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstanceSelection {
     pub instance_type: String,
+    #[serde(default)]
+    pub gpu_class: Option<String>,
     pub spot_capable: bool,
     pub estimated_hourly_cost: Option<f64>,
 }

@@ -50,9 +50,14 @@ k8s-openapi = { version = "0.21", features = ["v1_29"], optional = true }
 # AWS SDK
 aws-config = { workspace = true, optional = true, features = ["default-https-client", "rt-tokio"] }
 aws-sdk-ec2 = { workspace = true, optional = true }
+aws-sdk-pricing = { workspace = true, optional = true }
 aws-sdk-eks = { workspace = true, optional = true }
 aws-sdk-autoscaling = { workspace = true, optional = true }
 aws-sdk-cloudwatchlogs = { workspace = true, optional = true }
+
+# Modal uses its native HTTP/2 API; no external SDK process is required.
+tonic = { workspace = true, features = ["transport", "codegen", "prost"] }
+prost = { workspace = true, features = ["derive"] }
 
 # HTTP client for cloud APIs and pricing
 reqwest = { workspace = true, features = ["json", "rustls-tls", "gzip", "deflate"] }
@@ -75,6 +80,7 @@ urlencoding = { workspace = true }
 tempfile.workspace = true
 
 [dev-dependencies]
+tokio-stream = { workspace = true, features = ["net"] }
 mockall = { workspace = true }
 tempfile.workspace = true
 tokio-test = { workspace = true }
@@ -121,7 +127,7 @@ std = [
     "blueprint-keystore/std",
     "blueprint-pricing-engine/std",
 ]
-aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-autoscaling", "dep:aws-sdk-cloudwatchlogs"]
+aws = ["dep:aws-config", "dep:aws-sdk-ec2", "dep:aws-sdk-pricing", "dep:aws-sdk-autoscaling", "dep:aws-sdk-cloudwatchlogs"]
 aws-eks = ["aws", "dep:aws-sdk-eks"]
 gcp = []  # GCP support via REST API
 azure = []  # Azure support via REST API

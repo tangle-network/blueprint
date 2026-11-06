@@ -16,8 +16,7 @@ use blueprint_std::collections::HashMap;
 /// Vultr adapter for Blueprint deployment
 pub struct VultrAdapter {
     provisioner: VultrProvisioner,
-    #[allow(dead_code)]
-    api_key: String,
+    pricing: crate::pricing::PricingFetcher,
 }
 
 impl VultrAdapter {
@@ -26,11 +25,27 @@ impl VultrAdapter {
         let api_key = std::env::var("VULTR_API_KEY")
             .map_err(|_| Error::Other("VULTR_API_KEY environment variable not set".into()))?;
 
-        let provisioner = VultrProvisioner::new(api_key.clone()).await?;
+        Self::with_credentials(api_key)
+    }
+
+    pub fn with_credentials(api_key: String) -> Result<Self> {
+        let pricing = crate::pricing::PricingFetcher::new()
+            .and_then(|p| p.with_token(crate::CloudProvider::Vultr, api_key.clone()))
+            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
         Ok(Self {
-            api_key,
-            provisioner,
+            provisioner: VultrProvisioner::with_credentials(api_key)?,
+            pricing,
         })
+    }
+
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
+        let mut adapter = Self::with_credentials(api_key.clone())?;
+        adapter.provisioner = VultrProvisioner::with_endpoint(api_key, endpoint)?;
+        adapter.pricing = adapter
+            .pricing
+            .with_endpoint(crate::CloudProvider::Vultr, endpoint)
+            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
+        Ok(adapter)
     }
 
     /// Get SSH username for Vultr instances
@@ -41,6 +56,71 @@ impl VultrAdapter {
 
 #[async_trait]
 impl CloudProviderAdapter for VultrAdapter {
+    async fn quote(
+        &self,
+        spec: &ResourceSpec,
+        region: &str,
+    ) -> Result<crate::providers::common::InstanceSelection> {
+        spec.validate().map_err(Error::ConfigurationError)?;
+        let sku = self.provisioner.select_plan(spec);
+        let price = self
+            .pricing
+            .quote_instance(crate::CloudProvider::Vultr, region, &sku)
+            .await
+            .map_err(|e| Error::HttpError(e.to_string()))?
+            .ok_or_else(|| {
+                Error::ConfigurationError("Vultr exact SKU is unpriced or unavailable".into())
+            })?;
+        crate::providers::common::gpu_adapter::quoted_selection(sku, price)
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
+        require_tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "Vultr TEE leases are unsupported".into(),
+            ));
+        }
+        if spec.ssh_public_key.is_none() {
+            return Err(Error::ConfigurationError(
+                "Vultr lease SSH key required".into(),
+            ));
+        }
+        let mut custom_config = HashMap::new();
+        custom_config.insert("instance_type".into(), instance_type.into());
+        let infra = self
+            .provisioner
+            .provision_instance(
+                spec,
+                &ProvisioningConfig {
+                    name: format!("blueprint-{}", uuid::Uuid::new_v4()),
+                    region: region.into(),
+                    custom_config,
+                    ..Default::default()
+                },
+            )
+            .await?;
+        Ok(ProvisionedInstance {
+            id: infra.instance_id,
+            provider: infra.provider,
+            instance_type: infra.instance_type,
+            region: infra.region,
+            public_ip: None,
+            private_ip: None,
+            status: InstanceStatus::Starting,
+        })
+    }
+
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        self.provisioner.get_instance_details(id).await
+    }
+
     async fn provision_instance(
         &self,
         _instance_type: &str,
@@ -89,7 +169,7 @@ impl CloudProviderAdapter for VultrAdapter {
             id: infra.instance_id,
             public_ip: infra.public_ip,
             private_ip: infra.private_ip,
-            status: InstanceStatus::Running,
+            status: InstanceStatus::Starting,
             provider: crate::core::remote::CloudProvider::Vultr,
             region: infra.region,
             instance_type: infra.instance_type,
@@ -360,97 +440,5 @@ impl VultrAdapter {
                 "Kubernetes feature not enabled".to_string(),
             ))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_vultr_adapter_creation() {
-        let result = VultrAdapter::new().await;
-        // Without credentials, may succeed or fail - just testing the method exists
-        assert!(result.is_ok() || result.is_err());
-    }
-
-    #[cfg(feature = "kubernetes")]
-    #[tokio::test]
-    async fn test_vke_deployment_structure() {
-        use crate::core::resources::ResourceSpec;
-
-        // Test that the method signature and structure are correct
-        let adapter = VultrAdapter::new()
-            .await
-            .expect("Failed to create Vultr adapter");
-
-        let mut env_vars = HashMap::new();
-        env_vars.insert("CACHE_TTL".to_string(), "3600".to_string());
-        env_vars.insert("MAX_CONNECTIONS".to_string(), "100".to_string());
-
-        let result = adapter
-            .deploy_to_vke(
-                "test-vke-cluster",
-                "staging",
-                "webapp:latest",
-                &ResourceSpec::performance(),
-                env_vars,
-            )
-            .await;
-
-        // Without actual cluster, we expect an error but method should be callable
-        assert!(result.is_err());
-    }
-
-    #[cfg(feature = "kubernetes")]
-    #[tokio::test]
-    async fn test_vultr_generic_k8s_deployment_structure() {
-        use crate::core::resources::ResourceSpec;
-
-        let adapter = VultrAdapter::new()
-            .await
-            .expect("Failed to create Vultr adapter");
-
-        let mut env_vars = HashMap::new();
-        env_vars.insert("DEBUG".to_string(), "true".to_string());
-
-        let result = adapter
-            .deploy_to_generic_k8s(
-                "kube-system",
-                "alpine:latest",
-                &ResourceSpec::minimal(),
-                env_vars,
-            )
-            .await;
-
-        // Without actual cluster, we expect an error but method should be callable
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_env_vars_with_special_characters() {
-        let mut env_vars = HashMap::new();
-        env_vars.insert(
-            "DATABASE_URL".to_string(),
-            "postgresql://user:pass@host:5432/db".to_string(),
-        );
-        env_vars.insert(
-            "API_ENDPOINT".to_string(),
-            "https://api.example.com/v1".to_string(),
-        );
-
-        assert_eq!(env_vars.len(), 2);
-        assert!(
-            env_vars
-                .get("DATABASE_URL")
-                .unwrap()
-                .contains("postgresql://")
-        );
-        assert!(
-            env_vars
-                .get("API_ENDPOINT")
-                .unwrap()
-                .starts_with("https://")
-        );
     }
 }

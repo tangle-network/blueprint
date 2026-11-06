@@ -15,22 +15,43 @@ pub struct AwsAdapter {
     provisioner: AwsProvisioner,
     security_group_id: Option<String>,
     key_pair_name: String,
+    pricing_client: aws_sdk_pricing::Client,
+    ami_id: Option<String>,
 }
 
 impl AwsAdapter {
     /// Create new AWS adapter with security configuration
     pub async fn new() -> Result<Self> {
-        let provisioner = AwsProvisioner::new().await?;
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let mut adapter = Self::with_config(&config)?;
+        adapter.key_pair_name = std::env::var("AWS_KEY_PAIR_NAME").unwrap_or_default();
+        adapter.security_group_id = std::env::var("AWS_SECURITY_GROUP_ID").ok();
+        adapter.ami_id = std::env::var("AWS_AMI_ID").ok();
+        Ok(adapter)
+    }
 
-        // Default security configuration - should be hardened for production
-        let key_pair_name = std::env::var("AWS_KEY_PAIR_NAME")
-            .unwrap_or_else(|_| "blueprint-remote-providers".to_string());
-
+    /// Caller-owned credentials and transport, including SDK HTTP peers.
+    pub fn with_config(config: &aws_config::SdkConfig) -> Result<Self> {
+        let pricing = aws_sdk_pricing::config::Builder::from(config)
+            .region(aws_sdk_pricing::config::Region::new("us-east-1"))
+            .build();
         Ok(Self {
-            provisioner,
-            security_group_id: None, // Security group created on-demand
-            key_pair_name,
+            provisioner: AwsProvisioner::with_config(config),
+            pricing_client: aws_sdk_pricing::Client::from_conf(pricing),
+            security_group_id: None,
+            key_pair_name: String::new(),
+            ami_id: None,
         })
+    }
+
+    pub fn with_machine_image(mut self, ami_id: String) -> Self {
+        self.ami_id = Some(ami_id);
+        self
+    }
+
+    pub fn with_security_group(mut self, id: String) -> Self {
+        self.security_group_id = Some(id);
+        self
     }
 
     /// Convert ProvisionedInfrastructure to ProvisionedInstance
@@ -39,7 +60,7 @@ impl AwsAdapter {
             id: infra.instance_id,
             public_ip: infra.public_ip,
             private_ip: infra.private_ip,
-            status: crate::infra::types::InstanceStatus::Running,
+            status: crate::infra::types::InstanceStatus::Starting,
             provider: infra.provider,
             region: infra.region,
             instance_type: infra.instance_type,
@@ -91,6 +112,150 @@ impl AwsAdapter {
 
 #[async_trait]
 impl CloudProviderAdapter for AwsAdapter {
+    async fn quote(
+        &self,
+        spec: &ResourceSpec,
+        region: &str,
+    ) -> Result<crate::providers::common::InstanceSelection> {
+        use crate::providers::common::gpu_adapter::{catalog_skus, quoted_selection};
+        use aws_sdk_pricing::types::{Filter, FilterType};
+        spec.validate().map_err(Error::ConfigurationError)?;
+        let skus = if spec.gpu_count.is_some() {
+            catalog_skus(spec, "aws")?
+        } else {
+            vec![super::AwsInstanceMapper::map(spec).instance_type]
+        };
+        let mut best: Option<(String, f64)> = None;
+        for sku in skus {
+            let filters = [
+                ("instanceType", sku.as_str()),
+                ("regionCode", region),
+                ("operatingSystem", "Linux"),
+                ("tenancy", "Shared"),
+                ("preInstalledSw", "NA"),
+                ("capacitystatus", "Used"),
+            ]
+            .into_iter()
+            .map(|(field, value)| {
+                Filter::builder()
+                    .field(field)
+                    .value(value)
+                    .r#type(FilterType::TermMatch)
+                    .build()
+                    .map_err(|_| Error::ConfigurationError("Invalid AWS pricing filter".into()))
+            })
+            .collect::<Result<Vec<_>>>()?;
+            let mut token = None;
+            let mut seen = std::collections::HashSet::new();
+            loop {
+                let page = self
+                    .pricing_client
+                    .get_products()
+                    .service_code("AmazonEC2")
+                    .set_filters(Some(filters.clone()))
+                    .set_next_token(token)
+                    .max_results(100)
+                    .send()
+                    .await
+                    .map_err(|_| Error::HttpError("AWS Pricing Query failed".into()))?;
+                for product in page.price_list() {
+                    let product: serde_json::Value = serde_json::from_str(product)
+                        .map_err(|_| Error::HttpError("Invalid AWS price document".into()))?;
+                    let attrs = &product["product"]["attributes"];
+                    if attrs["instanceType"] != sku
+                        || attrs["regionCode"] != region
+                        || attrs["operatingSystem"] != "Linux"
+                        || attrs["tenancy"] != "Shared"
+                        || attrs["preInstalledSw"] != "NA"
+                    {
+                        continue;
+                    }
+                    let Some(terms) = product["terms"]["OnDemand"].as_object() else {
+                        continue;
+                    };
+                    for term in terms.values() {
+                        let Some(dimensions) = term["priceDimensions"].as_object() else {
+                            continue;
+                        };
+                        for dimension in dimensions.values() {
+                            if dimension["unit"] != "Hrs" || dimension["beginRange"] != "0" {
+                                continue;
+                            }
+                            let price = dimension["pricePerUnit"]["USD"]
+                                .as_str()
+                                .and_then(|p| p.parse::<f64>().ok());
+                            if let Some(price) = price.filter(|p| p.is_finite() && *p > 0.0) {
+                                if best.as_ref().is_none_or(|(_, current)| price < *current) {
+                                    best = Some((sku.clone(), price));
+                                }
+                            }
+                        }
+                    }
+                }
+                token = page
+                    .next_token()
+                    .filter(|t| !t.is_empty())
+                    .map(str::to_owned);
+                let Some(next) = &token else {
+                    break;
+                };
+                if !seen.insert(next.clone()) {
+                    return Err(Error::HttpError("AWS pricing page repeated".into()));
+                }
+            }
+        }
+        let (sku, price) = best.ok_or_else(|| {
+            Error::ConfigurationError("AWS exact SKU has no USD/hour price".into())
+        })?;
+        quoted_selection(sku, price)
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
+        require_tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if spec.ssh_public_key.is_none() {
+            return Err(Error::ConfigurationError(
+                "AWS lease SSH key required".into(),
+            ));
+        }
+        let ami = self.ami_id.clone().ok_or_else(|| {
+            Error::ConfigurationError("AWS lease requires a caller-selected AMI".into())
+        })?;
+        let mut custom_config = HashMap::new();
+        custom_config.insert("instance_type".into(), instance_type.into());
+        custom_config.insert("require_tee".into(), require_tee.to_string());
+        if let Some(group) = &self.security_group_id {
+            custom_config.insert("security_group_ids".into(), group.clone());
+        }
+        let config = ProvisioningConfig {
+            region: region.into(),
+            name: format!("blueprint-{}", uuid::Uuid::new_v4()),
+            ami_id: Some(ami),
+            custom_config,
+            ..Default::default()
+        };
+        Ok(Self::to_provisioned_instance(
+            self.provisioner.provision_instance(spec, &config).await?,
+        ))
+    }
+
+    async fn get_instance_details(&self, instance_id: &str) -> Result<ProvisionedInstance> {
+        self.provisioner.get_instance_details(instance_id).await
+    }
+
+    async fn lease_endpoint(&self, instance: &ProvisionedInstance) -> Result<String> {
+        instance
+            .public_ip
+            .as_ref()
+            .map(|ip| format!("ssh://blueprint@{ip}:22"))
+            .ok_or_else(|| Error::ConfigurationError("AWS instance address unavailable".into()))
+    }
+
     async fn provision_instance(
         &self,
         instance_type: &str,

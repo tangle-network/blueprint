@@ -1,455 +1,224 @@
-//! Google Cloud Platform provider implementation
-
+//! GCE REST provisioning. A successful insert returns its resource name before polling.
 pub mod adapter;
-
 use crate::core::error::{Error, Result};
-#[cfg(feature = "gcp")]
-use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
+use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, ProvisioningConfig};
-#[cfg(feature = "gcp")]
-use blueprint_core::{info, warn};
-#[cfg(feature = "gcp")]
-use blueprint_std::collections::HashMap;
+use crate::security::{ApiAuthentication, SecureHttpClient};
 
-/// GCP Compute Engine provisioner
 pub struct GcpProvisioner {
-    #[cfg(feature = "gcp")]
     project_id: String,
-    #[allow(dead_code)]
-    client: reqwest::Client,
-    #[cfg(feature = "gcp")]
-    access_token: Option<String>,
+    client: SecureHttpClient,
+    auth: ApiAuthentication,
+    base_url: String,
 }
 
 impl GcpProvisioner {
-    /// Create new GCP provisioner
-    #[cfg(feature = "gcp")]
     pub async fn new(project_id: String) -> Result<Self> {
-        // In production, would use google-cloud-auth crate
-        // Use environment variable or GCE metadata service for authentication
-        let access_token = Self::get_access_token().await?;
+        Self::with_credentials(project_id, crate::security::auth::gcp_access_token().await?)
+    }
 
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
-
+    pub fn with_credentials(project_id: String, token: String) -> Result<Self> {
         Ok(Self {
             project_id,
-            client,
-            access_token: Some(access_token),
+            client: SecureHttpClient::new()?,
+            auth: ApiAuthentication::google_cloud(token),
+            base_url: "https://compute.googleapis.com".into(),
         })
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn new(_project_id: String) -> Result<Self> {
-        Err(Error::ConfigurationError(
-            "GCP support not enabled. Enable the 'gcp' feature".into(),
-        ))
+    pub fn with_endpoint(project_id: String, token: String, endpoint: &str) -> Result<Self> {
+        let mut provisioner = Self::with_credentials(project_id, token)?;
+        provisioner.client = SecureHttpClient::with_endpoint(endpoint)?;
+        provisioner.base_url = endpoint.trim_end_matches('/').into();
+        Ok(provisioner)
     }
 
-    /// Get access token from environment or metadata service
-    #[cfg(feature = "gcp")]
-    async fn get_access_token() -> Result<String> {
-        // Try environment variable first
-        if let Ok(token) = std::env::var("GCP_ACCESS_TOKEN") {
-            return Ok(token);
-        }
-
-        // Try metadata service (for GCE instances)
-        {
-            let metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
-            let client = reqwest::Client::new();
-            let response = client
-                .get(metadata_url)
-                .header("Metadata-Flavor", "Google")
-                .send()
-                .await;
-
-            if let Ok(resp) = response {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(token) = json["access_token"].as_str() {
-                        return Ok(token.to_string());
-                    }
-                }
-            }
-        }
-
-        Err(Error::ConfigurationError(
-            "No GCP credentials found. Set GCP_ACCESS_TOKEN or use service account".into(),
-        ))
-    }
-
-    /// Provision a GCE instance
-    #[cfg(feature = "gcp")]
     pub async fn provision_instance(
         &self,
         spec: &ResourceSpec,
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
-        let instance_selection =
-            if let Some(override_type) = config.custom_config.get("instance_type") {
-                InstanceSelection {
-                    instance_type: override_type.clone(),
-                    spot_capable: false,
-                    estimated_hourly_cost: None,
-                }
-            } else {
-                Self::map_instance(spec)
-            };
-        let zone = format!("{}-a", config.region); // e.g., us-central1-a
-
-        info!(
-            "Provisioning GCP instance type {} in {}",
-            instance_selection.instance_type, zone
-        );
-        let require_tee = config
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if config
             .custom_config
             .get("require_tee")
-            .is_some_and(|value| value.eq_ignore_ascii_case("true"));
-
-        // Prepare instance configuration
-        let instance_config = serde_json::json!({
-            "name": config.name,
-            "machineType": format!("zones/{}/machineTypes/{}", zone, instance_selection.instance_type),
-            "disks": [{
-                "boot": true,
-                "autoDelete": true,
-                "initializeParams": {
-                    "sourceImage": config.machine_image.as_deref()
-                        .unwrap_or("projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"),
-                    "diskSizeGb": spec.storage_gb.to_string(),
-                }
-            }],
-            "networkInterfaces": [{
-                "network": "global/networks/default",
-                "accessConfigs": [{
-                    "type": "ONE_TO_ONE_NAT",
-                    "name": "External NAT"
-                }]
-            }],
-            "metadata": {
-                "items": [
-                    {
-                        "key": "ssh-keys",
-                        "value": config.custom_config.get("ssh_public_key")
-                            .unwrap_or(&String::from(""))
-                    },
-                    {
-                        "key": "startup-script",
-                        "value": Self::generate_startup_script()
-                    }
-                ]
-            },
-            "tags": {
-                "items": ["blueprint", "managed"]
-            },
-            "labels": {
-                "environment": "production",
-                "managed_by": "blueprint_remote_providers"
-            }
-        });
-        let mut instance_config = instance_config;
-        if require_tee {
-            instance_config["confidentialInstanceConfig"] = serde_json::json!({
-                "enableConfidentialCompute": true
-            });
-        }
-
-        // Create the instance
-        let url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances",
-            self.project_id, zone
-        );
-
-        let access_token = self.access_token.as_ref().ok_or_else(|| {
-            Error::ConfigurationError("GCP access token not available".to_string())
-        })?;
-
-        let response = self
-            .client
-            .post(&url)
-            .bearer_auth(access_token)
-            .json(&instance_config)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to create GCE instance: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::ConfigurationError(format!(
-                "GCP API error: {}",
-                error_text
-            )));
-        }
-
-        let operation: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse response: {}", e)))?;
-
-        info!(
-            "GCP operation started: {}",
-            operation["name"].as_str().unwrap_or("unknown")
-        );
-
-        // Wait for operation to complete
-        self.wait_for_operation(operation["selfLink"].as_str().unwrap_or(""))
-            .await?;
-
-        // Get instance details
-        let instance_url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
-            self.project_id, zone, config.name
-        );
-
-        let instance_response = self
-            .client
-            .get(&instance_url)
-            .bearer_auth(access_token)
-            .send()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to get instance: {}", e)))?;
-
-        let instance: serde_json::Value = instance_response
-            .json()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to parse instance: {}", e)))?;
-
-        // Extract IPs
-        let network_interface = &instance["networkInterfaces"][0];
-        let private_ip = network_interface["networkIP"]
-            .as_str()
-            .map(|s| s.to_string());
-        let public_ip = network_interface["accessConfigs"][0]["natIP"]
-            .as_str()
-            .map(|s| s.to_string());
-
-        let mut metadata = HashMap::new();
-        metadata.insert("zone".to_string(), zone.clone());
-        metadata.insert("project_id".to_string(), self.project_id.clone());
-        metadata.insert("instance_name".to_string(), config.name.clone());
-        metadata.insert("require_tee".to_string(), require_tee.to_string());
-        if let Some(numeric_id) = instance["id"].as_str() {
-            metadata.insert("instance_numeric_id".to_string(), numeric_id.to_string());
-        }
-
-        // require_tee gate: verify the Confidential Space OIDC attestation token
-        // before reporting this VM as a usable TEE deployment.
-        #[cfg(feature = "tee-attestation")]
-        if require_tee {
-            crate::attestation::gate_provisioned(
-                &CloudProvider::GCP,
-                public_ip.as_deref().or(private_ip.as_deref()),
-                &config.custom_config,
-                &mut metadata,
-            )
-            .await?;
-        }
-        // Fail-closed when the verifier is compiled out: a build without the
-        // attestation code can never reach the "TEE-trusted" verdict.
-        #[cfg(not(feature = "tee-attestation"))]
-        if require_tee {
+            .is_some_and(|v| v == "true")
+        {
             return Err(Error::ConfigurationError(
-                "require_tee set but this binary was built without the `tee-attestation` \
-                 feature; refusing to report an unverified VM as a TEE deployment"
-                    .into(),
+                "GCP lease attestation forwarding is unavailable".into(),
             ));
         }
-
+        let sku = config
+            .custom_config
+            .get("instance_type")
+            .cloned()
+            .unwrap_or_else(|| Self::map_instance(spec).instance_type);
+        if spec.gpu_count.is_some()
+            && !crate::providers::common::gpu_adapter::catalog_skus(spec, "gcp")?
+                .iter()
+                .any(|native| native == &sku)
+        {
+            return Err(Error::ConfigurationError(
+                "GPU request does not match the provider SKU".into(),
+            ));
+        }
+        if sku.is_empty() {
+            return Err(Error::ConfigurationError(
+                "No exact GCP machine type".into(),
+            ));
+        }
+        let zone = if config
+            .region
+            .rsplit('-')
+            .next()
+            .is_some_and(|suffix| suffix.len() == 1)
+        {
+            config.region.clone()
+        } else {
+            format!("{}-a", config.region)
+        };
+        let key = spec
+            .ssh_public_key
+            .as_ref()
+            .map(|key| format!("blueprint:{key}"))
+            .or_else(|| config.custom_config.get("ssh_public_key").cloned())
+            .ok_or_else(|| Error::ConfigurationError("GCP instance SSH key required".into()))?;
+        let id = format!(
+            "projects/{}/zones/{zone}/instances/{}",
+            self.project_id, config.name
+        );
+        let response = self.client.post_json(&format!("{}/compute/v1/projects/{}/zones/{zone}/instances",self.base_url,self.project_id),&self.auth,
+            serde_json::json!({"name":config.name,"machineType":format!("zones/{zone}/machineTypes/{sku}"),
+                "disks":[{"boot":true,"autoDelete":true,"initializeParams":{"sourceImage":config.machine_image.as_deref()
+                    .unwrap_or("projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"),"diskSizeGb":spec.storage_gb.ceil() as u64}}],
+                "networkInterfaces":[{"network":"global/networks/default","accessConfigs":[{"type":"ONE_TO_ONE_NAT","name":"External NAT"}]}],
+                "metadata":{"items":[{"key":"ssh-keys","value":key},{"key":"enable-oslogin","value":"FALSE"},
+                    {"key":"startup-script","value":Self::generate_startup_script()}]},
+                "labels":{"managed_by":"blueprint_remote_providers"}
+            })).await?;
+        if !response.status().is_success() {
+            return Err(Error::HttpError(format!(
+                "GCP insert HTTP {}",
+                response.status()
+            )));
+        }
         Ok(ProvisionedInfrastructure {
-            provider: CloudProvider::GCP,
-            instance_id: config.name.clone(),
-            public_ip,
-            private_ip,
+            provider: crate::CloudProvider::GCP,
+            instance_id: id,
+            public_ip: None,
+            private_ip: None,
             region: config.region.clone(),
-            instance_type: instance_selection.instance_type,
-            metadata,
+            instance_type: sku,
+            metadata: Default::default(),
         })
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn provision_instance(
+    pub async fn get_instance_details(
         &self,
-        _spec: &ResourceSpec,
-        _config: &ProvisioningConfig,
-    ) -> Result<ProvisionedInfrastructure> {
-        Err(Error::ConfigurationError(
-            "GCP provisioning requires 'gcp' feature".into(),
-        ))
+        name: &str,
+        zone: &str,
+    ) -> Result<ProvisionedInstance> {
+        let id = format!("projects/{}/zones/{zone}/instances/{name}", self.project_id);
+        let response = self
+            .client
+            .get(&format!("{}/compute/v1/{id}", self.base_url), &self.auth)
+            .await?;
+        if response.status().as_u16() == 404 {
+            return Ok(ProvisionedInstance {
+                id,
+                provider: crate::CloudProvider::GCP,
+                instance_type: String::new(),
+                region: String::new(),
+                public_ip: None,
+                private_ip: None,
+                status: InstanceStatus::Terminated,
+            });
+        }
+        let instance = crate::providers::common::gpu_adapter::api_json(response).await?;
+        if instance["name"] != name {
+            return Err(Error::HttpError(
+                "GCP returned a different instance name".into(),
+            ));
+        }
+        let status = match instance["status"].as_str() {
+            Some("RUNNING") => InstanceStatus::Running,
+            Some("PROVISIONING" | "STAGING") => InstanceStatus::Starting,
+            Some("STOPPING") => InstanceStatus::Stopping,
+            Some("TERMINATED" | "SUSPENDED") => InstanceStatus::Stopped,
+            _ => InstanceStatus::Unknown,
+        };
+        Ok(ProvisionedInstance {
+            id,
+            provider: crate::CloudProvider::GCP,
+            instance_type: instance["machineType"]
+                .as_str()
+                .and_then(|s| s.rsplit('/').next())
+                .unwrap_or_default()
+                .into(),
+            region: zone.rsplit_once('-').map(|(r, _)| r).unwrap_or(zone).into(),
+            public_ip: instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                .as_str()
+                .map(str::to_owned),
+            private_ip: instance["networkInterfaces"][0]["networkIP"]
+                .as_str()
+                .map(str::to_owned),
+            status,
+        })
     }
 
-    /// Wait for GCP operation to complete
-    #[cfg(feature = "gcp")]
-    async fn wait_for_operation(&self, operation_url: &str) -> Result<()> {
-        let max_attempts = 60;
-        let mut attempts = 0;
-
-        let access_token = self.access_token.as_ref().ok_or_else(|| {
-            Error::ConfigurationError("GCP access token not available".to_string())
-        })?;
-
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-            let response = self
-                .client
-                .get(operation_url)
-                .bearer_auth(access_token)
-                .send()
-                .await
-                .map_err(|e| {
-                    Error::ConfigurationError(format!("Failed to check operation: {}", e))
-                })?;
-
-            let operation: serde_json::Value = response.json().await.map_err(|e| {
-                Error::ConfigurationError(format!("Failed to parse operation: {}", e))
-            })?;
-
-            if operation["status"].as_str() == Some("DONE") {
-                if let Some(error) = operation.get("error") {
-                    return Err(Error::ConfigurationError(format!(
-                        "Operation failed: {:?}",
-                        error
-                    )));
-                }
-                return Ok(());
-            }
-
-            attempts += 1;
-            if attempts >= max_attempts {
-                return Err(Error::ConfigurationError("Operation timeout".into()));
-            }
+    pub async fn terminate_instance(&self, name: &str, zone: &str) -> Result<()> {
+        let response = self
+            .client
+            .delete(
+                &format!(
+                    "{}/compute/v1/projects/{}/zones/{zone}/instances/{name}",
+                    self.base_url, self.project_id
+                ),
+                &self.auth,
+            )
+            .await?;
+        if response.status().is_success() || response.status().as_u16() == 404 {
+            Ok(())
+        } else {
+            Err(Error::HttpError(format!(
+                "GCP deletion HTTP {}",
+                response.status()
+            )))
         }
     }
 
-    /// Generate startup script for GCE instances
     fn generate_startup_script() -> &'static str {
-        r#"#!/bin/bash
-        # Update system
-        apt-get update
-        
-        # Install Docker if not present
-        if ! command -v docker &> /dev/null; then
-            curl -fsSL https://get.docker.com | sh
-            usermod -aG docker ubuntu
-        fi
-        
-        # Install monitoring agent
-        curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh
-        bash add-monitoring-agent-repo.sh --also-install
-        
-        # Enable metrics collection
-        systemctl enable stackdriver-agent
-        systemctl start stackdriver-agent
-        "#
+        "#!/bin/sh\nset -eu\napt-get update\napt-get install -y docker.io\n"
     }
 
-    /// Map resource requirements to GCP instance type
     fn map_instance(spec: &ResourceSpec) -> InstanceSelection {
-        let gpu_count = spec.gpu_count;
-        if gpu_count.is_some() || spec.gpu_class.is_some() {
+        if spec.gpu_count.is_some() {
             return crate::providers::common::gpu_adapter::catalog_selection(spec, "gcp");
         }
-        let instance_type = match (spec.cpu, spec.memory_gb, gpu_count) {
-            // Memory optimized
-            (cpu, mem, _) if mem > cpu * 8.0 => {
-                if mem <= 32.0 {
-                    "n2-highmem-4"
-                } else if mem <= 64.0 {
-                    "n2-highmem-8"
-                } else {
-                    "n2-highmem-16"
-                }
-            }
-
-            // CPU optimized
-            (cpu, mem, _) if cpu > mem / 2.0 => {
-                if cpu <= 4.0 {
-                    "n2-highcpu-4"
-                } else if cpu <= 8.0 {
-                    "n2-highcpu-8"
-                } else {
-                    "n2-highcpu-16"
-                }
-            }
-
-            // Standard instances
-            (cpu, mem, _) if cpu <= 0.5 && mem <= 2.0 => "e2-micro",
-            (cpu, mem, _) if cpu <= 1.0 && mem <= 4.0 => "e2-small",
-            (cpu, mem, _) if cpu <= 2.0 && mem <= 8.0 => "e2-medium",
-            (cpu, mem, _) if cpu <= 4.0 && mem <= 16.0 => "n2-standard-4",
-            (cpu, mem, _) if cpu <= 8.0 && mem <= 32.0 => "n2-standard-8",
-            (cpu, mem, _) if cpu <= 16.0 && mem <= 64.0 => "n2-standard-16",
-            _ => "e2-standard-2",
+        let sku = match (spec.cpu, spec.memory_gb) {
+            (cpu, mem) if cpu <= 2.0 && mem <= 8.0 => "e2-standard-2",
+            (cpu, mem) if cpu <= 4.0 && mem <= 16.0 => "n2-standard-4",
+            (cpu, mem) if cpu <= 8.0 && mem <= 32.0 => "n2-standard-8",
+            (cpu, mem) if cpu <= 16.0 && mem <= 64.0 => "n2-standard-16",
+            _ => "",
         };
-
         InstanceSelection {
-            instance_type: instance_type.to_string(),
-            spot_capable: spec.allow_spot && !instance_type.starts_with("e2"),
+            gpu_class: spec.gpu_class.clone(),
+            instance_type: sku.into(),
+            spot_capable: false,
             estimated_hourly_cost: None,
         }
     }
 
-    /// Get instance type recommendation and cost estimate for given specifications
     pub fn get_instance_recommendation(&self, spec: &ResourceSpec) -> InstanceSelection {
         Self::map_instance(spec)
     }
-
-    /// Get cost estimate for a specific instance type
     pub fn get_cost_estimate(&self, _instance_type: &str) -> Option<f64> {
         None
     }
-
-    /// Get the startup script used for instance initialization
     pub fn get_startup_script(&self) -> &'static str {
         Self::generate_startup_script()
     }
-
-    /// Terminate a GCE instance
-    #[cfg(feature = "gcp")]
-    pub async fn terminate_instance(&self, instance_name: &str, zone: &str) -> Result<()> {
-        let url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
-            self.project_id, zone, instance_name
-        );
-
-        let access_token = self.access_token.as_ref().ok_or_else(|| {
-            Error::ConfigurationError("GCP access token not available".to_string())
-        })?;
-
-        let response = self
-            .client
-            .delete(&url)
-            .bearer_auth(access_token)
-            .send()
-            .await
-            .map_err(|e| {
-                Error::ConfigurationError(format!("Failed to terminate instance: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            warn!("Failed to terminate GCE instance: {}", error_text);
-            return Err(Error::ConfigurationError(format!(
-                "Failed to terminate GCE instance {} in zone {}: {}",
-                instance_name, zone, error_text
-            )));
-        } else {
-            info!("Terminated GCE instance: {}", instance_name);
-        }
-
-        Ok(())
-    }
-
-    #[cfg(not(feature = "gcp"))]
-    pub async fn terminate_instance(&self, _instance_name: &str, _zone: &str) -> Result<()> {
-        Ok(())
-    }
 }
-
-// Re-export both provisioner and adapter
 pub use adapter::GcpAdapter;

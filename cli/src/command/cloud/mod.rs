@@ -43,6 +43,7 @@ use url::Url;
 
 mod config;
 mod estimate;
+mod json;
 mod logs;
 mod policy;
 mod preflight;
@@ -54,11 +55,30 @@ pub use policy::{CostOptimization, RemoteDeploymentPolicy};
 
 #[derive(Subcommand, Debug)]
 pub enum CloudCommands {
+    /// Print the SDK GPU and provider catalog
+    Catalog {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Quote the cheapest configured provider; request and credentials on stdin
+    Quote {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Create an owned provider resource; request and credentials on stdin
+    Create {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Retire an owned lease and verify its provider resources are gone
+    Destroy {
+        #[arg(long, required = true)]
+        json: bool,
+    },
     /// Set up cloud provider access
     #[command(visible_alias = "cfg")]
     Configure {
         /// Cloud provider (aws, gcp, azure, digitalocean, vultr)
-        #[arg(value_enum)]
         provider: CloudProvider,
 
         /// Default region for this provider
@@ -89,7 +109,7 @@ pub enum CloudCommands {
         compare: bool,
 
         /// Specific provider to estimate
-        #[arg(short, long, value_enum)]
+        #[arg(short, long)]
         provider: Option<CloudProvider>,
 
         /// CPU cores
@@ -103,6 +123,14 @@ pub enum CloudCommands {
         /// Number of GPUs
         #[arg(long)]
         gpu: Option<u32>,
+
+        /// Canonical GPU class from the SDK catalog
+        #[arg(long)]
+        gpu_class: Option<String>,
+
+        /// Minimum VRAM in GB for each GPU
+        #[arg(long)]
+        gpu_vram: Option<u32>,
 
         /// Duration (e.g., 1h, 24h, 30d)
         #[arg(short = 'd', long, default_value = "24h")]
@@ -122,6 +150,10 @@ pub enum CloudCommands {
         /// Watch for changes
         #[arg(short, long)]
         watch: bool,
+
+        /// Read an owned-resource request from stdin and return JSON
+        #[arg(long, conflicts_with_all = ["service_id", "watch"])]
+        json: bool,
     },
 
     /// Terminate cloud deployments
@@ -217,13 +249,17 @@ pub enum CloudCommands {
 
     /// List configured providers
     #[command(visible_alias = "ls")]
-    List,
+    List {
+        /// List owned provider resources from a stdin request
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Validate cloud/TEE readiness and emit bootstrap env settings
     #[command(visible_alias = "check")]
     Preflight {
         /// Provider to validate (defaults to configured default provider)
-        #[arg(short, long, value_enum)]
+        #[arg(short, long)]
         provider: Option<CloudProvider>,
 
         /// Require TEE readiness checks
@@ -256,6 +292,10 @@ pub enum CloudCommands {
 /// * Termination is rejected or fails
 pub async fn execute(command: CloudCommands) -> Result<()> {
     match command {
+        CloudCommands::Catalog { .. } => json::execute(json::Operation::Catalog).await,
+        CloudCommands::Quote { .. } => json::execute(json::Operation::Quote).await,
+        CloudCommands::Create { .. } => json::execute(json::Operation::Create).await,
+        CloudCommands::Destroy { .. } => json::execute(json::Operation::Destroy).await,
         CloudCommands::Configure {
             provider,
             region,
@@ -272,6 +312,8 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
             cpu,
             memory,
             gpu,
+            gpu_class,
+            gpu_vram,
             duration,
             spot,
         } => {
@@ -281,13 +323,18 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
                 cpu,
                 memory,
                 gpu,
+                gpu_class,
+                gpu_vram,
                 duration,
                 spot,
             })
             .await
         }
 
-        CloudCommands::Status { service_id, watch } => status::show_status(service_id, watch).await,
+        CloudCommands::Status { json: true, .. } => json::execute(json::Operation::Status).await,
+        CloudCommands::Status {
+            service_id, watch, ..
+        } => status::show_status(service_id, watch).await,
 
         CloudCommands::Terminate {
             service_id,
@@ -320,7 +367,8 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
             lines,
         } => logs::stream_logs(service_id, follow, level, search, since, lines).await,
 
-        CloudCommands::List => config::list_providers().await,
+        CloudCommands::List { json: true } => json::execute(json::Operation::List).await,
+        CloudCommands::List { json: false } => config::list_providers().await,
 
         CloudCommands::Preflight {
             provider,

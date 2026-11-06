@@ -3,7 +3,7 @@
   "gpus": [
     {"id":"nvidia-t4","vendor":"nvidia","generation":"turing","vramGb":16,"memoryBandwidthGbps":320,"fp8":false,"fp4":false,"interconnect":"pcie","maxPerNode":8,"aliases":["t4"],"providerSkus":{"runpod":{"*":"Tesla T4"},"vast-ai":{"*":"Tesla T4"},"lambda-labs":{},"modal":{"*":"T4"},"aws":{"1":"g4dn.xlarge"}}},
     {"id":"nvidia-l4","vendor":"nvidia","generation":"ada","vramGb":24,"memoryBandwidthGbps":300,"fp8":true,"fp4":false,"interconnect":"pcie","maxPerNode":8,"aliases":["l4"],"providerSkus":{"runpod":{"*":"NVIDIA L4"},"vast-ai":{"*":"L4"},"lambda-labs":{},"modal":{"*":"L4"}}},
-    {"id":"nvidia-a10","vendor":"nvidia","generation":"ampere","vramGb":24,"memoryBandwidthGbps":600,"fp8":false,"fp4":false,"interconnect":"pcie","maxPerNode":8,"aliases":["a10","a10g"],"providerSkus":{"runpod":{"*":"NVIDIA A10"},"vast-ai":{"*":"A10"},"lambda-labs":{"1":"gpu_1x_a10","2":"gpu_2x_a10","4":"gpu_4x_a10","8":"gpu_8x_a10"},"modal":{"*":"A10"}}},
+    {"id":"nvidia-a10","vendor":"nvidia","generation":"ampere","vramGb":24,"memoryBandwidthGbps":600,"fp8":false,"fp4":false,"interconnect":"pcie","maxPerNode":8,"aliases":["a10","a10g"],"providerSkus":{"runpod":{"*":"NVIDIA A10"},"vast-ai":{"*":"A10"},"lambda-labs":{"1":"gpu_1x_a10","2":"gpu_2x_a10","4":"gpu_4x_a10","8":"gpu_8x_a10"},"modal":{"1":"A10","2":"A10","3":"A10","4":"A10"}}},
     {"id":"nvidia-l40s","vendor":"nvidia","generation":"ada","vramGb":48,"memoryBandwidthGbps":864,"fp8":true,"fp4":false,"interconnect":"pcie","maxPerNode":8,"aliases":["l40s"],"providerSkus":{"runpod":{"*":"NVIDIA L40S"},"vast-ai":{"*":"L40S"},"lambda-labs":{},"modal":{"*":"L40S"},"prime-intellect":{"*":"L40S"},"coreweave":{"*":"L40S"},"akash":{"*":"l40s"},"io-net":{"*":"L40S"},"crusoe":{"*":"l40s"}}},
     {"id":"nvidia-rtx-3090","vendor":"nvidia","generation":"ampere","vramGb":24,"memoryBandwidthGbps":936,"fp8":false,"fp4":false,"interconnect":"nvlink","maxPerNode":8,"aliases":["3090","rtx3090","nvidia-3090"],"providerSkus":{"runpod":{"*":"NVIDIA GeForce RTX 3090"},"vast-ai":{"*":"RTX 3090"},"lambda-labs":{},"modal":{},"prime-intellect":{"*":"RTX_3090"},"bittensor-lium":{"*":"RTX 3090"},"tensordock":{"*":"rtx3090-pcie-24gb"},"akash":{"*":"rtx3090"},"fluidstack":{"*":"RTX_3090"}}},
     {"id":"nvidia-rtx-4090","vendor":"nvidia","generation":"ada","vramGb":24,"memoryBandwidthGbps":1008,"fp8":true,"fp4":false,"interconnect":"pcie","maxPerNode":8,"aliases":["4090","rtx4090","nvidia-4090"],"providerSkus":{"runpod":{"*":"NVIDIA GeForce RTX 4090"},"vast-ai":{"*":"RTX 4090"},"lambda-labs":{},"modal":{},"prime-intellect":{"*":"RTX_4090"},"bittensor-lium":{"*":"RTX 4090"},"tensordock":{"*":"rtx4090-pcie-24gb"},"akash":{"*":"rtx4090"},"fluidstack":{"*":"RTX_4090"},"io-net":{"*":"RTX_4090"}}},
@@ -24,6 +24,29 @@
     {"id":"nvidia-quadro-p4000","vendor":"nvidia","generation":"pascal","vramGb":8,"memoryBandwidthGbps":243,"fp8":false,"fp4":false,"interconnect":"pcie","maxPerNode":8,"aliases":["p4000"],"providerSkus":{"paperspace":{"*":"P4000"}}},
     {"id":"nvidia-l40","vendor":"nvidia","generation":"ada","vramGb":48,"memoryBandwidthGbps":864,"fp8":true,"fp4":false,"interconnect":"pcie","maxPerNode":8,"aliases":["l40"],"providerSkus":{"io-net":{"*":"L40"}}},
     {"id":"amd-mi300x","vendor":"amd","generation":"cdna3","vramGb":192,"memoryBandwidthGbps":5300,"fp8":true,"fp4":false,"interconnect":"infinity-fabric","maxPerNode":8,"aliases":["mi300x"],"providerSkus":{}}
+  ],
+  "providers": [
+    {"id":"modal","aliases":[],"credentialEnvVars":["MODAL_TOKEN_ID","MODAL_TOKEN_SECRET"],"capabilities":{"managed":true,"preemptible":true,"customImage":true,"explicitCommandRequired":true,"scopedFirewall":false,"nativeExpiry":true}},
+    {"id":"aws","aliases":[],"credentialEnvVars":["AWS_ACCESS_KEY_ID","AWS_SECRET_ACCESS_KEY"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"gcp","aliases":["google"],"credentialEnvVars":["GOOGLE_APPLICATION_CREDENTIALS"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"azure","aliases":[],"credentialEnvVars":["AZURE_SUBSCRIPTION_ID","AZURE_CLIENT_ID","AZURE_CLIENT_SECRET","AZURE_TENANT_ID"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"digitalocean","aliases":["do"],"credentialEnvVars":["DIGITALOCEAN_TOKEN"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"vultr","aliases":[],"credentialEnvVars":["VULTR_API_KEY"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"linode","aliases":[],"credentialEnvVars":[],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"lambda-labs","aliases":["lambda","lambdalabs"],"credentialEnvVars":["LAMBDA_LABS_API_KEY"],"capabilities":{"managed":true,"customImage":true,"scopedFirewall":true,"nativeExpiry":false}},
+    {"id":"runpod","aliases":[],"credentialEnvVars":["RUNPOD_API_KEY"],"capabilities":{"managed":true,"customImage":true,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"vast-ai","aliases":["vast","vastai"],"credentialEnvVars":["VAST_AI_API_KEY"],"capabilities":{"managed":true,"customImage":true,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"coreweave","aliases":[],"credentialEnvVars":["COREWEAVE_TOKEN"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"paperspace","aliases":[],"credentialEnvVars":["PAPERSPACE_API_KEY"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"fluidstack","aliases":[],"credentialEnvVars":["FLUIDSTACK_API_KEY"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"tensordock","aliases":[],"credentialEnvVars":["TENSORDOCK_API_KEY","TENSORDOCK_API_TOKEN"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"akash","aliases":[],"credentialEnvVars":["AKASH_API_KEY"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"io-net","aliases":["ionet"],"credentialEnvVars":["IO_NET_API_KEY"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"prime-intellect","aliases":["pi","primeintellect"],"credentialEnvVars":["PRIME_INTELLECT_API_KEY"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"render","aliases":[],"credentialEnvVars":["RENDER_API_KEY"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"bittensor-lium","aliases":["lium","bittensorlium"],"credentialEnvVars":["LIUM_API_KEY"],"capabilities":{"managed":true,"customImage":true,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"hetzner","aliases":[],"credentialEnvVars":["HETZNER_API_TOKEN"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}},
+    {"id":"crusoe","aliases":[],"credentialEnvVars":["CRUSOE_API_KEY","CRUSOE_API_SECRET"],"capabilities":{"managed":false,"customImage":false,"scopedFirewall":false,"nativeExpiry":false}}
   ],
   "sources": ["https://docs.nvidia.com/enterprise-reference-architectures/hgx-ai-factory/latest/components.html", "https://docs.nvidia.com/enterprise-reference-architectures/nvl72-ai-factory/latest/components.html", "https://docs.primeintellect.ai/api-reference/availability/get-available-gpus", "https://docs.runpod.io/api-reference/pods/POST/pods"]
 }

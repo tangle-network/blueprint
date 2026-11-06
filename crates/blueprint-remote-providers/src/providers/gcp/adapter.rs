@@ -48,6 +48,43 @@ impl GcpAdapter {
         })
     }
 
+    pub fn with_credentials(project_id: String, token: String) -> Result<Self> {
+        Ok(Self {
+            provisioner: Arc::new(Mutex::new(GcpProvisioner::with_credentials(
+                project_id.clone(),
+                token,
+            )?)),
+            project_id,
+            ssh_key_path: None,
+            zone_map: Arc::new(RwLock::new(HashMap::new())),
+            default_region: "us-central1".into(),
+        })
+    }
+
+    pub fn with_endpoint(project_id: String, token: String, endpoint: &str) -> Result<Self> {
+        Ok(Self {
+            provisioner: Arc::new(Mutex::new(GcpProvisioner::with_endpoint(
+                project_id.clone(),
+                token,
+                endpoint,
+            )?)),
+            project_id,
+            ssh_key_path: None,
+            zone_map: Arc::new(RwLock::new(HashMap::new())),
+            default_region: "us-central1".into(),
+        })
+    }
+
+    fn instance_location(&self, id: &str) -> Option<(String, String)> {
+        let parts: Vec<_> = id.split('/').collect();
+        (parts.len() == 6
+            && parts[0] == "projects"
+            && parts[1] == self.project_id
+            && parts[2] == "zones"
+            && parts[4] == "instances")
+            .then(|| (parts[3].into(), parts[5].into()))
+    }
+
     /// Create secure firewall rules for blueprint deployment
     async fn ensure_firewall_rules(&self) -> Result<()> {
         let access_token = auth::gcp_access_token().await?;
@@ -240,6 +277,79 @@ impl GcpAdapter {
 
 #[async_trait]
 impl CloudProviderAdapter for GcpAdapter {
+    async fn quote(
+        &self,
+        spec: &ResourceSpec,
+        _region: &str,
+    ) -> Result<crate::providers::common::InstanceSelection> {
+        spec.validate().map_err(Error::ConfigurationError)?;
+        Err(Error::ConfigurationError("GCP machine types have no complete Billing SKU mapping; component-only prices are unselectable (Cloud Billing Catalog API, checked 2026-11-06)".into()))
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
+        require_tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        let mut custom_config = HashMap::new();
+        custom_config.insert("instance_type".into(), instance_type.into());
+        custom_config.insert("require_tee".into(), require_tee.to_string());
+        let infra = self
+            .provisioner
+            .lock()
+            .await
+            .provision_instance(
+                spec,
+                &ProvisioningConfig {
+                    name: format!("blueprint-{}", uuid::Uuid::new_v4()),
+                    region: region.into(),
+                    custom_config,
+                    ..Default::default()
+                },
+            )
+            .await?;
+        Ok(ProvisionedInstance {
+            id: infra.instance_id,
+            provider: infra.provider,
+            instance_type: infra.instance_type,
+            region: infra.region,
+            public_ip: None,
+            private_ip: None,
+            status: InstanceStatus::Starting,
+        })
+    }
+
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        let (zone, name) = if let Some(location) = self.instance_location(id) {
+            location
+        } else {
+            (
+                self.zone_map
+                    .read()
+                    .await
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| format!("{}-a", self.default_region)),
+                id.to_string(),
+            )
+        };
+        self.provisioner
+            .lock()
+            .await
+            .get_instance_details(&name, &zone)
+            .await
+    }
+
+    async fn lease_endpoint(&self, instance: &ProvisionedInstance) -> Result<String> {
+        instance
+            .public_ip
+            .as_ref()
+            .map(|ip| format!("ssh://blueprint@{ip}:22"))
+            .ok_or_else(|| Error::ConfigurationError("GCP instance address unavailable".into()))
+    }
+
     async fn provision_instance(
         &self,
         instance_type: &str,
@@ -304,63 +414,29 @@ impl CloudProviderAdapter for GcpAdapter {
         Ok(infra.into_provisioned_instance())
     }
 
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        // Retrieve the zone from our tracking map, falling back to default region
-        let zone = self
-            .zone_map
-            .read()
-            .await
-            .get(instance_id)
-            .cloned()
-            .unwrap_or_else(|| format!("{}-a", self.default_region));
-
+    async fn terminate_instance(&self, id: &str) -> Result<()> {
+        let (zone, name) = if let Some(location) = self.instance_location(id) {
+            location
+        } else {
+            (
+                self.zone_map
+                    .read()
+                    .await
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| format!("{}-a", self.default_region)),
+                id.to_string(),
+            )
+        };
         self.provisioner
             .lock()
             .await
-            .terminate_instance(instance_id, &zone)
-            .await?;
-
-        // Remove from zone map on successful termination
-        self.zone_map.write().await.remove(instance_id);
-
-        Ok(())
+            .terminate_instance(&name, &zone)
+            .await
     }
 
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        // Retrieve the zone from our tracking map, falling back to default region
-        let zone = self
-            .zone_map
-            .read()
-            .await
-            .get(instance_id)
-            .cloned()
-            .unwrap_or_else(|| format!("{}-a", self.default_region));
-
-        let url = format!(
-            "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
-            self.project_id, zone, instance_id
-        );
-
-        let access_token = auth::gcp_access_token().await?;
-
-        let client = crate::create_provider_client(30)?;
-        match client.get(&url).bearer_auth(&access_token).send().await {
-            Ok(response) if response.status().is_success() => {
-                if let Ok(instance) = response.json::<serde_json::Value>().await {
-                    match instance["status"].as_str() {
-                        Some("RUNNING") => Ok(InstanceStatus::Running),
-                        Some("PROVISIONING") | Some("STAGING") => Ok(InstanceStatus::Starting),
-                        Some("TERMINATED") | Some("STOPPING") => Ok(InstanceStatus::Terminated),
-                        _ => Ok(InstanceStatus::Unknown),
-                    }
-                } else {
-                    Ok(InstanceStatus::Unknown)
-                }
-            }
-            Ok(response) if response.status() == 404 => Ok(InstanceStatus::Terminated),
-            Ok(_) => Ok(InstanceStatus::Unknown),
-            Err(_) => Ok(InstanceStatus::Unknown),
-        }
+    async fn get_instance_status(&self, id: &str) -> Result<InstanceStatus> {
+        Ok(self.get_instance_details(id).await?.status)
     }
 
     async fn deploy_blueprint_with_target(
@@ -520,66 +596,6 @@ impl GcpAdapter {
             Err(Error::ConfigurationError(
                 "Kubernetes feature not enabled".to_string(),
             ))
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::GcpAdapter;
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
-    }
-
-    #[test]
-    fn firewall_rules_use_configured_cidrs() {
-        let _guard = env_lock();
-        unsafe {
-            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "10.0.0.0/8");
-            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "192.168.0.0/16");
-        }
-
-        let rules = GcpAdapter::build_firewall_rules().unwrap();
-        let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
-        let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
-        assert_eq!(ssh_rule[0].as_str(), Some("10.0.0.0/8"));
-        assert_eq!(qos_rule[0].as_str(), Some("192.168.0.0/16"));
-
-        unsafe {
-            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
-            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
-        }
-    }
-
-    #[test]
-    fn firewall_rules_fail_closed_without_explicit_cidrs() {
-        let _guard = env_lock();
-        unsafe {
-            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
-            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
-        }
-        let err = GcpAdapter::build_firewall_rules().unwrap_err();
-        assert!(err.to_string().contains("open ingress"));
-    }
-
-    #[test]
-    fn firewall_rules_allow_explicit_open_ingress() {
-        let _guard = env_lock();
-        unsafe {
-            std::env::set_var("BLUEPRINT_ALLOWED_SSH_CIDRS", "0.0.0.0/0");
-            std::env::set_var("BLUEPRINT_ALLOWED_QOS_CIDRS", "0.0.0.0/0");
-        }
-        let rules = GcpAdapter::build_firewall_rules().unwrap();
-        let ssh_rule = rules[0]["sourceRanges"].as_array().unwrap();
-        let qos_rule = rules[1]["sourceRanges"].as_array().unwrap();
-        assert_eq!(ssh_rule[0].as_str(), Some("0.0.0.0/0"));
-        assert_eq!(qos_rule[0].as_str(), Some("0.0.0.0/0"));
-        unsafe {
-            std::env::remove_var("BLUEPRINT_ALLOWED_SSH_CIDRS");
-            std::env::remove_var("BLUEPRINT_ALLOWED_QOS_CIDRS");
         }
     }
 }

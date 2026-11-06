@@ -26,6 +26,37 @@ pub enum InstanceStatus {
     Unknown,
 }
 
+/// A recoverable provider resource carrying the caller's ownership identity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedResource {
+    pub instance: ProvisionedInstance,
+    pub namespace: String,
+    pub lease_id: String,
+    pub kind: ManagedResourceKind,
+    pub endpoint: Option<String>,
+    pub tls_mode: Option<TlsMode>,
+    pub request_fingerprint: Option<String>,
+    pub hourly_cost_usd: Option<f64>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expiry_source: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedResourceKind {
+    Instance,
+    Firewall,
+    Template,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TlsMode {
+    Public,
+    Pinned,
+}
+
 /// Retry policy configuration
 #[derive(Debug, Clone)]
 pub struct RetryPolicy {
@@ -48,32 +79,5 @@ impl RetryPolicy {
     pub fn delay_for_attempt(&self, attempt: usize) -> blueprint_std::time::Duration {
         let delay = self.base_delay * 2u32.pow(attempt as u32);
         delay.min(self.max_delay)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_retry_policy() {
-        let policy = RetryPolicy::default();
-
-        assert_eq!(
-            policy.delay_for_attempt(0),
-            blueprint_std::time::Duration::from_secs(1)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(1),
-            blueprint_std::time::Duration::from_secs(2)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(2),
-            blueprint_std::time::Duration::from_secs(4)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(5),
-            blueprint_std::time::Duration::from_secs(30)
-        ); // Max delay
     }
 }

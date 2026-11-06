@@ -5,9 +5,7 @@ use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
 use crate::providers::common::{ProvisionedInfrastructure, ProvisioningConfig};
 #[cfg(feature = "aws")]
-use aws_sdk_ec2::types::{
-    EnclaveOptionsRequest, InstanceType, ResourceType, Tag, TagSpecification,
-};
+use aws_sdk_ec2::types::{InstanceType, ResourceType, Tag, TagSpecification};
 use blueprint_core::{info, warn};
 
 /// AWS EC2 provisioner
@@ -25,16 +23,15 @@ impl AwsProvisioner {
     /// Create a new AWS provisioner
     pub async fn new() -> Result<Self> {
         let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
-        let ec2_client = aws_sdk_ec2::Client::new(&config);
+        Ok(Self::with_config(&config))
+    }
 
-        #[cfg(feature = "aws-eks")]
-        let eks_client = Some(aws_sdk_eks::Client::new(&config));
-
-        Ok(Self {
-            ec2_client,
+    pub fn with_config(config: &aws_config::SdkConfig) -> Self {
+        Self {
+            ec2_client: aws_sdk_ec2::Client::new(config),
             #[cfg(feature = "aws-eks")]
-            eks_client,
-        })
+            eks_client: Some(aws_sdk_eks::Client::new(config)),
+        }
     }
 
     /// Provision an EC2 instance
@@ -48,11 +45,29 @@ impl AwsProvisioner {
         if let Some(override_type) = config.custom_config.get("instance_type") {
             instance_selection.instance_type = override_type.clone();
         }
+        if spec.gpu_count.is_some()
+            && !crate::providers::common::gpu_adapter::catalog_skus(spec, "aws")?
+                .iter()
+                .any(|native| native == &instance_selection.instance_type)
+        {
+            return Err(Error::ConfigurationError(
+                "GPU request does not match the provider SKU".into(),
+            ));
+        }
         let require_tee = config
             .custom_config
             .get("require_tee")
             .is_some_and(|value| value.eq_ignore_ascii_case("true"));
 
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if require_tee {
+            return Err(Error::ConfigurationError("AWS Nitro evidence must originate inside the enclave; remote lease attestation is unavailable".into()));
+        }
+        if self.ec2_client.config().region().map(|r| r.as_ref()) != Some(config.region.as_str()) {
+            return Err(Error::ConfigurationError(
+                "AWS client region differs from allocation region".into(),
+            ));
+        }
         // Run EC2 instance
         let mut request = self
             .ec2_client
@@ -63,7 +78,6 @@ impl AwsProvisioner {
             ))
             .min_count(1)
             .max_count(1)
-            .key_name(config.ssh_key_name.as_deref().unwrap_or("default"))
             .tag_specifications(
                 TagSpecification::builder()
                     .resource_type(ResourceType::Instance)
@@ -82,11 +96,22 @@ impl AwsProvisioner {
                     )
                     .build(),
             );
-        if require_tee {
+        if let Some(key) = &spec.ssh_public_key {
+            use base64::Engine;
+            let cloud_init = format!(
+                "#cloud-config\n{}",
+                serde_json::json!({"users":[{"name":"blueprint","shell":"/bin/bash",
+                "sudo":"ALL=(ALL) NOPASSWD:ALL","ssh_authorized_keys":[key]}],"ssh_pwauth":false})
+            );
             request =
-                request.enclave_options(EnclaveOptionsRequest::builder().enabled(true).build());
+                request.user_data(base64::engine::general_purpose::STANDARD.encode(cloud_init));
+        } else if let Some(key) = &config.ssh_key_name {
+            request = request.key_name(key);
         }
-
+        if let Some(groups) = config.custom_config.get("security_group_ids") {
+            request = request
+                .set_security_group_ids(Some(groups.split(',').map(str::to_owned).collect()));
+        }
         let result = request.send().await?;
 
         let instance = result
@@ -100,59 +125,9 @@ impl AwsProvisioner {
 
         info!("Created AWS EC2 instance: {}", instance_id);
 
-        // Wait for instance to be running
-        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-
-        // Get instance details
-        let describe_result = self
-            .ec2_client
-            .describe_instances()
-            .instance_ids(instance_id)
-            .send()
-            .await?;
-
-        let reservation = describe_result
-            .reservations()
-            .first()
-            .ok_or_else(|| Error::ConfigurationError("No reservation found".into()))?;
-
-        let instance = reservation
-            .instances()
-            .first()
-            .ok_or_else(|| Error::ConfigurationError("No instance found".into()))?;
-
-        let public_ip = instance.public_ip_address().map(|s| s.to_string());
-        let private_ip = instance.private_ip_address().map(|s| s.to_string());
-
-        let mut metadata = std::collections::HashMap::new();
-        metadata.insert("require_tee".to_string(), require_tee.to_string());
-
-        // require_tee gate: a TEE VM is only reported usable once its attestation
-        // is fetched and cryptographically verified. AWS Nitro fails closed here
-        // by design (the NSM document is producible only inside the enclave).
-        #[cfg(feature = "tee-attestation")]
-        if require_tee {
-            crate::attestation::gate_provisioned(
-                &crate::core::remote::CloudProvider::AWS,
-                public_ip.as_deref().or(private_ip.as_deref()),
-                &config.custom_config,
-                &mut metadata,
-            )
-            .await?;
-        }
-        // Fail-closed when the verifier is compiled out: a build without the
-        // attestation code can never reach the "TEE-trusted" verdict. Without
-        // this arm the gate above would silently vanish in the default build and
-        // an unattested VM would be reported as a TEE deployment.
-        #[cfg(not(feature = "tee-attestation"))]
-        if require_tee {
-            return Err(Error::ConfigurationError(
-                "require_tee set but this binary was built without the `tee-attestation` \
-                 feature; refusing to report an unverified VM as a TEE deployment"
-                    .into(),
-            ));
-        }
-
+        let public_ip = instance.public_ip_address().map(str::to_owned);
+        let private_ip = instance.private_ip_address().map(str::to_owned);
+        let metadata = std::collections::HashMap::new();
         Ok(ProvisionedInfrastructure {
             provider: crate::core::remote::CloudProvider::AWS,
             instance_id: instance_id.to_string(),
@@ -209,6 +184,51 @@ impl AwsProvisioner {
             }
             _ => Ok(crate::infra::types::InstanceStatus::Unknown),
         }
+    }
+
+    pub async fn get_instance_details(
+        &self,
+        id: &str,
+    ) -> Result<crate::infra::types::ProvisionedInstance> {
+        let output = self
+            .ec2_client
+            .describe_instances()
+            .instance_ids(id)
+            .send()
+            .await
+            .map_err(|_| Error::HttpError("AWS instance details unavailable".into()))?;
+        let instance = output
+            .reservations()
+            .iter()
+            .flat_map(|r| r.instances())
+            .find(|i| i.instance_id() == Some(id))
+            .ok_or_else(|| Error::HttpError("AWS instance missing".into()))?;
+        let status = match instance.state().and_then(|s| s.name()).map(|s| s.as_str()) {
+            Some("running") => crate::infra::types::InstanceStatus::Running,
+            Some("pending") => crate::infra::types::InstanceStatus::Starting,
+            Some("terminated") => crate::infra::types::InstanceStatus::Terminated,
+            Some("stopped" | "stopping") => crate::infra::types::InstanceStatus::Stopped,
+            _ => crate::infra::types::InstanceStatus::Unknown,
+        };
+        Ok(crate::infra::types::ProvisionedInstance {
+            id: id.into(),
+            provider: crate::core::remote::CloudProvider::AWS,
+            instance_type: instance
+                .instance_type()
+                .map(|t| t.as_str())
+                .unwrap_or_default()
+                .into(),
+            region: self
+                .ec2_client
+                .config()
+                .region()
+                .map(|r| r.as_ref())
+                .unwrap_or_default()
+                .into(),
+            public_ip: instance.public_ip_address().map(str::to_owned),
+            private_ip: instance.private_ip_address().map(str::to_owned),
+            status,
+        })
     }
 
     /// Create security group

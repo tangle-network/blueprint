@@ -17,19 +17,33 @@ pub struct DigitalOceanProvisioner {
     client: SecureHttpClient,
     auth: ApiAuthentication,
     default_region: String,
+    base_url: String,
 }
 
 impl DigitalOceanProvisioner {
     /// Create a new DigitalOcean provisioner
     pub async fn new(api_token: String, default_region: String) -> Result<Self> {
-        let client = SecureHttpClient::new()?;
-        let auth = ApiAuthentication::digitalocean(api_token);
+        Self::with_credentials(api_token, default_region)
+    }
 
+    pub fn with_credentials(api_token: String, default_region: String) -> Result<Self> {
         Ok(Self {
-            client,
-            auth,
+            client: SecureHttpClient::new()?,
+            auth: ApiAuthentication::digitalocean(api_token),
             default_region,
+            base_url: "https://api.digitalocean.com".into(),
         })
+    }
+
+    pub fn with_endpoint(
+        api_token: String,
+        default_region: String,
+        endpoint: &str,
+    ) -> Result<Self> {
+        let mut provisioner = Self::with_credentials(api_token, default_region)?;
+        provisioner.client = SecureHttpClient::with_endpoint(endpoint)?;
+        provisioner.base_url = endpoint.trim_end_matches('/').into();
+        Ok(provisioner)
     }
 
     /// Create a Droplet
@@ -39,14 +53,40 @@ impl DigitalOceanProvisioner {
         spec: &ResourceSpec,
         ssh_keys: Vec<String>,
     ) -> Result<Droplet> {
-        let droplet_size = self.select_droplet_size(spec);
+        let size = self.select_droplet_size(spec);
+        self.create_droplet_with_size(name, spec, ssh_keys, &size, &self.default_region)
+            .await
+    }
 
-        let url = "https://api.digitalocean.com/v2/droplets";
+    pub async fn create_droplet_with_size(
+        &self,
+        name: &str,
+        spec: &ResourceSpec,
+        ssh_keys: Vec<String>,
+        size: &str,
+        region: &str,
+    ) -> Result<Droplet> {
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if spec.gpu_count.is_some()
+            && !crate::providers::common::gpu_adapter::catalog_skus(spec, "digitalocean")?
+                .iter()
+                .any(|native| native == size)
+        {
+            return Err(Error::ConfigurationError(
+                "GPU request does not match the provider SKU".into(),
+            ));
+        }
+        if size.is_empty() {
+            return Err(Error::ConfigurationError(
+                "No exact DigitalOcean size".into(),
+            ));
+        }
 
+        let url = format!("{}/v2/droplets", self.base_url);
         let droplet_request = serde_json::json!({
             "name": name,
-            "region": self.default_region,
-            "size": droplet_size,
+            "region": region,
+            "size": size,
             "image": "ubuntu-22-04-x64",
             "ssh_keys": ssh_keys,
             "backups": false,
@@ -59,7 +99,7 @@ impl DigitalOceanProvisioner {
 
         let response = self
             .client
-            .post_json(url, &self.auth, droplet_request)
+            .post_json(&url, &self.auth, droplet_request)
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to create droplet: {e}")))?;
 
@@ -79,36 +119,21 @@ impl DigitalOceanProvisioner {
             .as_u64()
             .ok_or_else(|| Error::ConfigurationError("No droplet ID in response".into()))?;
 
-        // Wait for droplet to be active
-        self.wait_for_droplet_active(droplet_id).await?;
-
-        // Get droplet details with IP addresses
-        self.get_droplet_details(droplet_id).await
-    }
-
-    /// Wait for droplet to be active
-    async fn wait_for_droplet_active(&self, droplet_id: u64) -> Result<()> {
-        let mut attempts = 0;
-        loop {
-            if attempts > 60 {
-                return Err(Error::ConfigurationError(
-                    "Timeout waiting for droplet".into(),
-                ));
-            }
-
-            let droplet = self.get_droplet_details(droplet_id).await?;
-            if droplet.status == "active" {
-                return Ok(());
-            }
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            attempts += 1;
-        }
+        Ok(Droplet {
+            id: droplet_id,
+            name: name.into(),
+            size: size.into(),
+            region: region.into(),
+            status: "new".into(),
+            public_ipv4: None,
+            private_ipv4: None,
+            public_ipv6: None,
+        })
     }
 
     /// Get droplet details
-    async fn get_droplet_details(&self, droplet_id: u64) -> Result<Droplet> {
-        let url = format!("https://api.digitalocean.com/v2/droplets/{droplet_id}");
+    pub async fn get_droplet_details(&self, droplet_id: u64) -> Result<Droplet> {
+        let url = format!("{}/v2/droplets/{droplet_id}", self.base_url);
 
         let response = self
             .client
@@ -116,6 +141,18 @@ impl DigitalOceanProvisioner {
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to get droplet: {e}")))?;
 
+        if response.status().as_u16() == 404 {
+            return Ok(Droplet {
+                id: droplet_id,
+                name: String::new(),
+                size: String::new(),
+                region: String::new(),
+                status: "deleted".into(),
+                public_ipv4: None,
+                private_ipv4: None,
+                public_ipv6: None,
+            });
+        }
         if !response.status().is_success() {
             return Err(Error::ConfigurationError(
                 "Failed to get droplet details".into(),
@@ -169,7 +206,7 @@ impl DigitalOceanProvisioner {
         let node_size = self.select_droplet_size(spec);
         info!("Selected droplet size {} for cluster nodes", node_size);
 
-        let url = "https://api.digitalocean.com/v2/kubernetes/clusters";
+        let url = format!("{}/v2/kubernetes/clusters", self.base_url);
 
         // Get latest Kubernetes version
         let version = self.get_latest_k8s_version().await?;
@@ -229,7 +266,7 @@ impl DigitalOceanProvisioner {
 
     /// Get latest Kubernetes version
     async fn get_latest_k8s_version(&self) -> Result<String> {
-        let url = "https://api.digitalocean.com/v2/kubernetes/options".to_string();
+        let url = format!("{}/v2/kubernetes/options", self.base_url);
 
         let response =
             self.client.get(&url, &self.auth).await.map_err(|e| {
@@ -272,7 +309,7 @@ impl DigitalOceanProvisioner {
 
     /// Get cluster details
     async fn get_cluster_details(&self, cluster_id: &str) -> Result<DOKSCluster> {
-        let url = format!("https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}");
+        let url = format!("{}/v2/kubernetes/clusters/{cluster_id}", self.base_url);
 
         let response = self
             .client
@@ -309,8 +346,10 @@ impl DigitalOceanProvisioner {
 
     /// Get kubeconfig for a cluster
     pub async fn get_kubeconfig(&self, cluster_id: &str) -> Result<String> {
-        let url =
-            format!("https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}/kubeconfig");
+        let url = format!(
+            "{}/v2/kubernetes/clusters/{cluster_id}/kubeconfig",
+            self.base_url
+        );
 
         let response = self
             .client
@@ -330,11 +369,10 @@ impl DigitalOceanProvisioner {
 
     /// Select appropriate droplet size based on resource requirements
     fn select_droplet_size(&self, spec: &ResourceSpec) -> String {
-        // Check for GPU (DO doesn't have GPU instances yet)
         if spec.gpu_count.is_some() {
-            warn!("DigitalOcean doesn't support GPU instances, using CPU instance");
+            return crate::providers::common::gpu_adapter::catalog_selection(spec, "digitalocean")
+                .instance_type;
         }
-
         // Map to droplet sizes
         match (spec.cpu, spec.memory_gb) {
             (cpu, mem) if cpu <= 1.0 && mem <= 0.5 => "s-1vcpu-512mb",
@@ -358,38 +396,11 @@ impl DigitalOceanProvisioner {
 
     /// Generate cloud-init user data
     fn generate_user_data(&self, spec: &ResourceSpec) -> String {
-        let mut user_data = String::from("#cloud-config\n");
-
-        // Install Docker
-        user_data.push_str("packages:\n");
-        user_data.push_str("  - docker.io\n");
-        user_data.push_str("  - docker-compose\n\n");
-
-        // Configure resource limits via systemd
-        if spec.cpu > 0.0 || spec.memory_gb > 0.0 {
-            user_data.push_str("write_files:\n");
-            user_data.push_str("  - path: /etc/systemd/system/blueprint.service\n");
-            user_data.push_str("    content: |\n");
-            user_data.push_str("      [Unit]\n");
-            user_data.push_str("      Description=Blueprint Service\n");
-            user_data.push_str("      After=docker.service\n");
-            user_data.push_str("      [Service]\n");
-            user_data.push_str(&format!("      CPUQuota={}%\n", (spec.cpu * 100.0) as u32));
-            user_data.push_str(&format!(
-                "      MemoryMax={}M\n",
-                (spec.memory_gb * 1024.0) as u32
-            ));
-            user_data.push_str("      Restart=always\n");
-            user_data.push_str("      [Install]\n");
-            user_data.push_str("      WantedBy=multi-user.target\n");
+        let mut cloud_init = serde_json::json!({"packages":["docker.io"],"ssh_pwauth":false});
+        if let Some(key) = &spec.ssh_public_key {
+            cloud_init["ssh_authorized_keys"] = serde_json::json!([key]);
         }
-
-        // Enable monitoring
-        user_data.push_str("\nruncmd:\n");
-        user_data.push_str("  - systemctl enable docker\n");
-        user_data.push_str("  - systemctl start docker\n");
-
-        user_data
+        format!("#cloud-config\n{cloud_init}")
     }
 
     /// Get droplet status
@@ -400,7 +411,7 @@ impl DigitalOceanProvisioner {
 
     /// Delete a droplet
     pub async fn delete_droplet(&self, droplet_id: u64) -> Result<()> {
-        let url = format!("https://api.digitalocean.com/v2/droplets/{droplet_id}");
+        let url = format!("{}/v2/droplets/{droplet_id}", self.base_url);
 
         let response = self
             .client
@@ -408,7 +419,7 @@ impl DigitalOceanProvisioner {
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to delete droplet: {e}")))?;
 
-        if !response.status().is_success() {
+        if !response.status().is_success() && response.status().as_u16() != 404 {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::ConfigurationError(format!(
                 "Failed to delete droplet: {error_text}"
@@ -421,7 +432,7 @@ impl DigitalOceanProvisioner {
 
     /// Delete a Kubernetes cluster
     pub async fn delete_kubernetes_cluster(&self, cluster_id: &str) -> Result<()> {
-        let url = format!("https://api.digitalocean.com/v2/kubernetes/clusters/{cluster_id}");
+        let url = format!("{}/v2/kubernetes/clusters/{cluster_id}", self.base_url);
 
         let response = self
             .client

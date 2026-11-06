@@ -327,17 +327,31 @@ impl KubernetesDeploymentClient {
     pub async fn cleanup_blueprint(&self, name: &str) -> Result<()> {
         debug!("Cleaning up Blueprint deployment: {}", name);
 
-        // Delete service
         let services: Api<Service> = Api::namespaced(self.client.clone(), &self.namespace);
-        let service_name = format!("{}-service", name);
-        if let Err(e) = services.delete(&service_name, &Default::default()).await {
-            debug!("Service {} may not exist: {}", service_name, e);
-        }
-
-        // Delete deployment
         let deployments: Api<Deployment> = Api::namespaced(self.client.clone(), &self.namespace);
-        if let Err(e) = deployments.delete(name, &Default::default()).await {
-            debug!("Deployment {} may not exist: {}", name, e);
+        // Attempt both retirements even when one fails. Only not-found proves absence.
+        for result in [
+            services
+                .delete(&format!("{name}-service"), &Default::default())
+                .await
+                .map(|_| ()),
+            deployments
+                .delete(name, &Default::default())
+                .await
+                .map(|_| ()),
+        ] {
+            if let Err(error) = result {
+                match error {
+                    kube::Error::Api(e) if e.code == 404 => {}
+                    kube::Error::Api(e) => {
+                        return Err(Error::HttpError(format!(
+                            "Kubernetes cleanup HTTP {}",
+                            e.code
+                        )));
+                    }
+                    _ => return Err(Error::HttpError("Kubernetes cleanup failed".into())),
+                }
+            }
         }
 
         info!("Cleaned up Blueprint deployment: {}", name);

@@ -13,6 +13,7 @@ use blueprint_std::collections::HashMap;
 #[derive(Debug)]
 pub struct DigitalOceanAdapter {
     provisioner: DigitalOceanProvisioner,
+    pricing: crate::pricing::PricingFetcher,
 }
 
 impl DigitalOceanAdapter {
@@ -23,9 +24,27 @@ impl DigitalOceanAdapter {
 
         let default_region = std::env::var("DO_REGION").unwrap_or_else(|_| "nyc3".to_string());
 
-        let provisioner = DigitalOceanProvisioner::new(api_token, default_region).await?;
+        Self::with_credentials(api_token, default_region)
+    }
 
-        Ok(Self { provisioner })
+    pub fn with_credentials(api_token: String, region: String) -> Result<Self> {
+        let pricing = crate::pricing::PricingFetcher::new()
+            .and_then(|p| p.with_token(crate::CloudProvider::DigitalOcean, api_token.clone()))
+            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
+        Ok(Self {
+            provisioner: DigitalOceanProvisioner::with_credentials(api_token, region)?,
+            pricing,
+        })
+    }
+
+    pub fn with_endpoint(api_token: String, region: String, endpoint: &str) -> Result<Self> {
+        let mut adapter = Self::with_credentials(api_token.clone(), region.clone())?;
+        adapter.provisioner = DigitalOceanProvisioner::with_endpoint(api_token, region, endpoint)?;
+        adapter.pricing = adapter
+            .pricing
+            .with_endpoint(crate::CloudProvider::DigitalOcean, endpoint)
+            .map_err(|e| Error::ConfigurationError(e.to_string()))?;
+        Ok(adapter)
     }
 
     /// Convert Droplet to ProvisionedInstance
@@ -37,6 +56,7 @@ impl DigitalOceanAdapter {
             status: match droplet.status.as_str() {
                 "active" => InstanceStatus::Running,
                 "new" => InstanceStatus::Starting,
+                "deleted" => InstanceStatus::Terminated,
                 _ => InstanceStatus::Unknown,
             },
             provider: crate::core::remote::CloudProvider::DigitalOcean,
@@ -54,6 +74,66 @@ impl DigitalOceanAdapter {
 
 #[async_trait]
 impl CloudProviderAdapter for DigitalOceanAdapter {
+    async fn quote(
+        &self,
+        spec: &ResourceSpec,
+        region: &str,
+    ) -> Result<crate::providers::common::InstanceSelection> {
+        spec.validate().map_err(Error::ConfigurationError)?;
+        let sku = self.provisioner.select_droplet_size(spec);
+        let price = self
+            .pricing
+            .quote_instance(crate::CloudProvider::DigitalOcean, region, &sku)
+            .await
+            .map_err(|e| Error::HttpError(e.to_string()))?
+            .ok_or_else(|| {
+                Error::ConfigurationError(
+                    "DigitalOcean exact SKU is unpriced or unavailable".into(),
+                )
+            })?;
+        crate::providers::common::gpu_adapter::quoted_selection(sku, price)
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
+        require_tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if require_tee {
+            return Err(Error::ConfigurationError(
+                "DigitalOcean TEE leases are unsupported".into(),
+            ));
+        }
+        if spec.ssh_public_key.is_none() {
+            return Err(Error::ConfigurationError(
+                "DigitalOcean lease SSH key required".into(),
+            ));
+        }
+        let instance = self
+            .provisioner
+            .create_droplet_with_size(
+                &format!("blueprint-{}", uuid::Uuid::new_v4()),
+                spec,
+                vec![],
+                instance_type,
+                region,
+            )
+            .await?;
+        Ok(Self::droplet_to_instance(instance))
+    }
+
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        let id = id
+            .parse::<u64>()
+            .map_err(|_| Error::ConfigurationError("Invalid Droplet id".into()))?;
+        Ok(Self::droplet_to_instance(
+            self.provisioner.get_droplet_details(id).await?,
+        ))
+    }
+
     async fn provision_instance(
         &self,
         _instance_type: &str,
@@ -111,22 +191,10 @@ impl CloudProviderAdapter for DigitalOceanAdapter {
             .parse::<u64>()
             .map_err(|_| Error::Other("Invalid droplet ID".into()))?;
 
-        match self.provisioner.get_droplet_status(droplet_id).await {
-            Ok(status) => {
-                let instance_status = match status.as_str() {
-                    "active" => InstanceStatus::Running,
-                    "new" => InstanceStatus::Starting,
-                    "off" => InstanceStatus::Stopped,
-                    _ => InstanceStatus::Unknown,
-                };
-                info!("DigitalOcean droplet {} status: {}", instance_id, status);
-                Ok(instance_status)
-            }
-            Err(e) => {
-                warn!("Failed to get DigitalOcean droplet status: {}", e);
-                Ok(InstanceStatus::Unknown)
-            }
-        }
+        Ok(
+            Self::droplet_to_instance(self.provisioner.get_droplet_details(droplet_id).await?)
+                .status,
+        )
     }
 
     async fn deploy_blueprint_with_target(
@@ -296,83 +364,5 @@ impl DigitalOceanAdapter {
                 "Kubernetes feature not enabled".to_string(),
             ))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_digitalocean_adapter_creation() {
-        let result = DigitalOceanAdapter::new().await;
-        // Without credentials, may succeed or fail - just testing the method exists
-        assert!(result.is_ok() || result.is_err());
-    }
-
-    #[cfg(feature = "kubernetes")]
-    #[tokio::test]
-    async fn test_doks_deployment_structure() {
-        use crate::core::resources::ResourceSpec;
-
-        // Test that the method signature and structure are correct
-        let adapter = DigitalOceanAdapter::new()
-            .await
-            .expect("Failed to create DigitalOcean adapter");
-
-        let mut env_vars = HashMap::new();
-        env_vars.insert("REDIS_URL".to_string(), "redis://localhost".to_string());
-
-        let result = adapter
-            .deploy_to_doks(
-                "test-doks-cluster",
-                "production",
-                "myapp:v1.0",
-                &ResourceSpec::recommended(),
-                env_vars,
-            )
-            .await;
-
-        // Without actual cluster, we expect an error but method should be callable
-        assert!(result.is_err());
-    }
-
-    #[cfg(feature = "kubernetes")]
-    #[tokio::test]
-    async fn test_doks_generic_k8s_deployment_structure() {
-        use crate::core::resources::ResourceSpec;
-
-        let adapter = DigitalOceanAdapter::new()
-            .await
-            .expect("Failed to create DigitalOcean adapter");
-
-        let mut env_vars = HashMap::new();
-        env_vars.insert("NODE_ENV".to_string(), "production".to_string());
-        env_vars.insert("LOG_LEVEL".to_string(), "info".to_string());
-
-        let result = adapter
-            .deploy_to_generic_k8s(
-                "default",
-                "busybox:latest",
-                &ResourceSpec::minimal(),
-                env_vars,
-            )
-            .await;
-
-        // Without actual cluster, we expect an error but method should be callable
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_multiple_env_vars() {
-        let mut env_vars = HashMap::new();
-        env_vars.insert("VAR1".to_string(), "value1".to_string());
-        env_vars.insert("VAR2".to_string(), "value2".to_string());
-        env_vars.insert("VAR3".to_string(), "value3".to_string());
-
-        assert_eq!(env_vars.len(), 3);
-        assert!(env_vars.contains_key("VAR1"));
-        assert!(env_vars.contains_key("VAR2"));
-        assert!(env_vars.contains_key("VAR3"));
     }
 }

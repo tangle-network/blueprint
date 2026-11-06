@@ -1,474 +1,599 @@
-//! Akash Network `CloudProviderAdapter` implementation.
-//!
-//! See [`crate::providers::akash`] for the REST-adapter-over-relay design notes.
-//! In short: this adapter speaks a small REST surface (assumed to be hosted by
-//! a relay that fronts an Akash CLI / Cosmos SDK runtime) so we can avoid
-//! pulling in the full Cosmos transaction-signing dependency tree.
-
-use crate::core::error::{Error, Result};
-use crate::core::remote::CloudProvider;
-use crate::core::resources::ResourceSpec;
-use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
-use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::akash::instance_mapper::AkashInstanceMapper;
-use crate::providers::akash::sdl::build_sdl_manifest;
-use crate::providers::common::gpu_adapter::{
-    ClassifiedError, ErrorClass, RetryPolicy, build_http_client, classify_response, deploy_via_ssh,
-    generate_instance_name, poll_until, provision_with_cleanup, retry_with_backoff,
+//! Akash Console API: SDK-owned auction preparation, side-effect-free live bids,
+//! then lease acceptance after the deployment id has been durably recorded.
+use crate::{
+    CloudProvider, ResourceSpec,
+    core::error::{Error, Result},
+    infra::{
+        traits::{BlueprintDeploymentResult, CloudProviderAdapter},
+        types::{InstanceStatus, ProvisionedInstance},
+    },
+    providers::{
+        akash::sdl::build_sdl_manifest,
+        common::gpu_adapter::{
+            DEFAULT_GPU_IMAGE, api_json, api_json_or_missing, catalog_sku, catalog_skus,
+            quoted_selection, reject_tee, ssh_endpoint, starting_instance,
+        },
+    },
+    security::{ApiAuthentication, SecureHttpClient},
 };
-use crate::security::{ApiAuthentication, SecureHttpClient};
-use crate::shared::SshDeploymentConfig;
 use async_trait::async_trait;
-use blueprint_core::{info, warn};
 use blueprint_std::collections::HashMap;
-use std::time::Duration;
+use serde_json::{Value, json};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-const AKASH_LEASE_READY_TIMEOUT: Duration = Duration::from_secs(900);
-const AKASH_LEASE_POLL_INTERVAL: Duration = Duration::from_secs(15);
-const DEFAULT_LEASE_BUDGET_UAKT: u64 = 5_000_000;
+struct Auction {
+    dseq: String,
+    spec: ResourceSpec,
+}
 
-/// Adapter for Akash Network's decentralized GPU marketplace.
-///
-/// All HTTP calls go through [`retry_with_backoff`] with the default
-/// [`RetryPolicy`], and provisioning is wrapped in [`provision_with_cleanup`]
-/// so a failed deploy automatically closes the on-chain lease to prevent
-/// runaway billing.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Bid {
+    dseq: String,
+    gseq: u64,
+    oseq: u64,
+    provider: String,
+    amount: String,
+    denom: String,
+}
+
 pub struct AkashAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
-    rpc_url: String,
-    default_region: String,
-    lease_budget_uakt: u64,
-    preferred_provider: Option<String>,
-    retry_policy: RetryPolicy,
+    endpoint: String,
+    auction: Option<Auction>,
+    claimed: AtomicBool,
 }
 
 impl AkashAdapter {
-    /// Construct from environment variables.
     pub async fn new() -> Result<Self> {
-        let rpc_url = std::env::var("AKASH_RPC_URL")
-            .map_err(|_| Error::Other("AKASH_RPC_URL environment variable not set".into()))?;
-        let token = std::env::var("AKASH_API_TOKEN").unwrap_or_default();
-        let default_region = std::env::var("AKASH_REGION").unwrap_or_else(|_| "global".to_string());
-        let lease_budget_uakt = std::env::var("AKASH_LEASE_BUDGET_UAKT")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(DEFAULT_LEASE_BUDGET_UAKT);
-        let preferred_provider = std::env::var("AKASH_PROVIDER_ADDRESS").ok();
+        let key = std::env::var("AKASH_API_KEY")
+            .map_err(|_| Error::ConfigurationError("AKASH_API_KEY is required".into()))?;
+        Self::with_credentials(key)
+    }
 
+    pub fn with_credentials(key: String) -> Result<Self> {
+        Self::with_endpoint(key, "https://console-api.akash.network")
+    }
+    pub fn with_endpoint(key: String, endpoint: &str) -> Result<Self> {
         Ok(Self {
-            http: build_http_client()?,
-            auth: ApiAuthentication::akash(token),
-            rpc_url: rpc_url.trim_end_matches('/').to_string(),
-            default_region,
-            lease_budget_uakt,
-            preferred_provider,
-            retry_policy: RetryPolicy::default(),
-        })
-    }
-
-    /// Submit a new SDL deployment to the relay and return the deployment id.
-    async fn submit_deployment(&self, sdl: &str) -> Result<String> {
-        let url = format!("{}/deployments", self.rpc_url);
-        let body = serde_json::json!({
-            "sdl": sdl,
-            "lease_budget_uakt": self.lease_budget_uakt,
-        });
-
-        let json = retry_with_backoff("akash submit_deployment", &self.retry_policy, |_attempt| {
-            let url = url.clone();
-            let body = body.clone();
-            async move {
-                let response = self
-                    .http
-                    .post(&url, &self.auth, Some(body))
-                    .await
-                    .map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Akash POST {url}: {e}"
-                        )))
-                    })?;
-
-                if let Some(class) = classify_response(&response) {
-                    let body = response.text().await.unwrap_or_default();
-                    let inner = Error::HttpError(format!("Akash POST {url} failed: {body}"));
-                    return Err(ClassifiedError { class, inner });
-                }
-
-                response.json::<serde_json::Value>().await.map_err(|e| {
-                    ClassifiedError::transient(Error::HttpError(format!(
-                        "Akash response parse: {e}"
-                    )))
-                })
-            }
-        })
-        .await?;
-
-        json.get("deployment_id")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| Error::HttpError("Akash submit: no deployment_id returned".into()))
-    }
-
-    /// Accept a bid against a deployment, creating an on-chain lease.
-    async fn accept_bid(&self, deployment_id: &str) -> Result<()> {
-        let url = format!("{}/deployments/{deployment_id}/accept", self.rpc_url);
-        let body = serde_json::json!({
-            "provider_address": self.preferred_provider.clone().unwrap_or_default(),
-        });
-
-        retry_with_backoff("akash accept_bid", &self.retry_policy, |_attempt| {
-            let url = url.clone();
-            let body = body.clone();
-            async move {
-                let response = self
-                    .http
-                    .post(&url, &self.auth, Some(body))
-                    .await
-                    .map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Akash POST {url}: {e}"
-                        )))
-                    })?;
-                if let Some(class) = classify_response(&response) {
-                    let body = response.text().await.unwrap_or_default();
-                    let inner = Error::HttpError(format!("Akash accept {url} failed: {body}"));
-                    return Err(ClassifiedError { class, inner });
-                }
-                Ok(())
-            }
-        })
-        .await
-    }
-
-    /// Fetch a deployment's current JSON payload.
-    async fn fetch_deployment_json(&self, deployment_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{}/deployments/{deployment_id}", self.rpc_url);
-        retry_with_backoff("akash fetch_deployment", &self.retry_policy, |_attempt| {
-            let url = url.clone();
-            async move {
-                let response = self.http.get(&url, &self.auth).await.map_err(|e| {
-                    ClassifiedError::transient(Error::HttpError(format!("Akash GET {url}: {e}")))
-                })?;
-                if let Some(class) = classify_response(&response) {
-                    let body = response.text().await.unwrap_or_default();
-                    let inner = Error::HttpError(format!("Akash GET {url} failed: {body}"));
-                    return Err(ClassifiedError { class, inner });
-                }
-                response.json::<serde_json::Value>().await.map_err(|e| {
-                    ClassifiedError::transient(Error::HttpError(format!(
-                        "Akash response parse: {e}"
-                    )))
-                })
-            }
-        })
-        .await
-    }
-
-    /// Parse a relay deployment payload into a `ProvisionedInstance`.
-    fn parse_deployment(
-        value: &serde_json::Value,
-        fallback_region: &str,
-        instance_type: &str,
-    ) -> Result<ProvisionedInstance> {
-        let data = value.get("data").unwrap_or(value);
-
-        // Lease id is either a flat string or a dseq/gseq/oseq triple — serialize
-        // the triple as `dseq/gseq/oseq` for storage.
-        let id = if let Some(s) = data.get("lease_id").and_then(|v| v.as_str()) {
-            s.to_string()
-        } else if let Some(obj) = data.get("lease_id").and_then(|v| v.as_object()) {
-            let dseq = obj.get("dseq").and_then(|v| v.as_str()).unwrap_or("0");
-            let gseq = obj.get("gseq").and_then(|v| v.as_str()).unwrap_or("0");
-            let oseq = obj.get("oseq").and_then(|v| v.as_str()).unwrap_or("0");
-            format!("{dseq}/{gseq}/{oseq}")
-        } else if let Some(s) = data.get("deployment_id").and_then(|v| v.as_str()) {
-            s.to_string()
-        } else {
-            return Err(Error::HttpError(
-                "Akash response missing lease_id/deployment_id".into(),
-            ));
-        };
-
-        let public_ip = data
-            .get("public_ip")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let region = data
-            .get("region")
-            .and_then(|v| v.as_str())
-            .unwrap_or(fallback_region)
-            .to_string();
-
-        let status = match data.get("status").and_then(|v| v.as_str()).unwrap_or("") {
-            "active" | "running" | "leased" => InstanceStatus::Running,
-            "pending" | "bidding" | "matched" | "starting" => InstanceStatus::Starting,
-            "closing" => InstanceStatus::Stopping,
-            "closed" | "terminated" | "expired" => InstanceStatus::Terminated,
-            _ => InstanceStatus::Unknown,
-        };
-
-        Ok(ProvisionedInstance {
-            id,
-            provider: CloudProvider::Akash,
-            instance_type: instance_type.to_string(),
-            region,
-            public_ip,
-            private_ip: None,
-            status,
-        })
-    }
-
-    async fn wait_for_lease_ready(
-        &self,
-        deployment_id: &str,
-        instance_type: &str,
-    ) -> Result<ProvisionedInstance> {
-        let region = self.default_region.clone();
-        let instance_type = instance_type.to_string();
-        poll_until(
-            "Akash lease",
-            AKASH_LEASE_POLL_INTERVAL,
-            AKASH_LEASE_READY_TIMEOUT,
-            || async {
-                let raw = self.fetch_deployment_json(deployment_id).await?;
-                let instance = Self::parse_deployment(&raw, &region, &instance_type)?;
-                match instance.status {
-                    InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
-                    InstanceStatus::Terminated => Err(Error::HttpError(
-                        "Akash lease terminated before becoming ready".into(),
-                    )),
-                    _ => Ok(None),
-                }
+            http: SecureHttpClient::with_endpoint(endpoint)?,
+            auth: ApiAuthentication::ApiKey {
+                key,
+                header_name: "x-api-key".into(),
             },
+            endpoint: endpoint.trim_end_matches('/').into(),
+            auction: None,
+            claimed: AtomicBool::new(false),
+        })
+    }
+
+    /// Open an unleased auction explicitly, before adding this adapter to provider
+    /// comparison. The SDK owns the SDL and chain HTTP; quote never creates one.
+    /// Keep the returned adapter or close its auction if no lease is wanted.
+    pub async fn prepare_auction(mut self, spec: &ResourceSpec) -> Result<Self> {
+        supported_workload(spec)?;
+        let model = catalog_sku(spec, "akash")?;
+        let key = spec
+            .ssh_public_key
+            .as_deref()
+            .filter(|k| !k.is_empty())
+            .ok_or_else(|| {
+                configuration("Akash auction preparation requires the lessee's SSH public key")
+            })?;
+        let ceiling = spec
+            .max_hourly_cost_usd
+            .filter(|p| p.is_finite() && *p > 0.0)
+            .ok_or_else(|| {
+                configuration("Set max_hourly_cost_usd before preparing an Akash auction")
+            })?;
+        let blocks = self.blocks_per_hour().await?;
+        let per_block = (ceiling * 1_000_000.0 / blocks).floor();
+        if per_block < 1.0 || per_block > u64::MAX as f64 {
+            return Err(configuration(
+                "Akash bid ceiling is outside supported integer units",
+            ));
+        }
+        let sdl = build_sdl_manifest(
+            spec.image.as_deref().unwrap_or(DEFAULT_GPU_IMAGE),
+            &model,
+            spec,
+            &[22],
+            per_block as u64,
+        );
+        let _ = key;
+        let mut body = json!({"data":{"sdl":sdl}});
+        if let Some(hours) = spec
+            .lease_duration_secs
+            .map(|s| s.div_ceil(3600))
+            .filter(|h| (1..=48).contains(h))
+        {
+            body["data"]["runtimeLimitHours"] = json!(hours);
+        }
+        let response = api_json(
+            self.http
+                .post(
+                    &format!("{}/v1/deployments", self.endpoint),
+                    &self.auth,
+                    Some(body),
+                )
+                .await?,
+        )
+        .await?;
+        let data = response
+            .get("data")
+            .ok_or_else(|| configuration("Akash response missing deployment data"))?;
+        if data
+            .pointer("/signTx/code")
+            .and_then(Value::as_u64)
+            .is_some_and(|code| code != 0)
+        {
+            return Err(configuration("Akash deployment transaction failed"));
+        }
+        let dseq = data
+            .get("dseq")
+            .and_then(Value::as_str)
+            .filter(|s| valid_dseq(s))
+            .ok_or_else(|| configuration("Akash response missing deployment sequence"))?
+            .to_string();
+        self.auction = Some(Auction {
+            dseq,
+            spec: spec.clone(),
+        });
+        Ok(self)
+    }
+
+    pub fn auction_id(&self) -> Option<&str> {
+        self.auction.as_ref().map(|a| a.dseq.as_str())
+    }
+
+    /// Close an unselected prepared auction through the same provider retire path.
+    pub async fn close_auction(&self) -> Result<()> {
+        self.terminate_instance(
+            self.auction_id()
+                .ok_or_else(|| configuration("No prepared Akash auction"))?,
         )
         .await
     }
 
-    async fn close_deployment(&self, deployment_id: &str) -> Result<()> {
-        let url = format!("{}/deployments/{deployment_id}", self.rpc_url);
-        retry_with_backoff("akash close_deployment", &self.retry_policy, |_attempt| {
-            let url = url.clone();
-            async move {
-                let response = self.http.delete(&url, &self.auth).await.map_err(|e| {
-                    ClassifiedError::transient(Error::HttpError(format!("Akash DELETE {url}: {e}")))
-                })?;
-                if let Some(class) = classify_response(&response) {
-                    // 404 means it's already gone — treat as success.
-                    if matches!(class, ErrorClass::Permanent) && response.status().as_u16() == 404 {
-                        return Ok(());
-                    }
-                    let body = response.text().await.unwrap_or_default();
-                    let inner = Error::HttpError(format!("Akash DELETE {url} failed: {body}"));
-                    return Err(ClassifiedError { class, inner });
-                }
-                Ok(())
+    fn auction_for(&self, spec: &ResourceSpec, region: &str) -> Result<&Auction> {
+        supported_workload(spec)?;
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if !matches!(region, "" | "global") {
+            return Err(configuration("This Akash auction has global placement"));
+        }
+        let auction = self.auction.as_ref().ok_or_else(|| {
+            configuration("Prepare an SDK Akash auction before comparing live bids")
+        })?;
+        let bound = &auction.spec;
+        if spec.cpu != bound.cpu
+            || spec.memory_gb != bound.memory_gb
+            || spec.storage_gb != bound.storage_gb
+            || spec.gpu_count != bound.gpu_count
+            || spec.gpu_class != bound.gpu_class
+            || spec.gpu_vram_gb != bound.gpu_vram_gb
+            || spec.image != bound.image
+            || spec.ssh_public_key != bound.ssh_public_key
+        {
+            return Err(configuration(
+                "Request does not match the prepared Akash auction",
+            ));
+        }
+        Ok(auction)
+    }
+
+    /// Billing is micro-USD per block. Convert using observed recent chain block
+    /// timestamps; neither AKT exchange rates nor a fixed block-time guess enter.
+    async fn blocks_per_hour(&self) -> Result<f64> {
+        let value = api_json(
+            self.http
+                .get(&format!("{}/v1/blocks", self.endpoint), &self.auth)
+                .await?,
+        )
+        .await?;
+        let mut samples: Vec<_> = value
+            .as_array()
+            .ok_or_else(|| configuration("Missing Akash block observations"))?
+            .iter()
+            .filter_map(|v| {
+                Some((
+                    v.get("height")?.as_u64()?,
+                    chrono::DateTime::parse_from_rfc3339(v.get("datetime")?.as_str()?).ok()?,
+                ))
+            })
+            .collect();
+        samples.sort_by_key(|(height, _)| *height);
+        let (first, last) = (
+            samples
+                .first()
+                .ok_or_else(|| configuration("Missing Akash block observations"))?,
+            samples
+                .last()
+                .ok_or_else(|| configuration("Missing Akash block observations"))?,
+        );
+        let elapsed = last.1.signed_duration_since(first.1).num_milliseconds() as f64 / 1000.0;
+        let age = chrono::Utc::now()
+            .signed_duration_since(last.1)
+            .num_seconds();
+        if elapsed <= 0.0 || last.0 <= first.0 || !(-60..=300).contains(&age) {
+            return Err(configuration(
+                "Akash block observations are stale or invalid",
+            ));
+        }
+        Ok(3600.0 * (last.0 - first.0) as f64 / elapsed)
+    }
+
+    async fn bids(&self, spec: &ResourceSpec, region: &str) -> Result<Vec<(Bid, f64)>> {
+        let auction = self.auction_for(spec, region)?;
+        let models = catalog_skus(spec, "akash")?;
+        let required_vram = spec
+            .gpu_vram_gb
+            .or_else(|| {
+                spec.gpu_class
+                    .as_deref()
+                    .and_then(blueprint_core::gpu::find)
+                    .map(|g| g.vram_gb)
+            })
+            .unwrap_or(0);
+        let value = api_json(
+            self.http
+                .get(
+                    &format!("{}/v1/bids?dseq={}", self.endpoint, auction.dseq),
+                    &self.auth,
+                )
+                .await?,
+        )
+        .await?;
+        let blocks = self.blocks_per_hour().await?;
+        let mut bids = Vec::new();
+        for item in value
+            .get("data")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let Some(bid) = item.get("bid") else { continue };
+            let Some(id) = bid.get("id") else { continue };
+            if bid.get("state").and_then(Value::as_str) != Some("open")
+                || id.get("dseq").and_then(Value::as_str) != Some(auction.dseq.as_str())
+            {
+                continue;
             }
-        })
+            // Native ACT credits are denominated in USD. AKT and other unknown
+            // conversion rates are not executable USD quotes.
+            if bid.pointer("/price/denom").and_then(Value::as_str) != Some("uact") {
+                continue;
+            }
+            let Some(amount) = bid.pointer("/price/amount").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(price) = amount
+                .parse::<f64>()
+                .ok()
+                .filter(|p| p.is_finite() && *p > 0.0)
+                .map(|p| p * blocks / 1_000_000.0)
+            else {
+                continue;
+            };
+            if spec.max_hourly_cost_usd.is_some_and(|cap| price > cap) {
+                continue;
+            }
+            let Some(offers) = bid
+                .get("resources_offer")
+                .and_then(Value::as_array)
+                .filter(|o| o.len() == 1)
+            else {
+                continue;
+            };
+            let offer = &offers[0];
+            if offer.get("count").and_then(Value::as_u64) != Some(1) {
+                continue;
+            }
+            let resource = &offer["resources"];
+            if integer(resource, "/gpu/units/val") != spec.gpu_count.map(u64::from)
+                || integer(resource, "/cpu/units/val")
+                    .is_none_or(|v| v < (spec.cpu as f64 * 1000.0).ceil() as u64)
+                || integer(resource, "/memory/quantity/val")
+                    .is_none_or(|v| v < (spec.memory_gb as f64 * 1_073_741_824.0).ceil() as u64)
+                || resource
+                    .get("storage")
+                    .and_then(Value::as_array)
+                    .map(|s| {
+                        s.iter()
+                            .filter_map(|s| integer(s, "/quantity/val"))
+                            .fold(0u64, u64::saturating_add)
+                    })
+                    .is_none_or(|v| v < (spec.storage_gb as f64 * 1_073_741_824.0).ceil() as u64)
+            {
+                continue;
+            }
+            let matching = resource
+                .pointer("/gpu/attributes")
+                .and_then(Value::as_array)
+                .is_some_and(|attributes| {
+                    attributes.iter().any(|attribute| {
+                        if attribute.get("value").and_then(Value::as_str) != Some("true") {
+                            return false;
+                        }
+                        let Some(key) = attribute.get("key").and_then(Value::as_str) else {
+                            return false;
+                        };
+                        let parts: Vec<_> = key.split('/').collect();
+                        let model = parts.windows(2).find(|p| p[0] == "model").map(|p| p[1]);
+                        let ram = parts
+                            .windows(2)
+                            .find(|p| p[0] == "ram")
+                            .and_then(|p| p[1].strip_suffix("Gi"))
+                            .and_then(|v| v.parse::<u32>().ok());
+                        key.starts_with("vendor/nvidia/")
+                            && model.is_some_and(|m| models.iter().any(|v| v == m))
+                            && ram.is_some_and(|ram| ram >= required_vram)
+                    })
+                });
+            if !matching {
+                continue;
+            }
+            let (Some(gseq), Some(oseq), Some(provider)) = (
+                id.get("gseq").and_then(Value::as_u64),
+                id.get("oseq").and_then(Value::as_u64),
+                id.get("provider").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            bids.push((
+                Bid {
+                    dseq: auction.dseq.clone(),
+                    gseq,
+                    oseq,
+                    provider: provider.into(),
+                    amount: amount.into(),
+                    denom: "uact".into(),
+                },
+                price,
+            ));
+        }
+        bids.sort_by(|a, b| a.1.total_cmp(&b.1));
+        Ok(bids)
+    }
+
+    async fn deployment(&self, id: &str) -> Result<Option<Value>> {
+        if !valid_dseq(id) {
+            return Err(configuration("Invalid Akash deployment sequence"));
+        }
+        api_json_or_missing(
+            self.http
+                .get(
+                    &format!("{}/v1/deployments/{id}", self.endpoint),
+                    &self.auth,
+                )
+                .await?,
+        )
         .await
     }
+
+    fn endpoint(value: &Value) -> Result<String> {
+        for lease in value
+            .pointer("/data/leases")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if lease.get("state").and_then(Value::as_str) != Some("active") {
+                continue;
+            }
+            for ports in lease
+                .pointer("/status/forwarded_ports")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|v| v.values())
+            {
+                for port in ports.as_array().into_iter().flatten() {
+                    if port.get("port").and_then(Value::as_u64) == Some(22)
+                        && port
+                            .get("available")
+                            .and_then(Value::as_u64)
+                            .is_some_and(|n| n > 0)
+                    {
+                        if let (Some(host), Some(external)) = (
+                            port.get("host").and_then(Value::as_str),
+                            port.get("externalPort")
+                                .and_then(Value::as_u64)
+                                .and_then(|p| u16::try_from(p).ok()),
+                        ) {
+                            return ssh_endpoint(&format!("ssh root@{host} -p {external}"));
+                        }
+                    }
+                }
+            }
+        }
+        Err(configuration("Akash SSH endpoint is not ready"))
+    }
+}
+
+fn configuration(message: &str) -> Error {
+    Error::ConfigurationError(message.into())
+}
+fn valid_dseq(id: &str) -> bool {
+    !id.is_empty()
+        && id.bytes().all(|b| b.is_ascii_digit())
+        && id.parse::<u64>().is_ok_and(|n| n > 0)
+}
+fn integer(value: &Value, path: &str) -> Option<u64> {
+    value.pointer(path)?.as_str()?.parse().ok()
+}
+
+fn supported_workload(spec: &ResourceSpec) -> Result<()> {
+    if !spec.env.is_empty()
+        || !spec.ports.is_empty()
+        || spec.command.is_some()
+        || spec.endpoint_port.is_some()
+        || spec.source_network.is_some()
+        || spec.volume_gb.is_some_and(|v| v > 0.0)
+        || spec.volume_mount_path.is_some()
+        || spec.manifest.is_some()
+    {
+        return Err(Error::ConfigurationError(
+            "This adapter does not support the requested workload/network/volume fields".into(),
+        ));
+    }
+    Ok(())
 }
 
 #[async_trait]
 impl CloudProviderAdapter for AkashAdapter {
+    async fn quote(
+        &self,
+        spec: &ResourceSpec,
+        region: &str,
+    ) -> Result<crate::providers::common::InstanceSelection> {
+        let (bid, price) = self
+            .bids(spec, region)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                configuration("No live Akash USD bid satisfies the exact GPU request")
+            })?;
+        quoted_selection(
+            serde_json::to_string(&bid).map_err(|_| configuration("Invalid Akash bid"))?,
+            price,
+        )
+    }
     async fn provision_instance(
         &self,
-        instance_type: &str,
-        region: &str,
-        tee: bool,
+        _instance_type: &str,
+        _region: &str,
+        _tee: bool,
     ) -> Result<ProvisionedInstance> {
-        self.provision_resources(
-            instance_type,
-            region,
-            &ResourceSpec::default().with_gpu(1),
-            tee,
-        )
-        .await
+        Err(configuration(
+            "Akash requires a prepared auction and complete ResourceSpec",
+        ))
     }
-
     async fn provision_resources(
         &self,
         instance_type: &str,
         region: &str,
         spec: &ResourceSpec,
-        require_tee: bool,
+        tee: bool,
     ) -> Result<ProvisionedInstance> {
-        spec.validate().map_err(Error::ConfigurationError)?;
-        // Fail closed at the trait boundary: this provider has no
-        // confidential-compute / TEE attestation path. Refuse rather than
-        // silently return a non-TEE instance for a require_tee request.
-        if require_tee {
-            return Err(Error::ConfigurationError(
-                "Akash does not support confidential-compute / TEE attestation; \
-                 refusing require_tee"
-                    .into(),
-            ));
+        reject_tee(tee)?;
+        let expected: Bid = serde_json::from_str(instance_type)
+            .map_err(|_| configuration("Invalid selected Akash bid"))?;
+        let valid = self.bids(spec, region).await?.into_iter().any(|(b, _)| {
+            b.dseq == expected.dseq
+                && b.gseq == expected.gseq
+                && b.oseq == expected.oseq
+                && b.provider == expected.provider
+                && b.amount == expected.amount
+                && b.denom == expected.denom
+        });
+        if !valid {
+            return Err(configuration("Selected Akash bid is no longer available"));
         }
-        let label = generate_instance_name("akash");
-        let region_name = if region.is_empty() {
-            self.default_region.as_str()
-        } else {
-            region
-        };
-
-        // The `instance_type` is either a named profile (e.g. "gpu-a100-80gb")
-        // or a pre-built SDL manifest. If it doesn't look like YAML, build a
-        // default SDL around it using a placeholder image — the deploy step
-        // will replace the image when actually launching the blueprint.
-        let sdl = if instance_type.contains("---") || instance_type.contains("services:") {
-            instance_type.to_string()
-        } else {
-            build_sdl_manifest(
-                spec.image.as_deref().unwrap_or("ubuntu:22.04"),
-                instance_type,
-                spec,
-                &[],
-            )
-        };
-
-        let deployment_id = self.submit_deployment(&sdl).await?;
-        info!(%deployment_id, %label, "Submitted Akash deployment");
-
-        if let Err(e) = self.accept_bid(&deployment_id).await {
-            warn!(%deployment_id, error = %e, "Accept bid failed; closing deployment");
-            let _ = self.close_deployment(&deployment_id).await;
-            return Err(e);
-        }
-
-        let mut instance = self
-            .wait_for_lease_ready(&deployment_id, instance_type)
-            .await?;
-        // Carry the deployment id forward — that's what we DELETE on terminate.
-        instance.id = deployment_id;
-        instance.region = region_name.to_string();
-        Ok(instance)
+        self.claimed
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .map_err(|_| configuration("This Akash auction has already been allocated"))?;
+        Ok(starting_instance(
+            CloudProvider::Akash,
+            expected.dseq,
+            instance_type.into(),
+            "global".into(),
+        ))
     }
-
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        self.close_deployment(instance_id).await?;
-        info!(%instance_id, "Closed Akash deployment");
-        Ok(())
-    }
-
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        match self.fetch_deployment_json(instance_id).await {
-            Ok(raw) => {
-                let instance = Self::parse_deployment(&raw, &self.default_region, "akash-lease")?;
-                Ok(instance.status)
-            }
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Akash deployment status");
-                Ok(InstanceStatus::Unknown)
-            }
-        }
-    }
-
-    async fn deploy_blueprint_with_target(
-        &self,
-        target: &crate::core::deployment_target::DeploymentTarget,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        use crate::core::deployment_target::DeploymentTarget;
-        match target {
-            DeploymentTarget::VirtualMachine { runtime: _ } => {
-                let plan = AkashInstanceMapper::map(resource_spec);
-                let instance_type = plan.instance_type.clone();
-                provision_with_cleanup(
-                    "akash",
-                    || async {
-                        self.provision_resources(&instance_type, "", resource_spec, false)
-                            .await
-                    },
-                    |instance| {
-                        let env_vars = env_vars.clone();
-                        async move {
-                            self.deploy_blueprint(
-                                &instance,
-                                blueprint_image,
-                                resource_spec,
-                                env_vars,
-                            )
-                            .await
-                        }
-                    },
-                    |id| async move { self.terminate_instance(&id).await },
-                )
-                .await
-            }
-            DeploymentTarget::ManagedKubernetes { .. } => Err(Error::ConfigurationError(
-                "Akash does not offer managed Kubernetes".into(),
-            )),
-            DeploymentTarget::GenericKubernetes {
-                context: _,
-                namespace,
-            } => {
-                #[cfg(feature = "kubernetes")]
-                {
-                    use crate::shared::SharedKubernetesDeployment;
-                    SharedKubernetesDeployment::deploy_to_generic_k8s(
-                        namespace,
-                        blueprint_image,
-                        resource_spec,
-                        env_vars,
-                    )
-                    .await
-                }
-                #[cfg(not(feature = "kubernetes"))]
-                {
-                    let _ = (namespace, blueprint_image, resource_spec, env_vars);
-                    Err(Error::ConfigurationError(
-                        "Kubernetes feature not enabled".into(),
-                    ))
-                }
-            }
-            DeploymentTarget::Serverless { .. } => Err(Error::ConfigurationError(
-                "Akash does not offer serverless deployment".into(),
-            )),
-        }
-    }
-
-    async fn deploy_blueprint(
+    async fn prepare_access(
         &self,
         instance: &ProvisionedInstance,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        // Akash leases expose a forwarded SSH endpoint via the lease's public IP.
-        if instance.public_ip.is_none() {
-            return Err(Error::ConfigurationError(
-                "Akash lease has no public_ip; cannot SSH-deploy".into(),
+        spec: &ResourceSpec,
+    ) -> Result<()> {
+        let selected: Bid = serde_json::from_str(&instance.instance_type)
+            .map_err(|_| configuration("Invalid selected Akash bid"))?;
+        let valid = self.bids(spec, "").await?.into_iter().any(|(b, _)| {
+            b.dseq == selected.dseq
+                && b.gseq == selected.gseq
+                && b.oseq == selected.oseq
+                && b.provider == selected.provider
+                && b.amount == selected.amount
+                && b.denom == selected.denom
+        });
+        if !valid || selected.dseq != instance.id {
+            return Err(configuration(
+                "Selected Akash bid changed before lease acceptance",
             ));
         }
-        deploy_via_ssh(
-            instance,
-            blueprint_image,
-            resource_spec,
-            env_vars,
-            SshDeploymentConfig::akash(),
-        )
-        .await
+        api_json(self.http.post(&format!("{}/v1/leases",self.endpoint),&self.auth,Some(json!({"leases":[{"dseq":selected.dseq,"gseq":selected.gseq,"oseq":selected.oseq,"provider":selected.provider}]}))).await?).await?;
+        Ok(())
     }
-
-    async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
-        if let Some(endpoint) = deployment.qos_grpc_endpoint() {
-            // Reuse the pre-built pooled client instead of rebuilding the
-            // TLS stack on every (interval-driven) health probe.
-            match self
-                .http
-                .get(&format!("{endpoint}/health"), &ApiAuthentication::None)
-                .await
-            {
-                Ok(response) => Ok(response.status().is_success()),
-                Err(_) => Ok(false),
-            }
-        } else {
-            Ok(false)
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        let mut instance = starting_instance(
+            CloudProvider::Akash,
+            id.into(),
+            "akash-deployment".into(),
+            "global".into(),
+        );
+        let Some(value) = self.deployment(id).await? else {
+            instance.status = InstanceStatus::Terminated;
+            return Ok(instance);
+        };
+        if value
+            .pointer("/data/deployment/state")
+            .and_then(Value::as_str)
+            == Some("closed")
+        {
+            instance.status = InstanceStatus::Terminated;
+            return Ok(instance);
         }
+        if let Ok(endpoint) = Self::endpoint(&value) {
+            let url = url::Url::parse(&endpoint)
+                .map_err(|_| configuration("Invalid Akash access endpoint"))?;
+            instance.public_ip = url.host_str().map(str::to_string);
+            instance.status = InstanceStatus::Running;
+        }
+        Ok(instance)
     }
-
+    async fn get_instance_status(&self, id: &str) -> Result<InstanceStatus> {
+        Ok(self.get_instance_details(id).await?.status)
+    }
+    async fn lease_endpoint(&self, instance: &ProvisionedInstance) -> Result<String> {
+        Self::endpoint(
+            &self
+                .deployment(&instance.id)
+                .await?
+                .ok_or_else(|| configuration("Akash deployment no longer exists"))?,
+        )
+    }
+    async fn terminate_instance(&self, id: &str) -> Result<()> {
+        if !valid_dseq(id) {
+            return Err(configuration("Invalid Akash deployment sequence"));
+        }
+        let response = self
+            .http
+            .delete(
+                &format!("{}/v1/deployments/{id}", self.endpoint),
+                &self.auth,
+            )
+            .await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        let value = api_json(response).await?;
+        if value.pointer("/data/success").and_then(Value::as_bool) == Some(false) {
+            return Err(configuration("Akash deployment close was refused"));
+        }
+        Ok(())
+    }
+    async fn deploy_blueprint_with_target(
+        &self,
+        _target: &crate::core::deployment_target::DeploymentTarget,
+        _image: &str,
+        _spec: &ResourceSpec,
+        _env: HashMap<String, String>,
+    ) -> Result<BlueprintDeploymentResult> {
+        Err(configuration(
+            "Set the workload image in ResourceSpec, prepare its Akash auction, then allocate the lease",
+        ))
+    }
+    async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
+        Ok(self.get_instance_status(&deployment.instance.id).await? == InstanceStatus::Running)
+    }
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
     }

@@ -51,6 +51,15 @@ impl VastAiInstanceMapper {
             "rented":{"eq":false},
             "order": [["dph_total", "asc"]],
         });
+        let minimum = spec.gpu_vram_gb.unwrap_or(0).max(
+            spec.gpu_class
+                .as_deref()
+                .and_then(blueprint_core::gpu::find)
+                .map(|class| class.vram_gb)
+                .unwrap_or(0),
+        );
+        query["gpu_ram"] =
+            json!({"gte":crate::providers::common::gpu_adapter::gpu_memory_mib(minimum)});
         if let Some(max) = max_price_per_hour {
             query["dph_total"] = json!({ "lte": max });
         }

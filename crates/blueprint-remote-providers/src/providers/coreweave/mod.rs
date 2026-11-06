@@ -1,14 +1,14 @@
-//! CoreWeave — K8s-native GPU cloud. Unlike the other GPU providers, CoreWeave
-//! exposes its capacity through a managed Kubernetes offering rather than a
-//! bespoke REST instance API. The adapter delegates to `SharedKubernetesDeployment`.
+//! Kubernetes GPU leases with caller-owned Kubernetes credentials.
 //!
-//! <https://docs.coreweave.com/>
+//! `with_client` accepts an authenticated tenant client; `with_credentials`
+//! uses the caller's kubeconfig server/CA with the supplied token. The
+//! `kubernetes` feature is required. Allocation creates a Pod and an SSH
+//! LoadBalancer service; termination confirms both resources are gone.
 //!
-//! Env vars:
-//! - `COREWEAVE_TOKEN` — API / kubeconfig token (used to pull kubeconfig).
-//! - `COREWEAVE_REGION` — datacenter identifier (e.g. `ORD1`, `LAS1`).
-//! - `COREWEAVE_NAMESPACE` — tenant Kubernetes namespace.
-//! - `KUBECONFIG` — path to the pre-configured kubeconfig (takes precedence).
+//! Public node and dedicated-inference prices do not establish a tenant Pod's
+//! account price. [`crate::pricing::dated_gpu_rates`] records those unknowns
+//! and their sources. Supply exact all-in account contract prices through
+//! `with_prices`; unpriced allocations cannot enter provider selection.
 
 mod adapter;
 mod instance_mapper;

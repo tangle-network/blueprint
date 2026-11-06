@@ -3770,8 +3770,8 @@ fn ensure_keys(path: &PathBuf, required: &[SupportedKey]) -> Result<()> {
 fn init_tracing_subscriber() {
     use tracing_subscriber::fmt::format::FmtSpan;
     use tracing_subscriber::prelude::*;
-
     let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_writer(std::io::stderr)
         .with_target(false)
         .with_span_events(FmtSpan::CLOSE)
         .pretty();
