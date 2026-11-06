@@ -314,3 +314,44 @@ async fn remote_source_rejects_missing_binary() {
         Err(Error::NoMatchingBinary)
     ));
 }
+
+#[tokio::test]
+async fn independent_github_enforces_blake3_with_a_correct_sha256() {
+    let mut expected = binary("cargo-tangle");
+    expected.blake3 = Some([0xff; 32]);
+    let (_peer, mut source, cache, _tools) = github_fixture(expected, true, true).await;
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::HashMismatch { .. })
+    ));
+}
+
+#[tokio::test]
+async fn independent_github_rechecks_required_attestation_on_cache_hits() {
+    let (_peer, mut source, cache, tools) =
+        github_fixture(binary("cargo-tangle"), true, false).await;
+    source.fetch(cache.path()).await.unwrap();
+    std::fs::write(tools.path().join("gh"), "#!/bin/sh\nexit 1\n").unwrap();
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::AttestationFailed)
+    ));
+}
+
+#[tokio::test]
+async fn independent_github_rejects_ambiguous_native_manifest_candidates() {
+    let (peer, mut source, cache, _tools) =
+        github_fixture(binary("cargo-tangle"), true, false).await;
+    let mut manifest = github_manifest(&peer);
+    let duplicate = manifest["releases"][0].clone();
+    manifest["releases"].as_array_mut().unwrap().push(duplicate);
+    peer.serve(
+        &format!("{RELEASE}/dist-manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    );
+    assert!(matches!(
+        source.fetch(cache.path()).await,
+        Err(Error::NoMatchingBinary)
+    ));
+    assert!(!peer.seen().contains(&format!("{RELEASE}/{ARCHIVE}")));
+}
