@@ -40,6 +40,9 @@ pub struct ResourceSpec {
     pub image: Option<String>,
     #[serde(default)]
     pub volume_gb: Option<f32>,
+    /// Caller-owned existing native volume; its capacity must be verified by the provider.
+    #[serde(default)]
+    pub volume_id: Option<String>,
     #[serde(default)]
     pub volume_mount_path: Option<String>,
     #[serde(default)]
@@ -311,6 +314,9 @@ impl ResourceSpec {
         if self
             .volume_gb
             .is_some_and(|gb| !gb.is_finite() || gb <= 0.0)
+            || self.volume_id.as_ref().is_some_and(|id| {
+                id.is_empty() || id.len() > 256 || id.chars().any(char::is_control)
+            })
             || self
                 .volume_mount_path
                 .as_ref()
@@ -431,6 +437,7 @@ impl Default for ResourceSpec {
             ssh_public_key: None,
             image: None,
             volume_gb: None,
+            volume_id: None,
             volume_mount_path: None,
             region: None,
             weights: None,
@@ -525,6 +532,9 @@ pub enum CloudProvider {
     /// Hetzner Cloud — European cloud with dedicated GPU servers
     #[serde(rename = "hetzner", alias = "Hetzner")]
     Hetzner,
+    /// OVHcloud Public Cloud
+    #[serde(rename = "ovh", alias = "OVH", alias = "ovhcloud")]
+    Ovh,
     /// Crusoe Energy — clean-energy GPU cloud (L40S, A100, H100)
     #[serde(rename = "crusoe", alias = "Crusoe")]
     Crusoe,
@@ -562,6 +572,7 @@ impl core::fmt::Display for CloudProvider {
             CloudProvider::Render => write!(f, "Render"),
             CloudProvider::BittensorLium => write!(f, "Bittensor Lium"),
             CloudProvider::Hetzner => write!(f, "Hetzner"),
+            CloudProvider::Ovh => write!(f, "OVH"),
             CloudProvider::Crusoe => write!(f, "Crusoe"),
             CloudProvider::Generic => write!(f, "Generic"),
             CloudProvider::DockerLocal => write!(f, "Docker (Local)"),
@@ -603,6 +614,7 @@ impl CloudProvider {
             Self::Render => "render",
             Self::BittensorLium => "bittensor-lium",
             Self::Hetzner => "hetzner",
+            Self::Ovh => "ovh",
             Self::Crusoe => "crusoe",
             _ => "generic",
         }

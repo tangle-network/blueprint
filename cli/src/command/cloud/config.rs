@@ -3,11 +3,13 @@
 //! This module handles the configuration and authentication setup for various cloud providers.
 //! It provides interactive setup flows, credential management, and persistent configuration storage.
 
+use super::preflight::{default_region, region_env_var};
 use blueprint_remote_providers::security::auth;
 use color_eyre::{Result, eyre::Context};
 use dialoguer::{Select, theme::ColorfulTheme};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 
 pub use blueprint_core::resources::CloudProvider;
@@ -120,11 +122,11 @@ pub async fn configure(
 
     let mut config = CloudConfig::load()?;
 
-    // Get or prompt for region
-    let region = if let Some(r) = region {
-        r
-    } else {
-        prompt_region(&provider)?
+    // A region from the flag or the provider's variable; a prompt only on a terminal.
+    let region = match region.or_else(|| std::env::var(region_env_var(&provider)).ok()) {
+        Some(region) => region,
+        None if std::io::stdin().is_terminal() => prompt_region(&provider)?,
+        None => default_region(&provider).to_owned(),
     };
 
     if credentials_present(&provider).await {
@@ -168,6 +170,13 @@ fn credential_variables(provider: &CloudProvider) -> &'static [&'static str] {
         CloudProvider::DigitalOcean => &["DIGITALOCEAN_TOKEN"],
         CloudProvider::Vultr => &["VULTR_API_KEY"],
         CloudProvider::Hetzner => &["HETZNER_API_TOKEN"],
+        CloudProvider::Ovh => &[
+            "OVH_ENDPOINT",
+            "OVH_APPLICATION_KEY",
+            "OVH_APPLICATION_SECRET",
+            "OVH_CONSUMER_KEY",
+            "OVH_CLOUD_PROJECT_SERVICE",
+        ],
         CloudProvider::RunPod => &["RUNPOD_API_KEY"],
         CloudProvider::LambdaLabs => &["LAMBDA_LABS_API_KEY"],
         CloudProvider::PrimeIntellect => &["PRIME_INTELLECT_API_KEY"],
@@ -239,6 +248,13 @@ fn prompt_region(provider: &CloudProvider) -> Result<String> {
             ("hel1", "Helsinki (FI)"),
             ("ash", "Ashburn (US)"),
             ("hil", "Hillsboro (US)"),
+        ],
+        CloudProvider::Ovh => vec![
+            ("GRA11", "Gravelines (FR)"),
+            ("SBG5", "Strasbourg (FR)"),
+            ("BHS5", "Beauharnois (CA)"),
+            ("US-EAST-VA-1", "Vint Hill (US)"),
+            ("US-WEST-OR-1", "Hillsboro (US)"),
         ],
         CloudProvider::RunPod => vec![("US", "United States"), ("EU", "Europe"), ("CA", "Canada")],
         CloudProvider::LambdaLabs => vec![

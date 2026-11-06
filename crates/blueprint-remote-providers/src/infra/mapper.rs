@@ -1,20 +1,17 @@
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::providers::akash::AkashInstanceMapper;
-use crate::providers::bittensor_lium::BittensorLiumInstanceMapper;
 pub use crate::providers::common::InstanceSelection;
 use crate::providers::coreweave::CoreWeaveInstanceMapper;
 use crate::providers::crusoe::CrusoeInstanceMapper;
 use crate::providers::fluidstack::FluidstackInstanceMapper;
 use crate::providers::hetzner::HetznerInstanceMapper;
 use crate::providers::io_net::IoNetInstanceMapper;
-use crate::providers::lambda_labs::LambdaLabsInstanceMapper;
+use crate::providers::ovh::OvhInstanceMapper;
 use crate::providers::paperspace::PaperspaceInstanceMapper;
 use crate::providers::prime_intellect::PrimeIntellectInstanceMapper;
 use crate::providers::render::RenderInstanceMapper;
-use crate::providers::runpod::RunPodInstanceMapper;
 use crate::providers::tensordock::TensorDockInstanceMapper;
-use crate::providers::vast_ai::VastAiInstanceMapper;
 use serde::{Deserialize, Serialize};
 
 /// Maps resource requirements to cloud instance types
@@ -25,7 +22,7 @@ impl InstanceTypeMapper {
     pub fn map_to_instance_type(
         spec: &ResourceSpec,
         provider: &CloudProvider,
-    ) -> InstanceSelection {
+    ) -> crate::Result<InstanceSelection> {
         Self::map_to_instance_type_with_requirements(spec, provider, false)
     }
 
@@ -34,20 +31,27 @@ impl InstanceTypeMapper {
         spec: &ResourceSpec,
         provider: &CloudProvider,
         require_tee: bool,
-    ) -> InstanceSelection {
-        if require_tee {
-            return Self::map_tee_instance(spec, provider);
+    ) -> crate::Result<InstanceSelection> {
+        if matches!(
+            provider,
+            CloudProvider::RunPod
+                | CloudProvider::LambdaLabs
+                | CloudProvider::VastAi
+                | CloudProvider::BittensorLium
+        ) {
+            return Err(crate::Error::Provider(
+                crate::managed::ProviderErrorCode::Unsupported,
+            ));
         }
-
-        match provider {
+        if require_tee {
+            return Ok(Self::map_tee_instance(spec, provider));
+        }
+        Ok(match provider {
             CloudProvider::AWS => Self::map_aws_instance(spec),
             CloudProvider::GCP => Self::map_gcp_instance(spec),
             CloudProvider::Azure => Self::map_azure_instance(spec),
             CloudProvider::DigitalOcean => Self::map_do_instance(spec),
             CloudProvider::Vultr => Self::map_vultr_instance(spec),
-            CloudProvider::LambdaLabs => Self::from_common(LambdaLabsInstanceMapper::map(spec)),
-            CloudProvider::RunPod => Self::from_common(RunPodInstanceMapper::map(spec)),
-            CloudProvider::VastAi => Self::from_common(VastAiInstanceMapper::map(spec)),
             CloudProvider::CoreWeave => Self::from_common(CoreWeaveInstanceMapper::map(spec)),
             CloudProvider::Paperspace => Self::from_common(PaperspaceInstanceMapper::map(spec)),
             CloudProvider::Fluidstack => Self::from_common(FluidstackInstanceMapper::map(spec)),
@@ -58,13 +62,11 @@ impl InstanceTypeMapper {
                 Self::from_common(PrimeIntellectInstanceMapper::map(spec))
             }
             CloudProvider::Render => Self::from_common(RenderInstanceMapper::map(spec)),
-            CloudProvider::BittensorLium => {
-                Self::from_common(BittensorLiumInstanceMapper::map(spec))
-            }
             CloudProvider::Hetzner => Self::from_common(HetznerInstanceMapper::map(spec)),
+            CloudProvider::Ovh => Self::from_common(OvhInstanceMapper::map(spec)),
             CloudProvider::Crusoe => Self::from_common(CrusoeInstanceMapper::map(spec)),
             _ => Self::map_generic_instance(spec),
-        }
+        })
     }
 
     fn map_tee_instance(spec: &ResourceSpec, provider: &CloudProvider) -> InstanceSelection {

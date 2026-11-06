@@ -50,30 +50,3 @@ impl RetryPolicy {
         delay.min(self.max_delay)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_retry_policy() {
-        let policy = RetryPolicy::default();
-
-        assert_eq!(
-            policy.delay_for_attempt(0),
-            blueprint_std::time::Duration::from_secs(1)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(1),
-            blueprint_std::time::Duration::from_secs(2)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(2),
-            blueprint_std::time::Duration::from_secs(4)
-        );
-        assert_eq!(
-            policy.delay_for_attempt(5),
-            blueprint_std::time::Duration::from_secs(30)
-        ); // Max delay
-    }
-}

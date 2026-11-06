@@ -27,6 +27,23 @@ pub struct GpuClass {
 }
 
 impl GpuClass {
+    /// Match a complete hardware name, alias or SKU without guessing substrings.
+    pub fn matches_name(&self, name: &str) -> bool {
+        let normalize = |name: &str| -> String {
+            name.to_ascii_lowercase()
+                .trim_start_matches("nvidia")
+                .chars()
+                .filter(char::is_ascii_alphanumeric)
+                .collect()
+        };
+        let key = normalize(name);
+        self.aliases
+            .iter()
+            .chain(core::iter::once(&self.id))
+            .chain(self.provider_skus.values().flat_map(|skus| skus.values()))
+            .any(|name| normalize(name) == key)
+    }
+
     /// Fixed node SKUs require an exact count; flexible SKUs accept any valid count.
     pub fn sku(&self, provider: &str, count: u32) -> Option<&str> {
         if count == 0 || count > self.max_per_node {
@@ -86,13 +103,6 @@ pub fn detect() -> Result<Vec<GpuDevice>, String> {
     }
     let csv = String::from_utf8(output.stdout).map_err(|_| "Invalid GPU detector output")?;
     let classes = catalog();
-    let normalize = |name: &str| -> String {
-        name.to_ascii_lowercase()
-            .trim_start_matches("nvidia")
-            .chars()
-            .filter(char::is_ascii_alphanumeric)
-            .collect()
-    };
     csv.lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
@@ -105,17 +115,10 @@ pub fn detect() -> Result<Vec<GpuDevice>, String> {
                     .map_err(|_| "Invalid GPU memory total")?,
                 class: None,
             };
-            let key = normalize(&device.name);
             device.class = classes
                 .iter()
                 .filter(|gpu| gpu.vram_gb <= device.vram_gb())
-                .filter(|gpu| {
-                    gpu.aliases
-                        .iter()
-                        .chain(core::iter::once(&gpu.id))
-                        .chain(gpu.provider_skus.values().flat_map(|skus| skus.values()))
-                        .any(|name| normalize(name) == key)
-                })
+                .filter(|gpu| gpu.matches_name(&device.name))
                 .max_by_key(|gpu| gpu.vram_gb)
                 .map(|gpu| gpu.id.to_string());
             Ok(device)

@@ -1,16 +1,16 @@
 //! Multi-cloud infrastructure provisioner for Blueprint deployments
 //!
-//! Provides a single interface for provisioning across AWS, GCP, Azure, DigitalOcean, and Vultr
+//! Provides a single interface for provisioning across every provider in `providers`
 
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-#[cfg(feature = "aws")]
-use crate::infra::adapters::AwsAdapter;
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
 use crate::providers::akash::AkashAdapter;
+#[cfg(feature = "aws")]
+use crate::providers::aws::AwsAdapter;
 use crate::providers::azure::adapter::AzureAdapter;
 use crate::providers::bittensor_lium::BittensorLiumAdapter;
 use crate::providers::coreweave::CoreWeaveAdapter;
@@ -21,6 +21,7 @@ use crate::providers::gcp::GcpAdapter;
 use crate::providers::hetzner::HetznerAdapter;
 use crate::providers::io_net::IoNetAdapter;
 use crate::providers::lambda_labs::LambdaLabsAdapter;
+use crate::providers::ovh::OvhAdapter;
 use crate::providers::paperspace::PaperspaceAdapter;
 use crate::providers::prime_intellect::PrimeIntellectAdapter;
 use crate::providers::render::RenderAdapter;
@@ -33,7 +34,8 @@ use blueprint_std::collections::HashMap;
 
 /// Multi-cloud provisioner that handles deployments across all supported providers
 pub struct CloudProvisioner {
-    providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
+    pub(crate) providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
+    pub(crate) regions: HashMap<CloudProvider, String>,
     /// Why each provider the environment names has no adapter.
     init_errors: HashMap<CloudProvider, String>,
     retry_policy: RetryPolicy,
@@ -47,6 +49,7 @@ impl CloudProvisioner {
     pub async fn new() -> Result<Self> {
         let mut provisioner = Self {
             providers: HashMap::new(),
+            regions: HashMap::new(),
             init_errors: HashMap::new(),
             retry_policy: RetryPolicy::default(),
         };
@@ -116,6 +119,9 @@ impl CloudProvisioner {
         if present("HETZNER_API_TOKEN") {
             provisioner.add(CloudProvider::Hetzner, HetznerAdapter::new().await);
         }
+        if present("OVH_APPLICATION_KEY") {
+            provisioner.add(CloudProvider::Ovh, OvhAdapter::new().await);
+        }
         if present("CRUSOE_API_KEY") && present("CRUSOE_API_SECRET") {
             provisioner.add(CloudProvider::Crusoe, CrusoeAdapter::new().await);
         }
@@ -138,15 +144,20 @@ impl CloudProvisioner {
         }
     }
 
-    #[cfg(test)]
     pub fn with_providers(
         providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
     ) -> Self {
         Self {
             providers,
+            regions: HashMap::new(),
             init_errors: HashMap::new(),
             retry_policy: RetryPolicy::default(),
         }
+    }
+
+    pub fn with_regions(mut self, regions: HashMap<CloudProvider, String>) -> Self {
+        self.regions = regions;
+        self
     }
 
     /// Get the adapter for a specific provider
@@ -184,6 +195,10 @@ impl CloudProvisioner {
         region: &str,
         require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        resource_spec
+            .validate()
+            .map_err(|_| Error::Provider(crate::managed::ProviderErrorCode::InvalidRequest))?;
+        let require_tee = require_tee || resource_spec.tee_required;
         let adapter = self.get_adapter(&provider)?;
 
         if require_tee
@@ -197,12 +212,50 @@ impl CloudProvisioner {
             )));
         }
 
+        if adapter.managed().is_some()
+            && (resource_spec.gpu_count.is_some() || !resource_spec.arms.is_empty())
+        {
+            use crate::managed::ProviderErrorCode;
+            let mut spec = resource_spec.clone();
+            if spec
+                .provider
+                .as_ref()
+                .is_some_and(|value| value != &provider)
+                || spec
+                    .region
+                    .as_deref()
+                    .is_some_and(|value| !region.is_empty() && value != region)
+                || spec.ownership.is_none()
+                || spec.lease_duration_secs.is_none_or(|seconds| seconds == 0)
+            {
+                return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+            }
+            spec.provider = Some(provider.clone());
+            if spec.region.is_none() && !region.is_empty() {
+                spec.region = Some(region.into());
+            }
+            spec.tee_required |= require_tee;
+            let offers = self.quotes(&spec).await?;
+            let quote = offers.quotes.first().ok_or_else(|| {
+                Error::Provider(
+                    offers
+                        .errors
+                        .first()
+                        .map_or(ProviderErrorCode::NoStock, |error| error.code),
+                )
+            })?;
+            return self
+                .create_managed(&spec, &quote.candidate)
+                .await
+                .map(|resource| resource.instance);
+        }
+
         // Map resources to appropriate instance type
         let instance_selection = InstanceTypeMapper::map_to_instance_type_with_requirements(
             resource_spec,
             &provider,
             require_tee,
-        );
+        )?;
         info!(
             "Provisioning {} instance type {} (tee_required={})",
             provider, instance_selection.instance_type, require_tee
@@ -360,6 +413,7 @@ impl CloudProvisioner {
             CloudProvider::Azure => SshDeploymentConfig::azure(),
             CloudProvider::DigitalOcean => SshDeploymentConfig::digitalocean(),
             CloudProvider::Hetzner => SshDeploymentConfig::hetzner(),
+            CloudProvider::Ovh => SshDeploymentConfig::ovh(),
             CloudProvider::RunPod => SshDeploymentConfig::runpod(),
             CloudProvider::LambdaLabs => SshDeploymentConfig::lambda_labs(),
             CloudProvider::VastAi => SshDeploymentConfig::vast_ai(),

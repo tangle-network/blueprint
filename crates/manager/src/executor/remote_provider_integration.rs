@@ -391,6 +391,7 @@ fn deployment_type_from_provider(provider: &CloudProvider) -> DeploymentType {
         CloudProvider::Render => DeploymentType::RenderDispersedNode,
         CloudProvider::BittensorLium => DeploymentType::BittensorLiumMiner,
         CloudProvider::Hetzner => DeploymentType::HetznerServer,
+        CloudProvider::Ovh => DeploymentType::OvhInstance,
         CloudProvider::Crusoe => DeploymentType::CrusoeVm,
         _ => DeploymentType::SshRemote,
     }
@@ -518,6 +519,7 @@ fn provider_default_region(provider: &CloudProvider) -> &'static str {
         CloudProvider::Render => "oregon",
         CloudProvider::BittensorLium => "global",
         CloudProvider::Hetzner => "fsn1",
+        CloudProvider::Ovh => "GRA11",
         CloudProvider::Crusoe => "us-east1",
         _ => "default",
     }
