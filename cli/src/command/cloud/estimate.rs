@@ -31,7 +31,6 @@ pub struct EstimateOptions {
     /// Duration (e.g., 1h, 24h, 30d)
     #[arg(short = 'd', long, default_value = "24h")]
     pub duration: String,
-
 }
 
 pub async fn estimate(opts: EstimateOptions) -> Result<()> {
