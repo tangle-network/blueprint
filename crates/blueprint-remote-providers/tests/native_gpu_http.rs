@@ -15,6 +15,9 @@ mod bootstrap;
 #[path = "native_gpu_http/lambda_firewall.rs"]
 mod lambda_firewall;
 
+#[path = "native_gpu_http/lambda_access.rs"]
+mod lambda_access;
+
 #[path = "native_gpu_http/lambda_sku.rs"]
 mod lambda_sku;
 
