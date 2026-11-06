@@ -25,6 +25,8 @@ install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = true
 bin-aliases = { cargo-tangle = ["tangle", "tg"] }
+# Released archives add `cargo tangle cloud`; source installs keep the lean default.
+features = ["remote-providers"]
 members = ["cargo:/cli"]
 # PR validation belongs to the local Beelink gate; dist only publishes releases.
 pr-run-mode = "skip"

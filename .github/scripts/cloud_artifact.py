@@ -2,6 +2,7 @@
 """Cargo-dist extension: build the same CLI with its cloud-only feature set."""
 
 import hashlib
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -65,12 +66,14 @@ def build(target):
     assert target in TARGETS, f"unsupported cloud artifact target: {target}"
     version = subprocess.check_output(["rustc", "-vV"], text=True)
     assert f"host: {target}\n" in version, "cloud artifacts use native release runners"
+    metadata = subprocess.check_output(["cargo", "metadata", "--no-deps", "--format-version", "1"], cwd=ROOT)
+    target_dir = Path(json.loads(metadata)["target_directory"]) / "cloud-only"
     subprocess.run([
         "cargo", "build", "--locked", "-p", "cargo-tangle", "--bin", "cargo-tangle",
-        "--profile", "dist", "--target", target, "--target-dir", str(ROOT / "target/cloud-only"),
+        "--profile", "dist", "--target", target, "--target-dir", str(target_dir),
         "--no-default-features", "--features", "cloud-only",
     ], cwd=ROOT, check=True)
-    binary = ROOT / f"target/cloud-only/{target}/dist/cargo-tangle"
+    binary = target_dir / target / "dist/cargo-tangle"
     OUTPUT.mkdir(parents=True, exist_ok=True)
     stem = f"cargo-tangle-cloud-{target}"
     archive = OUTPUT / f"{stem}.tar.xz"

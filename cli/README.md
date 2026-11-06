@@ -22,15 +22,17 @@ cargo install cargo-tangle --git https://github.com/tangle-network/blueprint --f
 ### Feature flags
 
 Source installs enable `full` by default, including blueprint development,
-registration, operator and key commands. Add `remote-providers` for cloud
-commands, or `vm-debug` for the Linux VM sandbox.
+registration, operator and key commands. Release archives and the shell
+installer also enable `remote-providers`, which adds `cargo tangle cloud`;
+add it to a source install with `--features remote-providers`. `vm-debug`
+adds the Linux VM sandbox.
 
 The release also includes `cargo-tangle-cloud-<target>.tar.xz` and its
 `.sha256` file for native Linux x86_64 and aarch64. These archives contain the
 same `cargo-tangle` executable built with `--no-default-features --features
 cloud-only`. They expose the cloud commands without Anvil, testcontainers or
-cargo-generate in the production dependency graph. Standard archives retain
-the full CLI. The cloud-only flavor can also be installed from source:
+cargo-generate in the production dependency graph. Standard archives carry
+the full CLI with cloud commands. Install the cloud-only flavor from source:
 
 ```bash
 cargo install cargo-tangle --git https://github.com/tangle-network/blueprint \
@@ -410,7 +412,7 @@ the manager rebuilds the state cleanly.
 
 ## Cloud Deployment
 
-> **Note:** Cloud deployment requires the `remote-providers` feature flag. See [Feature flags](#feature-flags) for installation instructions.
+> **Note:** Release archives include cloud commands; source installs need the `remote-providers` feature. See [Feature flags](#feature-flags).
 
 The Tangle CLI supports deploying blueprints to cloud providers for scalable, distributed execution:
 
