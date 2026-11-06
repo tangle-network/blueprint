@@ -31,6 +31,7 @@ use mpp::protocol::core::{Base64UrlJson, PaymentChallenge};
 use mpp::protocol::intents::ChargeRequest;
 use mpp::protocol::traits::ErrorCode;
 use serde_json::json;
+use x402_chain_eip155::chain::AssetTransferMethod;
 use std::sync::atomic::Ordering;
 
 use crate::X402InvocationMode;
@@ -611,16 +612,9 @@ fn build_challenge(
         network: token.network.clone(),
         scheme: "exact".into(),
         transfer_method: token.transfer_method.clone(),
-        extra: if token.transfer_method == "eip3009" {
-            Some(Eip3009Extra {
-                name: token
-                    .eip3009_name
-                    .clone()
-                    .unwrap_or_else(|| "USD Coin".into()),
-                version: token.eip3009_version.clone().unwrap_or_else(|| "2".into()),
-            })
-        } else {
-            None
+        extra: match token.asset_transfer_method() {
+            AssetTransferMethod::Eip3009 { name, version } => Some(Eip3009Extra { name, version }),
+            AssetTransferMethod::Permit2 { .. } => None,
         },
         decimals: token.decimals,
         service_id,
@@ -1012,8 +1006,8 @@ mod tests {
             rate_per_native_unit: Decimal::from(3200u32),
             markup_bps: 0,
             transfer_method: "eip3009".into(),
-            eip3009_name: Some("USD Coin".into()),
-            eip3009_version: Some("2".into()),
+            eip712_name: "USD Coin".into(),
+            eip712_version: "2".into(),
         }
     }
 
