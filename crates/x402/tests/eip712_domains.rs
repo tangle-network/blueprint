@@ -65,8 +65,13 @@ fn a_domain_is_stated_never_guessed_and_unknown_methods_are_refused() {
     // No default domain for either method.
     assert!(token("transfer_method = \"eip3009\"").is_err());
     // Older configs keep loading through the eip3009_* aliases.
-    let old = token("transfer_method = \"eip3009\"\neip3009_name = \"USD Coin\"\neip3009_version = \"2\"");
-    assert_eq!(old.expect("aliases load").asset_transfer_method(), usdc_base("eip3009").asset_transfer_method());
+    let old = token(
+        "transfer_method = \"eip3009\"\neip3009_name = \"USD Coin\"\neip3009_version = \"2\"",
+    );
+    assert_eq!(
+        old.expect("aliases load").asset_transfer_method(),
+        usdc_base("eip3009").asset_transfer_method()
+    );
     // A near-miss method never silently becomes permit2.
     let mut typo = usdc_base("permit2");
     typo.transfer_method = "EIP3009".into();

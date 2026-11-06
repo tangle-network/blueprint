@@ -31,8 +31,8 @@ use mpp::protocol::core::{Base64UrlJson, PaymentChallenge};
 use mpp::protocol::intents::ChargeRequest;
 use mpp::protocol::traits::ErrorCode;
 use serde_json::json;
-use x402_chain_eip155::chain::AssetTransferMethod;
 use std::sync::atomic::Ordering;
+use x402_chain_eip155::chain::AssetTransferMethod;
 
 use crate::X402InvocationMode;
 use crate::config::AcceptedToken;
