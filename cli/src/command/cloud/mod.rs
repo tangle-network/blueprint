@@ -58,7 +58,6 @@ pub enum CloudCommands {
     #[command(visible_alias = "cfg")]
     Configure {
         /// Cloud provider (aws, gcp, azure, digitalocean, vultr)
-        #[arg(value_enum)]
         provider: CloudProvider,
 
         /// Default region for this provider
@@ -89,7 +88,7 @@ pub enum CloudCommands {
         compare: bool,
 
         /// Specific provider to estimate
-        #[arg(short, long, value_enum)]
+        #[arg(short, long)]
         provider: Option<CloudProvider>,
 
         /// CPU cores
@@ -223,7 +222,7 @@ pub enum CloudCommands {
     #[command(visible_alias = "check")]
     Preflight {
         /// Provider to validate (defaults to configured default provider)
-        #[arg(short, long, value_enum)]
+        #[arg(short, long)]
         provider: Option<CloudProvider>,
 
         /// Require TEE readiness checks

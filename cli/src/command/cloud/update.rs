@@ -115,27 +115,7 @@ pub async fn update(
         .ok_or_else(|| eyre!("Provider not found"))?;
     let adapter = provisioner.get_adapter(provider)?;
 
-    // Extract resource spec from current deployment
-    let resource_spec = blueprint_remote_providers::core::resources::ResourceSpec {
-        cpu: current
-            .metadata
-            .get("cpu")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(1.0),
-        memory_gb: current
-            .metadata
-            .get("memory_gb")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(1.0),
-        storage_gb: current
-            .metadata
-            .get("storage_gb")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(10.0),
-        gpu_count: None,
-        allow_spot: false,
-        qos: Default::default(),
-    };
+    let resource_spec = current.resource_spec.clone();
 
     // Convert DeploymentRecord to BlueprintDeploymentResult
     let current_deployment = deployment_record_to_blueprint_result(current)?;

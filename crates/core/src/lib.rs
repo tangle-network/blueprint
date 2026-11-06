@@ -4,6 +4,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 #[macro_use]
 pub(crate) mod macros;
@@ -20,6 +22,7 @@ pub mod extract;
 pub mod gpu;
 pub mod job;
 pub mod metadata;
+pub mod resources;
 
 pub use bytes::Bytes;
 pub use error::Error;

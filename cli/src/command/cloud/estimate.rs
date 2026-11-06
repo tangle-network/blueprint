@@ -13,7 +13,7 @@ pub struct EstimateOptions {
     pub compare: bool,
 
     /// Specific provider to estimate
-    #[arg(short, long, value_enum)]
+    #[arg(short, long)]
     pub provider: Option<CloudProvider>,
 
     /// CPU cores
@@ -90,7 +90,7 @@ async fn estimate_live(opts: EstimateOptions, hours: f64) -> Result<()> {
             .providers
             .get(&provider)
             .ok_or_else(|| eyre!("Configure a provider region before requesting its live price"))?;
-        let native = remote_provider(&provider);
+        let native = provider.clone();
         let selection = InstanceTypeMapper::map_to_instance_type(&spec, &native);
         match pricing
             .quote_instance(native, &settings.region, &selection.instance_type)
@@ -130,24 +130,6 @@ async fn estimate_live(opts: EstimateOptions, hours: f64) -> Result<()> {
         println!("Total for {}: ${:.4}", opts.duration, hourly * hours);
     }
     Ok(())
-}
-
-#[cfg(feature = "remote-providers")]
-fn remote_provider(provider: &CloudProvider) -> blueprint_remote_providers::CloudProvider {
-    use blueprint_remote_providers::CloudProvider as Native;
-    match provider {
-        CloudProvider::AWS => Native::AWS,
-        CloudProvider::GCP => Native::GCP,
-        CloudProvider::Azure => Native::Azure,
-        CloudProvider::DigitalOcean => Native::DigitalOcean,
-        CloudProvider::Vultr => Native::Vultr,
-        CloudProvider::Hetzner => Native::Hetzner,
-        CloudProvider::RunPod => Native::RunPod,
-        CloudProvider::LambdaLabs => Native::LambdaLabs,
-        CloudProvider::PrimeIntellect => Native::PrimeIntellect,
-        CloudProvider::VastAi => Native::VastAi,
-        CloudProvider::Crusoe => Native::Crusoe,
-    }
 }
 
 fn parse_duration(value: &str) -> Result<f64> {

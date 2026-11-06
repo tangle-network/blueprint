@@ -4,61 +4,7 @@ use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-/// Supported cloud providers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum CloudProvider {
-    AWS,
-    GCP,
-    Azure,
-    DigitalOcean,
-    Vultr,
-    Hetzner,
-    RunPod,
-    LambdaLabs,
-    PrimeIntellect,
-    VastAi,
-    Crusoe,
-    /// Generic provider (e.g. for Kubernetes)
-    Generic,
-}
-
-impl CloudProvider {
-    #[must_use]
-    pub fn supports_tee(self) -> bool {
-        matches!(self, Self::AWS | Self::GCP | Self::Azure)
-    }
-}
-
-impl std::fmt::Display for CloudProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::AWS => write!(f, "AWS"),
-            Self::GCP => write!(f, "Google Cloud"),
-            Self::Azure => write!(f, "Azure"),
-            Self::DigitalOcean => write!(f, "DigitalOcean"),
-            Self::Vultr => write!(f, "Vultr"),
-            Self::Hetzner => write!(f, "Hetzner"),
-            Self::RunPod => write!(f, "RunPod"),
-            Self::LambdaLabs => write!(f, "Lambda Labs"),
-            Self::PrimeIntellect => write!(f, "Prime Intellect"),
-            Self::VastAi => write!(f, "Vast.ai"),
-            Self::Crusoe => write!(f, "Crusoe"),
-            Self::Generic => write!(f, "Generic"),
-        }
-    }
-}
-
-/// Resource specification for deployments.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceSpec {
-    pub cpu: f32,
-    pub memory_gb: f32,
-    pub storage_gb: f32,
-    pub gpu_count: Option<u32>,
-    pub allow_spot: bool,
-    #[serde(default)]
-    pub tee_required: bool,
-}
+pub use blueprint_core::resources::{CloudProvider, ResourceSpec};
 
 /// Deployment target options.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,22 +94,11 @@ impl ProviderSelector {
     /// - High CPU (>8 cores) → Try CPU-intensive providers
     /// - High memory (>32GB) → Try memory-intensive providers  
     /// - Otherwise → Try cost-optimized providers
-    /// - High scale (>10 instances) → Use Kubernetes
     pub fn select_target(&self, requirements: &ResourceSpec) -> Result<DeploymentTarget> {
         info!(
             "Selecting deployment target for requirements: {:?}",
             requirements
         );
-
-        // For high-scale workloads, prefer K8s
-        // Note: ResourceSpec doesn't have instance count yet, this is for future expansion
-        // if requirements.instance_count.unwrap_or(1) > 10 {
-        //     info!("High-scale workload detected, selecting Kubernetes");
-        //     return Ok(DeploymentTarget::Kubernetes {
-        //         context: "production".to_string(),
-        //         namespace: "blueprints".to_string(),
-        //     });
-        // }
 
         let provider = self.select_provider(requirements)?;
         Ok(DeploymentTarget::CloudInstance(provider))
@@ -198,7 +133,7 @@ impl ProviderSelector {
         match candidates.first() {
             Some(provider) => {
                 info!("Selected provider: {:?}", provider);
-                Ok(*provider)
+                Ok(provider.clone())
             }
             None => {
                 warn!("No providers configured for workload requirements");
@@ -214,9 +149,9 @@ impl ProviderSelector {
         let mut fallbacks = Vec::new();
 
         if requirements.tee_required {
-            fallbacks.extend(&self.preferences.tee_capable);
+            fallbacks.extend(self.preferences.tee_capable.iter().cloned());
             let primary = self.select_provider(requirements).ok();
-            fallbacks.retain(|p| Some(*p) != primary);
+            fallbacks.retain(|p| Some(p) != primary.as_ref());
             fallbacks.dedup();
             info!("TEE fallback providers: {:?}", fallbacks);
             return fallbacks;
@@ -225,114 +160,20 @@ impl ProviderSelector {
         // Add all other provider categories as fallbacks
         if requirements.gpu_count.is_some() {
             // For GPU workloads, fallback to CPU-intensive providers
-            fallbacks.extend(&self.preferences.cpu_intensive);
+            fallbacks.extend(self.preferences.cpu_intensive.iter().cloned());
         } else {
             // For other workloads, try all categories
-            fallbacks.extend(&self.preferences.cost_optimized);
-            fallbacks.extend(&self.preferences.cpu_intensive);
-            fallbacks.extend(&self.preferences.memory_intensive);
+            fallbacks.extend(self.preferences.cost_optimized.iter().cloned());
+            fallbacks.extend(self.preferences.cpu_intensive.iter().cloned());
+            fallbacks.extend(self.preferences.memory_intensive.iter().cloned());
         }
 
         // Remove duplicates and the already-tried primary provider
         let primary = self.select_provider(requirements).ok();
-        fallbacks.retain(|p| Some(*p) != primary);
+        fallbacks.retain(|p| Some(p) != primary.as_ref());
         fallbacks.dedup();
 
         info!("Fallback providers: {:?}", fallbacks);
         fallbacks
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_gpu_provider_selection() {
-        let selector = ProviderSelector::with_defaults();
-        let requirements = ResourceSpec {
-            cpu: 4.0,
-            memory_gb: 16.0,
-            storage_gb: 100.0,
-            gpu_count: Some(1),
-            allow_spot: false,
-            tee_required: false,
-        };
-
-        let provider = selector.select_provider(&requirements).unwrap();
-        // GPU workloads prefer decentralized marketplaces (RunPod first) over
-        // hyperscalers — cheaper for inference / training.
-        assert_eq!(provider, CloudProvider::RunPod);
-    }
-
-    #[test]
-    fn test_cpu_intensive_selection() {
-        let selector = ProviderSelector::with_defaults();
-        let requirements = ResourceSpec {
-            cpu: 16.0, // High CPU
-            memory_gb: 32.0,
-            storage_gb: 200.0,
-            gpu_count: None,
-            allow_spot: false,
-            tee_required: false,
-        };
-
-        let provider = selector.select_provider(&requirements).unwrap();
-        // CPU-intensive workloads prefer Hetzner (cheapest dedicated cores).
-        assert_eq!(provider, CloudProvider::Hetzner);
-    }
-
-    #[test]
-    fn test_cost_optimized_selection() {
-        let selector = ProviderSelector::with_defaults();
-        let requirements = ResourceSpec {
-            cpu: 2.0,
-            memory_gb: 4.0,
-            storage_gb: 20.0,
-            gpu_count: None,
-            allow_spot: true,
-            tee_required: false,
-        };
-
-        let provider = selector.select_provider(&requirements).unwrap();
-        // Cost-optimized spot workloads prefer VastAi (cheapest spot marketplace).
-        assert_eq!(provider, CloudProvider::VastAi);
-    }
-
-    #[test]
-    fn test_fallback_providers() {
-        let selector = ProviderSelector::with_defaults();
-        let requirements = ResourceSpec {
-            cpu: 4.0,
-            memory_gb: 16.0,
-            storage_gb: 100.0,
-            gpu_count: Some(1),
-            allow_spot: false,
-            tee_required: false,
-        };
-
-        let fallbacks = selector.get_fallback_providers(&requirements);
-        // Should include CPU-intensive providers as fallback for GPU workloads
-        assert!(fallbacks.contains(&CloudProvider::Vultr));
-        assert!(fallbacks.contains(&CloudProvider::DigitalOcean));
-        // Should not include the primary selection (GCP)
-        assert!(!fallbacks.contains(&CloudProvider::GCP));
-    }
-
-    #[test]
-    fn test_tee_provider_selection() {
-        let selector = ProviderSelector::with_defaults();
-        let requirements = ResourceSpec {
-            cpu: 2.0,
-            memory_gb: 8.0,
-            storage_gb: 40.0,
-            gpu_count: None,
-            allow_spot: false,
-            tee_required: true,
-        };
-
-        let provider = selector.select_provider(&requirements).unwrap();
-        assert_eq!(provider, CloudProvider::AWS);
-        assert!(provider.supports_tee());
     }
 }

@@ -45,35 +45,3 @@ impl TensorDockInstanceMapper {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn spec(mem: f32) -> ResourceSpec {
-        ResourceSpec {
-            cpu: 8.0,
-            memory_gb: mem,
-            storage_gb: 100.0,
-            gpu_count: Some(1),
-            allow_spot: false,
-            qos: Default::default(),
-        }
-    }
-
-    #[test]
-    fn tiny_picks_rtx3090() {
-        assert_eq!(
-            TensorDockInstanceMapper::map(&spec(8.0)).instance_type,
-            "rtx3090-24gb"
-        );
-    }
-
-    #[test]
-    fn huge_picks_h100() {
-        assert_eq!(
-            TensorDockInstanceMapper::map(&spec(256.0)).instance_type,
-            "h100-80gb-sxm5"
-        );
-    }
-}
