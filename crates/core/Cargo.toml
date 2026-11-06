@@ -22,14 +22,6 @@ serde_json = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
 # Path-only test dependency avoids a publish-time cycle through the SDK.
-blueprint-sdk = { version = "...", path = "./crates/sdk" }`, but a
-# circular dev-dep on the umbrella crate breaks `cargo publish`: cargo
-# would carry the version constraint into this published manifest and
-# then fail to resolve `blueprint-sdk = "^0.2.0-alpha.X"` against
-# crates.io (the umbrella depends on this crate, so the umbrella can
-# never be on crates.io before this crate is). The path-only form is
-# stripped from the published manifest entirely, while local doctests
-# and tests still resolve via the workspace path.
 blueprint-sdk = { path = "../sdk", features = ["std"] }
 serde_json = { workspace = true, features = ["alloc"] }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
