@@ -146,16 +146,14 @@ impl CloudProvisioner {
             };
             let mut expired: Vec<ManagedLeaseIdentity> = Vec::new();
             for resource in listed {
+                let due = &resource.instance.provider == provider
+                    && resource.is_present()
+                    && resource.expires_at.is_some_and(|deadline| deadline <= now);
                 let identity = ManagedLeaseIdentity {
                     namespace: resource.namespace,
                     lease_id: resource.lease_id,
                 };
-                if &resource.instance.provider == provider
-                    && identity.namespace == namespace
-                    && resource.is_present()
-                    && resource.expires_at.is_some_and(|deadline| deadline <= now)
-                    && !expired.contains(&identity)
-                {
+                if due && identity.namespace == namespace && !expired.contains(&identity) {
                     expired.push(identity);
                 }
             }
