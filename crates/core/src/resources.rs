@@ -525,6 +525,9 @@ pub enum CloudProvider {
     /// Hetzner Cloud — European cloud with dedicated GPU servers
     #[serde(rename = "hetzner", alias = "Hetzner")]
     Hetzner,
+    /// OVHcloud Public Cloud
+    #[serde(rename = "ovh", alias = "OVH", alias = "ovhcloud")]
+    Ovh,
     /// Crusoe Energy — clean-energy GPU cloud (L40S, A100, H100)
     #[serde(rename = "crusoe", alias = "Crusoe")]
     Crusoe,
@@ -562,6 +565,7 @@ impl core::fmt::Display for CloudProvider {
             CloudProvider::Render => write!(f, "Render"),
             CloudProvider::BittensorLium => write!(f, "Bittensor Lium"),
             CloudProvider::Hetzner => write!(f, "Hetzner"),
+            CloudProvider::Ovh => write!(f, "OVH"),
             CloudProvider::Crusoe => write!(f, "Crusoe"),
             CloudProvider::Generic => write!(f, "Generic"),
             CloudProvider::DockerLocal => write!(f, "Docker (Local)"),
@@ -603,6 +607,7 @@ impl CloudProvider {
             Self::Render => "render",
             Self::BittensorLium => "bittensor-lium",
             Self::Hetzner => "hetzner",
+            Self::Ovh => "ovh",
             Self::Crusoe => "crusoe",
             _ => "generic",
         }

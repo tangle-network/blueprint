@@ -38,6 +38,7 @@ impl Machine {
                 match provider {
                     CloudProvider::GCP => DeploymentType::GcpGce,
                     CloudProvider::Crusoe => DeploymentType::CrusoeVm,
+                    CloudProvider::Ovh => DeploymentType::OvhInstance,
                     _ => DeploymentType::AwsEc2,
                 },
                 ResourceSpec::recommended(),
@@ -182,10 +183,138 @@ impl FakeGcp {
     }
 }
 
+/// OVH's Public Cloud API on a local port. It checks each request's signature against OVH's
+/// documented formula and serves one instance, which a DELETE removes unless it is refused.
+struct FakeOvh {
+    endpoint: String,
+    deleted: Arc<Mutex<bool>>,
+}
+
+const OVH_TIME: &str = "1700000000";
+
+/// `$1$` + hex(sha1(secret+consumer+method+url+body+timestamp)), joined with `+`.
+fn ovh_signature(
+    secret: &str,
+    consumer: &str,
+    method: &str,
+    url: &str,
+    body: &str,
+    time: &str,
+) -> String {
+    use sha1::{Digest, Sha1};
+    let digest = Sha1::digest([secret, consumer, method, url, body, time].join("+"));
+    format!("$1${}", hex::encode(digest))
+}
+
+impl FakeOvh {
+    fn serving(instance: &'static str, refuse_delete: bool) -> Self {
+        // Computed with Python's hashlib from OVH's formula, so the peer cannot share a bug with
+        // the client it checks.
+        assert_eq!(
+            ovh_signature(
+                "secret",
+                "consumer",
+                "DELETE",
+                "http://127.0.0.1:1/1.0/cloud/project/p/instance/i-ovh",
+                "",
+                OVH_TIME
+            ),
+            "$1$3befbcea2debb71060e8b6560db0a419992e7fff"
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let root = format!("http://{}", listener.local_addr().unwrap());
+        let deleted = Arc::new(Mutex::new(false));
+        let removed = deleted.clone();
+        let base = root.clone();
+        serve_on(listener, move |request| {
+            let (head, body) = request.split_once("\r\n\r\n").unwrap_or((request, ""));
+            let mut words = head.split_whitespace();
+            let (method, path) = (
+                words.next().unwrap_or_default(),
+                words.next().unwrap_or_default(),
+            );
+            if path == "/1.0/auth/time" {
+                return ("200 OK", OVH_TIME.to_owned());
+            }
+            let header = |name: &str| {
+                head.lines().find_map(|line| {
+                    let (key, value) = line.split_once(':')?;
+                    key.eq_ignore_ascii_case(name)
+                        .then(|| value.trim().to_owned())
+                })
+            };
+            let expected = ovh_signature(
+                "secret",
+                "consumer",
+                method,
+                &format!("{base}{path}"),
+                body,
+                &header("x-ovh-timestamp").unwrap_or_default(),
+            );
+            let mut removed = removed.lock().unwrap();
+            if header("x-ovh-application").as_deref() != Some("app")
+                || header("x-ovh-consumer").as_deref() != Some("consumer")
+                || header("x-ovh-signature") != Some(expected)
+            {
+                (
+                    "400 Bad Request",
+                    r#"{"class":"Client::BadRequest","message":"Invalid signature"}"#.to_owned(),
+                )
+            } else if *removed || path != format!("/1.0/cloud/project/p/instance/{instance}") {
+                (
+                    "404 Not Found",
+                    r#"{"class":"Client::NotFound","message":"Instance not found"}"#.to_owned(),
+                )
+            } else if method == "DELETE" && refuse_delete {
+                (
+                    "403 Forbidden",
+                    r#"{"class":"Client::Forbidden","message":"refused"}"#.to_owned(),
+                )
+            } else if method == "DELETE" {
+                *removed = true;
+                ("200 OK", "null".to_owned())
+            } else {
+                (
+                    "200 OK",
+                    format!(
+                        r#"{{"id":"{instance}","status":"ACTIVE","region":"GRA11","flavor":{{"name":"d2-2"}},"ipAddresses":[{{"ip":"203.0.113.7","type":"public","version":4}}]}}"#
+                    ),
+                )
+            }
+        });
+        Self {
+            endpoint: format!("{root}/1.0"),
+            deleted,
+        }
+    }
+
+    fn env<'a>(&'a self, secret: &'a str) -> [(&'a str, &'a str); 5] {
+        [
+            ("OVH_ENDPOINT", &self.endpoint),
+            ("OVH_APPLICATION_KEY", "app"),
+            ("OVH_APPLICATION_SECRET", secret),
+            ("OVH_CONSUMER_KEY", "consumer"),
+            ("OVH_CLOUD_PROJECT_SERVICE", "p"),
+        ]
+    }
+}
+
+fn ovh() -> CloudProvider {
+    "ovh".parse().expect("the shared provider enum names OVH")
+}
+
 /// Answer each request on a local port and return the port's address.
 fn serve(respond: impl Fn(&str) -> (&'static str, String) + Send + 'static) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!("http://{}/", listener.local_addr().unwrap());
+    serve_on(listener, respond);
+    endpoint
+}
+
+fn serve_on(
+    listener: TcpListener,
+    respond: impl Fn(&str) -> (&'static str, String) + Send + 'static,
+) {
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let mut stream = stream.unwrap();
@@ -198,7 +327,6 @@ fn serve(respond: impl Fn(&str) -> (&'static str, String) + Send + 'static) -> S
             .unwrap();
         }
     });
-    endpoint
 }
 
 fn answer(request: &str, refused: &str, terminated: &Mutex<Vec<String>>) -> (&'static str, String) {
@@ -526,4 +654,87 @@ fn configure_reads_the_environment_and_names_what_is_missing() {
         stderr(&output)
     );
     assert!(!stdout(&machine.cli(&["list"], None)).contains("CoreWeave"));
+}
+
+#[test]
+fn ovh_requests_carry_ovhs_signature() {
+    let machine = Machine::tracking_in(&[("i-ovh", ovh(), "GRA11")]);
+    let peer = FakeOvh::serving("i-ovh", false);
+    let output = machine.cli_with(&["status", "i-ovh"], None, &peer.env("secret"));
+    assert!(
+        stdout(&output).contains("Provider state:  running"),
+        "{}",
+        stdout(&output)
+    );
+    let output = machine.cli_with(&["status", "i-ovh"], None, &peer.env("wrong"));
+    assert!(
+        stdout(&output).contains("Invalid signature"),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn a_refused_ovh_delete_fails_and_keeps_the_record() {
+    let machine = Machine::tracking_in(&[("i-ovh", ovh(), "GRA11")]);
+    let peer = FakeOvh::serving("i-ovh", true);
+    let output = machine.cli_with(&["terminate", "i-ovh", "--yes"], None, &peer.env("secret"));
+    assert!(!output.status.success(), "{}", stdout(&output));
+    assert!(stderr(&output).contains("refused"), "{}", stderr(&output));
+    assert_eq!(machine.tracked(), ["i-ovh"]);
+}
+
+#[test]
+fn a_deleted_ovh_instance_reads_as_gone() {
+    let machine = Machine::tracking_in(&[("i-ovh", ovh(), "GRA11")]);
+    let peer = FakeOvh::serving("i-ovh", false);
+    let output = machine.cli_with(&["terminate", "i-ovh", "--yes"], None, &peer.env("secret"));
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(*peer.deleted.lock().unwrap());
+    assert!(machine.tracked().is_empty());
+    // A stale record for the deleted instance reads as OVH reports it.
+    let stale = Machine::tracking_in(&[("i-ovh", ovh(), "GRA11")]);
+    let output = stale.cli_with(&["status", "i-ovh"], None, &peer.env("secret"));
+    assert!(
+        stdout(&output).contains("Provider state:  terminated"),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn broken_ovh_credentials_leave_aws_working() {
+    let machine = Machine::tracking_in(&[
+        ("i-aws", CloudProvider::AWS, "us-east-1"),
+        ("i-ovh", ovh(), "GRA11"),
+    ]);
+    let aws = FakeAws::refusing("");
+    let peer = FakeOvh::serving("i-ovh", false);
+    let env = peer.env("wrong");
+    let output = machine.cli_with(&["status", "i-aws"], Some(&aws), &env);
+    assert!(
+        stdout(&output).contains("Provider state:  running"),
+        "{}",
+        stdout(&output)
+    );
+    let output = machine.cli_with(&["terminate", "--all", "--yes"], Some(&aws), &env);
+    assert!(!output.status.success(), "{}", stdout(&output));
+    assert_eq!(aws.terminated(), ["i-aws"]);
+    assert_eq!(machine.tracked(), ["i-ovh"]);
+    assert!(!*peer.deleted.lock().unwrap());
+    // A missing variable fails OVH alone, and configure names it without a terminal.
+    let partial = [("OVH_APPLICATION_KEY", "app")];
+    let output = machine.cli_with(&["status", "i-ovh"], Some(&aws), &partial);
+    assert!(
+        stdout(&output).contains("OVH_APPLICATION_SECRET"),
+        "{}",
+        stdout(&output)
+    );
+    let output = machine.cli_with(&["configure", "ovh"], None, &partial);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("OVH_CLOUD_PROJECT_SERVICE"),
+        "{}",
+        stdout(&output)
+    );
 }

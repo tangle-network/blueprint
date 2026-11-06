@@ -1,16 +1,16 @@
 //! Multi-cloud infrastructure provisioner for Blueprint deployments
 //!
-//! Provides a single interface for provisioning across AWS, GCP, Azure, DigitalOcean, and Vultr
+//! Provides a single interface for provisioning across every provider in `providers`
 
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
-#[cfg(feature = "aws")]
-use crate::infra::adapters::AwsAdapter;
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
 use crate::providers::akash::AkashAdapter;
+#[cfg(feature = "aws")]
+use crate::providers::aws::AwsAdapter;
 use crate::providers::azure::adapter::AzureAdapter;
 use crate::providers::bittensor_lium::BittensorLiumAdapter;
 use crate::providers::coreweave::CoreWeaveAdapter;
@@ -21,6 +21,7 @@ use crate::providers::gcp::GcpAdapter;
 use crate::providers::hetzner::HetznerAdapter;
 use crate::providers::io_net::IoNetAdapter;
 use crate::providers::lambda_labs::LambdaLabsAdapter;
+use crate::providers::ovh::OvhAdapter;
 use crate::providers::paperspace::PaperspaceAdapter;
 use crate::providers::prime_intellect::PrimeIntellectAdapter;
 use crate::providers::render::RenderAdapter;
@@ -115,6 +116,9 @@ impl CloudProvisioner {
         }
         if present("HETZNER_API_TOKEN") {
             provisioner.add(CloudProvider::Hetzner, HetznerAdapter::new().await);
+        }
+        if present("OVH_APPLICATION_KEY") {
+            provisioner.add(CloudProvider::Ovh, OvhAdapter::new().await);
         }
         if present("CRUSOE_API_KEY") && present("CRUSOE_API_SECRET") {
             provisioner.add(CloudProvider::Crusoe, CrusoeAdapter::new().await);
@@ -360,6 +364,7 @@ impl CloudProvisioner {
             CloudProvider::Azure => SshDeploymentConfig::azure(),
             CloudProvider::DigitalOcean => SshDeploymentConfig::digitalocean(),
             CloudProvider::Hetzner => SshDeploymentConfig::hetzner(),
+            CloudProvider::Ovh => SshDeploymentConfig::ovh(),
             CloudProvider::RunPod => SshDeploymentConfig::runpod(),
             CloudProvider::LambdaLabs => SshDeploymentConfig::lambda_labs(),
             CloudProvider::VastAi => SshDeploymentConfig::vast_ai(),

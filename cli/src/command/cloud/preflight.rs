@@ -278,7 +278,7 @@ fn render_bootstrap_env(
     out
 }
 
-fn region_env_var(provider: &CloudProvider) -> &'static str {
+pub(super) fn region_env_var(provider: &CloudProvider) -> &'static str {
     match provider {
         CloudProvider::AWS => "AWS_DEFAULT_REGION",
         CloudProvider::GCP => "GCP_DEFAULT_REGION",
@@ -286,6 +286,7 @@ fn region_env_var(provider: &CloudProvider) -> &'static str {
         CloudProvider::DigitalOcean => "DO_REGION",
         CloudProvider::Vultr => "VULTR_DEFAULT_REGION",
         CloudProvider::Hetzner => "HETZNER_REGION",
+        CloudProvider::Ovh => "OVH_REGION",
         CloudProvider::RunPod => "RUNPOD_REGION",
         CloudProvider::LambdaLabs => "LAMBDA_LABS_REGION",
         CloudProvider::PrimeIntellect => "PRIME_INTELLECT_REGION",
@@ -303,7 +304,7 @@ fn region_for_provider(config: &CloudConfig, provider: &CloudProvider) -> String
         .unwrap_or_else(|| default_region(provider).to_string())
 }
 
-fn default_region(provider: &CloudProvider) -> &'static str {
+pub(super) fn default_region(provider: &CloudProvider) -> &'static str {
     match provider {
         CloudProvider::AWS => "us-east-1",
         CloudProvider::GCP => "us-central1",
@@ -311,6 +312,7 @@ fn default_region(provider: &CloudProvider) -> &'static str {
         CloudProvider::DigitalOcean => "nyc3",
         CloudProvider::Vultr => "ewr",
         CloudProvider::Hetzner => "fsn1",
+        CloudProvider::Ovh => "GRA11",
         CloudProvider::RunPod => "US",
         CloudProvider::LambdaLabs => "us-west-1",
         CloudProvider::PrimeIntellect => "us-east",

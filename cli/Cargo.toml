@@ -90,6 +90,8 @@ blueprint-keystore = { path = "../crates/keystore", features = ["bn254"] }
 tempfile = { workspace = true }
 alloy-contract = { workspace = true }
 assert_cmd = "2.0"
+hex = { workspace = true, features = ["std"] }
+sha1 = { workspace = true }
 
 [features]
 default = ["full"]
