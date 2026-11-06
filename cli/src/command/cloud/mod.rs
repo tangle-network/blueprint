@@ -163,7 +163,7 @@ pub enum CloudCommands {
     },
 
     /// Rollback blueprint to previous version
-    #[command(visible_alias = "rb")]
+    #[command(visible_alias = "rb", disable_version_flag = true)]
     Rollback {
         /// Service ID to rollback
         service_id: String,
