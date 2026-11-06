@@ -14,6 +14,7 @@ documentation = "https://docs.rs/blueprint-remote-providers"
 # Blueprint standard library
 blueprint-std.workspace = true
 base64 = { workspace = true }
+http = { workspace = true }
 
 # Core dependencies
 anyhow.workspace = true
@@ -30,6 +31,7 @@ blake3 = { workspace = true }
 hex = { workspace = true }
 sha1 = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
+ssh-key = { version = "0.6.7", default-features = false, features = ["alloc", "ecdsa"] }
 url = { workspace = true }
 jsonwebtoken = { workspace = true }
 thiserror.workspace = true
@@ -84,10 +86,6 @@ wiremock = { workspace = true }
 serial_test.workspace = true
 proptest = { workspace = true }
 mockito = { workspace = true }
-# Official AWS mocking library
-aws-smithy-mocks-experimental = { workspace = true }
-aws-smithy-runtime = { workspace = true, features = ["test-util"] }
-aws-smithy-types = { workspace = true }
 http = { workspace = true }
 # Additional dependencies for integration tests
 chrono = { workspace = true, features = ["serde", "clock"] }

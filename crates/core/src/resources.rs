@@ -40,6 +40,9 @@ pub struct ResourceSpec {
     pub image: Option<String>,
     #[serde(default)]
     pub volume_gb: Option<f32>,
+    /// Caller-owned existing native volume; its capacity must be verified by the provider.
+    #[serde(default)]
+    pub volume_id: Option<String>,
     #[serde(default)]
     pub volume_mount_path: Option<String>,
     #[serde(default)]
@@ -311,6 +314,9 @@ impl ResourceSpec {
         if self
             .volume_gb
             .is_some_and(|gb| !gb.is_finite() || gb <= 0.0)
+            || self.volume_id.as_ref().is_some_and(|id| {
+                id.is_empty() || id.len() > 256 || id.chars().any(char::is_control)
+            })
             || self
                 .volume_mount_path
                 .as_ref()
@@ -431,6 +437,7 @@ impl Default for ResourceSpec {
             ssh_public_key: None,
             image: None,
             volume_gb: None,
+            volume_id: None,
             volume_mount_path: None,
             region: None,
             weights: None,

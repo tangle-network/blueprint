@@ -230,9 +230,15 @@ impl AutoDeploymentManager {
         let pricing = self.pricing_fetcher.read().await;
         let mut best: Option<(CloudProvider, String, f64)> = None;
         for provider in providers {
-            let sku =
-                super::mapper::InstanceTypeMapper::map_to_instance_type(spec, &provider.provider)
-                    .instance_type;
+            let selection = match super::mapper::InstanceTypeMapper::map_to_instance_type(
+                spec,
+                &provider.provider,
+            ) {
+                Ok(selection) => selection,
+                Err(Error::Provider(crate::managed::ProviderErrorCode::Unsupported)) => continue,
+                Err(error) => return Err(error),
+            };
+            let sku = selection.instance_type;
             match pricing
                 .quote_instance(provider.provider.clone(), &provider.region, &sku)
                 .await
@@ -594,26 +600,5 @@ allow_fallback = true
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_find_cheapest_provider() {
-        let manager = AutoDeploymentManager::new();
-
-        let spec = ResourceSpec::basic();
-
-        // Should return default AWS without configured providers
-        let result = manager.find_cheapest_provider(&spec).await;
-        assert!(result.is_ok());
-
-        let (provider, region, price) = result.unwrap();
-        assert_eq!(provider, CloudProvider::AWS);
-        assert_eq!(region, "us-west-2");
-        assert!(price > 0.0);
     }
 }

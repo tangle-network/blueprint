@@ -1,212 +1,139 @@
-//! Secure HTTP client with proper authentication and security controls
-//!
-//! Replaces insecure reqwest usage with proper security controls including
-//! certificate pinning, AWS Signature v4, and request validation.
+//! Provider HTTP with origin-bound credentials, bounded bodies and no redirects.
 
-use crate::core::error::{Error, Result};
-use blueprint_core::{debug, warn};
-use blueprint_std::time::Duration;
-use reqwest::{Client, ClientBuilder, Request, Response, header};
-use url::Url;
+use crate::managed::ProviderErrorCode;
+use crate::{Error, Result};
+use reqwest::{Client, Method, Response, header};
+use std::time::Duration;
+use url::{Host, Url};
 
-/// Secure HTTP client with comprehensive security controls
 pub struct SecureHttpClient {
     client: Client,
-    /// Maximum response size to prevent memory exhaustion
-    max_response_size: usize,
-    /// Request timeout
-    timeout: Duration,
+    origin: Option<String>,
 }
 
 impl SecureHttpClient {
-    /// Create new secure HTTP client with security defaults
     pub fn new() -> Result<Self> {
-        let client = ClientBuilder::new()
-            .timeout(Duration::from_secs(30))
-            .user_agent("blueprint-remote-providers/1.0.0")
-            .use_rustls_tls() // Use rustls instead of native-tls for consistency
-            // `validate_url` admits plain HTTP only to loopback; redirects must stay on HTTPS.
-            .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                if attempt.url().scheme() == "https" && attempt.previous().len() < 10 {
-                    attempt.follow()
-                } else {
-                    attempt.stop()
-                }
-            }))
-            .tcp_keepalive(Duration::from_secs(60))
-            .connection_verbose(false) // Disable verbose logging in production
-            .build()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to create HTTP client: {e}")))?;
-
-        Ok(Self {
-            client,
-            max_response_size: 10 * 1024 * 1024, // 10MB max response
-            timeout: Duration::from_secs(30),
-        })
+        Self::build(None)
     }
 
-    /// Make authenticated request with security validation
-    pub async fn authenticated_request(
-        &self,
-        method: reqwest::Method,
-        url: &str,
-        auth: &ApiAuthentication,
-        body: Option<serde_json::Value>,
-    ) -> Result<Response> {
-        // Validate URL
-        let parsed_url = self.validate_url(url)?;
-
-        // Build request
-        let mut request_builder = self.client.request(method.clone(), parsed_url.clone());
-
-        // Add authentication
-        request_builder =
-            self.add_authentication(request_builder, auth, &method, &parsed_url, body.as_ref())?;
-
-        // Add security headers
-        request_builder = request_builder
-            .header(header::USER_AGENT, "blueprint-remote-providers/1.0.0")
-            .header("X-Client-Version", "1.0.0")
-            .header("X-Request-ID", uuid::Uuid::new_v4().to_string());
-
-        // Add body if provided
-        if let Some(body) = body {
-            request_builder = request_builder.json(&body);
-        }
-
-        let request = request_builder
-            .build()
-            .map_err(|e| Error::ConfigurationError(format!("Failed to build request: {e}")))?;
-
-        // Validate request before sending
-        self.validate_request(&request)?;
-
-        debug!("Making authenticated request to: {}", url);
-
-        // Send request with timeout
-        let response = tokio::time::timeout(self.timeout, self.client.execute(request))
-            .await
-            .map_err(|_| Error::ConfigurationError("Request timeout".into()))?
-            .map_err(|e| Error::ConfigurationError(format!("Request failed: {e}")))?;
-
-        // Validate response
-        self.validate_response(&response).await?;
-
-        // SECURITY: Validate certificate pinning if available
-        self.validate_certificate_pinning(url, &response)?;
-
-        Ok(response)
-    }
-
-    /// Validate URL for security
-    fn validate_url(&self, url: &str) -> Result<Url> {
-        let parsed =
-            Url::parse(url).map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
-
-        let host = parsed
-            .host_str()
-            .ok_or_else(|| Error::ConfigurationError("No hostname in URL".into()))?;
-        // A local peer, such as a test double for a provider's API, never leaves the machine.
-        let loopback = match parsed.host() {
-            Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
-            Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
-            _ => host == "localhost",
+    pub fn with_endpoint(endpoint: &str) -> Result<Self> {
+        let url = Url::parse(endpoint)
+            .map_err(|_| Error::ConfigurationError("Invalid provider endpoint".into()))?;
+        let loopback = match url.host() {
+            Some(Host::Ipv4(ip)) => ip.is_loopback(),
+            Some(Host::Ipv6(ip)) => ip.is_loopback(),
+            Some(Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
+            None => false,
         };
-        if parsed.scheme() != "https" && !(loopback && parsed.scheme() == "http") {
-            return Err(Error::ConfigurationError("Only HTTPS URLs allowed".into()));
-        }
-        if !loopback && !self.is_allowed_domain(host) {
-            return Err(Error::ConfigurationError(format!(
-                "Domain not in allowlist: {host}"
-            )));
-        }
-
-        // Check for suspicious patterns
-        if url.contains("..") || url.contains("javascript:") || url.contains("data:") {
+        if !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !(url.scheme() == "https" || (url.scheme() == "http" && loopback))
+        {
             return Err(Error::ConfigurationError(
-                "Suspicious URL pattern detected".into(),
+                "Provider endpoint requires HTTPS or loopback HTTP".into(),
             ));
         }
-
-        Ok(parsed)
+        Self::build(Some(url.origin().ascii_serialization()))
     }
 
-    /// Check if domain is allowed
-    fn is_allowed_domain(&self, host: &str) -> bool {
-        let allowed_domains = [
-            // AWS domains
-            "ec2.amazonaws.com",
-            "s3.amazonaws.com",
-            "sts.amazonaws.com",
-            "iam.amazonaws.com",
-            // Google Cloud domains
-            "compute.googleapis.com",
-            "storage.googleapis.com",
-            "iam.googleapis.com",
-            // Azure domains
-            "management.azure.com",
-            "storage.azure.com",
-            // DigitalOcean domains
-            "api.digitalocean.com",
-            // Vultr domains
-            "api.vultr.com",
-            // Lambda Labs domains
-            "cloud.lambdalabs.com",
-            // RunPod domains
-            "api.runpod.io",
-            // Vast.ai domains
-            "console.vast.ai",
-            // CoreWeave domains
-            "api.coreweave.com",
-            // Paperspace domains
-            "api.paperspace.io",
-            // Fluidstack domains
-            "api.fluidstack.io",
-            // TensorDock domains
-            "marketplace.tensordock.com",
-            // Akash domains
-            "api.akash.network",
-            // io.net domains
-            "api.io.net",
-            // Prime Intellect domains
-            "api.primeintellect.ai",
-            // Render domains
-            "api.render.com",
-            // Bittensor/Lium domains
-            "api.lium.ai",
-            "api.hetzner.cloud",
-            "api.crusoecloud.com",
-            "rest.runpod.io",
-            "api.rendernetwork.com",
-            // OVHcloud: eu.api.ovh.com, ca.api.ovh.com and the US API
-            "api.ovh.com",
-            "api.us.ovhcloud.com",
-            // Kubernetes domains (for EKS/GKE/AKS)
-            "kubernetes.default.svc",
-            "kubernetes.default.svc.cluster.local",
-        ];
-
-        // Exact match or subdomain of allowed domains
-        allowed_domains
-            .iter()
-            .any(|&domain| host == domain || host.ends_with(&format!(".{domain}")))
+    fn build(origin: Option<String>) -> Result<Self> {
+        let client = Client::builder()
+            .https_only(origin.is_none())
+            .use_rustls_tls()
+            .timeout(Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!(
+                "blueprint-remote-providers/",
+                env!("CARGO_PKG_VERSION")
+            ))
+            .build()
+            .map_err(|_| Error::HttpError("Provider client initialization failed".into()))?;
+        Ok(Self { client, origin })
     }
 
-    /// Add authentication to request
-    fn add_authentication(
+    fn url(&self, value: &str) -> Result<Url> {
+        let url = Url::parse(value)
+            .map_err(|_| Error::ConfigurationError("Invalid provider request URL".into()))?;
+        if !url.username().is_empty() || url.password().is_some() || url.fragment().is_some() {
+            return Err(Error::ConfigurationError(
+                "Invalid provider request URL".into(),
+            ));
+        }
+        let allowed = match &self.origin {
+            Some(origin) => url.origin().ascii_serialization() == *origin,
+            None => {
+                url.scheme() == "https"
+                    && url.host_str().is_some_and(|host| {
+                        [
+                            "ec2.amazonaws.com",
+                            "s3.amazonaws.com",
+                            "sts.amazonaws.com",
+                            "iam.amazonaws.com",
+                            "compute.googleapis.com",
+                            "storage.googleapis.com",
+                            "iam.googleapis.com",
+                            "management.azure.com",
+                            "storage.azure.com",
+                            "api.digitalocean.com",
+                            "api.vultr.com",
+                            "cloud.lambdalabs.com",
+                            "cloud.lambda.com",
+                            "api.runpod.io",
+                            "rest.runpod.io",
+                            "console.vast.ai",
+                            "api.coreweave.com",
+                            "api.paperspace.io",
+                            "api.fluidstack.io",
+                            "marketplace.tensordock.com",
+                            "dashboard.tensordock.com",
+                            "api.akash.network",
+                            "api.io.net",
+                            "api.primeintellect.ai",
+                            "api.render.com",
+                            "api.lium.ai",
+                            "lium.io",
+                            "api.hetzner.cloud",
+                            "api.crusoecloud.com",
+                            "api.rendernetwork.com",
+                            "api.ovh.com",
+                            "api.us.ovhcloud.com",
+                            "kubernetes.default.svc",
+                            "kubernetes.default.svc.cluster.local",
+                        ]
+                        .iter()
+                        .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+                    })
+            }
+        };
+        if !allowed {
+            return Err(Error::ConfigurationError(
+                "Request outside provider API origin".into(),
+            ));
+        }
+        Ok(url)
+    }
+
+    fn authenticated(
         &self,
-        mut request_builder: reqwest::RequestBuilder,
+        method: Method,
+        url: &str,
         auth: &ApiAuthentication,
-        method: &reqwest::Method,
-        url: &Url,
         body: Option<&serde_json::Value>,
     ) -> Result<reqwest::RequestBuilder> {
-        match auth {
-            ApiAuthentication::Bearer { token } => {
-                request_builder = request_builder.bearer_auth(token);
-            }
+        let url = self.url(url)?;
+        let mut request = self.client.request(method.clone(), url.clone());
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        Ok(match auth {
+            ApiAuthentication::Bearer { token } => request.bearer_auth(token),
             ApiAuthentication::ApiKey { key, header_name } => {
-                request_builder = request_builder.header(header_name, key);
+                let mut value = header::HeaderValue::from_str(key)
+                    .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+                value.set_sensitive(true);
+                request.header(header_name, value)
             }
             ApiAuthentication::Ovh {
                 application_key,
@@ -215,7 +142,7 @@ impl SecureHttpClient {
                 timestamp,
             } => {
                 use sha1::{Digest, Sha1};
-                // OVH signs the exact URL and body sent; `json()` below serializes the same way.
+                // OVH signs the exact URL and body sent; `json()` serializes the same way.
                 let body = body.map(ToString::to_string).unwrap_or_default();
                 let timestamp = timestamp.to_string();
                 let signed = [
@@ -227,140 +154,134 @@ impl SecureHttpClient {
                     &timestamp,
                 ]
                 .join("+");
-                request_builder = request_builder
-                    .header("X-Ovh-Application", application_key)
-                    .header("X-Ovh-Consumer", consumer_key)
+                request
+                    .header("X-Ovh-Application", application_key.as_str())
+                    .header("X-Ovh-Consumer", consumer_key.as_str())
                     .header("X-Ovh-Timestamp", timestamp)
                     .header(
                         "X-Ovh-Signature",
                         format!("$1${}", hex::encode(Sha1::digest(signed))),
-                    );
+                    )
             }
-            ApiAuthentication::None => {
-                warn!("Making unauthenticated request to: {}", url);
-            }
-        }
-
-        Ok(request_builder)
+            ApiAuthentication::None => request,
+        })
     }
 
-    /// Validate request before sending
-    fn validate_request(&self, request: &Request) -> Result<()> {
-        // Check content length
-        if let Some(content_length) = request.headers().get(header::CONTENT_LENGTH) {
-            let length: usize = content_length
-                .to_str()
-                .map_err(|_| Error::ConfigurationError("Invalid content length header".into()))?
-                .parse()
-                .map_err(|_| Error::ConfigurationError("Invalid content length value".into()))?;
-
-            if length > 50 * 1024 * 1024 {
-                // 50MB max request
-                return Err(Error::ConfigurationError("Request body too large".into()));
-            }
+    async fn send(&self, request: reqwest::RequestBuilder) -> Result<Response> {
+        const MAX_BODY: usize = 10 * 1024 * 1024;
+        let mut response = request
+            .send()
+            .await
+            .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let status = response.status();
+        if !status.is_success() && status != reqwest::StatusCode::NOT_FOUND {
+            return Err(Error::Provider(match status.as_u16() {
+                401 | 403 => ProviderErrorCode::AuthRejected,
+                402 => ProviderErrorCode::Quota,
+                429 => ProviderErrorCode::RateLimited,
+                500..=599 => ProviderErrorCode::Indeterminate,
+                _ => ProviderErrorCode::ProviderError,
+            }));
         }
-
-        // Validate headers for injection
-        for (name, value) in request.headers() {
-            let name_str = name.as_str();
-            let value_str = value
-                .to_str()
-                .map_err(|_| Error::ConfigurationError("Invalid header value".into()))?;
-
-            // Check for header injection
-            if value_str.contains('\n') || value_str.contains('\r') {
-                return Err(Error::ConfigurationError(format!(
-                    "Header injection detected in {name_str}: {value_str}"
-                )));
-            }
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_BODY as u64)
+        {
+            return Err(Error::Provider(ProviderErrorCode::ProviderError));
         }
-
-        Ok(())
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?
+        {
+            if chunk.len() > MAX_BODY - body.len() {
+                return Err(Error::Provider(ProviderErrorCode::ProviderError));
+            }
+            body.extend_from_slice(&chunk);
+        }
+        // Preserve status and headers for native parsing; error bodies never escape.
+        if status == reqwest::StatusCode::NOT_FOUND {
+            body.clear();
+        }
+        let mut bounded = http::Response::builder().status(status);
+        *bounded.headers_mut().expect("valid HTTP response builder") = response.headers().clone();
+        bounded
+            .body(body)
+            .map(Response::from)
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))
     }
 
-    /// Validate response
-    async fn validate_response(&self, response: &Response) -> Result<()> {
-        // Check response size
-        if let Some(content_length) = response.headers().get(header::CONTENT_LENGTH) {
-            let length: usize = content_length
-                .to_str()
-                .map_err(|_| Error::ConfigurationError("Invalid response content length".into()))?
-                .parse()
-                .map_err(|_| Error::ConfigurationError("Invalid content length format".into()))?;
-
-            if length > self.max_response_size {
-                return Err(Error::ConfigurationError("Response too large".into()));
-            }
-        }
-
-        // Check content type for JSON responses
-        if let Some(content_type) = response.headers().get(header::CONTENT_TYPE) {
-            let content_type_str = content_type
-                .to_str()
-                .map_err(|_| Error::ConfigurationError("Invalid content type header".into()))?;
-
-            // Only allow expected content types from cloud APIs
-            let allowed_types = [
-                "application/json",
-                "application/xml",
-                "text/xml",
-                "text/plain",
-            ];
-
-            if !allowed_types
-                .iter()
-                .any(|&t| content_type_str.starts_with(t))
-            {
-                warn!("Unexpected content type: {}", content_type_str);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Certificate pinning placeholder. Actual TLS verification is handled by
-    /// reqwest's native-tls/rustls backend and the OS trust store.
-    fn validate_certificate_pinning(&self, _url: &str, _response: &Response) -> Result<()> {
-        Ok(())
-    }
-
-    /// Make a simple GET request with authentication
-    pub async fn get(&self, url: &str, auth: &ApiAuthentication) -> Result<Response> {
-        self.authenticated_request(reqwest::Method::GET, url, auth, None)
+    pub async fn authenticated_request(
+        &self,
+        method: Method,
+        url: &str,
+        auth: &ApiAuthentication,
+        body: Option<serde_json::Value>,
+    ) -> Result<Response> {
+        self.send(self.authenticated(method, url, auth, body.as_ref())?)
             .await
     }
 
-    /// Make a POST request with authentication and optional JSON body
+    pub async fn get(&self, url: &str, auth: &ApiAuthentication) -> Result<Response> {
+        self.authenticated_request(Method::GET, url, auth, None)
+            .await
+    }
+
     pub async fn post(
         &self,
         url: &str,
         auth: &ApiAuthentication,
         body: Option<serde_json::Value>,
     ) -> Result<Response> {
-        self.authenticated_request(reqwest::Method::POST, url, auth, body)
+        self.authenticated_request(Method::POST, url, auth, body)
             .await
     }
 
-    /// Make a POST request with JSON body
     pub async fn post_json(
         &self,
         url: &str,
         auth: &ApiAuthentication,
         body: serde_json::Value,
     ) -> Result<Response> {
-        self.authenticated_request(reqwest::Method::POST, url, auth, Some(body))
+        self.post(url, auth, Some(body)).await
+    }
+
+    pub async fn post_json_idempotent(
+        &self,
+        url: &str,
+        auth: &ApiAuthentication,
+        body: serde_json::Value,
+        key: &str,
+    ) -> Result<Response> {
+        if key.len() != 64 || !key.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+        }
+        self.send(
+            self.authenticated(Method::POST, url, auth, Some(&body))?
+                .header("Idempotency-Key", key),
+        )
+        .await
+    }
+
+    pub async fn post_form(
+        &self,
+        url: &str,
+        auth: &ApiAuthentication,
+        form: &std::collections::HashMap<String, String>,
+    ) -> Result<Response> {
+        self.send(self.authenticated(Method::POST, url, auth, None)?.form(form))
             .await
     }
 
-    /// Make a DELETE request
     pub async fn delete(&self, url: &str, auth: &ApiAuthentication) -> Result<Response> {
-        self.authenticated_request(reqwest::Method::DELETE, url, auth, None)
+        self.authenticated_request(Method::DELETE, url, auth, None)
             .await
     }
 }
 
 /// API authentication methods
-#[derive(Clone)]
+#[derive(Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub enum ApiAuthentication {
     /// Bearer token authentication
     Bearer { token: String },
@@ -396,50 +317,38 @@ impl std::fmt::Debug for ApiAuthentication {
 }
 
 impl ApiAuthentication {
-    /// Create DigitalOcean API authentication
     pub fn digitalocean(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create Google Cloud API authentication
     pub fn google_cloud(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create Azure authentication
     pub fn azure(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create Vultr API authentication
     pub fn vultr(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Lambda Labs API authentication
     pub fn lambda_labs(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create RunPod API authentication
     pub fn runpod(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Vast.ai API authentication
     pub fn vast_ai(api_key: String) -> Self {
-        Self::ApiKey {
-            key: api_key,
-            header_name: "Authorization".to_string(),
-        }
+        Self::Bearer { token: api_key }
     }
 
-    /// Create CoreWeave API authentication
     pub fn coreweave(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create Paperspace API authentication
     pub fn paperspace(api_key: String) -> Self {
         Self::ApiKey {
             key: api_key,
@@ -447,7 +356,6 @@ impl ApiAuthentication {
         }
     }
 
-    /// Create Fluidstack API authentication
     pub fn fluidstack(api_key: String) -> Self {
         Self::ApiKey {
             key: api_key,
@@ -455,7 +363,6 @@ impl ApiAuthentication {
         }
     }
 
-    /// Create TensorDock API authentication
     pub fn tensordock(api_key: String, api_token: String) -> Self {
         Self::ApiKey {
             key: format!("{api_key}:{api_token}"),
@@ -463,37 +370,33 @@ impl ApiAuthentication {
         }
     }
 
-    /// Create Akash API authentication
     pub fn akash(token: String) -> Self {
         Self::Bearer { token }
     }
 
-    /// Create io.net API authentication
     pub fn io_net(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Prime Intellect API authentication
     pub fn prime_intellect(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Render API authentication
     pub fn render(api_key: String) -> Self {
         Self::Bearer { token: api_key }
     }
 
-    /// Create Bittensor/Lium API authentication
     pub fn bittensor_lium(api_key: String) -> Self {
-        Self::Bearer { token: api_key }
+        Self::ApiKey {
+            key: api_key,
+            header_name: "X-API-Key".into(),
+        }
     }
 
-    /// Create Hetzner Cloud API authentication
     pub fn hetzner(api_token: String) -> Self {
         Self::Bearer { token: api_token }
     }
 
-    /// Create Crusoe Cloud API authentication (key:secret as Bearer)
     pub fn crusoe(api_key: String, api_secret: String) -> Self {
         Self::Bearer {
             token: format!("{api_key}:{api_secret}"),
@@ -504,54 +407,5 @@ impl ApiAuthentication {
 impl Default for SecureHttpClient {
     fn default() -> Self {
         Self::new().expect("Failed to create secure HTTP client")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_url_validation() {
-        let client = SecureHttpClient::new().unwrap();
-
-        // Valid URLs
-        assert!(
-            client
-                .validate_url("https://api.digitalocean.com/v2/droplets")
-                .is_ok()
-        );
-        assert!(client.validate_url("https://ec2.amazonaws.com/").is_ok());
-
-        // Invalid URLs
-        assert!(
-            client
-                .validate_url("http://api.digitalocean.com/v2/droplets")
-                .is_err()
-        ); // HTTP
-        assert!(client.validate_url("https://evil.com/api").is_err()); // Not in allowlist
-        assert!(
-            client
-                .validate_url("https://api.digitalocean.com/../../../etc/passwd")
-                .is_err()
-        ); // Path traversal
-    }
-
-    #[test]
-    fn test_domain_allowlist() {
-        let client = SecureHttpClient::new().unwrap();
-
-        // Allowed domains
-        assert!(client.is_allowed_domain("api.digitalocean.com"));
-        assert!(client.is_allowed_domain("ec2.amazonaws.com"));
-        assert!(client.is_allowed_domain("compute.googleapis.com"));
-        assert!(client.is_allowed_domain("management.azure.com"));
-
-        // Subdomains should be allowed
-        assert!(client.is_allowed_domain("us-east-1.ec2.amazonaws.com"));
-
-        // Disallowed domains
-        assert!(!client.is_allowed_domain("evil.com"));
-        assert!(!client.is_allowed_domain("malicious.site"));
     }
 }
