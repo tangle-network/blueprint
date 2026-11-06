@@ -32,9 +32,6 @@ pub struct EstimateOptions {
     #[arg(short = 'd', long, default_value = "24h")]
     pub duration: String,
 
-    /// Include spot pricing
-    #[arg(short, long)]
-    pub spot: bool,
 }
 
 pub async fn estimate(opts: EstimateOptions) -> Result<()> {
@@ -42,10 +39,6 @@ pub async fn estimate(opts: EstimateOptions) -> Result<()> {
     ensure!(
         opts.cpu.is_finite() && opts.cpu > 0.0 && opts.memory.is_finite() && opts.memory > 0.0,
         "Resource requirements must be finite and positive"
-    );
-    ensure!(
-        !opts.spot,
-        "No live spot quote is available for this estimate"
     );
     #[cfg(feature = "remote-providers")]
     {
@@ -91,7 +84,14 @@ async fn estimate_live(opts: EstimateOptions, hours: f64) -> Result<()> {
             .get(&provider)
             .ok_or_else(|| eyre!("Configure a provider region before requesting its live price"))?;
         let native = provider.clone();
-        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &native);
+        let selection = match InstanceTypeMapper::map_to_instance_type(&spec, &native) {
+            Ok(selection) => selection,
+            Err(error) if opts.compare => {
+                eprintln!("{provider}: {error}");
+                continue;
+            }
+            Err(error) => return Err(error.into()),
+        };
         match pricing
             .quote_instance(native, &settings.region, &selection.instance_type)
             .await
