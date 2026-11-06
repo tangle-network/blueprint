@@ -29,7 +29,7 @@ env:
 jobs:
   check-release-enabled:
     name: Check if releases are enabled
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
     steps:
@@ -55,7 +55,7 @@ jobs:
       contents: read
     needs: check-release-enabled
     if: needs.check-release-enabled.outputs.enabled == 'true'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     # Bound a stalled publish run while leaving room for registry rate limits.
     timeout-minutes: 90
     steps:
@@ -99,7 +99,7 @@ jobs:
 
       - name: Recover release output from existing tags
         if: inputs.recover-tagged == true
-        run: python3 .github/scripts/crate-publish-plan.py --from-tags > release-output.json
+        run: git checkout "$GITHUB_SHA" -- .github/scripts/crate-publish-plan.py && python3 .github/scripts/crate-publish-plan.py --from-tags > release-output.json
 
       - name: Save release output for batch publishing
         if: steps.release-plz.outputs.releases_created == 'true'
