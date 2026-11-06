@@ -1,6 +1,6 @@
 # Tangle CLI
 
-Create, run, and operate blueprints on the Tangle EVM and EigenLayer.
+Create, run, and operate blueprints on Tangle EVM.
 
 ## Table of Contents
 
@@ -19,7 +19,6 @@ Create, run, and operate blueprints on the Tangle EVM and EigenLayer.
     - [Deploy Blueprint to Cloud](#deploy-blueprint-to-cloud)
     - [Monitor Cloud Deployments](#monitor-cloud-deployments)
   - [Key Management](#key-management)
-  - [EigenLayer Helpers](#eigenlayer-helpers)
   - [Generating Keys from the Command Line](#generating-keys-from-the-command-line)
     - [Flags](#flags)
 
@@ -544,10 +543,6 @@ cargo tangle key list --keystore-path ./keystore
 
 The keystore supports filesystem, in-memory, and remote HSM backends through `blueprint-keystore`.
 
-## EigenLayer Helpers
-
-EigenLayer support remains available under `cargo tangle blueprint eigenlayer <subcommand>`. Use it to register AVSs, list allocations, or run the EigenLayer manager by supplying the addresses exported from the EigenLayer contracts.
-
 ## Operator Status
 
 Inspect the latest heartbeat/online status from `OperatorStatusRegistry`:
@@ -572,117 +567,6 @@ Omit `--operator` to query the locally configured operator. Add `--json` for mac
 
 - End-to-end demos and advanced options live on the [CLI reference](https://docs.tangle.tools/developers/cli/reference).
 - For pricing/QoS flows, combine the CLI with `crates/pricing-engine` and the new `OPERATOR_*` env vars described in that README.
-
-```bash
-cargo tangle blueprint run \
-  --protocol eigenlayer \
-  --config ./config.toml
-```
-
-The manager will:
-- Read all active AVS registrations from `~/.tangle/eigenlayer_registrations.json`
-- Spawn a separate blueprint instance for each AVS
-- Monitor rewards and slashing events
-- Auto-restart failed blueprints
-
-#### 5. Deregister from an AVS
-
-```bash
-cargo tangle blueprint eigenlayer deregister \
-  --service-manager 0x... \
-  --keystore-uri ./keystore
-```
-
-### EigenLayer Command Reference
-
-#### `eigenlayer register`
-
-Register with a new EigenLayer AVS.
-
-```bash
-cargo tangle blueprint eigenlayer register \
-  --config <CONFIG_FILE> \
-  --keystore-uri <KEYSTORE_PATH> \
-  [--runtime <RUNTIME>] \
-  [--verify]
-```
-
-**Arguments**:
-- `--config`: Path to JSON configuration file
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-- `--runtime`: Runtime target (`native`, `hypervisor`, `container`) - overrides config file
-- `--verify`: Perform on-chain verification (optional)
-
-**Aliases**: `reg`
-
-#### `eigenlayer deregister`
-
-Deregister from an EigenLayer AVS.
-
-```bash
-cargo tangle blueprint eigenlayer deregister \
-  --service-manager <ADDRESS> \
-  --keystore-uri <KEYSTORE_PATH>
-```
-
-**Arguments**:
-- `--service-manager`: Service manager contract address
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-
-**Aliases**: `dereg`
-
-#### `eigenlayer list`
-
-List all registered AVS services.
-
-```bash
-cargo tangle blueprint eigenlayer list \
-  [--active-only] \
-  [--format <FORMAT>]
-```
-
-**Arguments**:
-- `--active-only`: Show only active registrations
-- `--format`: Output format: `table` (default) or `json`
-
-**Aliases**: `ls`
-
-#### `eigenlayer sync`
-
-Synchronize local registrations with on-chain state.
-
-```bash
-cargo tangle blueprint eigenlayer sync \
-  --http-rpc-url <URL> \
-  --keystore-uri <KEYSTORE_PATH> \
-  [--settings-file <FILE>]
-```
-
-**Arguments**:
-- `--http-rpc-url`: HTTP RPC endpoint (default: `http://127.0.0.1:8545`)
-- `--keystore-uri`: Keystore path (default: `./keystore`)
-- `--settings-file`: Protocol settings file (optional)
-
-### Runtime Targets
-
-Each AVS can specify its execution runtime:
-
-- **`native`** - Bare process (no sandbox)
-  - Fastest startup and lowest overhead
-  - For testing only - no isolation
-  - Direct process execution
-
-- **`hypervisor`** - cloud-hypervisor VM (default)
-  - Production-ready VM isolation
-  - Strong security boundaries
-  - Resource limits enforced
-  - Recommended for production
-
-- **`container`** - Docker/Kata containers (Coming Soon)
-  - Not yet implemented
-  - For now, use `native` for testing or `hypervisor` for production
-
-Set via config file or override via CLI `--runtime` flag.
 
 ## Generating Keys from the Command Line
 
