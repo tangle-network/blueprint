@@ -1,7 +1,7 @@
 //! Independent public gRPC policy and EIP-712 domain challenges.
 use alloy_dyn_abi::TypedData;
 use alloy_primitives::{Address, B256, Signature, U256, keccak256};
-use blueprint_crypto::k256::K256SigningKey;
+use blueprint_crypto::{BytesEncoding, k256::K256SigningKey};
 use blueprint_pricing_engine_lib::{
     BenchmarkCache, JobPricingConfig, OperatorConfig, OperatorSigner, PricingEngineService,
     pow::{generate_challenge, generate_proof},
