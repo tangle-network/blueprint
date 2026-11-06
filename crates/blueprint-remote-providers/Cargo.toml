@@ -34,6 +34,8 @@ url = { workspace = true }
 jsonwebtoken = { workspace = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
+# Unconditional: GcpAdapter is not behind `gcp`, and default builds already link it via blueprint-tee.
+gcp_auth = { workspace = true }
 toml = { workspace = true }
 blueprint-core = { workspace = true, features = ["tracing"] }
 
