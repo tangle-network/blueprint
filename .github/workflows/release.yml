@@ -43,6 +43,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
           ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - name: Use this workflow revision's release tooling
+        run: git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install dist
         shell: bash
         run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/astral-sh/cargo-dist/releases/download/v0.28.7-prerelease.1/cargo-dist-installer.sh | sh"
@@ -92,6 +94,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
           ref: refs/tags/${{ needs.plan.outputs.tag }}
+      - name: Use the planned source and this workflow revision's release tooling
+        run: test "$(git rev-parse HEAD)" = "${{ needs.plan.outputs.source-sha }}" && git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |
@@ -169,6 +173,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
           ref: refs/tags/${{ needs.plan.outputs.tag }}
+      - name: Use the planned source and this workflow revision's release tooling
+        run: test "$(git rev-parse HEAD)" = "${{ needs.plan.outputs.source-sha }}" && git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
@@ -215,6 +221,8 @@ jobs:
           persist-credentials: false
           submodules: recursive
           ref: refs/tags/${{ needs.plan.outputs.tag }}
+      - name: Use the planned source and this workflow revision's release tooling
+        run: test "$(git rev-parse HEAD)" = "${{ needs.plan.outputs.source-sha }}" && git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install cached dist
         uses: actions/download-artifact@v4
         with:
@@ -232,7 +240,6 @@ jobs:
         run: |
           python3 .github/scripts/verify_release_tags.py --artifacts record --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
           dist host ${{ needs.plan.outputs.tag-flag }} --steps=upload --steps=release --output-format=json > dist-manifest.json
-          echo "artifact manifest prepared"
           echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@v4
@@ -253,6 +260,7 @@ jobs:
           PRERELEASE_FLAG: "${{ fromJson(steps.host.outputs.manifest).announcement_is_prerelease && '--prerelease' || '' }}"
           RELEASE_COMMIT: "${{ needs.plan.outputs.source-sha }}"
         run: |
+          gh release upload "$RELEASE_TAG" target/distrib/release-source.json --clobber
           gh release upload "$RELEASE_TAG" artifacts/* --clobber
 
           prerelease_args=()
@@ -260,21 +268,5 @@ jobs:
             prerelease_args+=("$PRERELEASE_FLAG")
           fi
           gh release edit "$RELEASE_TAG" --target "$RELEASE_COMMIT" "${prerelease_args[@]}" --draft=false
-          gh release upload "$RELEASE_TAG" target/distrib/release-source.json --clobber
           python3 .github/scripts/verify_release_tags.py --artifacts check --plan target/distrib/plan-dist-manifest.json --tag "$RELEASE_TAG"
           echo "source-bound artifacts uploaded and verified"
-
-  announce:
-    needs:
-      - plan
-      - host
-    if: ${{ always() && needs.host.result == 'success' }}
-    runs-on: "ubuntu-latest"
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          submodules: recursive
-          ref: refs/tags/${{ needs.plan.outputs.tag }}

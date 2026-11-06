@@ -9,7 +9,8 @@ ci = "github"
 create-release = false
 github-build-setup = "build-setup.yml"
 # release.yml retains the CLI tag filter, cache retention and source-bound recovery
-# around generated jobs. Compare it with `dist generate` after upgrading dist.
+# around generated jobs, overlays this file and the verifier from the workflow commit,
+# and omits `announce`. Compare it with `dist generate` after upgrading dist.
 allow-dirty = ["ci"]
 # The installers to generate for each app
 installers = ["shell"]

@@ -26,7 +26,7 @@ def proof():
         (root / "release.json").write_text(json.dumps([{"package_name": "cargo-tangle", "version": "0.5.0-alpha.28", "tag": TAG}]))
         content = {"cli.tar.xz": "artifact fixture input", "cli.tar.xz.sha256": ""}
         content["cli.tar.xz.sha256"] = hashlib.sha256(content["cli.tar.xz"].encode()).hexdigest() + " *cli.tar.xz\n"
-        record = {"schema_version": 1, "tag": TAG, "source_sha": SHA,
+        record = {"schema_version": 1, "tag": TAG, "source_sha": SHA, "workflow_sha": "a"*40,
                   "sha256": {name: hashlib.sha256(value.encode()).hexdigest() for name, value in content.items()}}
         fixture = {"record": record, "content": content, "complete": False, "partial": False, "fail": False, "head": SHA, "tagged": SHA}
         state = root / "fixture.json"
@@ -61,7 +61,7 @@ sys.stdout.write(values[i])
 ''')
         for executable in binary.iterdir(): executable.chmod(0o700)
         env = {**os.environ, "PATH": str(binary)+os.pathsep+os.environ["PATH"],
-               "RELEASE_FIXTURE": str(state), "GITHUB_REPOSITORY": "tangle-network/blueprint", "GITHUB_SERVER_URL": "https://github.com", "GITHUB_API_URL": "https://api.github.com"}
+               "RELEASE_FIXTURE": str(state), "GITHUB_WORKFLOW_SHA": "a"*40, "GITHUB_REPOSITORY": "tangle-network/blueprint", "GITHUB_SERVER_URL": "https://github.com", "GITHUB_API_URL": "https://api.github.com"}
         def invoke(mode="check", expected=0):
             state.write_text(json.dumps(fixture))
             args = [sys.executable, str(SCRIPT), "--artifacts", mode]
@@ -75,10 +75,10 @@ sys.stdout.write(values[i])
         invoke()
         fixture["record"]["source_sha"] = "0"*40
         invoke(expected=2)
-        fixture["partial"] = True
-        invoke(expected=2)
-        fixture["partial"] = False
         fixture["record"]["source_sha"] = SHA
+        fixture["partial"] = True
+        invoke(expected=3)
+        fixture["partial"] = False
         fixture["head"] = "0"*40
         invoke(expected=2)
         fixture["head"] = SHA
@@ -120,6 +120,8 @@ sys.stdout.write(values[i])
             return "\n".join(lines).replace("${{ needs.plan.outputs.tag-flag }}", f"--tag={TAG}")
         shell = step("- id: host")+"\n"+step("- name: Create GitHub Release")
         assert "${{" not in shell, "unresolved workflow process input"
+        fixture["published"] = ["cli.tar.xz"]
+        assert "no source record" in invoke(expected=2).stderr
         fixture["published"] = []
         state.write_text(json.dumps(fixture))
         env.update({"RELEASE_TAG":TAG,"RELEASE_COMMIT":SHA,"PRERELEASE_FLAG":"--prerelease","GITHUB_OUTPUT":str(root/"outputs.txt")})
@@ -128,7 +130,8 @@ sys.stdout.write(values[i])
         live = json.loads(state.read_text())
         assert set(live["published"])==set(content)|{"release-source.json"}, live
         assert "source-bound artifacts uploaded and verified" in result.stdout
-        print(json.dumps({"cases":12,"missing_assets":"incomplete","wrong_source":"error",
+        assert next(a[3] for a in map(json.loads, (root / "argv.jsonl").read_text().splitlines()) if a[:2]==["release","upload"]).endswith("release-source.json")
+        print(json.dumps({"cases":13,"missing_assets":"incomplete","unrecorded_assets":"error","wrong_source":"error",
                           "bad_checksum":"incomplete","unknown_github":"error","dispatch_receipt":99,"workflow_publication":"complete_after_upload"}))
 
 

@@ -104,19 +104,19 @@ impl LambdaLabsAdapter {
         let known = classes.iter().find(|class| {
             class.sku("lambda-labs", count) == native["name"].as_str() && native["name"].is_string()
         });
-        let mut described = classes.iter().filter(|class| {
-            count <= class.max_per_node
-                && native["gpu_description"]
-                    .as_str()
-                    .is_some_and(|name| class.matches_name(name))
-        });
-        let first = described.next();
-        let unique = first.filter(|_| described.next().is_none());
-        match (known, unique) {
-            (Some(known), Some(description)) if known.id != description.id => None,
-            (Some(known), _) => Some(known.clone()),
-            (None, description) => description.cloned(),
+        let description = native["gpu_description"].as_str();
+        let described = classes
+            .iter()
+            .filter(|class| {
+                count <= class.max_per_node
+                    && description.is_some_and(|name| class.matches_name(name))
+            })
+            .collect::<Vec<_>>();
+        if let Some(known) = known {
+            return (described.is_empty() || described.iter().any(|class| class.id == known.id))
+                .then(|| known.clone());
         }
+        (described.len() == 1).then(|| described[0].clone())
     }
 
     fn managed(raw: &Value) -> Result<Option<ManagedResource>> {

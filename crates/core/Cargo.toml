@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-core"
-version = "0.2.0-alpha.6"
+version = "0.2.0-alpha.7"
 description = "Blueprint SDK Core functionality"
 authors.workspace = true
 edition.workspace = true
@@ -21,9 +21,6 @@ serde = { workspace = true, features = ["alloc", "derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
 [dev-dependencies]
-# Path-only test dependency avoids a publish-time cycle through the SDK.
-blueprint-sdk = { path = "../sdk", features = ["std"] }
-serde_json = { workspace = true, features = ["alloc"] }
 tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed", "steer", "filter"] }
 tokio = { workspace = true, features = ["full"] }
 

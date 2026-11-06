@@ -67,6 +67,7 @@ impl Drop for KubeconfigRestore {
 #[tokio::test]
 #[serial(env)]
 async fn metadata_class_count_and_minimum_vram_reach_the_kubernetes_wire() -> anyhow::Result<()> {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let pods = Pods::default();
@@ -166,10 +167,6 @@ async fn metadata_class_count_and_minimum_vram_reach_the_kubernetes_wire() -> an
             .unwrap();
         assert_eq!(vram["operator"], "Gt");
         let threshold: u32 = vram["values"][0].as_str().unwrap().parse()?;
-        assert!(
-            141 > threshold,
-            "141 decimal GB must satisfy a 140 GB minimum"
-        );
         assert!(140 > threshold, "the requested minimum itself must qualify");
         assert!(139 <= threshold, "less VRAM must not qualify");
         assert!(pod["spec"].get("nodeSelector").is_none());

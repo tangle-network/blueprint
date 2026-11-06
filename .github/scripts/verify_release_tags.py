@@ -261,13 +261,15 @@ def artifact_mode(args) -> int:
     if args.artifacts == "record":
         files = {name: hashlib.sha256((Path("target/distrib") / name).read_bytes()).hexdigest()
                  for name in plan["artifacts"]}
-        record = {"schema_version": 1, "tag": args.tag, "source_sha": source, "sha256": files}
+        record = {"schema_version": 1, "tag": args.tag, "source_sha": source, "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"], "sha256": files}
         Path("target/distrib/release-source.json").write_text(json.dumps(record, sort_keys=True) + "\n")
         print(json.dumps({"source_sha": source, "artifacts_recorded": len(files)}))
         return 0
     release = github("api", f"repos/{repo}/releases/tags/{args.tag}")
     assets = {row["name"]: row for row in (release or {}).get("assets", [])}
     if "release-source.json" not in assets:
+        if assets.keys() & plan["artifacts"]:
+            raise ReleaseVerificationError("published assets have no source record; release a new version instead of replacing them")
         print("Release artifact set is incomplete")
         return 3
     def download(name):

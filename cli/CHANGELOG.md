@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha.29](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.28...cargo-tangle-v0.5.0-alpha.29) - 2026-11-06
+
+### Other
+
+- Use one live VM price source and reject unknown estimates (#1626)
+
 ## [0.5.0-alpha.28](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.27...cargo-tangle-v0.5.0-alpha.28) - 2026-11-03
 
 ### Other
