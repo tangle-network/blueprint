@@ -167,21 +167,24 @@ impl CloudProvisioner {
             .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
         let _guard = super::ownership::lock(provider, identity).await?;
         let native = self.managed_adapter(provider)?;
-        let resources = if let Some(id) = provider_id {
-            self.status_managed(provider, identity, id)
-                .await?
-                .into_iter()
-                .collect()
-        } else {
-            native
-                .list(&identity.namespace)
-                .await?
-                .into_iter()
-                .filter(|resource| resource.lease_id == identity.lease_id)
-                .collect::<Vec<_>>()
+        let primary = match provider_id {
+            Some(id) => self.status_managed(provider, identity, id).await?,
+            None => None,
         };
+        let mut resources = native.list(&identity.namespace).await?;
+        resources.retain(|resource| resource.lease_id == identity.lease_id);
+        if let Some(primary) = primary {
+            if !resources.iter().any(|resource| {
+                resource.instance.id == primary.instance.id && resource.kind == primary.kind
+            }) {
+                resources.push(primary);
+            }
+        }
+        for resource in &resources {
+            owned(resource, provider, identity)?;
+        }
+        resources.sort_by_key(|resource| resource.kind != ManagedResourceKind::Instance);
         for resource in resources {
-            owned(&resource, provider, identity)?;
             native.destroy(identity, &resource).await?;
         }
         if native

@@ -1,4 +1,3 @@
-//! The SDK owns the JSON contract consumed by the maintained CLI.
 
 use super::*;
 use crate::{CloudProvider, CloudProvisioner, Error, ResourceSpec};
@@ -149,7 +148,6 @@ pub enum BoundaryResponse {
     },
 }
 
-/// Both sides are derived from their actual Rust request and result types.
 #[derive(JsonSchema)]
 pub struct BoundaryContract {
     pub request: BoundaryRequest,
@@ -214,7 +212,6 @@ impl BoundaryResponse {
     }
 }
 
-/// Credentials enter only this call; errors never serialize provider bodies.
 pub async fn execute_boundary(request: BoundaryRequest) -> BoundaryResponse {
     match run(request).await {
         Ok(data) => BoundaryResponse::Success {
