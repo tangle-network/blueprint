@@ -510,7 +510,7 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
                     let body: Value = request.body_json().unwrap();
                     let id = format!("synthetic-lambda-{}", state.len() + 1);
                     state.insert(id.clone(), json!({"id":id,"name":body["name"],"tags":body["tags"],
-                        "status":"active","ip":"192.0.2.14","created":"2026-11-06T10:00:00Z",
+                        "status":"active","ip":"192.0.2.14","created":"2026-11-06T10:00:00Z","ssh_key_names":body["ssh_key_names"],
                         "instance_type":{"name":body["instance_type_name"],"specs":{"gpus":8},"price_cents_per_hour":6400},
                         "region":{"name":body["region_name"]}}));
                     ResponseTemplate::new(200).set_body_json(json!({"data":{"instance_ids":[id]}}))

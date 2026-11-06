@@ -4,7 +4,9 @@ use crate::managed::{
     ManagedLeaseIdentity, ManagedMetadata, ManagedProviderAdapter, ManagedResource,
     ManagedResourceKind, NativeOffer, ProviderErrorCode,
 };
-use crate::security::{ApiAuthentication, SecureHttpClient};
+use crate::security::{
+    ApiAuthentication, SecureHttpClient, canonical_public_key, parse_public_key,
+};
 use crate::{CloudProvider, Error, InstanceStatus, ProvisionedInstance, ResourceSpec, Result};
 use async_trait::async_trait;
 use serde_json::{Value, json};
@@ -44,6 +46,17 @@ impl VastAiAdapter {
     }
     fn constraints(spec: &ResourceSpec) -> Result<()> {
         crate::managed::bootstrap::workload_environment(spec)?;
+        if let Some(key) = &spec.ssh_public_key {
+            parse_public_key(key)?;
+            if spec.command.as_ref().is_none_or(|command| {
+                command.is_empty()
+                    || command[0].is_empty()
+                    || command[0].starts_with('-')
+                    || command.iter().any(|arg| arg.contains('\0'))
+            }) {
+                return Err(Error::Provider(ProviderErrorCode::Unsupported));
+            }
+        }
         if spec.tee_required
             || spec.source_network.is_some()
             || spec.volume_gb.is_some()
@@ -93,7 +106,7 @@ impl VastAiAdapter {
         let price = if spot {
             let bid = raw["min_bid"]
                 .as_f64()
-                .filter(|bid| (0.001..=128.0).contains(bid))?;
+                .filter(|bid| bid.is_finite() && *bid > 0.0)?;
             let disk = raw["storage_total_cost"]
                 .as_f64()
                 .filter(|disk| disk.is_finite() && *disk >= 0.0)?;
@@ -175,6 +188,33 @@ impl VastAiAdapter {
         }
         Ok(Some(resource))
     }
+    async fn has_instance_key(&self, path: &str, expected: &str) -> Result<bool> {
+        let response = self.http.get(path, &self.auth).await?;
+        let document: Value = response
+            .json()
+            .await
+            .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?;
+        if document["success"].as_bool() != Some(true) {
+            return Err(Error::Provider(ProviderErrorCode::Indeterminate));
+        }
+        let keys: Value = match &document["ssh_keys"] {
+            Value::String(encoded) => serde_json::from_str(encoded)
+                .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?,
+            value => value.clone(),
+        };
+        let keys = keys
+            .as_array()
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let mut present = false;
+        for key in keys {
+            let key = key["public_key"]
+                .as_str()
+                .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+            present |= canonical_public_key(key)? == expected;
+        }
+        Ok(present)
+    }
+
     async fn raw_instance(&self, id: &str) -> Result<Option<Value>> {
         let id = id
             .parse::<u64>()
@@ -303,7 +343,19 @@ impl ManagedProviderAdapter for VastAiAdapter {
         }
         let mut body = json!({"client_id":"me","image":image,"disk":spec.storage_gb,"label":metadata.label()?,"runtype":"args","target_state":"running",
             "env":native_env});
-        if let Some(command) = &spec.command {
+        if spec.ssh_public_key.is_some() {
+            body["runtype"] = json!("ssh_direc ssh_proxy");
+            let command = spec
+                .command
+                .as_ref()
+                .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
+            let arguments = command
+                .iter()
+                .map(|arg| shell_escape::escape(arg.as_str().into()).into_owned())
+                .collect::<Vec<_>>()
+                .join(" ");
+            body["onstart"] = json!(format!("exec {arguments}"));
+        } else if let Some(command) = &spec.command {
             body["args"] = json!(command);
         }
         if offer.spot {
@@ -364,6 +416,56 @@ impl ManagedProviderAdapter for VastAiAdapter {
         resource.hourly_cost_usd = Some(offer.hourly_cost_usd);
         Ok(resource)
     }
+    async fn complete(
+        &self,
+        spec: &ResourceSpec,
+        resource: ManagedResource,
+    ) -> Result<ManagedResource> {
+        let Some(key) = spec.ssh_public_key.as_deref() else {
+            return Ok(resource);
+        };
+        let key = canonical_public_key(key)?;
+        let raw = self
+            .raw_instance(&resource.instance.id)
+            .await?
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let observed = Self::managed(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+        if observed.instance.id != resource.instance.id
+            || observed.namespace != resource.namespace
+            || observed.lease_id != resource.lease_id
+            || observed.request_fingerprint != resource.request_fingerprint
+        {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        if !matches!(
+            raw["image_runtype"].as_str(),
+            Some("ssh" | "ssh_proxy" | "ssh_direc ssh_proxy")
+        ) {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        let path = format!(
+            "{}/instances/{}/ssh/",
+            self.base_url,
+            urlencoding::encode(&resource.instance.id)
+        );
+        if !self.has_instance_key(&path, &key).await? {
+            let response = self
+                .http
+                .post_json(&path, &self.auth, json!({"ssh_key":key}))
+                .await?;
+            let document: Value = response
+                .json()
+                .await
+                .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?;
+            if document["success"].as_bool() != Some(true)
+                || !self.has_instance_key(&path, &key).await?
+            {
+                return Err(Error::Provider(ProviderErrorCode::Indeterminate));
+            }
+        }
+        Ok(observed)
+    }
+
     async fn status(
         &self,
         identity: &ManagedLeaseIdentity,

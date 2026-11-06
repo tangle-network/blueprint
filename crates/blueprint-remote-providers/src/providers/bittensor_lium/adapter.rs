@@ -4,7 +4,9 @@ use crate::managed::{
     ManagedLeaseIdentity, ManagedMetadata, ManagedProviderAdapter, ManagedResource,
     ManagedResourceKind, NativeOffer, ProviderErrorCode,
 };
-use crate::security::{ApiAuthentication, SecureHttpClient};
+use crate::security::{
+    ApiAuthentication, SecureHttpClient, canonical_public_key, parse_public_key,
+};
 use crate::{CloudProvider, Error, InstanceStatus, ProvisionedInstance, ResourceSpec, Result};
 use async_trait::async_trait;
 use serde_json::{Value, json};
@@ -38,6 +40,9 @@ impl BittensorLiumAdapter {
     }
     fn constraints(spec: &ResourceSpec) -> Result<()> {
         crate::managed::bootstrap::workload_environment(spec)?;
+        if let Some(key) = &spec.ssh_public_key {
+            parse_public_key(key)?;
+        }
         if spec
             .max_hourly_cost_usd
             .is_some_and(|cap| cap / f64::from(spec.gpu_count.unwrap_or(1)) <= 0.01)
@@ -333,11 +338,11 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
                     && !image.chars().any(|c| c.is_whitespace() || c.is_control())
             })
             .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
-        let key = spec
-            .ssh_public_key
-            .as_ref()
-            .filter(|key| !key.trim().is_empty())
-            .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
+        let key = canonical_public_key(
+            spec.ssh_public_key
+                .as_deref()
+                .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?,
+        )?;
         let mut metadata = ManagedMetadata::for_spec(spec, fingerprint, chrono::Utc::now())?;
         let mut original_offer = offer.clone();
         let mut owned = Vec::new();
@@ -452,6 +457,41 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
         resource.hourly_cost_usd = Some(offer.hourly_cost_usd);
         Ok(resource)
     }
+    async fn complete(
+        &self,
+        spec: &ResourceSpec,
+        resource: ManagedResource,
+    ) -> Result<ManagedResource> {
+        let Some(expected) = spec.ssh_public_key.as_deref() else {
+            return Ok(resource);
+        };
+        let expected = parse_public_key(expected)?;
+        let raw = self
+            .get(&format!(
+                "pods/{}",
+                urlencoding::encode(&resource.instance.id)
+            ))
+            .await?
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let keys = raw["ssh_keys"]
+            .as_array()
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let keys = keys
+            .iter()
+            .map(|key| {
+                parse_public_key(
+                    key["public_key"]
+                        .as_str()
+                        .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if !keys.iter().any(|key| key.key_data() == expected.key_data()) {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Self::managed_pod(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Conflict))
+    }
+
     async fn status(
         &self,
         identity: &ManagedLeaseIdentity,

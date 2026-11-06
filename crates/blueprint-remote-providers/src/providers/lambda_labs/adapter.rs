@@ -4,7 +4,7 @@ use crate::managed::{
     ManagedLeaseIdentity, ManagedMetadata, ManagedProviderAdapter, ManagedResource,
     ManagedResourceKind, NativeOffer, ProviderErrorCode, bootstrap,
 };
-use crate::security::{ApiAuthentication, SecureHttpClient};
+use crate::security::{ApiAuthentication, SecureHttpClient, parse_public_key};
 use crate::{CloudProvider, Error, InstanceStatus, ProvisionedInstance, ResourceSpec, Result};
 use async_trait::async_trait;
 use serde_json::{Value, json};
@@ -172,13 +172,7 @@ impl LambdaLabsAdapter {
             return Ok(());
         };
         let unsupported = || Error::Provider(ProviderErrorCode::Unsupported);
-        let parse = |value: &str| {
-            if value.contains(['\0', '\r', '\n']) {
-                return Err(unsupported());
-            }
-            ssh_key::PublicKey::from_openssh(value).map_err(|_| unsupported())
-        };
-        let expected = parse(public_key)?;
+        let expected = parse_public_key(public_key)?;
         let name = self
             .ssh_key_name
             .as_deref()
@@ -197,7 +191,9 @@ impl LambdaLabsAdapter {
             .next()
             .and_then(|key| key["public_key"].as_str())
             .ok_or_else(unsupported)?;
-        if selected.next().is_some() || parse(registered)?.key_data() != expected.key_data() {
+        if selected.next().is_some()
+            || parse_public_key(registered)?.key_data() != expected.key_data()
+        {
             return Err(unsupported());
         }
         Ok(())
@@ -511,6 +507,31 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
             blueprint_core::gpu::find(&offer.gpu_class).map(|class| class.vram_gb);
         resource.hourly_cost_usd = Some(offer.hourly_cost_usd);
         Ok(resource)
+    }
+
+    async fn complete(
+        &self,
+        spec: &ResourceSpec,
+        resource: ManagedResource,
+    ) -> Result<ManagedResource> {
+        let name = self
+            .ssh_key_name
+            .as_deref()
+            .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
+        let raw = self
+            .data(&format!(
+                "instances/{}",
+                urlencoding::encode(&resource.instance.id)
+            ))
+            .await?;
+        let names = raw["ssh_key_names"]
+            .as_array()
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        if !names.iter().any(|key| key.as_str() == Some(name)) {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        self.verify_ssh_key(spec).await?;
+        Self::managed(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Conflict))
     }
 
     async fn status(

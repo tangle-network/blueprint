@@ -33,7 +33,7 @@ async fn lambda_accepts_an_own_three_gpu_sku_with_known_gpu_description() {
         .respond_with(move |request:&Request|{
             let body:Value=request.body_json().unwrap();
             *launched.lock().unwrap()=json!({"id":"synthetic-three","tags":body["tags"],"status":"active","ip":"192.0.2.40",
-                "region":{"name":"us-test-1"},"instance_type":{"name":body["instance_type_name"],"gpu_description":"NVIDIA B200","price_cents_per_hour":2400,"specs":{"gpus":3}}});
+                "ssh_key_names":body["ssh_key_names"],"region":{"name":"us-test-1"},"instance_type":{"name":body["instance_type_name"],"gpu_description":"NVIDIA B200","price_cents_per_hour":2400,"specs":{"gpus":3}}});
             ResponseTemplate::new(200).set_body_json(json!({"data":{"instance_ids":["synthetic-three"]}}))
         }).mount(&peer).await;
     Mock::given(method("GET"))

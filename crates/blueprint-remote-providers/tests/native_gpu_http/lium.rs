@@ -42,6 +42,7 @@ async fn lium_native_peer() -> MockServer {
                     let body:Value=request.body_json().unwrap();let template=state.1.get(body["template_id"].as_str().unwrap()).unwrap().clone();
                     state.0+=1;let id=format!("00000000-0000-4000-8000-{:012}",state.0);
                     state.2.insert(id.clone(),json!({"id":id,"template":template,"pod_name":body["pod_name"],"status":"RUNNING",
+                        "ssh_keys":[{"name":"synthetic","public_key":body["user_public_key"]}],
                         "gpu_name":"B200","gpu_count":"8","price":48.3,"created_at":"2026-11-06T10:00:00Z",
                         "ssh_connect_cmd":"ssh -p 22345 root@192.0.2.13","termination_hours":body["termination_hours"],
                         "executor":{"location":{"region":"NSW"},"executor_ip_address":"192.0.2.13"}}));

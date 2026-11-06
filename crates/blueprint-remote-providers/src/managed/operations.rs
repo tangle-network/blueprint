@@ -59,6 +59,26 @@ impl CloudProvisioner {
         let _guard = super::ownership::lock(provider, identity).await?;
         let native = self.managed_adapter(provider)?;
         let fingerprint = candidate.allocation_fingerprint()?;
+        let validate = |resource: &ManagedResource| {
+            owned(resource, provider, identity)?;
+            if resource.instance.id.is_empty()
+                || resource.kind != ManagedResourceKind::Instance
+                || resource.request_fingerprint.as_deref() != Some(fingerprint.as_str())
+            {
+                return Err(Error::Provider(ProviderErrorCode::Conflict));
+            }
+            Ok(())
+        };
+        let complete = async |resource: ManagedResource| -> Result<ManagedResource> {
+            validate(&resource)?;
+            let id = resource.instance.id.clone();
+            let resource = native.complete(&resolved, resource).await?;
+            validate(&resource)?;
+            if resource.instance.id != id {
+                return Err(Error::Provider(ProviderErrorCode::Conflict));
+            }
+            Ok(resource)
+        };
         let existing = native.list(&identity.namespace).await?;
         let existing: Vec<_> = existing
             .into_iter()
@@ -73,11 +93,7 @@ impl CloudProvisioner {
             return Err(Error::Provider(ProviderErrorCode::Conflict));
         }
         if let Some(resource) = existing.into_iter().next() {
-            owned(&resource, provider, identity)?;
-            if resource.request_fingerprint.as_deref() != Some(fingerprint.as_str()) {
-                return Err(Error::Provider(ProviderErrorCode::Conflict));
-            }
-            return Ok(resource);
+            return complete(resource).await;
         }
         let fresh = native
             .offers(&resolved, &candidate.offer.region)
@@ -96,11 +112,7 @@ impl CloudProvisioner {
             })
             .ok_or(Error::Provider(ProviderErrorCode::NoStock))?;
         let resource = native.create(&resolved, &fresh, &fingerprint).await?;
-        owned(&resource, provider, identity)?;
-        if resource.request_fingerprint.as_deref() != Some(fingerprint.as_str()) {
-            return Err(Error::Provider(ProviderErrorCode::Conflict));
-        }
-        Ok(resource)
+        complete(resource).await
     }
 
     pub async fn status_managed(

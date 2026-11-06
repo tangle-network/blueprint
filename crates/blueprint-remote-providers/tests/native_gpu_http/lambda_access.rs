@@ -30,12 +30,19 @@ async fn lambda_key_peer(registered: Option<String>) -> MockServer {
         .await;
     Mock::given(method("GET")).and(path("/ssh-keys"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":registered.map(|key|vec![json!({"id":"synthetic-key-id","name":"synthetic-key","public_key":key})]).unwrap_or_default()}))).mount(&peer).await;
-    Mock::given(method("POST"))
-        .and(path("/instance-operations/launch"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(json!({"data":{"instance_ids":["synthetic-instance"]}})),
-        )
+    let native = std::sync::Arc::new(std::sync::Mutex::new(Value::Null));
+    let created = native.clone();
+    Mock::given(method("POST")).and(path("/instance-operations/launch"))
+        .respond_with(move |request:&wiremock::Request| {
+            let body:Value=request.body_json().unwrap();
+            *created.lock().unwrap()=json!({"id":"synthetic-instance","status":"booting","tags":body["tags"],"ssh_key_names":body["ssh_key_names"],"region":{"name":body["region_name"]},"instance_type":{"name":body["instance_type_name"],"specs":{"gpus":8},"price_cents_per_hour":6400}});
+            ResponseTemplate::new(200).set_body_json(json!({"data":{"instance_ids":["synthetic-instance"]}}))
+        }).mount(&peer).await;
+    Mock::given(method("GET"))
+        .and(path("/instances/synthetic-instance"))
+        .respond_with(move |_: &wiremock::Request| {
+            ResponseTemplate::new(200).set_body_json(json!({"data":native.lock().unwrap().clone()}))
+        })
         .mount(&peer)
         .await;
     peer

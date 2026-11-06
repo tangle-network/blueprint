@@ -4,7 +4,9 @@ use crate::managed::{
     ManagedLeaseIdentity, ManagedMetadata, ManagedProviderAdapter, ManagedResource,
     ManagedResourceKind, NativeOffer, ProviderErrorCode,
 };
-use crate::security::{ApiAuthentication, SecureHttpClient};
+use crate::security::{
+    ApiAuthentication, SecureHttpClient, canonical_public_key, parse_public_key,
+};
 use crate::{CloudProvider, Error, InstanceStatus, ProvisionedInstance, ResourceSpec, Result};
 use async_trait::async_trait;
 use serde_json::{Value, json};
@@ -284,7 +286,7 @@ impl ManagedProviderAdapter for RunPodAdapter {
         let mut env = crate::managed::bootstrap::workload_environment(spec)?;
         env.extend(metadata.env());
         if let Some(key) = &spec.ssh_public_key {
-            env.insert("PUBLIC_KEY".into(), key.clone());
+            env.insert("PUBLIC_KEY".into(), canonical_public_key(key)?);
         }
         let mut ports = spec.ports.clone();
         if let Some(port) = spec.endpoint_port {
@@ -330,6 +332,28 @@ impl ManagedProviderAdapter for RunPodAdapter {
             return Err(Error::Provider(ProviderErrorCode::Indeterminate));
         }
         Self::managed(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Indeterminate))
+    }
+
+    async fn complete(
+        &self,
+        spec: &ResourceSpec,
+        resource: ManagedResource,
+    ) -> Result<ManagedResource> {
+        let Some(expected) = spec.ssh_public_key.as_deref() else {
+            return Ok(resource);
+        };
+        let expected = parse_public_key(expected)?;
+        let raw = self
+            .pod(&resource.instance.id)
+            .await?
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let assigned = raw["env"]["PUBLIC_KEY"]
+            .as_str()
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        if parse_public_key(assigned)?.key_data() != expected.key_data() {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Self::managed(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Conflict))
     }
 
     async fn status(

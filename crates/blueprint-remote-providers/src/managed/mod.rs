@@ -27,6 +27,12 @@ pub trait ManagedProviderAdapter: Send + Sync {
         offer: &NativeOffer,
         fingerprint: &str,
     ) -> Result<ManagedResource>;
+    /// Finish recoverable setup without renting another instance.
+    async fn complete(
+        &self,
+        spec: &ResourceSpec,
+        resource: ManagedResource,
+    ) -> Result<ManagedResource>;
     async fn status(
         &self,
         identity: &ManagedLeaseIdentity,
