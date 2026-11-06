@@ -497,7 +497,7 @@ fn configure_reads_the_environment_and_names_what_is_missing() {
     let output = machine.cli_with(&["configure", "gcp", "--region", "us-central1"], None, &env);
     assert!(output.status.success(), "{}", stderr(&output));
     assert!(
-        stdout(&output).contains("Found Google Cloud credentials"),
+        stdout(&output).contains("Found GCP credentials"),
         "{}",
         stdout(&output)
     );
@@ -516,4 +516,14 @@ fn configure_reads_the_environment_and_names_what_is_missing() {
         "{}",
         stdout(&output)
     );
+
+    // The shared provider enum parses more names than `configure` can check credentials for.
+    let output = machine.cli(&["configure", "coreweave", "--region", "lga1"], None);
+    assert!(!output.status.success(), "{}", stdout(&output));
+    assert!(
+        stderr(&output).contains("does not support CoreWeave"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(!stdout(&machine.cli(&["list"], None)).contains("CoreWeave"));
 }
