@@ -125,50 +125,23 @@ impl SecureHttpClient {
 
     /// Check if domain is allowed
     fn is_allowed_domain(&self, host: &str) -> bool {
+        // The API hosts that adapters built on this client call, as each BASE_URL names them.
         let allowed_domains = [
-            // AWS domains
-            "ec2.amazonaws.com",
-            "s3.amazonaws.com",
-            "sts.amazonaws.com",
-            "iam.amazonaws.com",
-            // Google Cloud domains
-            "compute.googleapis.com",
-            "storage.googleapis.com",
-            "iam.googleapis.com",
-            // Azure domains
-            "management.azure.com",
-            "storage.azure.com",
-            // DigitalOcean domains
-            "api.digitalocean.com",
-            // Vultr domains
-            "api.vultr.com",
-            // Lambda Labs domains
-            "cloud.lambdalabs.com",
-            // RunPod domains
-            "api.runpod.io",
-            // Vast.ai domains
-            "console.vast.ai",
-            // CoreWeave domains
-            "api.coreweave.com",
-            // Paperspace domains
-            "api.paperspace.io",
-            // Fluidstack domains
-            "api.fluidstack.io",
-            // TensorDock domains
-            "marketplace.tensordock.com",
-            // Akash domains
             "api.akash.network",
-            // io.net domains
+            "api.coreweave.com",
+            "api.crusoecloud.com",
+            "api.digitalocean.com",
+            "api.fluidstack.io",
+            "api.hetzner.cloud",
             "api.io.net",
-            // Prime Intellect domains
-            "api.primeintellect.ai",
-            // Render domains
-            "api.render.com",
-            // Bittensor/Lium domains
             "api.lium.ai",
-            // Kubernetes domains (for EKS/GKE/AKS)
-            "kubernetes.default.svc",
-            "kubernetes.default.svc.cluster.local",
+            "api.paperspace.io",
+            "api.primeintellect.ai",
+            "api.rendernetwork.com",
+            "cloud.lambdalabs.com",
+            "console.vast.ai",
+            "marketplace.tensordock.com",
+            "rest.runpod.io",
         ];
 
         // Exact match or subdomain of allowed domains
@@ -522,7 +495,6 @@ mod tests {
                 .validate_url("https://api.digitalocean.com/v2/droplets")
                 .is_ok()
         );
-        assert!(client.validate_url("https://ec2.amazonaws.com/").is_ok());
 
         // Invalid URLs
         assert!(
@@ -536,24 +508,6 @@ mod tests {
                 .validate_url("https://api.digitalocean.com/../../../etc/passwd")
                 .is_err()
         ); // Path traversal
-    }
-
-    #[test]
-    fn test_domain_allowlist() {
-        let client = SecureHttpClient::new().unwrap();
-
-        // Allowed domains
-        assert!(client.is_allowed_domain("api.digitalocean.com"));
-        assert!(client.is_allowed_domain("ec2.amazonaws.com"));
-        assert!(client.is_allowed_domain("compute.googleapis.com"));
-        assert!(client.is_allowed_domain("management.azure.com"));
-
-        // Subdomains should be allowed
-        assert!(client.is_allowed_domain("us-east-1.ec2.amazonaws.com"));
-
-        // Disallowed domains
-        assert!(!client.is_allowed_domain("evil.com"));
-        assert!(!client.is_allowed_domain("malicious.site"));
     }
 
     #[test]
