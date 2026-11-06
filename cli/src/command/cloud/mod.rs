@@ -107,7 +107,11 @@ pub enum CloudCommands {
     #[command(visible_alias = "s")]
     Status {
         /// Service ID (shows all if not specified)
+        #[arg(conflicts_with = "json")]
         service_id: Option<String>,
+
+        #[arg(long)]
+        json: bool,
 
         /// Watch for changes
         #[arg(short, long)]
@@ -133,11 +137,7 @@ pub enum CloudCommands {
     #[command(visible_alias = "up")]
     Update {
         /// Service ID to update
-        #[arg(conflicts_with = "json")]
-        service_id: Option<String>,
-
-        #[arg(long)]
-        json: bool,
+        service_id: String,
 
         /// New blueprint image to deploy
         #[arg(short, long)]
@@ -290,11 +290,7 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
         CloudCommands::Status { json: true, .. } => json::execute("status").await,
         CloudCommands::Status {
             service_id, watch, ..
-        } => {
-            let service_id =
-                service_id.ok_or_else(|| color_eyre::eyre::eyre!("service ID is required"))?;
-            status::show_status(service_id, watch).await
-        }
+        } => status::show_status(service_id, watch).await,
 
         CloudCommands::Terminate {
             service_id,

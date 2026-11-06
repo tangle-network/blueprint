@@ -5,6 +5,7 @@ use crate::{CloudProvider, CloudProvisioner, Error, ResourceSpec};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::io::Read;
 
 pub const SCHEMA_VERSION: u32 = 1;
 
@@ -294,4 +295,28 @@ async fn run(request: BoundaryRequest) -> crate::Result<BoundaryData> {
             Ok(BoundaryData::Destroyed { destroyed: true })
         }
     }
+}
+
+/// Decode the process payload without retaining the credential input buffer.
+pub fn read_boundary_request(operation: &str, reader: impl Read) -> Option<BoundaryRequest> {
+    const LIMIT: u64 = 1_048_576;
+    let mut input = zeroize::Zeroizing::new(Vec::new());
+    reader.take(LIMIT + 1).read_to_end(&mut input).ok()?;
+    if input.len() as u64 > LIMIT {
+        return None;
+    }
+    let mut value: Value = if input.is_empty() && operation == "catalog" {
+        serde_json::json!({})
+    } else {
+        serde_json::from_slice(&input).ok()?
+    };
+    let object = value.as_object_mut()?;
+    if object
+        .get("operation")
+        .is_some_and(|value| value.as_str() != Some(operation))
+    {
+        return None;
+    }
+    object.insert("operation".into(), Value::String(operation.into()));
+    serde_json::from_value(value).ok()
 }
