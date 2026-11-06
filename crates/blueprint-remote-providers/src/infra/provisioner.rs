@@ -10,7 +10,6 @@ use crate::infra::adapters::AwsAdapter;
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
 use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
-use crate::monitoring::discovery::{CloudCredentials, MachineTypeDiscovery};
 use crate::providers::akash::AkashAdapter;
 use crate::providers::azure::adapter::AzureAdapter;
 use crate::providers::bittensor_lium::BittensorLiumAdapter;
@@ -36,7 +35,6 @@ use blueprint_std::collections::HashMap;
 pub struct CloudProvisioner {
     providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
     retry_policy: RetryPolicy,
-    discovery: MachineTypeDiscovery,
 }
 
 impl CloudProvisioner {
@@ -198,7 +196,6 @@ impl CloudProvisioner {
         Ok(Self {
             providers,
             retry_policy: RetryPolicy::default(),
-            discovery: MachineTypeDiscovery::new(),
         })
     }
 
@@ -209,7 +206,6 @@ impl CloudProvisioner {
         Self {
             providers,
             retry_policy: RetryPolicy::default(),
-            discovery: MachineTypeDiscovery::new(),
         }
     }
 
@@ -306,7 +302,7 @@ impl CloudProvisioner {
         let adapter = self
             .providers
             .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
+            .ok_or(Error::ProviderNotConfigured(provider))?;
 
         adapter.terminate_instance(instance_id).await?;
 
@@ -358,7 +354,7 @@ impl CloudProvisioner {
         let adapter = self
             .providers
             .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
+            .ok_or(Error::ProviderNotConfigured(provider))?;
 
         adapter.get_instance_status(instance_id).await
     }
@@ -506,52 +502,6 @@ impl CloudProvisioner {
             .ok_or_else(|| Error::ProviderNotConfigured(provider.clone()))?;
 
         adapter.get_instance_details(instance_id).await
-    }
-
-    /// Use discovery service to find optimal instance type for requirements
-    pub async fn discover_optimal_instance(
-        &mut self,
-        provider: &CloudProvider,
-        resource_spec: &ResourceSpec,
-        region: &str,
-        max_hourly_cost: Option<f64>,
-    ) -> Result<String> {
-        // Load credentials from environment variables
-        let credentials = CloudCredentials::from_env();
-
-        match self
-            .discovery
-            .discover_machine_types(provider, region, &credentials)
-            .await
-        {
-            Ok(_machines) => {
-                // Use discovery service to find best match
-                if let Some(machine) = self.discovery.find_best_match(
-                    provider,
-                    resource_spec.cpu as u32,
-                    resource_spec.memory_gb as f64,
-                    resource_spec.gpu_count.unwrap_or(0) > 0,
-                    max_hourly_cost,
-                ) {
-                    info!(
-                        "Discovery found optimal instance: {} (${:.2}/hr)",
-                        machine.name,
-                        machine.hourly_price.unwrap_or(0.0)
-                    );
-                    return Ok(machine.name);
-                }
-            }
-            Err(e) => {
-                warn!(
-                    "Discovery failed for {:?}: {}, falling back to mapper",
-                    provider, e
-                );
-            }
-        }
-
-        // Fallback to instance mapper
-        let instance_selection = InstanceTypeMapper::map_to_instance_type(resource_spec, provider);
-        Ok(instance_selection.instance_type)
     }
 }
 

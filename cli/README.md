@@ -459,8 +459,8 @@ cargo tangle cloud configure azure --region eastus
 # Compare costs across all providers
 cargo tangle cloud estimate --compare --cpu 4 --memory 16
 
-# Estimate for specific provider with spot pricing
-cargo tangle cloud estimate --provider aws --spot --duration 30d
+# Estimate a configured provider using its live on-demand price
+cargo tangle cloud estimate --provider aws --duration 30d
 
 # GPU-enabled instances
 cargo tangle cloud estimate --provider gcp --gpu 1 --cpu 8 --memory 32
