@@ -69,7 +69,6 @@ def check_global_phase(dist):
     assert result.returncode != 0 and "checksum mismatch" in result.stderr, result
     assert not any(VERIFIED.iterdir()), "failed verification left publishable outputs"
     shutil.rmtree(OUTPUT)
-    print(json.dumps({"global_phase": "published verified archives; stopped on a bad checksum"}))
 
 
 if __name__ == "__main__":

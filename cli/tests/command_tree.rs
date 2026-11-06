@@ -4,18 +4,20 @@ use std::process::Command;
 
 const FULL: &str = "attest blueprint delegator dev harness key operator";
 
-fn help(path: &[String]) -> String {
+fn help(path: &[String]) -> Result<String, String> {
     let output = Command::new(env!("CARGO_BIN_EXE_cargo-tangle"))
         .args(path)
         .arg("--help")
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{path:?} --help failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap()
+    if output.status.success() {
+        Ok(String::from_utf8(output.stdout).unwrap())
+    } else {
+        Err(format!(
+            "{path:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
+    }
 }
 
 fn subcommands(help: &str) -> BTreeSet<String> {
@@ -40,19 +42,23 @@ fn every_command_in_the_built_feature_set_renders_help() {
     if cfg!(feature = "remote-providers") {
         expected.insert("cloud".to_owned());
     }
-    let root = help(&[]);
-    assert_eq!(root, help(&["tangle".to_owned()]), "cargo's tangle prefix");
+    let root = help(&[]).unwrap();
+    assert_eq!(Ok(root.clone()), help(&["tangle".to_owned()]));
     let roots = subcommands(&root);
     assert_eq!(roots, expected);
     let mut pending: Vec<Vec<String>> = roots.into_iter().map(|root| vec![root]).collect();
-    let mut visited = 1;
+    let mut failures = Vec::new();
     while let Some(path) = pending.pop() {
-        visited += 1;
-        assert!(visited < 300, "unexpected recursive command graph");
-        for child in subcommands(&help(&path)) {
-            pending.push([path.as_slice(), &[child]].concat());
+        match help(&path) {
+            Ok(text) => {
+                for child in subcommands(&text) {
+                    pending.push([path.as_slice(), &[child]].concat());
+                }
+            }
+            Err(failure) => failures.push(failure),
         }
     }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 #[cfg(feature = "remote-providers")]

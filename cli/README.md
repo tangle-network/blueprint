@@ -39,11 +39,7 @@ cargo install cargo-tangle --git https://github.com/tangle-network/blueprint \
   --no-default-features --features cloud-only --force
 ```
 
-Cargo-dist's existing [build setup](../.github/workflows/build-setup.yml) builds
-and checks the native cloud archives. Its `extra-artifacts` declaration in
-[dist-workspace.toml](../dist-workspace.toml) verifies their checksums and
-includes them in the same maintained release. Verify the downloaded `.sha256`
-file before extracting the archive. Release-plz owns versions and tags.
+Verify the downloaded `.sha256` file before extracting the archive.
 
 ## Creating a New Blueprint
 
