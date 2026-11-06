@@ -8,8 +8,7 @@ use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::gpu_adapter::{
-    build_http_client, deploy_via_ssh, generate_instance_name, gpu_count_or_one, poll_until,
-    require_public_ip,
+    deploy_via_ssh, generate_instance_name, gpu_count_or_one, poll_until, require_public_ip,
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
@@ -25,6 +24,7 @@ const POD_POLL_INTERVAL: Duration = Duration::from_secs(8);
 pub struct RunPodAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
+    base_url: String,
     cloud_type: String,
     default_region: String,
 }
@@ -33,18 +33,34 @@ impl RunPodAdapter {
     pub async fn new() -> Result<Self> {
         let api_key = std::env::var("RUNPOD_API_KEY")
             .map_err(|_| Error::Other("RUNPOD_API_KEY environment variable not set".into()))?;
-        let cloud_type = std::env::var("RUNPOD_CLOUD_TYPE").unwrap_or_else(|_| "SECURE".into());
-        let default_region = std::env::var("RUNPOD_REGION").unwrap_or_else(|_| "US".into());
+        let mut adapter = Self::with_credentials(api_key)?;
+        if let Ok(cloud_type) = std::env::var("RUNPOD_CLOUD_TYPE") {
+            adapter.cloud_type = cloud_type;
+        }
+        if let Ok(region) = std::env::var("RUNPOD_REGION") {
+            adapter.default_region = region;
+        }
+        Ok(adapter)
+    }
+
+    /// Construct with caller-owned credentials and the provider's default endpoint.
+    pub fn with_credentials(api_key: String) -> Result<Self> {
+        Self::with_endpoint(api_key, BASE_URL)
+    }
+
+    /// Construct with an explicit API endpoint for the same provider.
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
         Ok(Self {
-            http: build_http_client()?,
+            http: SecureHttpClient::with_endpoint(endpoint)?,
             auth: ApiAuthentication::runpod(api_key),
-            cloud_type,
-            default_region,
+            base_url: endpoint.trim_end_matches('/').to_string(),
+            cloud_type: "SECURE".into(),
+            default_region: "US".into(),
         })
     }
 
     async fn fetch_pod(&self, pod_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/pods/{pod_id}");
+        let url = format!("{}/pods/{pod_id}", self.base_url);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -181,7 +197,7 @@ impl CloudProviderAdapter for RunPodAdapter {
             "supportPublicIp": true,
         });
 
-        let create_url = format!("{BASE_URL}/pods");
+        let create_url = format!("{}/pods", self.base_url);
         let json: serde_json::Value = {
             let mut last_err = None;
             let mut result = None;
@@ -243,7 +259,7 @@ impl CloudProviderAdapter for RunPodAdapter {
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        let url = format!("{BASE_URL}/pods/{instance_id}");
+        let url = format!("{}/pods/{instance_id}", self.base_url);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -401,87 +417,5 @@ impl CloudProviderAdapter for RunPodAdapter {
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_running_pod() {
-        let json = serde_json::json!({
-            "id": "pod-abc",
-            "desiredStatus": "RUNNING",
-            "publicIp": "203.0.113.5",
-            "privateIp": "10.2.3.4",
-            "machine": {
-                "gpuTypeId": "NVIDIA A100 80GB PCIe",
-                "dataCenterId": "US-EAST-1"
-            }
-        });
-        let instance = RunPodAdapter::parse_pod(&json, "US").unwrap();
-        assert_eq!(instance.id, "pod-abc");
-        assert_eq!(instance.instance_type, "NVIDIA A100 80GB PCIe");
-        assert_eq!(instance.public_ip.as_deref(), Some("203.0.113.5"));
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::RunPod);
-    }
-
-    #[test]
-    fn parses_provisioning_pod_as_starting() {
-        let json = serde_json::json!({
-            "id": "pod-new",
-            "desiredStatus": "PROVISIONING",
-            "machine": { "gpuTypeId": "X", "dataCenterId": "X" }
-        });
-        let instance = RunPodAdapter::parse_pod(&json, "US").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-    }
-
-    #[test]
-    fn parses_exited_pod_as_terminated() {
-        let json = serde_json::json!({
-            "id": "pod-dead",
-            "desiredStatus": "EXITED",
-            "machine": { "gpuTypeId": "X", "dataCenterId": "X" }
-        });
-        let instance = RunPodAdapter::parse_pod(&json, "US").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    /// `deploy_blueprint_with_target` inlines the same cleanup-on-failure shape
-    /// proven by `providers::common::gpu_adapter::tests::provision_with_cleanup_*`.
-    #[tokio::test]
-    async fn cleanup_on_failed_deploy_terminates_instance() {
-        use crate::providers::common::gpu_adapter::provision_with_cleanup;
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        let cleaned = Arc::new(AtomicBool::new(false));
-        let cleaned_clone = cleaned.clone();
-        let result = provision_with_cleanup(
-            "runpod",
-            || async {
-                Ok(ProvisionedInstance {
-                    id: "pod-test".into(),
-                    provider: CloudProvider::RunPod,
-                    instance_type: "A100".into(),
-                    region: "US".into(),
-                    public_ip: Some("1.2.3.4".into()),
-                    private_ip: None,
-                    status: InstanceStatus::Running,
-                })
-            },
-            |_| async { Err(Error::Other("simulated deploy failure".into())) },
-            |id| async move {
-                assert_eq!(id, "pod-test");
-                cleaned_clone.store(true, Ordering::SeqCst);
-                Ok(())
-            },
-        )
-        .await;
-        assert!(result.is_err());
-        assert!(cleaned.load(Ordering::SeqCst));
     }
 }

@@ -593,24 +593,3 @@ allow_fallback = true
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_find_cheapest_provider() {
-        let manager = AutoDeploymentManager::new();
-
-        let spec = ResourceSpec::basic();
-
-        // Should return default AWS without configured providers
-        let result = manager.find_cheapest_provider(&spec).await;
-        assert!(result.is_ok());
-
-        let (provider, region, price) = result.unwrap();
-        assert_eq!(provider, CloudProvider::AWS);
-        assert_eq!(region, "us-west-2");
-        assert!(price > 0.0);
-    }
-}

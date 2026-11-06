@@ -42,6 +42,10 @@ impl BlueprintDeploymentResult {
 /// Common adapter trait for all cloud providers
 #[async_trait]
 pub trait CloudProviderAdapter: Send + Sync {
+    fn managed(&self) -> Option<&dyn crate::managed::ManagedProviderAdapter> {
+        None
+    }
+
     /// Provision a new instance of the specified type in the given region
     async fn provision_instance(
         &self,

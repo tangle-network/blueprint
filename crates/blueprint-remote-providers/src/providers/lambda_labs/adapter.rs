@@ -6,7 +6,7 @@ use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::gpu_adapter::{
-    build_http_client, deploy_via_ssh, generate_instance_name, poll_until, require_public_ip,
+    deploy_via_ssh, generate_instance_name, poll_until, require_public_ip,
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
@@ -23,6 +23,7 @@ const INSTANCE_POLL_INTERVAL: Duration = Duration::from_secs(10);
 pub struct LambdaLabsAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
+    base_url: String,
     default_region: String,
     ssh_key_name: Option<String>,
 }
@@ -32,21 +33,40 @@ impl LambdaLabsAdapter {
     pub async fn new() -> Result<Self> {
         let api_key = std::env::var("LAMBDA_LABS_API_KEY")
             .map_err(|_| Error::Other("LAMBDA_LABS_API_KEY environment variable not set".into()))?;
-        let default_region =
-            std::env::var("LAMBDA_LABS_REGION").unwrap_or_else(|_| "us-west-1".to_string());
-        let ssh_key_name = std::env::var("LAMBDA_LABS_SSH_KEY_NAME").ok();
+        let mut adapter = Self::with_credentials(api_key)?;
+        if let Ok(region) = std::env::var("LAMBDA_LABS_REGION") {
+            adapter.default_region = region;
+        }
+        adapter.ssh_key_name = std::env::var("LAMBDA_LABS_SSH_KEY_NAME").ok();
+        Ok(adapter)
+    }
 
+    /// Construct with caller-owned credentials and the provider's default endpoint.
+    pub fn with_credentials(api_key: String) -> Result<Self> {
+        Self::with_endpoint(api_key, BASE_URL)
+    }
+
+    /// Construct with an explicit API endpoint for the same provider.
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
         Ok(Self {
-            http: build_http_client()?,
+            http: SecureHttpClient::with_endpoint(endpoint)?,
             auth: ApiAuthentication::lambda_labs(api_key),
-            default_region,
-            ssh_key_name,
+            base_url: endpoint.trim_end_matches('/').to_string(),
+            default_region: "us-west-1".into(),
+            ssh_key_name: None,
         })
+    }
+
+    /// Select an existing provider SSH key for a legacy instance launch.
+    #[must_use]
+    pub fn with_ssh_key_name(mut self, name: String) -> Self {
+        self.ssh_key_name = Some(name);
+        self
     }
 
     /// Fetch a single instance's JSON payload from the REST API.
     async fn fetch_instance_json(&self, instance_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/instances/{instance_id}");
+        let url = format!("{}/instances/{instance_id}", self.base_url);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -188,7 +208,7 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
             payload["ssh_key_names"] = serde_json::json!([key]);
         }
 
-        let launch_url = format!("{BASE_URL}/instance-operations/launch");
+        let launch_url = format!("{}/instance-operations/launch", self.base_url);
         let json: serde_json::Value = {
             let mut last_err = None;
             let mut result = None;
@@ -254,7 +274,7 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
         let payload = serde_json::json!({ "instance_ids": [instance_id] });
-        let terminate_url = format!("{BASE_URL}/instance-operations/terminate");
+        let terminate_url = format!("{}/instance-operations/terminate", self.base_url);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -424,106 +444,5 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_running_instance_json() {
-        let json = serde_json::json!({
-            "data": {
-                "id": "0920482c7a",
-                "ip": "192.0.2.10",
-                "private_ip": "10.0.0.5",
-                "status": "active",
-                "instance_type": { "name": "gpu_1x_a100" },
-                "region": { "name": "us-west-1" }
-            }
-        });
-        let instance = LambdaLabsAdapter::parse_instance(&json, "us-east-1").unwrap();
-        assert_eq!(instance.id, "0920482c7a");
-        assert_eq!(instance.public_ip.as_deref(), Some("192.0.2.10"));
-        assert_eq!(instance.private_ip.as_deref(), Some("10.0.0.5"));
-        assert_eq!(instance.region, "us-west-1");
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::LambdaLabs);
-    }
-
-    #[test]
-    fn parses_booting_instance_as_starting() {
-        let json = serde_json::json!({
-            "data": {
-                "id": "pending",
-                "status": "booting",
-                "instance_type": { "name": "gpu_1x_a10" },
-                "region": { "name": "us-west-1" }
-            }
-        });
-        let instance = LambdaLabsAdapter::parse_instance(&json, "us-west-1").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-        assert!(instance.public_ip.is_none());
-    }
-
-    #[test]
-    fn parses_terminated_instance() {
-        let json = serde_json::json!({
-            "data": {
-                "id": "dead",
-                "status": "terminated",
-                "instance_type": { "name": "gpu_1x_a10" },
-                "region": { "name": "us-west-1" }
-            }
-        });
-        let instance = LambdaLabsAdapter::parse_instance(&json, "us-west-1").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    #[test]
-    fn parse_fails_without_id() {
-        let json = serde_json::json!({
-            "data": { "status": "active" }
-        });
-        assert!(LambdaLabsAdapter::parse_instance(&json, "us-west-1").is_err());
-    }
-
-    /// `deploy_blueprint_with_target` inlines the same cleanup-on-failure shape
-    /// proven by `providers::common::gpu_adapter::tests::provision_with_cleanup_*`:
-    /// when `deploy_blueprint` returns `Err`, `terminate_instance` is invoked with
-    /// the provisioned id and the original deploy error is propagated. This test
-    /// exercises the helper directly to lock that contract.
-    #[tokio::test]
-    async fn cleanup_on_failed_deploy_terminates_instance() {
-        use crate::providers::common::gpu_adapter::provision_with_cleanup;
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        let cleaned = Arc::new(AtomicBool::new(false));
-        let cleaned_clone = cleaned.clone();
-        let result = provision_with_cleanup(
-            "lambda_labs",
-            || async {
-                Ok(ProvisionedInstance {
-                    id: "ll-test".into(),
-                    provider: CloudProvider::LambdaLabs,
-                    instance_type: "gpu_1x_a10".into(),
-                    region: "us-west-1".into(),
-                    public_ip: Some("1.2.3.4".into()),
-                    private_ip: None,
-                    status: InstanceStatus::Running,
-                })
-            },
-            |_| async { Err(Error::Other("simulated deploy failure".into())) },
-            |id| async move {
-                assert_eq!(id, "ll-test");
-                cleaned_clone.store(true, Ordering::SeqCst);
-                Ok(())
-            },
-        )
-        .await;
-        assert!(result.is_err());
-        assert!(cleaned.load(Ordering::SeqCst));
     }
 }

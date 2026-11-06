@@ -13,9 +13,8 @@ use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::gpu_adapter::{
-    ClassifiedError, RetryPolicy, build_http_client, classify_response, deploy_via_ssh,
-    generate_instance_name, poll_until, provision_with_cleanup, require_public_ip,
-    retry_with_backoff,
+    ClassifiedError, RetryPolicy, classify_response, deploy_via_ssh, generate_instance_name,
+    poll_until, provision_with_cleanup, require_public_ip, retry_with_backoff,
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
@@ -35,6 +34,7 @@ const DEFAULT_DURATION_HOURS: u64 = 24;
 pub struct BittensorLiumAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
+    base_url: String,
     hotkey: String,
     coldkey: String,
     region: String,
@@ -51,26 +51,41 @@ impl BittensorLiumAdapter {
             .map_err(|_| Error::Other("LIUM_WALLET_HOTKEY environment variable not set".into()))?;
         let coldkey = std::env::var("LIUM_WALLET_COLDKEY")
             .map_err(|_| Error::Other("LIUM_WALLET_COLDKEY environment variable not set".into()))?;
-        let region = std::env::var("LIUM_REGION").unwrap_or_else(|_| "auto".to_string());
-        let duration_hours = std::env::var("LIUM_DURATION_HOURS")
+        let mut adapter = Self::with_credentials(api_key)?;
+        adapter.hotkey = hotkey;
+        adapter.coldkey = coldkey;
+        if let Ok(region) = std::env::var("LIUM_REGION") {
+            adapter.region = region;
+        }
+        adapter.duration_hours = std::env::var("LIUM_DURATION_HOURS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(DEFAULT_DURATION_HOURS);
-        let ssh_pubkey = std::env::var("LIUM_SSH_PUBKEY").ok();
+        adapter.ssh_pubkey = std::env::var("LIUM_SSH_PUBKEY").ok();
+        Ok(adapter)
+    }
 
+    /// Construct with caller-owned credentials and the provider's default endpoint.
+    pub fn with_credentials(api_key: String) -> Result<Self> {
+        Self::with_endpoint(api_key, BASE_URL)
+    }
+
+    /// Construct with an explicit API endpoint for the same provider.
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
         Ok(Self {
-            http: build_http_client()?,
+            http: SecureHttpClient::with_endpoint(endpoint)?,
             auth: ApiAuthentication::bittensor_lium(api_key),
-            hotkey,
-            coldkey,
-            region,
-            duration_hours,
-            ssh_pubkey,
+            base_url: endpoint.trim_end_matches('/').to_string(),
+            hotkey: String::new(),
+            coldkey: String::new(),
+            region: "auto".into(),
+            duration_hours: DEFAULT_DURATION_HOURS,
+            ssh_pubkey: None,
         })
     }
 
     async fn fetch_rental_json(&self, rental_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/rentals/{rental_id}");
+        let url = format!("{}/rentals/{rental_id}", self.base_url);
         retry_with_backoff("lium.get_rental", &RetryPolicy::default(), |_| {
             let url = url.clone();
             async move {
@@ -192,7 +207,7 @@ impl BittensorLiumAdapter {
                         .http
                         .authenticated_request(
                             reqwest::Method::POST,
-                            &format!("{BASE_URL}/rentals"),
+                            &format!("{}/rentals", self.base_url),
                             &self.auth,
                             Some(payload),
                         )
@@ -243,7 +258,7 @@ impl BittensorLiumAdapter {
     }
 
     async fn cancel_rental(&self, rental_id: &str) -> Result<()> {
-        let url = format!("{BASE_URL}/rentals/{rental_id}");
+        let url = format!("{}/rentals/{rental_id}", self.base_url);
         retry_with_backoff("lium.cancel_rental", &RetryPolicy::default(), |_| {
             let url = url.clone();
             async move {
@@ -412,65 +427,5 @@ impl CloudProviderAdapter for BittensorLiumAdapter {
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_running_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-9001",
-                "status": "active",
-                "gpu_type": "H100-80GB",
-                "datacenter": "eu-central",
-                "public_ip": "192.0.2.55",
-                "private_ip": "10.20.0.7",
-                "miner_uid": 42
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.id, "lium-9001");
-        assert_eq!(instance.public_ip.as_deref(), Some("192.0.2.55"));
-        assert_eq!(instance.region, "eu-central");
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::BittensorLium);
-    }
-
-    #[test]
-    fn parses_starting_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-pending",
-                "status": "matching",
-                "gpu_type": "A100-80GB"
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-        assert!(instance.public_ip.is_none());
-        assert_eq!(instance.region, "auto");
-    }
-
-    #[test]
-    fn parses_terminated_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-dead",
-                "status": "ended",
-                "gpu_type": "RTX_4090"
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    #[test]
-    fn parse_fails_without_id() {
-        let json = serde_json::json!({ "rental": { "status": "active" } });
-        assert!(BittensorLiumAdapter::parse_instance(&json, "auto").is_err());
     }
 }

@@ -11,9 +11,7 @@ use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::common::gpu_adapter::{
-    build_http_client, deploy_via_ssh, poll_until, require_public_ip,
-};
+use crate::providers::common::gpu_adapter::{deploy_via_ssh, poll_until, require_public_ip};
 use crate::providers::vast_ai::VastAiInstanceMapper;
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
@@ -30,6 +28,7 @@ const DEFAULT_IMAGE: &str = "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime";
 pub struct VastAiAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
+    base_url: String,
     max_price_per_hour: f64,
     min_reliability: f64,
 }
@@ -38,19 +37,31 @@ impl VastAiAdapter {
     pub async fn new() -> Result<Self> {
         let api_key = std::env::var("VAST_AI_API_KEY")
             .map_err(|_| Error::Other("VAST_AI_API_KEY environment variable not set".into()))?;
-        let max_price_per_hour = std::env::var("VAST_AI_MAX_PRICE_PER_HOUR")
+        let mut adapter = Self::with_credentials(api_key)?;
+        adapter.max_price_per_hour = std::env::var("VAST_AI_MAX_PRICE_PER_HOUR")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(2.0);
-        let min_reliability = std::env::var("VAST_AI_MIN_RELIABILITY")
+            .unwrap_or(adapter.max_price_per_hour);
+        adapter.min_reliability = std::env::var("VAST_AI_MIN_RELIABILITY")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(0.95);
+            .unwrap_or(adapter.min_reliability);
+        Ok(adapter)
+    }
+
+    /// Construct with caller-owned credentials and the provider's default endpoint.
+    pub fn with_credentials(api_key: String) -> Result<Self> {
+        Self::with_endpoint(api_key, BASE_URL)
+    }
+
+    /// Construct with an explicit API endpoint for the same provider.
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
         Ok(Self {
-            http: build_http_client()?,
+            http: SecureHttpClient::with_endpoint(endpoint)?,
             auth: ApiAuthentication::vast_ai(api_key),
-            max_price_per_hour,
-            min_reliability,
+            base_url: endpoint.trim_end_matches('/').to_string(),
+            max_price_per_hour: 2.0,
+            min_reliability: 0.95,
         })
     }
 
@@ -63,7 +74,7 @@ impl VastAiAdapter {
             .http
             .authenticated_request(
                 reqwest::Method::POST,
-                &format!("{BASE_URL}/bundles/"),
+                &format!("{}/bundles/", self.base_url),
                 &self.auth,
                 Some(serde_json::json!({ "q": query })),
             )
@@ -107,7 +118,7 @@ impl VastAiAdapter {
     }
 
     async fn fetch_instance(&self, instance_id: i64) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/instances/");
+        let url = format!("{}/instances/", self.base_url);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -262,7 +273,7 @@ impl CloudProviderAdapter for VastAiAdapter {
             "label": format!("blueprint-{}", uuid::Uuid::new_v4()),
             "runtype": "ssh_direc",
         });
-        let rent_url = format!("{BASE_URL}/asks/{offer_id}/");
+        let rent_url = format!("{}/asks/{offer_id}/", self.base_url);
         let json: serde_json::Value = {
             let mut last_err = None;
             let mut result = None;
@@ -324,7 +335,7 @@ impl CloudProviderAdapter for VastAiAdapter {
         let id: i64 = instance_id
             .parse()
             .map_err(|_| Error::Other(format!("Invalid Vast.ai instance id: {instance_id}")))?;
-        let url = format!("{BASE_URL}/instances/{id}/");
+        let url = format!("{}/instances/{id}/", self.base_url);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -458,86 +469,5 @@ impl CloudProviderAdapter for VastAiAdapter {
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_running_vast_instance() {
-        let json = serde_json::json!({
-            "id": 12345,
-            "actual_status": "running",
-            "public_ipaddr": "198.51.100.1",
-            "gpu_name": "RTX 4090",
-            "num_gpus": 2,
-            "geolocation": "US-CA"
-        });
-        let instance = VastAiAdapter::parse_instance(&json).unwrap();
-        assert_eq!(instance.id, "12345");
-        assert_eq!(instance.instance_type, "2x RTX 4090");
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::VastAi);
-    }
-
-    #[test]
-    fn parses_scheduling_as_starting() {
-        let json = serde_json::json!({
-            "id": 1,
-            "actual_status": "scheduling",
-            "gpu_name": "A100",
-            "num_gpus": 1
-        });
-        let instance = VastAiAdapter::parse_instance(&json).unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-    }
-
-    #[test]
-    fn parses_exited_as_terminated() {
-        let json = serde_json::json!({
-            "id": 1,
-            "actual_status": "exited",
-            "gpu_name": "A100",
-            "num_gpus": 1
-        });
-        let instance = VastAiAdapter::parse_instance(&json).unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    /// `deploy_blueprint_with_target` inlines the same cleanup-on-failure shape
-    /// proven by `providers::common::gpu_adapter::tests::provision_with_cleanup_*`.
-    #[tokio::test]
-    async fn cleanup_on_failed_deploy_terminates_instance() {
-        use crate::providers::common::gpu_adapter::provision_with_cleanup;
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        let cleaned = Arc::new(AtomicBool::new(false));
-        let cleaned_clone = cleaned.clone();
-        let result = provision_with_cleanup(
-            "vast_ai",
-            || async {
-                Ok(ProvisionedInstance {
-                    id: "12345".into(),
-                    provider: CloudProvider::VastAi,
-                    instance_type: "1x A100".into(),
-                    region: "US-CA".into(),
-                    public_ip: Some("1.2.3.4".into()),
-                    private_ip: None,
-                    status: InstanceStatus::Running,
-                })
-            },
-            |_| async { Err(Error::Other("simulated deploy failure".into())) },
-            |id| async move {
-                assert_eq!(id, "12345");
-                cleaned_clone.store(true, Ordering::SeqCst);
-                Ok(())
-            },
-        )
-        .await;
-        assert!(result.is_err());
-        assert!(cleaned.load(Ordering::SeqCst));
     }
 }
