@@ -30,6 +30,8 @@ pub struct ResourceLimits {
     pub cpu_count: Option<u8>,
     /// Number of GPU devices
     pub gpu_count: Option<u8>,
+    /// Canonical GPU class, preserved through remote and container placement.
+    pub gpu_class: Option<String>,
     /// GPU scheduling policy (Required = hard constraint, Preferred = soft affinity)
     pub gpu_policy: GpuSchedulingPolicy,
     /// Minimum VRAM per GPU device in GiB (used for node selector labels)
@@ -49,6 +51,7 @@ impl Default for ResourceLimits {
             cpu_count: Some(2),
             // No GPU by default
             gpu_count: None,
+            gpu_class: None,
             gpu_policy: GpuSchedulingPolicy::None,
             gpu_min_vram_gb: None,
             // No bandwidth limit by default

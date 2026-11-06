@@ -72,6 +72,7 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 libc = { workspace = true }
 rand = { workspace = true }
 urlencoding = { workspace = true }
+tempfile.workspace = true
 
 [dev-dependencies]
 mockall = { workspace = true }

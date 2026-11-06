@@ -313,6 +313,7 @@ async fn test_shared_kubernetes_deployment_generic() {
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
+        ..Default::default()
     };
 
     // Test the actual shared deployment function
@@ -469,6 +470,7 @@ async fn test_managed_k8s_deployment_with_mock_auth() {
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
+        ..Default::default()
     };
 
     // Use EKS config but against our kind cluster (simulates managed K8s flow)
@@ -536,6 +538,7 @@ async fn test_k8s_deployment_resource_allocation() {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         },
         // Standard resources
         ResourceSpec {
@@ -545,6 +548,7 @@ async fn test_k8s_deployment_resource_allocation() {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         },
         // High resources
         ResourceSpec {
@@ -554,6 +558,7 @@ async fn test_k8s_deployment_resource_allocation() {
             gpu_count: Some(1),
             allow_spot: true,
             qos: Default::default(),
+            ..Default::default()
         },
     ];
 
@@ -766,6 +771,7 @@ async fn test_end_to_end_managed_k8s_workflow() {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         },
         std::collections::HashMap::new(),
     )

@@ -1,119 +1,74 @@
-//! Remote service runtime implementation for cloud deployments
+//! Remote runtime backed by the SDK lease that owns allocation and retirement.
 
 use super::service::Status;
 use crate::error::{Error, Result};
-use blueprint_core::info;
-use blueprint_remote_providers::deployment::manager_integration::RemoteDeploymentConfig;
-use blueprint_remote_providers::deployment::tracker::DeploymentStatus;
-use blueprint_remote_providers::deployment::tracker::DeploymentTracker;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use blueprint_remote_providers::deployment::secure_ssh::SecureSshClient;
+use blueprint_remote_providers::{Lease, ResourceSpec};
 
-/// A remote service instance running on a cloud provider
 pub struct RemoteServiceInstance {
-    config: RemoteDeploymentConfig,
-    tracker: Arc<DeploymentTracker>,
-    status: Arc<RwLock<Status>>,
+    lease: Lease,
+    resources: ResourceSpec,
+    status: Status,
+    process: Option<(SecureSshClient, u32, tempfile::TempDir)>,
 }
 
 impl RemoteServiceInstance {
-    pub fn new(config: RemoteDeploymentConfig, tracker: Arc<DeploymentTracker>) -> Self {
+    pub fn from_lease(lease: Lease, resources: ResourceSpec) -> Self {
         Self {
-            config,
-            tracker,
-            status: Arc::new(RwLock::new(Status::NotStarted)),
+            lease,
+            resources,
+            status: Status::NotStarted,
+            process: None,
         }
+    }
+
+    /// Retain the per-lease key and host pin while monitoring the deployed process.
+    pub fn with_process(
+        mut self,
+        ssh: SecureSshClient,
+        pid: u32,
+        access: tempfile::TempDir,
+    ) -> Self {
+        self.process = Some((ssh, pid, access));
+        self
     }
 
     pub async fn start(&mut self) -> Result<()> {
-        let provider = self
-            .config
-            .provider
-            .as_ref()
-            .map(|p| format!("{:?}", p))
-            .unwrap_or_else(|| "unknown".to_string());
-        info!(
-            "Starting remote service on {} (instance: {})",
-            provider, self.config.instance_id
-        );
-
-        *self.status.write().await = Status::Pending;
-
-        // The deployment was already created in try_remote_deployment
-        // Just verify it's running
-        match self
-            .tracker
-            .get_deployment_status(&self.config.instance_id)
-            .await
-        {
-            Some(DeploymentStatus::Active) => {
-                *self.status.write().await = Status::Running;
-                Ok(())
-            }
-            Some(DeploymentStatus::Terminating) => {
-                *self.status.write().await = Status::Pending;
-                Err(Error::Other(
-                    "Remote deployment is terminating and cannot be started".into(),
-                ))
-            }
-            Some(DeploymentStatus::Terminated) => {
-                *self.status.write().await = Status::Finished;
-                Err(Error::Other(
-                    "Remote deployment is already terminated".into(),
-                ))
-            }
-            Some(DeploymentStatus::Failed) => {
-                *self.status.write().await = Status::Error;
-                Err(Error::Other("Remote deployment failed".into()))
-            }
-            Some(DeploymentStatus::Unknown) => {
-                *self.status.write().await = Status::Unknown;
-                Err(Error::Other("Remote deployment status unknown".into()))
-            }
-            None => {
-                *self.status.write().await = Status::Error;
-                Err(Error::Other("Remote deployment not found".into()))
-            }
+        self.resources.validate().map_err(Error::Other)?;
+        if !self.lease.is_active().await? {
+            self.status = Status::Finished;
+            return Err(Error::Other(
+                "Remote service lease has expired or terminated".into(),
+            ));
         }
+        if let Some((ssh, pid, _)) = &self.process {
+            ssh.run_script(&format!("kill -0 {pid}")).await?;
+        }
+        self.status = Status::Running;
+        Ok(())
     }
 
     pub async fn status(&self) -> Result<Status> {
-        Ok(*self.status.read().await)
+        if !self.lease.is_active().await? {
+            return Ok(Status::Finished);
+        }
+        if let Some((ssh, pid, _)) = &self.process {
+            if *pid < 2 || ssh.run_script(&format!("kill -0 {pid}")).await.is_err() {
+                return Ok(Status::Error);
+            }
+        }
+        Ok(self.status)
     }
 
     pub async fn shutdown(&mut self) -> Result<()> {
-        let provider = self
-            .config
-            .provider
-            .as_ref()
-            .map(|p| format!("{:?}", p))
-            .unwrap_or_else(|| "unknown".to_string());
-        info!(
-            "Shutting down remote service on {} (instance: {})",
-            provider, self.config.instance_id
-        );
-
-        // Mark for termination in tracker
-        self.tracker
-            .handle_termination(&self.config.instance_id)
-            .await?;
-
-        *self.status.write().await = Status::Finished;
+        self.lease.terminate().await?;
+        self.status = Status::Finished;
         Ok(())
     }
 
     pub async fn logs(&self, _lines: usize) -> Result<Vec<String>> {
-        let provider = self
-            .config
-            .provider
-            .as_ref()
-            .map(|p| format!("{:?}", p))
-            .unwrap_or_else(|| "unknown".to_string());
-        // This would fetch logs from the remote provider
-        // For now, return a placeholder
-        Ok(vec![format!(
-            "[Remote logs from {} instance {} - not yet implemented]",
-            provider, self.config.instance_id
-        )])
+        Err(Error::Other(
+            "Fetch workload logs through the allocated SSH endpoint".into(),
+        ))
     }
 }

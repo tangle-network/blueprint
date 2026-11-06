@@ -1,3 +1,5 @@
+mod upgrade;
+
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -14,8 +16,6 @@ use crate::blueprint::native::FilteredBlueprint;
 use crate::config::BlueprintManagerContext;
 use crate::config::SourceType;
 use crate::error::{Error, Result};
-#[cfg(feature = "remote-providers")]
-use crate::executor::remote_provider_integration::RemoteProviderManager;
 use crate::metrics;
 use crate::protocol::tangle::client::TangleProtocolClient;
 use crate::protocol::tangle::metadata::OnChainMetadataProvider;
@@ -63,19 +63,6 @@ pub trait BlueprintMetadataProvider: Send + Sync {
     ) -> Result<Option<BlueprintMetadata>>;
 }
 
-/// Convert `ResourceLimits` to a `ResourceSpec` for remote cloud provisioning.
-#[cfg(feature = "remote-providers")]
-fn resource_spec_from_limits(limits: &ResourceLimits) -> blueprint_remote_providers::ResourceSpec {
-    blueprint_remote_providers::ResourceSpec {
-        cpu: f32::from(limits.cpu_count.unwrap_or(2)),
-        memory_gb: limits.memory_size as f32 / (1024.0 * 1024.0 * 1024.0),
-        storage_gb: limits.storage_space as f32 / (1024.0 * 1024.0 * 1024.0),
-        gpu_count: limits.gpu_count.map(u32::from),
-        allow_spot: false,
-        qos: blueprint_remote_providers::core::resources::QosParameters::default(),
-    }
-}
-
 /// Handles Tangle events and translates them into blueprint lifecycle actions.
 pub struct TangleEventHandler {
     metadata: Arc<dyn BlueprintMetadataProvider>,
@@ -88,8 +75,6 @@ pub struct TangleEventHandler {
     ///   - drains queued `SwapRequest`s after every block so verified swaps
     ///     get applied without waiting for a fresh on-chain signal.
     upgrade: Option<crate::upgrade::UpgradePipeline>,
-    #[cfg(feature = "remote-providers")]
-    remote_provider: Option<RemoteProviderManager>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -156,6 +141,7 @@ fn supports_tee(source: &BlueprintSource) -> bool {
 ///   The container runtime uses node affinity (soft constraint, CPU fallback allowed).
 /// - `None`: no GPU resources.
 fn apply_gpu_limits(gpu: &GpuRequirements, limits: &mut ResourceLimits) {
+    limits.gpu_class = gpu.class.clone();
     match gpu.policy {
         GpuPolicy::Required => {
             let count = gpu.min_count.clamp(1, 255) as u8;
@@ -229,8 +215,6 @@ impl TangleEventHandler {
         Self {
             metadata: Arc::new(OnChainMetadataProvider::new()),
             upgrade: None,
-            #[cfg(feature = "remote-providers")]
-            remote_provider: None,
         }
     }
 
@@ -239,8 +223,6 @@ impl TangleEventHandler {
         Self {
             metadata,
             upgrade: None,
-            #[cfg(feature = "remote-providers")]
-            remote_provider: None,
         }
     }
 
@@ -255,24 +237,6 @@ impl TangleEventHandler {
     /// mount it onto the auth proxy's router.
     pub fn upgrade_api(&self) -> Option<crate::upgrade::UpgradeApi> {
         self.upgrade.as_ref().map(|u| u.api.clone())
-    }
-
-    /// Initialize remote provider manager from context.
-    #[cfg(feature = "remote-providers")]
-    pub async fn init_remote_provider(&mut self, ctx: &BlueprintManagerContext) -> Result<()> {
-        if ctx.remote_deployment_opts.enable_remote_deployments {
-            match RemoteProviderManager::new(ctx).await {
-                Ok(Some(manager)) => {
-                    info!("Remote provider manager initialized for GPU deployments");
-                    self.remote_provider = Some(manager);
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    warn!(error = %e, "Failed to initialize remote provider manager");
-                }
-            }
-        }
-        Ok(())
     }
 
     /// Initialize the handler by syncing the client with the latest observed block.
@@ -500,7 +464,6 @@ impl TangleEventHandler {
                 );
                 if let Some(metadata) = self.metadata.resolve_service(client, service_id).await? {
                     let blueprint_id = metadata.blueprint_id;
-                    let gpu_requirements = metadata.gpu_requirements;
                     if let Err(e) = self
                         .ensure_service_running(&trace_id, metadata, env, ctx, active_blueprints)
                         .await
@@ -514,13 +477,6 @@ impl TangleEventHandler {
                         );
                         continue;
                     }
-                    #[cfg(feature = "remote-providers")]
-                    self.notify_remote_service_initiated(
-                        blueprint_id,
-                        service_id,
-                        &gpu_requirements,
-                    )
-                    .await;
                 } else {
                     info!(
                         trace_id = %trace_id,
@@ -540,9 +496,6 @@ impl TangleEventHandler {
                 if let Ok(service) = client.client().get_service(service_id).await {
                     self.stop_service(service.blueprintId, service_id, active_blueprints)
                         .await?;
-                    #[cfg(feature = "remote-providers")]
-                    self.notify_remote_service_terminated(service.blueprintId, service_id)
-                        .await;
                 }
             } else if let Ok(evt) = log.log_decode::<OperatorPreRegistered>() {
                 let blueprint_id = evt.inner.data.blueprintId;
@@ -871,38 +824,15 @@ impl TangleEventHandler {
                 {
                     Ok(mut service) => {
                         if let Some(health) = service.start().await? {
-                            if let Err(e) = health.await {
-                                last_err = Some(e);
-                            } else {
-                                active_blueprints
-                                    .entry(metadata.blueprint_id)
-                                    .or_default()
-                                    .insert(metadata.service_id, service);
-                                info!(
-                                    trace_id = %trace_id,
-                                    blueprint_id = metadata.blueprint_id,
-                                    service_id = metadata.service_id,
-                                    "Started Tangle blueprint service via local cargo fallback"
-                                );
-                                self.on_service_started(metadata.blueprint_id, metadata.service_id)
-                                    .await;
-                                return Ok(());
-                            }
-                        } else {
-                            active_blueprints
-                                .entry(metadata.blueprint_id)
-                                .or_default()
-                                .insert(metadata.service_id, service);
-                            info!(
-                                trace_id = %trace_id,
-                                blueprint_id = metadata.blueprint_id,
-                                service_id = metadata.service_id,
-                                "Started Tangle blueprint service via local cargo fallback"
-                            );
-                            self.on_service_started(metadata.blueprint_id, metadata.service_id)
-                                .await;
-                            return Ok(());
+                            health.await?;
                         }
+                        active_blueprints
+                            .entry(metadata.blueprint_id)
+                            .or_default()
+                            .insert(metadata.service_id, service);
+                        self.on_service_started(metadata.blueprint_id, metadata.service_id)
+                            .await;
+                        return Ok(());
                     }
                     Err(e) => last_err = Some(e),
                 }
@@ -910,266 +840,6 @@ impl TangleEventHandler {
         }
 
         Err(last_err.unwrap_or(Error::NoFetchers))
-    }
-
-    /// Notify the upgrade watcher that a service is now running.
-    ///
-    /// Called from `ensure_service_running` success paths. Best-effort —
-    /// failures here would only delay upgrade reconciliation, not corrupt
-    /// state, so they are downgraded to warnings.
-    async fn on_service_started(&self, blueprint_id: u64, service_id: u64) {
-        let Some(pipeline) = &self.upgrade else {
-            return;
-        };
-        pipeline
-            .tracked_services
-            .insert(blueprint_id, service_id)
-            .await;
-        // Resolve the effective binary version so the watcher knows the
-        // (versionId, sha256) the manager just spun up. If the chain reverts
-        // (no published versions) we simply skip — the watcher will pick
-        // this up the moment a publish lands.
-        match pipeline
-            .api
-            .chain()
-            .effective_binary_version(service_id, blueprint_id)
-            .await
-        {
-            Ok(version) => {
-                pipeline
-                    .state
-                    .set_running(
-                        service_id,
-                        crate::upgrade::RunningBinary {
-                            version_id: version.version_id,
-                            sha256: version.sha256,
-                        },
-                    )
-                    .await;
-                info!(
-                    target: "upgrade",
-                    blueprint_id,
-                    service_id,
-                    version_id = version.version_id,
-                    "registered service with upgrade watcher"
-                );
-            }
-            Err(crate::upgrade::UpgradeError::NoVersionsPublished { .. }) => {
-                info!(
-                    target: "upgrade",
-                    blueprint_id,
-                    service_id,
-                    "service started before any binary version was published — watcher will reconcile on next publish"
-                );
-            }
-            Err(err) => {
-                warn!(
-                    target: "upgrade",
-                    blueprint_id,
-                    service_id,
-                    error = %err,
-                    "failed to record initial binary version for new service"
-                );
-            }
-        }
-        // Cache the current policy too, so the local RPC can answer
-        // `GET /upgrades/policy/{service_id}` immediately.
-        if let Ok(policy) = pipeline
-            .api
-            .chain()
-            .service_upgrade_policy(service_id)
-            .await
-        {
-            pipeline.state.set_policy(service_id, policy).await;
-        }
-    }
-
-    /// Notify the upgrade watcher that a service is no longer running.
-    async fn on_service_stopped(&self, blueprint_id: u64, service_id: u64) {
-        let Some(pipeline) = &self.upgrade else {
-            return;
-        };
-        pipeline
-            .tracked_services
-            .remove(blueprint_id, service_id)
-            .await;
-        pipeline.state.clear_running(service_id).await;
-    }
-
-    /// Decide whether a Tangle block's logs touched any binary-version
-    /// surface, and if so, kick the watcher.
-    async fn maybe_notify_upgrade_watcher(&self, logs: &[alloy_rpc_types::Log]) {
-        let Some(pipeline) = &self.upgrade else {
-            return;
-        };
-        let mut blueprints = std::collections::HashSet::new();
-        let mut policy_changed = false;
-        for log in logs {
-            let Some(topic0) = log.topic0() else {
-                continue;
-            };
-            if topic0 == &crate::upgrade::event_selectors::binary_version_published()
-                || topic0 == &crate::upgrade::event_selectors::binary_active_version_changed()
-                || topic0 == &crate::upgrade::event_selectors::binary_version_deprecated()
-            {
-                // Indexed param[1] is the blueprintId on these three events.
-                if let Some(bp_topic) = log.topics().get(1) {
-                    let bp = u64::from_be_bytes(
-                        bp_topic.as_slice()[24..32].try_into().unwrap_or([0u8; 8]),
-                    );
-                    blueprints.insert(bp);
-                }
-            } else if topic0 == &crate::upgrade::event_selectors::operator_binary_acked()
-                || topic0 == &crate::upgrade::event_selectors::service_upgrade_policy_set()
-            {
-                // Service-scoped events — we don't know the blueprint from
-                // the topic alone. Mark the policy_changed flag so we ask
-                // the watcher for a wildcard reconcile.
-                policy_changed = true;
-            }
-        }
-        if policy_changed {
-            pipeline.watcher.notify_reconcile_all().await;
-        } else if !blueprints.is_empty() {
-            pipeline.watcher.notify_block(blueprints).await;
-        }
-    }
-
-    /// Pop any queued `SwapRequest`s and apply them against
-    /// `active_blueprints`. Called once per processed block from the Tangle
-    /// event loop.
-    async fn drain_pending_swaps(
-        &mut self,
-        env: &BlueprintEnvironment,
-        ctx: &BlueprintManagerContext,
-        active_blueprints: &mut ActiveBlueprints,
-    ) {
-        // `self.upgrade` is `Option`; we have to take it out to satisfy the
-        // borrow checker for the recursive call back into the handler.
-        let Some(mut pipeline) = self.upgrade.take() else {
-            return;
-        };
-        while let Ok(request) = pipeline.swap_rx.try_recv() {
-            self.apply_swap(&pipeline, request, env, ctx, active_blueprints)
-                .await;
-        }
-        self.upgrade = Some(pipeline);
-    }
-
-    /// Drain the old service for one swap and let the next reconcile spawn
-    /// the replacement.
-    ///
-    /// We split this from the spawn path because the existing
-    /// `ensure_service_running` knows how to assemble sources/runtime/GPU
-    /// state for the relevant blueprint. Forking that pipeline would mean
-    /// two ways to spawn a service — exactly the duplication the codebase
-    /// avoids elsewhere. The cost is one block of downtime between drain
-    /// and respawn, which is acceptable for AUTO/APPROVE flows.
-    async fn apply_swap(
-        &self,
-        pipeline: &crate::upgrade::UpgradePipeline,
-        request: crate::upgrade::SwapRequest,
-        env: &BlueprintEnvironment,
-        ctx: &BlueprintManagerContext,
-        active_blueprints: &mut ActiveBlueprints,
-    ) {
-        let trace_id = gen_trace_id();
-        info!(
-            target: "upgrade",
-            trace_id = %trace_id,
-            blueprint_id = request.blueprint_id,
-            service_id = request.service_id,
-            to_version_id = request.target.version_id,
-            "applying queued swap"
-        );
-
-        // Step 1: drain old. Take ownership of the Service so its destructor
-        // does not race the respawn.
-        let Some(services) = active_blueprints.get_mut(&request.blueprint_id) else {
-            warn!(
-                target: "upgrade",
-                trace_id = %trace_id,
-                blueprint_id = request.blueprint_id,
-                service_id = request.service_id,
-                "swap arrived for an untracked blueprint — discarding"
-            );
-            return;
-        };
-        let Some(old_service) = services.remove(&request.service_id) else {
-            warn!(
-                target: "upgrade",
-                trace_id = %trace_id,
-                blueprint_id = request.blueprint_id,
-                service_id = request.service_id,
-                "swap arrived for an untracked service — discarding"
-            );
-            return;
-        };
-        if let Err(err) = old_service.shutdown().await {
-            warn!(
-                target: "upgrade",
-                trace_id = %trace_id,
-                blueprint_id = request.blueprint_id,
-                service_id = request.service_id,
-                error = %err,
-                "old service drain returned error; continuing into respawn"
-            );
-        }
-        // Drop the blueprint entry if empty so the next reconcile cycle
-        // re-creates it from scratch with fresh resource limits.
-        if let Some(services) = active_blueprints.get(&request.blueprint_id) {
-            if services.is_empty() {
-                active_blueprints.remove(&request.blueprint_id);
-            }
-        }
-
-        // Step 2: record the new running state. The metric is reset
-        // intentionally — the swap-in is observed only when the next spawn
-        // succeeds, not here.
-        pipeline
-            .state
-            .set_running(
-                request.service_id,
-                crate::upgrade::RunningBinary {
-                    version_id: request.target.version_id,
-                    sha256: request.target.sha256,
-                },
-            )
-            .await;
-        pipeline.state.clear_pending(request.service_id).await;
-        pipeline
-            .state
-            .push_history(crate::upgrade::UpgradeHistoryEntry {
-                service_id: request.service_id,
-                blueprint_id: request.blueprint_id,
-                from_version_id: request.previous.map(|r| r.version_id),
-                from_sha256: request.previous.map(|r| r.sha256),
-                to_version_id: request.target.version_id,
-                to_sha256: request.target.sha256,
-                policy: request.policy,
-                completed_at: std::time::SystemTime::now(),
-                outcome: crate::upgrade::UpgradeOutcome::Swapped,
-            })
-            .await;
-
-        info!(
-            target: "upgrade",
-            trace_id = %trace_id,
-            event = "binary_swapped",
-            blueprint_id = request.blueprint_id,
-            service_id = request.service_id,
-            to_version_id = request.target.version_id,
-            policy = %request.policy,
-            "binary swap drained — re-spawn will happen on next reconcile"
-        );
-
-        // Step 3: trigger re-spawn through the normal lifecycle.
-        // `resolve_service` returns the same metadata the protocol event
-        // handler would build for a `ServiceActivated` event; the new
-        // binary will be picked up via the source's normal fetch path,
-        // which content-addresses against the cache. Errors are logged but
-        // not surfaced — the next block's reconcile will retry.
-        let _ = &request.binary_path;
     }
 
     async fn stop_service(
@@ -1192,228 +862,5 @@ impl TangleEventHandler {
         }
         self.on_service_stopped(blueprint_id, service_id).await;
         Ok(())
-    }
-}
-
-#[cfg(feature = "remote-providers")]
-impl TangleEventHandler {
-    async fn notify_remote_service_initiated(
-        &self,
-        blueprint_id: u64,
-        service_id: u64,
-        gpu: &GpuRequirements,
-    ) {
-        let Some(remote) = &self.remote_provider else {
-            return;
-        };
-        let mut limits = ResourceLimits::default();
-        apply_gpu_limits(gpu, &mut limits);
-        let resource_spec = resource_spec_from_limits(&limits);
-        if let Err(e) = remote
-            .on_service_initiated(
-                blueprint_id,
-                service_id,
-                Some(resource_spec),
-                None,
-                std::collections::HashMap::new(),
-            )
-            .await
-        {
-            warn!(
-                blueprint_id,
-                service_id,
-                error = %e,
-                "Remote provider failed to handle service initiation"
-            );
-        }
-    }
-
-    async fn notify_remote_service_terminated(&self, blueprint_id: u64, service_id: u64) {
-        let Some(remote) = &self.remote_provider else {
-            return;
-        };
-        if let Err(e) = remote.on_service_terminated(blueprint_id, service_id).await {
-            warn!(
-                blueprint_id,
-                service_id,
-                error = %e,
-                "Remote provider failed to handle service termination"
-            );
-        }
-    }
-}
-
-impl Default for TangleEventHandler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-fn build_source_handler(
-    source: &BlueprintSource,
-    blueprint_id: u64,
-    blueprint_name: String,
-    allow_unchecked_attestations: bool,
-) -> Box<DynBlueprintSource<'static>> {
-    match source {
-        BlueprintSource::Testing(fetcher) => DynBlueprintSource::new_box(TestSourceFetcher::new(
-            fetcher.clone(),
-            blueprint_id,
-            blueprint_name,
-        )),
-        BlueprintSource::Github(fetcher) => DynBlueprintSource::new_box(GithubBinaryFetcher::new(
-            fetcher.clone(),
-            blueprint_id,
-            blueprint_name,
-            allow_unchecked_attestations,
-        )),
-        BlueprintSource::Container(fetcher) => {
-            DynBlueprintSource::new_box(crate::sources::container::ContainerSource::new(
-                fetcher.clone(),
-                blueprint_id,
-                blueprint_name,
-            ))
-        }
-        BlueprintSource::Remote(fetcher) => DynBlueprintSource::new_box(RemoteBinaryFetcher::new(
-            fetcher.clone(),
-            blueprint_id,
-            blueprint_name,
-        )),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::sources::types::{
-        BlueprintBinary, GithubFetcher, ImageRegistryFetcher, RemoteFetcher, TestFetcher,
-    };
-
-    fn test_source() -> BlueprintSource {
-        BlueprintSource::Testing(TestFetcher {
-            cargo_package: "pkg".to_string(),
-            cargo_bin: "bin".to_string(),
-            base_path: "/tmp".to_string(),
-        })
-    }
-
-    fn container_source() -> BlueprintSource {
-        BlueprintSource::Container(ImageRegistryFetcher {
-            registry: "ghcr.io".to_string(),
-            image: "tangle/demo".to_string(),
-            tag: "v1".to_string(),
-        })
-    }
-
-    fn remote_source() -> BlueprintSource {
-        BlueprintSource::Remote(RemoteFetcher {
-            dist_url: "https://example.com/dist.json".to_string(),
-            archive_url: "https://example.com/archive.tar.xz".to_string(),
-            binaries: vec![BlueprintBinary {
-                arch: "amd64".to_string(),
-                os: "linux".to_string(),
-                name: "demo".to_string(),
-                sha256: [0x11; 32],
-                blake3: None,
-            }],
-        })
-    }
-
-    fn github_source() -> BlueprintSource {
-        BlueprintSource::Github(GithubFetcher {
-            owner: "owner".to_string(),
-            repo: "repo".to_string(),
-            tag: "v1".to_string(),
-            binaries: vec![BlueprintBinary {
-                arch: "amd64".to_string(),
-                os: "linux".to_string(),
-                name: "demo".to_string(),
-                sha256: [0x22; 32],
-                blake3: None,
-            }],
-        })
-    }
-
-    #[test]
-    fn deterministic_order_prefers_native_then_container_then_testing() {
-        let sources = vec![
-            test_source(),
-            container_source(),
-            remote_source(),
-            github_source(),
-        ];
-        let ordered =
-            ordered_source_indices(&sources, SourceType::Native, ConfidentialityPolicy::Any);
-        assert_eq!(ordered, vec![2, 3, 1, 0]);
-    }
-
-    #[test]
-    fn deterministic_order_prefers_container_when_requested() {
-        let sources = vec![
-            test_source(),
-            container_source(),
-            remote_source(),
-            github_source(),
-        ];
-        let ordered =
-            ordered_source_indices(&sources, SourceType::Container, ConfidentialityPolicy::Any);
-        assert_eq!(ordered, vec![1, 2, 3, 0]);
-    }
-
-    #[test]
-    fn deterministic_order_is_stable_for_wasm_preference() {
-        let sources = vec![
-            github_source(),
-            test_source(),
-            remote_source(),
-            container_source(),
-        ];
-        let first = ordered_source_indices(&sources, SourceType::Wasm, ConfidentialityPolicy::Any);
-        let second = ordered_source_indices(&sources, SourceType::Wasm, ConfidentialityPolicy::Any);
-        assert_eq!(first, second);
-        assert_eq!(first, vec![0, 2, 3, 1]);
-    }
-
-    #[test]
-    fn tee_required_filters_to_container_sources_only() {
-        let sources = vec![
-            test_source(),
-            container_source(),
-            remote_source(),
-            github_source(),
-        ];
-        let ordered = ordered_source_indices(
-            &sources,
-            SourceType::Native,
-            ConfidentialityPolicy::TeeRequired,
-        );
-        assert_eq!(ordered, vec![1]);
-    }
-
-    #[test]
-    fn tee_required_without_container_sources_returns_empty_order() {
-        let sources = vec![test_source(), remote_source(), github_source()];
-        let ordered = ordered_source_indices(
-            &sources,
-            SourceType::Container,
-            ConfidentialityPolicy::TeeRequired,
-        );
-        assert!(ordered.is_empty());
-    }
-
-    #[test]
-    fn tee_preferred_prioritizes_container_sources() {
-        let sources = vec![
-            test_source(),
-            remote_source(),
-            github_source(),
-            container_source(),
-        ];
-        let ordered = ordered_source_indices(
-            &sources,
-            SourceType::Native,
-            ConfidentialityPolicy::TeePreferred,
-        );
-        assert_eq!(ordered[0], 3);
     }
 }

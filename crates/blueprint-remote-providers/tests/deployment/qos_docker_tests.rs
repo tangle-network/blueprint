@@ -586,6 +586,7 @@ async fn test_qos_port_exposure_logic() {
             heartbeat_interval: Duration::from_secs(30),
             required_ports: vec![8080, 9615, 9944],
         },
+        ..Default::default()
     };
     
     let env_vars = HashMap::from([

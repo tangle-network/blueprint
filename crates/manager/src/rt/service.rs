@@ -56,7 +56,7 @@ enum Runtime {
 /// A service instance
 pub struct Service {
     runtime: Runtime,
-    bridge: BridgeHandle,
+    bridge: Option<BridgeHandle>,
     alive_rx: Option<oneshot::Receiver<()>>,
 }
 
@@ -113,6 +113,17 @@ impl Service {
         _cache_dir: &Path,
         runtime_dir: &Path,
     ) -> Result<Service> {
+        #[cfg(feature = "remote-providers")]
+        if ctx.remote_deployment_opts.enable_remote_deployments {
+            let policy = crate::remote::service::RemoteDeploymentPolicy {
+                max_hourly_cost: Some(ctx.remote_deployment_opts.max_hourly_cost as f32),
+                ..Default::default()
+            };
+            return crate::remote::RemoteDeploymentService::new(policy)
+                .await?
+                .deploy_service(ctx, sub_service_str, binary_path, env, args, limits, None)
+                .await;
+        }
         #[cfg(feature = "vm-sandbox")]
         if !ctx.vm_sandbox_options.no_vm {
             return Service::new_vm(
@@ -204,7 +215,7 @@ impl Service {
 
         Ok(Self {
             runtime: Runtime::Hypervisor(hypervisor),
-            bridge: bridge_handle,
+            bridge: Some(bridge_handle),
             alive_rx: Some(alive_rx),
         })
     }
@@ -253,7 +264,7 @@ impl Service {
 
         Ok(Self {
             runtime: Runtime::Container(instance),
-            bridge: bridge_handle,
+            bridge: Some(bridge_handle),
             alive_rx: Some(alive_rx),
         })
     }
@@ -278,6 +289,27 @@ impl Service {
         mut env_vars: BlueprintEnvVars,
         arguments: BlueprintArgs,
     ) -> Result<Service> {
+        if matches!(limits.gpu_policy, super::GpuSchedulingPolicy::Required) {
+            let devices = tokio::task::spawn_blocking(blueprint_core::gpu::detect)
+                .await
+                .map_err(|error| Error::Other(format!("GPU detector task: {error}")))?
+                .map_err(Error::Other)?;
+            let count = devices
+                .iter()
+                .filter(|device| {
+                    device.vram_gb() >= limits.gpu_min_vram_gb.unwrap_or(0)
+                        && limits
+                            .gpu_class
+                            .as_ref()
+                            .is_none_or(|class| device.class.as_ref() == Some(class))
+                })
+                .count();
+            if count < usize::from(limits.gpu_count.unwrap_or(1)) {
+                return Err(Error::Other(
+                    "Operator GPUs cannot satisfy class, count and per-device VRAM".into(),
+                ));
+            }
+        }
         let (bridge_base_socket, bridge_handle, alive_rx) =
             create_bridge(ctx, runtime_dir.as_ref(), service_name, true, None).await?;
 
@@ -291,7 +323,7 @@ impl Service {
                 env_vars,
                 arguments,
             })),
-            bridge: bridge_handle,
+            bridge: Some(bridge_handle),
             alive_rx: Some(alive_rx),
         })
     }
@@ -303,18 +335,15 @@ impl Service {
     /// See [`create_bridge()`]
     #[cfg(feature = "remote-providers")]
     pub async fn new_remote(
-        ctx: &BlueprintManagerContext,
-        runtime_dir: impl AsRef<Path>,
-        service_name: &str,
+        _ctx: &BlueprintManagerContext,
+        _runtime_dir: impl AsRef<Path>,
+        _service_name: &str,
         remote_instance: RemoteServiceInstance,
     ) -> Result<Service> {
-        let (_, bridge_handle, alive_rx) =
-            create_bridge(ctx, runtime_dir.as_ref(), service_name, true, None).await?;
-
         Ok(Self {
             runtime: Runtime::Remote(remote_instance),
-            bridge: bridge_handle,
-            alive_rx: Some(alive_rx),
+            bridge: None,
+            alive_rx: None,
         })
     }
 
@@ -352,6 +381,11 @@ impl Service {
     /// * See [`HypervisorInstance::start()`]
     #[allow(clippy::unused_async)]
     pub async fn start(&mut self) -> Result<Option<impl Future<Output = Result<()>> + use<>>> {
+        #[cfg(feature = "remote-providers")]
+        if let Runtime::Remote(remote) = &mut self.runtime {
+            remote.start().await?;
+            return Ok(None);
+        }
         let Some(alive_rx) = self.alive_rx.take() else {
             error!("Service already started!");
             return Ok(None);
@@ -373,14 +407,7 @@ impl Service {
                 })?;
             }
             #[cfg(feature = "remote-providers")]
-            Runtime::Remote(remote) => {
-                remote.start().await.map_err(|e| {
-                    error!("Failed to start remote service: {e}");
-                    e
-                })?;
-                // Remote services do not connect to the local bridge socket.
-                return Ok(None);
-            }
+            Runtime::Remote(_) => unreachable!("remote start is handled before bridge startup"),
             Runtime::Native(instance) => match instance {
                 NativeProcess::NotStarted(info) => {
                     let args = info.arguments.encode(true);
@@ -464,7 +491,9 @@ impl Service {
             _ => warn!("No process attached"),
         }
 
-        self.bridge.shutdown();
+        if let Some(bridge) = self.bridge {
+            bridge.shutdown();
+        }
 
         Ok(())
     }

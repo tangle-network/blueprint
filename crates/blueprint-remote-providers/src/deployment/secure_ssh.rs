@@ -196,6 +196,70 @@ impl SecureSshClient {
         Self { connection }
     }
 
+    /// Execute a script over stdin, pinning the first host key in a caller-owned file.
+    pub async fn run_script(&self, script: &str) -> Result<String> {
+        use std::process::Stdio;
+        use tokio::io::AsyncWriteExt;
+        let known_hosts = self.connection.known_hosts_file.as_ref().ok_or_else(|| {
+            Error::ConfigurationError(
+                "Script execution requires a per-allocation known_hosts file".into(),
+            )
+        })?;
+        let mut command = Command::new("ssh");
+        command
+            .args([
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "IdentitiesOnly=yes",
+                "-o",
+                "ConnectTimeout=30",
+                "-o",
+                "StrictHostKeyChecking=accept-new",
+                "-o",
+            ])
+            .arg(format!("UserKnownHostsFile={}", known_hosts.display()))
+            .arg("-p")
+            .arg(self.connection.port.to_string());
+        if let Some(key) = &self.connection.key_path {
+            command.arg("-i").arg(key);
+        }
+        if let Some(jump) = &self.connection.jump_host {
+            command.arg("-J").arg(jump);
+        }
+        let mut child = command
+            .arg("--")
+            .arg(format!("{}@{}", self.connection.user, self.connection.host))
+            .args(["sh", "-s"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|_| Error::Other("Unable to start SSH script transport".into()))?;
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| Error::Other("SSH stdin unavailable".into()))?
+            .write_all(script.as_bytes())
+            .await
+            .map_err(|_| Error::Other("Unable to send SSH script".into()))?;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(120),
+            child.wait_with_output(),
+        )
+        .await
+        .map_err(|_| Error::Other("SSH script execution timed out".into()))??;
+        if !output.status.success() {
+            return Err(Error::Other(format!(
+                "SSH script failed ({})",
+                output.status
+            )));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+
     /// Execute command on remote host with security validation
     pub async fn run_remote_command(&self, command: &str) -> Result<String> {
         // Validate command for basic safety

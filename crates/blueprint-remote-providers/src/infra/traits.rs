@@ -50,6 +50,56 @@ pub trait CloudProviderAdapter: Send + Sync {
         require_tee: bool,
     ) -> Result<ProvisionedInstance>;
 
+    /// Provision with the complete request, including GPU class/count/VRAM and access key.
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
+        require_tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        spec.validate()
+            .map_err(crate::core::error::Error::ConfigurationError)?;
+        if spec.gpu_count.is_some() || spec.ssh_public_key.is_some() {
+            return Err(crate::core::error::Error::ConfigurationError(
+                "Provider does not implement GPU allocation with per-lease access".into(),
+            ));
+        }
+        self.provision_instance(instance_type, region, require_tee)
+            .await
+    }
+
+    /// Live price for an in-stock allocation. Unpriced providers cannot be selected.
+    async fn quote(
+        &self,
+        _spec: &ResourceSpec,
+        _region: &str,
+    ) -> Result<crate::providers::common::InstanceSelection> {
+        Err(crate::core::error::Error::ConfigurationError(
+            "Live price unavailable".into(),
+        ))
+    }
+
+    /// Install access after creation, once the resource is durably tracked.
+    async fn prepare_access(
+        &self,
+        _instance: &ProvisionedInstance,
+        _spec: &ResourceSpec,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// SSH URI for the allocated resource; account credentials never form lease access.
+    async fn lease_endpoint(&self, instance: &ProvisionedInstance) -> Result<String> {
+        instance
+            .public_ip
+            .as_ref()
+            .map(|ip| format!("ssh://root@{ip}:22"))
+            .ok_or_else(|| {
+                crate::core::error::Error::ConfigurationError("No lease endpoint".into())
+            })
+    }
+
     /// Terminate an existing instance
     async fn terminate_instance(&self, instance_id: &str) -> Result<()>;
 

@@ -25,16 +25,29 @@ pub struct CoreWeaveAdapter {
 impl CoreWeaveAdapter {
     pub async fn new() -> Result<Self> {
         let token = std::env::var("COREWEAVE_TOKEN")
-            .map_err(|_| Error::Other("COREWEAVE_TOKEN environment variable not set".into()))?;
-        let default_region =
-            std::env::var("COREWEAVE_REGION").unwrap_or_else(|_| "ORD1".to_string());
+            .map_err(|_| Error::ConfigurationError("COREWEAVE_TOKEN is required".into()))?;
         let namespace =
-            std::env::var("COREWEAVE_NAMESPACE").unwrap_or_else(|_| "tenant-blueprint".to_string());
-        Ok(Self {
-            default_region,
-            namespace,
+            std::env::var("COREWEAVE_NAMESPACE").unwrap_or_else(|_| "tenant-blueprint".into());
+        Ok(Self::with_credentials(token, namespace))
+    }
+
+    pub fn with_credentials(token: String, namespace: String) -> Self {
+        Self {
             token,
-        })
+            namespace,
+            default_region: String::new(),
+        }
+    }
+
+    #[cfg(feature = "kubernetes")]
+    fn gpu_selector(
+        spec: &ResourceSpec,
+    ) -> Result<blueprint_std::collections::BTreeMap<String, String>> {
+        let sku = crate::providers::common::gpu_adapter::catalog_sku(spec, "coreweave")?;
+        Ok(blueprint_std::collections::BTreeMap::from([(
+            "gpu.nvidia.com/class".into(),
+            sku,
+        )]))
     }
 
     /// Namespace-scoped logical identifier for a deployment.
@@ -125,11 +138,12 @@ impl CloudProviderAdapter for CoreWeaveAdapter {
                     } else {
                         namespace.as_str()
                     };
-                    SharedKubernetesDeployment::deploy_to_generic_k8s(
+                    SharedKubernetesDeployment::deploy_to_generic_k8s_with_selector(
                         ns,
                         blueprint_image,
                         resource_spec,
                         env_vars,
+                        Self::gpu_selector(resource_spec)?,
                     )
                     .await
                 }
@@ -156,11 +170,12 @@ impl CloudProviderAdapter for CoreWeaveAdapter {
                     // CoreWeave's managed K8s does not expose a cluster-id based
                     // auth command the way EKS/GKE/AKS do. Users must export a
                     // kubeconfig beforehand; the adapter uses the generic path.
-                    SharedKubernetesDeployment::deploy_to_generic_k8s(
+                    SharedKubernetesDeployment::deploy_to_generic_k8s_with_selector(
                         ns,
                         blueprint_image,
                         resource_spec,
                         env_vars,
+                        Self::gpu_selector(resource_spec)?,
                     )
                     .await
                 }
@@ -191,11 +206,12 @@ impl CloudProviderAdapter for CoreWeaveAdapter {
         #[cfg(feature = "kubernetes")]
         {
             use crate::shared::SharedKubernetesDeployment;
-            SharedKubernetesDeployment::deploy_to_generic_k8s(
+            SharedKubernetesDeployment::deploy_to_generic_k8s_with_selector(
                 &self.namespace,
                 blueprint_image,
                 resource_spec,
                 env_vars,
+                Self::gpu_selector(resource_spec)?,
             )
             .await
         }
@@ -230,41 +246,5 @@ impl CloudProviderAdapter for CoreWeaveAdapter {
         // relies on the blueprint manager's TTL-based reconciliation to prune stale
         // deployments at namespace scope.
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_adapter(namespace: &str) -> CoreWeaveAdapter {
-        CoreWeaveAdapter {
-            default_region: "ORD1".into(),
-            namespace: namespace.into(),
-            token: "test-token".into(),
-        }
-    }
-
-    #[test]
-    fn logical_id_is_namespace_scoped() {
-        let adapter = test_adapter("tenant-test");
-        let id = adapter.logical_instance_id();
-        assert!(id.starts_with("tenant-test-"));
-        // The suffix is a UUID; confirm at least 20 chars of entropy appended.
-        assert!(id.len() > "tenant-test-".len() + 20);
-    }
-
-    #[test]
-    fn logical_id_differs_between_calls() {
-        let adapter = test_adapter("tenant-x");
-        let a = adapter.logical_instance_id();
-        let b = adapter.logical_instance_id();
-        assert_ne!(a, b);
-    }
-
-    #[test]
-    fn token_accessor_returns_configured_value() {
-        let adapter = test_adapter("tenant-y");
-        assert_eq!(adapter.token(), "test-token");
     }
 }

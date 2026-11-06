@@ -80,6 +80,7 @@ async fn test_real_ssh_deployment_with_container() {
                 gpu_count: None,
                 allow_spot: false,
                 qos: Default::default(),
+                ..Default::default()
             };
 
             let mut env_vars = HashMap::new();
@@ -205,6 +206,7 @@ async fn test_resource_limits_are_enforced() {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         };
 
         // Generate Docker command
@@ -265,6 +267,7 @@ mod stress_tests {
                     gpu_count: None,
                     allow_spot: false,
                     qos: Default::default(),
+                    ..Default::default()
                 };
 
                 // Deploy and verify

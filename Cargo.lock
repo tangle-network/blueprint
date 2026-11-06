@@ -2962,6 +2962,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.16.1",
  "pin-project-lite",
+ "serde",
  "serde_json",
  "tiny-keccak",
  "tokio",
@@ -3330,8 +3331,10 @@ dependencies = [
  "url",
  "uuid 1.23.1",
  "walkdir",
+ "wiremock",
  "xz",
  "xz2",
+ "zeroize",
 ]
 
 [[package]]
@@ -3750,9 +3753,11 @@ dependencies = [
  "blueprint-x402",
  "document-features",
  "openssl-sys",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "wiremock",
 ]
 
 [[package]]

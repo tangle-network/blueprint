@@ -5,11 +5,12 @@
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
+use crate::deployment::DeploymentTracker;
 #[cfg(feature = "aws")]
 use crate::infra::adapters::AwsAdapter;
 use crate::infra::mapper::InstanceTypeMapper;
 use crate::infra::traits::CloudProviderAdapter;
-use crate::infra::types::{InstanceStatus, ProvisionedInstance, RetryPolicy};
+use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::monitoring::discovery::{CloudCredentials, MachineTypeDiscovery};
 use crate::providers::akash::AkashAdapter;
 use crate::providers::azure::adapter::AzureAdapter;
@@ -29,13 +30,18 @@ use crate::providers::runpod::RunPodAdapter;
 use crate::providers::tensordock::TensorDockAdapter;
 use crate::providers::vast_ai::VastAiAdapter;
 use crate::providers::vultr::adapter::VultrAdapter;
-use blueprint_core::{error, info, warn};
+use blueprint_core::{info, warn};
 use blueprint_std::collections::HashMap;
+use std::{path::PathBuf, sync::Arc};
+use tokio::sync::OnceCell;
 
 /// Multi-cloud provisioner that handles deployments across all supported providers
+#[derive(Clone)]
 pub struct CloudProvisioner {
-    providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
-    retry_policy: RetryPolicy,
+    pub(crate) providers: Arc<HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>>,
+    pub(crate) regions: HashMap<CloudProvider, String>,
+    pub(crate) lease_store: PathBuf,
+    pub(crate) lease_tracker: Arc<OnceCell<Arc<DeploymentTracker>>>,
     discovery: MachineTypeDiscovery,
 }
 
@@ -196,19 +202,22 @@ impl CloudProvisioner {
         }
 
         Ok(Self {
-            providers,
-            retry_policy: RetryPolicy::default(),
+            providers: Arc::new(providers),
+            regions: HashMap::new(),
+            lease_store: PathBuf::from(".tangle/gpu-leases"),
+            lease_tracker: Arc::new(OnceCell::new()),
             discovery: MachineTypeDiscovery::new(),
         })
     }
 
-    #[cfg(test)]
     pub fn with_providers(
         providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
     ) -> Self {
         Self {
-            providers,
-            retry_policy: RetryPolicy::default(),
+            providers: Arc::new(providers),
+            regions: HashMap::new(),
+            lease_store: PathBuf::from(".tangle/gpu-leases"),
+            lease_tracker: Arc::new(OnceCell::new()),
             discovery: MachineTypeDiscovery::new(),
         }
     }
@@ -243,6 +252,9 @@ impl CloudProvisioner {
         region: &str,
         require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        resource_spec
+            .validate()
+            .map_err(Error::ConfigurationError)?;
         let adapter = self
             .providers
             .get(&provider)
@@ -270,83 +282,34 @@ impl CloudProvisioner {
             provider, instance_selection.instance_type, require_tee
         );
 
-        // Retry with exponential backoff
-        let mut attempt = 0;
-        loop {
-            match adapter
-                .provision_instance(&instance_selection.instance_type, region, require_tee)
-                .await
-            {
-                Ok(instance) => {
-                    info!(
-                        "Successfully provisioned {} instance: {}",
-                        provider, instance.id
-                    );
-                    return Ok(instance);
-                }
-                Err(e) if attempt < self.retry_policy.max_retries => {
-                    attempt += 1;
-                    let delay = self.retry_policy.delay_for_attempt(attempt);
-                    warn!(
-                        "Provision attempt {} failed: {}, retrying in {:?}",
-                        attempt, e, delay
-                    );
-                    tokio::time::sleep(delay).await;
-                }
-                Err(e) => {
-                    error!("Failed to provision after {} attempts: {}", attempt + 1, e);
-                    return Err(e);
-                }
+        let instance = adapter
+            .provision_resources(
+                &instance_selection.instance_type,
+                region,
+                resource_spec,
+                require_tee,
+            )
+            .await?;
+        if instance.status == InstanceStatus::Running {
+            return Ok(instance);
+        }
+        match crate::providers::common::gpu_adapter::wait_for_instance(
+            adapter.as_ref(),
+            &instance.id,
+        )
+        .await
+        {
+            Ok(ready) => Ok(ready),
+            Err(error) => {
+                self.terminate(provider, &instance.id).await?;
+                Err(error)
             }
         }
     }
 
-    /// Terminate instance with cleanup verification
+    /// Terminate and verify that the provider no longer owns the allocation.
     pub async fn terminate(&self, provider: CloudProvider, instance_id: &str) -> Result<()> {
-        let adapter = self
-            .providers
-            .get(&provider)
-            .ok_or_else(|| Error::ProviderNotConfigured(provider))?;
-
-        adapter.terminate_instance(instance_id).await?;
-
-        // Verify termination
-        let mut retries = 0;
-        while retries < 10 {
-            match adapter.get_instance_status(instance_id).await {
-                Ok(InstanceStatus::Terminated) => {
-                    info!("Instance {} successfully terminated", instance_id);
-                    return Ok(());
-                }
-                Ok(status) => {
-                    warn!(
-                        "Instance {} still in status {:?}, waiting...",
-                        instance_id, status
-                    );
-                    tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
-                    retries += 1;
-                }
-                Err(e) => {
-                    if is_not_found_error(&e) {
-                        info!(
-                            "Instance {} no longer found after termination request",
-                            instance_id
-                        );
-                        return Ok(());
-                    }
-                    warn!(
-                        "Failed to verify termination status for {}: {}",
-                        instance_id, e
-                    );
-                    tokio::time::sleep(blueprint_std::time::Duration::from_secs(5)).await;
-                    retries += 1;
-                }
-            }
-        }
-
-        Err(Error::Other(
-            "Instance termination verification timeout".into(),
-        ))
+        crate::leases::terminate_checked(self.get_adapter(&provider)?, instance_id).await
     }
 
     /// Get current status of an instance
@@ -555,7 +518,7 @@ impl CloudProvisioner {
     }
 }
 
-fn is_not_found_error(error: &Error) -> bool {
+pub(crate) fn is_not_found_error(error: &Error) -> bool {
     let message = match error {
         Error::ConfigurationError(message)
         | Error::NetworkError(message)

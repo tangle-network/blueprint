@@ -212,6 +212,7 @@ async fn test_deploy_blueprint_as_container() {
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -271,6 +272,7 @@ async fn test_deploy_native_blueprint_binary() {
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
+        ..Default::default()
     };
 
     let mut config_vars = HashMap::new();
@@ -329,6 +331,7 @@ async fn test_deploy_blueprint_binary_as_service() {
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -463,6 +466,7 @@ async fn test_blueprint_deployment_lifecycle() {
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -535,6 +539,7 @@ async fn test_blueprint_with_qos_metrics() {
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -606,6 +611,7 @@ async fn test_blueprint_resource_specifications() {
                 gpu_count: None,
                 allow_spot: true,
                 qos: Default::default(),
+                ..Default::default()
             },
         ),
         (
@@ -617,6 +623,7 @@ async fn test_blueprint_resource_specifications() {
                 gpu_count: None,
                 allow_spot: false,
                 qos: Default::default(),
+                ..Default::default()
             },
         ),
         (
@@ -628,6 +635,7 @@ async fn test_blueprint_resource_specifications() {
                 gpu_count: None,
                 allow_spot: false,
                 qos: Default::default(),
+                ..Default::default()
             },
         ),
         (
@@ -639,6 +647,7 @@ async fn test_blueprint_resource_specifications() {
                 gpu_count: Some(2),
                 allow_spot: false,
                 qos: Default::default(),
+                ..Default::default()
             },
         ),
     ];

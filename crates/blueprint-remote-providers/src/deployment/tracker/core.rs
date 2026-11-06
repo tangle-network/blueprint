@@ -18,6 +18,7 @@ pub struct DeploymentTracker {
     deployments: Arc<RwLock<HashMap<String, DeploymentRecord>>>,
     /// Persistent state file path
     state_file: PathBuf,
+    state_writer: Arc<tokio::sync::Mutex<()>>,
     /// Cleanup handlers for different deployment types
     cleanup_handlers: Arc<RwLock<HashMap<DeploymentType, Box<dyn CleanupHandler>>>>,
 }
@@ -37,6 +38,7 @@ impl DeploymentTracker {
         let mut tracker = Self {
             deployments: Arc::new(RwLock::new(deployments)),
             state_file,
+            state_writer: Arc::new(tokio::sync::Mutex::new(())),
             cleanup_handlers: Arc::new(RwLock::new(HashMap::new())),
         };
 
@@ -65,8 +67,12 @@ impl DeploymentTracker {
         self.save_state().await?;
 
         // Schedule TTL check if applicable
-        if let Some(ttl) = deployment.ttl_seconds {
-            self.schedule_ttl_cleanup(blueprint_id, ttl).await;
+        if let Some(expiry) = deployment.expires_at {
+            self.schedule_ttl_cleanup(
+                blueprint_id,
+                (expiry - Utc::now()).to_std().unwrap_or_default(),
+            )
+            .await;
         }
 
         Ok(())
@@ -188,16 +194,35 @@ impl DeploymentTracker {
     }
 
     /// Schedule TTL-based cleanup
-    async fn schedule_ttl_cleanup(&self, blueprint_id: String, ttl_seconds: u64) {
+    async fn schedule_ttl_cleanup(&self, blueprint_id: String, delay: std::time::Duration) {
         let tracker = self.clone();
 
         tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_secs(ttl_seconds)).await;
+            tokio::time::sleep(delay).await;
 
-            if let Err(e) = tracker.handle_ttl_expiry(&blueprint_id).await {
-                error!("Failed to handle TTL expiry for {}: {}", blueprint_id, e);
+            loop {
+                if !matches!(tracker.get(&blueprint_id).await, Ok(Some(_))) {
+                    break;
+                }
+                match tracker.handle_ttl_expiry(&blueprint_id).await {
+                    Ok(()) => break,
+                    Err(error) => {
+                        error!(%blueprint_id, %error, "Expiry cleanup failed; record retained")
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             }
         });
+    }
+
+    /// Rearm persisted deadlines after process startup, once cleanup handlers are configured.
+    pub async fn resume_ttls(&self) {
+        for (id, deployment) in self.list_deployments().await {
+            if let Some(expiry) = deployment.expires_at {
+                self.schedule_ttl_cleanup(id, (expiry - Utc::now()).to_std().unwrap_or_default())
+                    .await;
+            }
+        }
     }
 
     /// Register default cleanup handlers
@@ -261,14 +286,16 @@ impl DeploymentTracker {
 
     /// Save state to disk
     async fn save_state(&self) -> Result<()> {
+        let _writer = self.state_writer.lock().await;
         let deployments = self.deployments.read().await;
         let json = serde_json::to_string_pretty(&*deployments)
             .map_err(|e| Error::ConfigurationError(format!("Failed to serialize state: {e}")))?;
 
-        tokio::fs::write(&self.state_file, json)
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("Failed to write state: {e}")))?;
-
+        let temporary = self
+            .state_file
+            .with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+        tokio::fs::write(&temporary, json).await?;
+        tokio::fs::rename(&temporary, &self.state_file).await?;
         Ok(())
     }
 
@@ -372,7 +399,6 @@ impl DeploymentTracker {
         Ok(())
     }
 
-    #[cfg(test)]
     pub async fn set_cleanup_handler(
         &self,
         deployment_type: DeploymentType,
@@ -388,6 +414,7 @@ impl Clone for DeploymentTracker {
         Self {
             deployments: self.deployments.clone(),
             state_file: self.state_file.clone(),
+            state_writer: self.state_writer.clone(),
             cleanup_handlers: self.cleanup_handlers.clone(),
         }
     }

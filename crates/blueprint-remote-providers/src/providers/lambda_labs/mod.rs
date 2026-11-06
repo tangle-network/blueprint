@@ -1,14 +1,7 @@
-//! Lambda Labs — on-demand GPU cloud with A100/H100 instances.
-//!
-//! <https://cloud.lambdalabs.com/api/v1/docs>
-//!
-//! API pattern: REST + Basic auth with API key as username. We represent this as
-//! Bearer auth because reqwest normalizes both; Lambda Labs accepts a Bearer token.
-//!
-//! Env vars:
-//! - `LAMBDA_LABS_API_KEY` — API key from the Lambda Labs dashboard.
-//! - `LAMBDA_LABS_REGION` — default region slug, e.g. `us-west-1`, `us-east-1`.
-//! - `LAMBDA_LABS_SSH_KEY_NAME` — SSH key name pre-registered in the dashboard.
+//! Lambda Cloud instance pricing, capacity, and lifecycle.
+//! <https://docs.lambda.com/api/cloud>
+//! Fixed node SKUs require an exact GPU count from the SDK catalog.
+//! Credentials may be supplied by the caller or LAMBDA_LABS_API_KEY.
 
 mod adapter;
 mod instance_mapper;

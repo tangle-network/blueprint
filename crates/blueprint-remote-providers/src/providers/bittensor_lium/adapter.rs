@@ -1,318 +1,241 @@
-//! Bittensor Lium (subnet 51) `CloudProviderAdapter` implementation.
-//!
-//! **Stability note:** Lium is primarily a Python SDK; the REST shim used here
-//! is documented at <https://docs.lium.ai> as a best-effort interop surface.
-//! Endpoint shapes may evolve as the subnet matures. Payment settlement happens
-//! out-of-band via the Bittensor CLI/SDK against the operator's coldkey — this
-//! adapter only handles the rental lifecycle (create/poll/terminate), never
-//! TAO transfers. Operators must fund their hotkey/coldkey wallets before use.
-
+//! Lium node rentals using its public rent-by-spec API.
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::common::gpu_adapter::{
-    ClassifiedError, RetryPolicy, build_http_client, classify_response, deploy_via_ssh,
-    generate_instance_name, poll_until, provision_with_cleanup, require_public_ip,
-    retry_with_backoff,
+use crate::providers::common::{
+    InstanceSelection,
+    gpu_adapter::{
+        api_json, build_http_client, catalog_sku, catalog_skus, deploy_via_ssh,
+        generate_instance_name, provision_with_cleanup, quoted_selection, reject_tee,
+        require_public_ip,
+    },
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
 use async_trait::async_trait;
-use blueprint_core::{info, warn};
 use blueprint_std::collections::HashMap;
-use std::time::Duration;
+use serde_json::{Value, json};
 
-const BASE_URL: &str = "https://api.lium.ai/v1";
-// Subnet consensus + miner orchestration is slower than centralized clouds; give
-// rentals more headroom before timing out.
-const RENTAL_READY_TIMEOUT: Duration = Duration::from_secs(900);
-const RENTAL_POLL_INTERVAL: Duration = Duration::from_secs(10);
-const DEFAULT_DURATION_HOURS: u64 = 24;
+const BASE_URL: &str = "https://lium.io/api";
 
-/// Adapter for Bittensor Lium subnet 51 GPU rentals.
 pub struct BittensorLiumAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
-    hotkey: String,
-    coldkey: String,
-    region: String,
+    base_url: String,
     duration_hours: u64,
-    ssh_pubkey: Option<String>,
 }
 
 impl BittensorLiumAdapter {
-    /// Construct from environment variables.
     pub async fn new() -> Result<Self> {
-        let api_key = std::env::var("LIUM_API_KEY")
-            .map_err(|_| Error::Other("LIUM_API_KEY environment variable not set".into()))?;
-        let hotkey = std::env::var("LIUM_WALLET_HOTKEY")
-            .map_err(|_| Error::Other("LIUM_WALLET_HOTKEY environment variable not set".into()))?;
-        let coldkey = std::env::var("LIUM_WALLET_COLDKEY")
-            .map_err(|_| Error::Other("LIUM_WALLET_COLDKEY environment variable not set".into()))?;
-        let region = std::env::var("LIUM_REGION").unwrap_or_else(|_| "auto".to_string());
-        let duration_hours = std::env::var("LIUM_DURATION_HOURS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(DEFAULT_DURATION_HOURS);
-        let ssh_pubkey = std::env::var("LIUM_SSH_PUBKEY").ok();
+        let key = std::env::var("LIUM_API_KEY")
+            .map_err(|_| Error::ConfigurationError("LIUM_API_KEY is required".into()))?;
+        Self::with_credentials(key)
+    }
 
+    pub fn with_credentials(api_key: String) -> Result<Self> {
         Ok(Self {
             http: build_http_client()?,
-            auth: ApiAuthentication::bittensor_lium(api_key),
-            hotkey,
-            coldkey,
-            region,
-            duration_hours,
-            ssh_pubkey,
-        })
-    }
-
-    async fn fetch_rental_json(&self, rental_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/rentals/{rental_id}");
-        retry_with_backoff("lium.get_rental", &RetryPolicy::default(), |_| {
-            let url = url.clone();
-            async move {
-                let response = self.http.get(&url, &self.auth).await.map_err(|e| {
-                    ClassifiedError::transient(Error::HttpError(format!("Lium GET {url}: {e}")))
-                })?;
-                if let Some(class) = classify_response(&response) {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(ClassifiedError {
-                        class,
-                        inner: Error::HttpError(format!("Lium GET {url} failed: {body}")),
-                    });
-                }
-                response.json::<serde_json::Value>().await.map_err(|e| {
-                    ClassifiedError::transient(Error::HttpError(format!(
-                        "Lium response parse: {e}"
-                    )))
-                })
-            }
-        })
-        .await
-    }
-
-    /// Convert a Lium rental JSON payload into a `ProvisionedInstance`.
-    fn parse_instance(
-        value: &serde_json::Value,
-        fallback_region: &str,
-    ) -> Result<ProvisionedInstance> {
-        let data = value
-            .get("rental")
-            .or_else(|| value.get("data"))
-            .unwrap_or(value);
-        let id = data
-            .get("rental_id")
-            .or_else(|| data.get("id"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::HttpError("Lium response missing rental_id".into()))?
-            .to_string();
-        let instance_type = data
-            .get("gpu_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        let region = data
-            .get("region")
-            .or_else(|| data.get("datacenter"))
-            .and_then(|v| v.as_str())
-            .unwrap_or(fallback_region)
-            .to_string();
-        let public_ip = data
-            .get("public_ip")
-            .or_else(|| data.get("ip"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let private_ip = data
-            .get("private_ip")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let status = match data.get("status").and_then(|v| v.as_str()).unwrap_or("") {
-            "active" | "running" | "ready" => InstanceStatus::Running,
-            "matching" | "pending" | "provisioning" | "starting" | "queued" => {
-                InstanceStatus::Starting
-            }
-            "stopping" | "ending" => InstanceStatus::Stopping,
-            "ended" | "expired" | "terminated" | "failed" | "cancelled" => {
-                InstanceStatus::Terminated
-            }
-            _ => InstanceStatus::Unknown,
-        };
-
-        Ok(ProvisionedInstance {
-            id,
-            provider: CloudProvider::BittensorLium,
-            instance_type,
-            region,
-            public_ip,
-            private_ip,
-            status,
-        })
-    }
-
-    async fn wait_for_running(&self, rental_id: &str) -> Result<ProvisionedInstance> {
-        let region = self.region.clone();
-        poll_until(
-            "Bittensor Lium rental",
-            RENTAL_POLL_INTERVAL,
-            RENTAL_READY_TIMEOUT,
-            || async {
-                let raw = self.fetch_rental_json(rental_id).await?;
-                let instance = Self::parse_instance(&raw, &region)?;
-                match instance.status {
-                    InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
-                    InstanceStatus::Terminated => Err(Error::HttpError(
-                        "Lium rental terminated before becoming ready".into(),
-                    )),
-                    _ => Ok(None),
-                }
+            auth: ApiAuthentication::ApiKey {
+                key: api_key,
+                header_name: "X-API-Key".into(),
             },
+            base_url: BASE_URL.into(),
+            duration_hours: 24,
+        })
+    }
+
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
+        let mut adapter = Self::with_credentials(api_key)?;
+        adapter.http = SecureHttpClient::with_endpoint(endpoint)?;
+        adapter.base_url = endpoint.trim_end_matches('/').into();
+        Ok(adapter)
+    }
+
+    fn rental_request(
+        &self,
+        spec: &ResourceSpec,
+        dry_run: bool,
+        selected_sku: Option<&str>,
+    ) -> Result<Value> {
+        let sku = selected_sku
+            .map(String::from)
+            .map(Ok)
+            .unwrap_or_else(|| catalog_sku(spec, "bittensor-lium"))?;
+        Ok(
+            json!({"pod_name":generate_instance_name("lium"),"gpu_type":sku,
+            "gpu_count":spec.gpu_count.unwrap_or(1),"min_vram_gb":spec.gpu_vram_gb,
+            "min_cpus":spec.cpu.ceil() as u32,"min_ram_gb":spec.memory_gb,
+            "min_disk_gb":spec.storage_gb,"user_public_key":spec.ssh_public_key.as_deref().unwrap_or(""),
+            "termination_hours":spec.lease_duration_secs.map(|secs|secs.div_ceil(3600)).unwrap_or(self.duration_hours),"dry_run":dry_run}),
+        )
+    }
+
+    async fn fetch_rental_json(&self, id: &str) -> Result<Value> {
+        api_json(
+            self.http
+                .get(&format!("{}/pods/{id}", self.base_url), &self.auth)
+                .await?,
         )
         .await
     }
 
-    async fn create_rental(&self, gpu_type: &str, _region: &str) -> Result<ProvisionedInstance> {
-        let name = generate_instance_name("lium");
-        let payload = serde_json::json!({
-            "name": name,
-            "hotkey": self.hotkey,
-            "coldkey": self.coldkey,
-            "gpu_type": gpu_type,
-            "duration_hours": self.duration_hours,
-            "ssh_pubkey": self.ssh_pubkey.clone().unwrap_or_default(),
-        });
-
-        let json: serde_json::Value =
-            retry_with_backoff("lium.create_rental", &RetryPolicy::default(), |_| {
-                let payload = payload.clone();
-                async move {
-                    let response = self
-                        .http
-                        .authenticated_request(
-                            reqwest::Method::POST,
-                            &format!("{BASE_URL}/rentals"),
-                            &self.auth,
-                            Some(payload),
-                        )
-                        .await
-                        .map_err(|e| {
-                            ClassifiedError::transient(Error::HttpError(format!(
-                                "Lium create rental: {e}"
-                            )))
-                        })?;
-                    if let Some(class) = classify_response(&response) {
-                        let body = response.text().await.unwrap_or_default();
-                        return Err(ClassifiedError {
-                            class,
-                            inner: Error::HttpError(format!("Lium create rental failed: {body}")),
-                        });
-                    }
-                    response.json::<serde_json::Value>().await.map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Lium rental parse: {e}"
-                        )))
-                    })
-                }
-            })
-            .await?;
-
-        let data = json
-            .get("rental")
-            .or_else(|| json.get("data"))
-            .unwrap_or(&json);
-        let rental_id = data
-            .get("rental_id")
-            .or_else(|| data.get("id"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::HttpError("Lium create: no rental id returned".into()))?
-            .to_string();
-        let miner_uid = data
-            .get("miner_uid")
-            .and_then(|v| {
-                v.as_u64()
-                    .map(|u| u.to_string())
-                    .or_else(|| v.as_str().map(String::from))
-            })
-            .unwrap_or_else(|| "unknown".to_string());
-
-        info!(%rental_id, %gpu_type, %miner_uid, "Created Bittensor Lium rental");
-
-        self.wait_for_running(&rental_id).await
+    fn parse_instance(raw: &Value) -> Result<ProvisionedInstance> {
+        let id = raw["id"]
+            .as_str()
+            .ok_or_else(|| Error::HttpError("Lium pod has no id".into()))?;
+        Ok(ProvisionedInstance {
+            id: id.into(),
+            provider: CloudProvider::BittensorLium,
+            instance_type: raw["executor"]["machine_name"]
+                .as_str()
+                .unwrap_or_default()
+                .into(),
+            region: String::new(),
+            public_ip: raw["executor"]["executor_ip_address"]
+                .as_str()
+                .map(String::from),
+            private_ip: None,
+            status: match raw["status"].as_str().unwrap_or_default() {
+                "RUNNING" => InstanceStatus::Running,
+                "FAILED" | "TERMINATED" => InstanceStatus::Terminated,
+                _ => InstanceStatus::Starting,
+            },
+        })
     }
 
-    async fn cancel_rental(&self, rental_id: &str) -> Result<()> {
-        let url = format!("{BASE_URL}/rentals/{rental_id}");
-        retry_with_backoff("lium.cancel_rental", &RetryPolicy::default(), |_| {
-            let url = url.clone();
-            async move {
-                let response = self
-                    .http
-                    .authenticated_request(reqwest::Method::DELETE, &url, &self.auth, None)
-                    .await
-                    .map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Lium cancel rental: {e}"
-                        )))
-                    })?;
-                if let Some(class) = classify_response(&response) {
-                    if response.status().as_u16() == 404 {
-                        return Ok(());
-                    }
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(ClassifiedError {
-                        class,
-                        inner: Error::HttpError(format!("Lium cancel failed: {body}")),
-                    });
-                }
-                Ok(())
-            }
-        })
-        .await?;
-        info!(%rental_id, "Cancelled Bittensor Lium rental");
-        Ok(())
+    async fn cancel_rental(&self, id: &str) -> Result<()> {
+        let response = self
+            .http
+            .delete(&format!("{}/pods/{id}", self.base_url), &self.auth)
+            .await?;
+        if response.status().is_success() || response.status().as_u16() == 404 {
+            Ok(())
+        } else {
+            Err(Error::HttpError(format!(
+                "Lium terminate HTTP {}",
+                response.status()
+            )))
+        }
     }
 }
 
 #[async_trait]
 impl CloudProviderAdapter for BittensorLiumAdapter {
+    async fn quote(&self, spec: &ResourceSpec, _region: &str) -> Result<InstanceSelection> {
+        let mut best: Option<InstanceSelection> = None;
+        for sku in catalog_skus(spec, "bittensor-lium")? {
+            let response = self
+                .http
+                .post_json(
+                    &format!("{}/executors/rent-by-spec", self.base_url),
+                    &self.auth,
+                    self.rental_request(spec, true, Some(&sku))?,
+                )
+                .await;
+            let Ok(response) = response else {
+                continue;
+            };
+            let Ok(value) = api_json(response).await else {
+                continue;
+            };
+            let Ok(candidate) =
+                quoted_selection(sku, value["price_per_hour"].as_f64().unwrap_or(f64::NAN))
+            else {
+                continue;
+            };
+            if best
+                .as_ref()
+                .is_none_or(|old| candidate.estimated_hourly_cost < old.estimated_hourly_cost)
+            {
+                best = Some(candidate);
+            }
+        }
+        best.ok_or_else(|| Error::ConfigurationError("Lium has no qualifying priced node".into()))
+    }
+
     async fn provision_instance(
         &self,
         instance_type: &str,
         region: &str,
-        require_tee: bool,
+        tee: bool,
     ) -> Result<ProvisionedInstance> {
-        // Fail closed at the trait boundary: this provider has no
-        // confidential-compute / TEE attestation path. Refuse rather than
-        // silently return a non-TEE instance for a require_tee request.
-        if require_tee {
-            return Err(Error::ConfigurationError(
-                "Bittensor Lium does not support confidential-compute / TEE attestation; \
-                 refusing require_tee"
-                    .into(),
-            ));
+        let instance = self
+            .provision_resources(
+                instance_type,
+                region,
+                &ResourceSpec::default().with_gpu(1),
+                tee,
+            )
+            .await?;
+        self.prepare_access(&instance, &ResourceSpec::default())
+            .await?;
+        crate::providers::common::gpu_adapter::wait_for_instance(self, &instance.id).await
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        _region: &str,
+        spec: &ResourceSpec,
+        tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        reject_tee(tee)?;
+        let skus = catalog_skus(spec, "bittensor-lium")?;
+        let sku = skus
+            .iter()
+            .find(|sku| sku.as_str() == instance_type)
+            .or_else(|| skus.first())
+            .cloned()
+            .ok_or_else(|| Error::ConfigurationError("Lium GPU SKU missing".into()))?;
+        let request = self.rental_request(spec, false, Some(&sku))?;
+        let created = api_json(
+            self.http
+                .post_json(
+                    &format!("{}/executors/rent-by-spec", self.base_url),
+                    &self.auth,
+                    request,
+                )
+                .await?,
+        )
+        .await?;
+        let id = created["pod_id"]
+            .as_str()
+            .ok_or_else(|| Error::HttpError("Lium create missing pod_id".into()))?
+            .to_string();
+        Ok(crate::providers::common::gpu_adapter::starting_instance(
+            CloudProvider::BittensorLium,
+            id,
+            sku,
+            String::new(),
+        ))
+    }
+
+    async fn terminate_instance(&self, id: &str) -> Result<()> {
+        self.cancel_rental(id).await
+    }
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        Self::parse_instance(&self.fetch_rental_json(id).await?)
+    }
+    async fn get_instance_status(&self, id: &str) -> Result<InstanceStatus> {
+        let response = self
+            .http
+            .get(&format!("{}/pods/{id}", self.base_url), &self.auth)
+            .await?;
+        match crate::providers::common::gpu_adapter::api_json_or_missing(response).await? {
+            Some(raw) => Ok(Self::parse_instance(&raw)?.status),
+            None => Ok(InstanceStatus::Terminated),
         }
-        self.create_rental(instance_type, region).await
     }
 
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        self.cancel_rental(instance_id).await
+    async fn lease_endpoint(&self, instance: &ProvisionedInstance) -> Result<String> {
+        let raw = self.fetch_rental_json(&instance.id).await?;
+        let command = raw["ssh_connect_cmd"]
+            .as_str()
+            .ok_or_else(|| Error::HttpError("Lium pod has no SSH endpoint".into()))?;
+        crate::providers::common::gpu_adapter::ssh_endpoint(command)
     }
-
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        match self.fetch_rental_json(instance_id).await {
-            Ok(raw) => {
-                let instance = Self::parse_instance(&raw, &self.region)?;
-                Ok(instance.status)
-            }
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Lium rental status");
-                Ok(InstanceStatus::Unknown)
-            }
-        }
-    }
-
     async fn deploy_blueprint_with_target(
         &self,
         target: &crate::core::deployment_target::DeploymentTarget,
@@ -325,8 +248,8 @@ impl CloudProviderAdapter for BittensorLiumAdapter {
             DeploymentTarget::VirtualMachine { runtime: _ } => {
                 let plan = super::BittensorLiumInstanceMapper::map(resource_spec);
                 provision_with_cleanup(
-                    "bittensor_lium",
-                    || self.create_rental(&plan.instance_type, ""),
+                    "bittensor-lium",
+                    || self.provision_resources(&plan.instance_type, "", resource_spec, false),
                     |instance| {
                         let env_vars = env_vars.clone();
                         async move {
@@ -382,6 +305,15 @@ impl CloudProviderAdapter for BittensorLiumAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        let ready = if instance.status != InstanceStatus::Running || instance.public_ip.is_none() {
+            Some(
+                crate::providers::common::gpu_adapter::wait_for_instance(self, &instance.id)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        let instance = ready.as_ref().unwrap_or(instance);
         require_public_ip(instance)?;
         deploy_via_ssh(
             instance,
@@ -412,65 +344,5 @@ impl CloudProviderAdapter for BittensorLiumAdapter {
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_running_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-9001",
-                "status": "active",
-                "gpu_type": "H100-80GB",
-                "datacenter": "eu-central",
-                "public_ip": "192.0.2.55",
-                "private_ip": "10.20.0.7",
-                "miner_uid": 42
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.id, "lium-9001");
-        assert_eq!(instance.public_ip.as_deref(), Some("192.0.2.55"));
-        assert_eq!(instance.region, "eu-central");
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::BittensorLium);
-    }
-
-    #[test]
-    fn parses_starting_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-pending",
-                "status": "matching",
-                "gpu_type": "A100-80GB"
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-        assert!(instance.public_ip.is_none());
-        assert_eq!(instance.region, "auto");
-    }
-
-    #[test]
-    fn parses_terminated_json() {
-        let json = serde_json::json!({
-            "rental": {
-                "rental_id": "lium-dead",
-                "status": "ended",
-                "gpu_type": "RTX_4090"
-            }
-        });
-        let instance = BittensorLiumAdapter::parse_instance(&json, "auto").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    #[test]
-    fn parse_fails_without_id() {
-        let json = serde_json::json!({ "rental": { "status": "active" } });
-        assert!(BittensorLiumAdapter::parse_instance(&json, "auto").is_err());
     }
 }

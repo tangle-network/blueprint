@@ -135,8 +135,10 @@ message ResourcePricing {
   string kind = 1;
   // Quantity of the resource
   uint64 count = 2;
-  // Price per unit in USD with decimal precision (e.g., 0.00005 USD per MB)
-  double price_per_unit_rate = 3;
+  reserved 3;
+  reserved "price_per_unit_rate";
+  // Unsigned big-endian integer; USD atoms at the SDK pricing scale (10^9).
+  bytes price_per_unit = 4;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -163,6 +165,10 @@ message GetJobPriceRequest {
   // (32 bytes, required). Bound into the EIP-712 signature; tnt-core v0.18.0+
   // reverts JobQuoteInputsMismatch when the submitted inputs hash differently.
   bytes inputs_hash = 7;
+  // Canonical SDK catalog id. Empty with zero count/duration selects legacy job pricing.
+  string gpu_class = 8;
+  uint64 gpu_count = 9;
+  uint64 duration_secs = 10;
 }
 
 // Response message for GetJobPrice RPC
@@ -230,4 +236,8 @@ message JobQuoteDetails {
   // EIP-712 signature; tnt-core v0.18.0+ reverts JobQuoteInputsMismatch when
   // the submitted inputs hash differently.
   bytes inputs_hash = 8;
+  // GPU allocation bound into GpuJobQuoteDetails; absent fields retain legacy signatures.
+  string gpu_class = 9;
+  uint64 gpu_count = 10;
+  uint64 duration_secs = 11;
 }

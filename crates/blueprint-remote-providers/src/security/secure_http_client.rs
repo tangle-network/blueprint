@@ -16,6 +16,7 @@ pub struct SecureHttpClient {
     max_response_size: usize,
     /// Request timeout
     timeout: Duration,
+    endpoint_origin: Option<String>,
 }
 
 impl SecureHttpClient {
@@ -25,7 +26,8 @@ impl SecureHttpClient {
             .timeout(Duration::from_secs(30))
             .user_agent("blueprint-remote-providers/1.0.0")
             .use_rustls_tls() // Use rustls instead of native-tls for consistency
-            .https_only(true) // Force HTTPS
+            .https_only(true)
+            .redirect(reqwest::redirect::Policy::none())
             .tcp_keepalive(Duration::from_secs(60))
             .connection_verbose(false) // Disable verbose logging in production
             .build()
@@ -35,6 +37,33 @@ impl SecureHttpClient {
             client,
             max_response_size: 10 * 1024 * 1024, // 10MB max response
             timeout: Duration::from_secs(30),
+            endpoint_origin: None,
+        })
+    }
+
+    /// Use a caller-selected API endpoint. Plain HTTP is restricted to loopback
+    /// peers; credentials cannot leave this origin through redirects or requests.
+    pub fn with_endpoint(endpoint: &str) -> Result<Self> {
+        let url = Url::parse(endpoint)
+            .map_err(|_| Error::ConfigurationError("Invalid API endpoint".into()))?;
+        let loopback = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
+        if !url.username().is_empty()
+            || url.password().is_some()
+            || !(url.scheme() == "https" || (url.scheme() == "http" && loopback))
+        {
+            return Err(Error::ConfigurationError(
+                "API endpoint requires HTTPS or loopback HTTP".into(),
+            ));
+        }
+        Ok(Self {
+            client: ClientBuilder::new()
+                .timeout(Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|e| Error::ConfigurationError(e.to_string()))?,
+            max_response_size: 10 * 1024 * 1024,
+            timeout: Duration::from_secs(30),
+            endpoint_origin: Some(url.origin().ascii_serialization()),
         })
     }
 
@@ -74,19 +103,21 @@ impl SecureHttpClient {
         // Validate request before sending
         self.validate_request(&request)?;
 
-        debug!("Making authenticated request to: {}", url);
+        debug!(
+            "Making authenticated request to: {}",
+            parsed_url.origin().ascii_serialization()
+        );
 
         // Send request with timeout
         let response = tokio::time::timeout(self.timeout, self.client.execute(request))
             .await
             .map_err(|_| Error::ConfigurationError("Request timeout".into()))?
-            .map_err(|e| Error::ConfigurationError(format!("Request failed: {e}")))?;
+            .map_err(|e| {
+                Error::ConfigurationError(format!("Request failed: {}", e.without_url()))
+            })?;
 
         // Validate response
         self.validate_response(&response).await?;
-
-        // SECURITY: Validate certificate pinning if available
-        self.validate_certificate_pinning(url, &response)?;
 
         Ok(response)
     }
@@ -95,6 +126,15 @@ impl SecureHttpClient {
     fn validate_url(&self, url: &str) -> Result<Url> {
         let parsed =
             Url::parse(url).map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
+
+        if let Some(origin) = &self.endpoint_origin {
+            if parsed.origin().ascii_serialization() != *origin {
+                return Err(Error::ConfigurationError(
+                    "Request outside configured API origin".into(),
+                ));
+            }
+            return Ok(parsed);
+        }
 
         // Must be HTTPS
         if parsed.scheme() != "https" {
@@ -144,8 +184,10 @@ impl SecureHttpClient {
             "api.vultr.com",
             // Lambda Labs domains
             "cloud.lambdalabs.com",
+            "cloud.lambda.com",
             // RunPod domains
             "api.runpod.io",
+            "rest.runpod.io",
             // Vast.ai domains
             "console.vast.ai",
             // CoreWeave domains
@@ -156,6 +198,7 @@ impl SecureHttpClient {
             "api.fluidstack.io",
             // TensorDock domains
             "marketplace.tensordock.com",
+            "dashboard.tensordock.com",
             // Akash domains
             "api.akash.network",
             // io.net domains
@@ -166,6 +209,7 @@ impl SecureHttpClient {
             "api.render.com",
             // Bittensor/Lium domains
             "api.lium.ai",
+            "lium.io",
             // Kubernetes domains (for EKS/GKE/AKS)
             "kubernetes.default.svc",
             "kubernetes.default.svc.cluster.local",
@@ -301,12 +345,6 @@ impl SecureHttpClient {
         Ok(())
     }
 
-    /// Certificate pinning placeholder. Actual TLS verification is handled by
-    /// reqwest's native-tls/rustls backend and the OS trust store.
-    fn validate_certificate_pinning(&self, _url: &str, _response: &Response) -> Result<()> {
-        Ok(())
-    }
-
     /// Make a simple GET request with authentication
     pub async fn get(&self, url: &str, auth: &ApiAuthentication) -> Result<Response> {
         self.authenticated_request(reqwest::Method::GET, url, auth, None)
@@ -322,6 +360,29 @@ impl SecureHttpClient {
     ) -> Result<Response> {
         self.authenticated_request(reqwest::Method::POST, url, auth, body)
             .await
+    }
+
+    /// Send a form body to APIs that require URL-encoded credentials and fields.
+    pub async fn post_form(
+        &self,
+        url: &str,
+        auth: &ApiAuthentication,
+        form: &std::collections::HashMap<String, String>,
+    ) -> Result<Response> {
+        let url = self.validate_url(url)?;
+        let builder = self.client.post(url.clone());
+        let request = self
+            .add_authentication(builder, auth, &url, None)?
+            .form(form)
+            .build()
+            .map_err(|_| Error::ConfigurationError("Invalid API form request".into()))?;
+        self.validate_request(&request)?;
+        let response = tokio::time::timeout(self.timeout, self.client.execute(request))
+            .await
+            .map_err(|_| Error::HttpError("Provider request timeout".into()))?
+            .map_err(|e| Error::HttpError(e.without_url().to_string()))?;
+        self.validate_response(&response).await?;
+        Ok(response)
     }
 
     /// Make a POST request with JSON body
@@ -429,10 +490,7 @@ impl ApiAuthentication {
 
     /// Create Vast.ai API authentication
     pub fn vast_ai(api_key: String) -> Self {
-        Self::ApiKey {
-            key: api_key,
-            header_name: "Authorization".to_string(),
-        }
+        Self::Bearer { token: api_key }
     }
 
     /// Create CoreWeave API authentication

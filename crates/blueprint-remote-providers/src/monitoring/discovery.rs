@@ -10,6 +10,7 @@ use blueprint_std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Machine type discovery service
+#[derive(Clone)]
 pub struct MachineTypeDiscovery {
     client: reqwest::Client,
     cache: HashMap<CloudProvider, Vec<MachineType>>,
@@ -53,35 +54,35 @@ impl MachineTypeDiscovery {
                 Ok(discovered) => discovered,
                 Err(e) => {
                     debug!("AWS discovery failed: {}, using fallback", e);
-                    self.get_common_aws_instances()
+                    Vec::new()
                 }
             },
             CloudProvider::GCP => match self.discover_gcp_machines(region, credentials).await {
                 Ok(discovered) => discovered,
                 Err(e) => {
                     debug!("GCP discovery failed: {}, using fallback", e);
-                    self.get_common_gcp_machines()
+                    Vec::new()
                 }
             },
             CloudProvider::Azure => match self.discover_azure_vms(region, credentials).await {
                 Ok(discovered) => discovered,
                 Err(e) => {
                     debug!("Azure discovery failed: {}, using fallback", e);
-                    self.get_common_azure_vms()
+                    Vec::new()
                 }
             },
             CloudProvider::DigitalOcean => match self.discover_do_droplets(credentials).await {
                 Ok(discovered) => discovered,
                 Err(e) => {
                     debug!("DigitalOcean discovery failed: {}, using fallback", e);
-                    self.get_common_do_droplets()
+                    Vec::new()
                 }
             },
             CloudProvider::Vultr => match self.discover_vultr_plans(credentials).await {
                 Ok(discovered) => discovered,
                 Err(e) => {
                     debug!("Vultr discovery failed: {}, using fallback", e);
-                    self.get_common_vultr_plans()
+                    Vec::new()
                 }
             },
             _ => vec![],
@@ -106,62 +107,10 @@ impl MachineTypeDiscovery {
         _region: &str,
         _credentials: &CloudCredentials,
     ) -> Result<Vec<MachineType>> {
-        Ok(self.get_common_aws_instances())
+        Ok(Vec::new())
     }
 
     /// Get common AWS instance types (fallback)
-    fn get_common_aws_instances(&self) -> Vec<MachineType> {
-        vec![
-            MachineType {
-                name: "t3.micro".to_string(),
-                provider: CloudProvider::AWS,
-                vcpus: 2,
-                memory_gb: 1.0,
-                storage_gb: Some(8.0),
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "Up to 5 Gigabit".to_string(),
-                hourly_price: Some(0.0104),
-                spot_price: Some(0.0031),
-            },
-            MachineType {
-                name: "t3.small".to_string(),
-                provider: CloudProvider::AWS,
-                vcpus: 2,
-                memory_gb: 2.0,
-                storage_gb: Some(8.0),
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "Up to 5 Gigabit".to_string(),
-                hourly_price: Some(0.0208),
-                spot_price: Some(0.0062),
-            },
-            MachineType {
-                name: "m6i.xlarge".to_string(),
-                provider: CloudProvider::AWS,
-                vcpus: 4,
-                memory_gb: 16.0,
-                storage_gb: None,
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "Up to 12.5 Gigabit".to_string(),
-                hourly_price: Some(0.192),
-                spot_price: Some(0.0576),
-            },
-            MachineType {
-                name: "g4dn.xlarge".to_string(),
-                provider: CloudProvider::AWS,
-                vcpus: 4,
-                memory_gb: 16.0,
-                storage_gb: Some(125.0),
-                gpu_count: 1,
-                gpu_type: Some("NVIDIA T4".to_string()),
-                network_performance: "Up to 25 Gigabit".to_string(),
-                hourly_price: Some(0.526),
-                spot_price: Some(0.1578),
-            },
-        ]
-    }
 
     /// Discover GCP machine types
     async fn discover_gcp_machines(
@@ -187,7 +136,7 @@ impl MachineTypeDiscovery {
             .map_err(|e| Error::ConfigurationError(format!("Failed to query GCP: {e}")))?;
 
         if !response.status().is_success() {
-            return Ok(self.get_common_gcp_machines());
+            return Ok(Vec::new());
         }
 
         let json: serde_json::Value = response
@@ -220,41 +169,13 @@ impl MachineTypeDiscovery {
         }
 
         if machines.is_empty() {
-            Ok(self.get_common_gcp_machines())
+            Ok(Vec::new())
         } else {
             Ok(machines)
         }
     }
 
     /// Get common GCP machine types (fallback)
-    fn get_common_gcp_machines(&self) -> Vec<MachineType> {
-        vec![
-            MachineType {
-                name: "e2-micro".to_string(),
-                provider: CloudProvider::GCP,
-                vcpus: 2,
-                memory_gb: 1.0,
-                storage_gb: None,
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "1 Gbps".to_string(),
-                hourly_price: Some(0.00838),
-                spot_price: Some(0.00251),
-            },
-            MachineType {
-                name: "e2-standard-4".to_string(),
-                provider: CloudProvider::GCP,
-                vcpus: 4,
-                memory_gb: 16.0,
-                storage_gb: None,
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "10 Gbps".to_string(),
-                hourly_price: Some(0.134),
-                spot_price: Some(0.0402),
-            },
-        ]
-    }
 
     /// Discover Azure VM sizes
     async fn discover_azure_vms(
@@ -280,7 +201,7 @@ impl MachineTypeDiscovery {
             .map_err(|e| Error::ConfigurationError(format!("Failed to query Azure: {e}")))?;
 
         if !response.status().is_success() {
-            return Ok(self.get_common_azure_vms());
+            return Ok(Vec::new());
         }
 
         let json: serde_json::Value = response.json().await.map_err(|e| {
@@ -314,41 +235,13 @@ impl MachineTypeDiscovery {
         }
 
         if machines.is_empty() {
-            Ok(self.get_common_azure_vms())
+            Ok(Vec::new())
         } else {
             Ok(machines)
         }
     }
 
     /// Get common Azure VM sizes (fallback)
-    fn get_common_azure_vms(&self) -> Vec<MachineType> {
-        vec![
-            MachineType {
-                name: "Standard_B1s".to_string(),
-                provider: CloudProvider::Azure,
-                vcpus: 1,
-                memory_gb: 1.0,
-                storage_gb: Some(4.0),
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "Moderate".to_string(),
-                hourly_price: Some(0.012),
-                spot_price: Some(0.0036),
-            },
-            MachineType {
-                name: "Standard_D4s_v5".to_string(),
-                provider: CloudProvider::Azure,
-                vcpus: 4,
-                memory_gb: 16.0,
-                storage_gb: None,
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "12500 Mbps".to_string(),
-                hourly_price: Some(0.192),
-                spot_price: Some(0.0576),
-            },
-        ]
-    }
 
     /// Discover DigitalOcean droplet sizes
     async fn discover_do_droplets(
@@ -366,7 +259,7 @@ impl MachineTypeDiscovery {
             .map_err(|e| Error::ConfigurationError(format!("Failed to query DigitalOcean: {e}")))?;
 
         if !response.status().is_success() {
-            return Ok(self.get_common_do_droplets());
+            return Ok(Vec::new());
         }
 
         let json: serde_json::Value = response
@@ -403,41 +296,13 @@ impl MachineTypeDiscovery {
         }
 
         if machines.is_empty() {
-            Ok(self.get_common_do_droplets())
+            Ok(Vec::new())
         } else {
             Ok(machines)
         }
     }
 
     /// Get common DigitalOcean droplet sizes (fallback)
-    fn get_common_do_droplets(&self) -> Vec<MachineType> {
-        vec![
-            MachineType {
-                name: "s-1vcpu-1gb".to_string(),
-                provider: CloudProvider::DigitalOcean,
-                vcpus: 1,
-                memory_gb: 1.0,
-                storage_gb: Some(25.0),
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "1 Gbps".to_string(),
-                hourly_price: Some(0.009),
-                spot_price: None,
-            },
-            MachineType {
-                name: "s-2vcpu-4gb".to_string(),
-                provider: CloudProvider::DigitalOcean,
-                vcpus: 2,
-                memory_gb: 4.0,
-                storage_gb: Some(80.0),
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "4 Gbps".to_string(),
-                hourly_price: Some(0.036),
-                spot_price: None,
-            },
-        ]
-    }
 
     /// Discover Vultr plans
     async fn discover_vultr_plans(
@@ -461,7 +326,7 @@ impl MachineTypeDiscovery {
             .map_err(|e| Error::ConfigurationError(format!("Failed to query Vultr: {e}")))?;
 
         if !response.status().is_success() {
-            return Ok(self.get_common_vultr_plans());
+            return Ok(Vec::new());
         }
 
         let json: serde_json::Value = response.json().await.map_err(|e| {
@@ -501,41 +366,13 @@ impl MachineTypeDiscovery {
         }
 
         if machines.is_empty() {
-            Ok(self.get_common_vultr_plans())
+            Ok(Vec::new())
         } else {
             Ok(machines)
         }
     }
 
     /// Get common Vultr plans (fallback)
-    fn get_common_vultr_plans(&self) -> Vec<MachineType> {
-        vec![
-            MachineType {
-                name: "vc2-1c-1gb".to_string(),
-                provider: CloudProvider::Vultr,
-                vcpus: 1,
-                memory_gb: 1.0,
-                storage_gb: Some(25.0),
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "1 Gbps".to_string(),
-                hourly_price: Some(0.007),
-                spot_price: None,
-            },
-            MachineType {
-                name: "vc2-2c-4gb".to_string(),
-                provider: CloudProvider::Vultr,
-                vcpus: 2,
-                memory_gb: 4.0,
-                storage_gb: Some(80.0),
-                gpu_count: 0,
-                gpu_type: None,
-                network_performance: "3 Gbps".to_string(),
-                hourly_price: Some(0.024),
-                spot_price: None,
-            },
-        ]
-    }
 
     /// Find best machine type for given requirements
     pub fn find_best_match(
@@ -549,6 +386,10 @@ impl MachineTypeDiscovery {
         self.cache.get(provider).and_then(|machines| {
             machines
                 .iter()
+                .filter(|m| {
+                    m.hourly_price
+                        .is_some_and(|price| price.is_finite() && price > 0.0)
+                })
                 .filter(|m| m.vcpus >= min_vcpus)
                 .filter(|m| m.memory_gb >= min_memory_gb)
                 .filter(|m| !needs_gpu || m.gpu_count > 0)
@@ -630,43 +471,4 @@ pub struct MachineType {
     pub network_performance: String,
     pub hourly_price: Option<f64>,
     pub spot_price: Option<f64>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_machine_type_discovery() {
-        let discovery = MachineTypeDiscovery::new();
-
-        // Test getting fallback machines
-        let aws_machines = discovery.get_common_aws_instances();
-        assert!(!aws_machines.is_empty());
-        assert_eq!(aws_machines[0].provider, CloudProvider::AWS);
-
-        let gcp_machines = discovery.get_common_gcp_machines();
-        assert!(!gcp_machines.is_empty());
-        assert_eq!(gcp_machines[0].provider, CloudProvider::GCP);
-    }
-
-    #[test]
-    fn test_find_best_match() {
-        let mut discovery = MachineTypeDiscovery::new();
-
-        // Populate cache with test data
-        discovery
-            .cache
-            .insert(CloudProvider::AWS, discovery.get_common_aws_instances());
-
-        // Find small instance
-        let match1 = discovery.find_best_match(&CloudProvider::AWS, 2, 1.0, false, Some(0.02));
-        assert!(match1.is_some());
-        assert_eq!(match1.unwrap().name, "t3.micro");
-
-        // Find GPU instance
-        let match2 = discovery.find_best_match(&CloudProvider::AWS, 4, 16.0, true, None);
-        assert!(match2.is_some());
-        assert_eq!(match2.unwrap().name, "g4dn.xlarge");
-    }
 }

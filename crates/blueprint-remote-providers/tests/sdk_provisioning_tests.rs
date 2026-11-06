@@ -316,6 +316,7 @@ async fn test_blueprint_binary_resource_analysis() {
         gpu_count: None,
         allow_spot: true, // Cost optimization
         qos: Default::default(),
+        ..Default::default()
     };
 
     println!("🎯 Calculated resource spec:");

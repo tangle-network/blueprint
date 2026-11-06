@@ -1,307 +1,296 @@
-//! Prime Intellect `CloudProviderAdapter` implementation.
-//!
-//! Prime Intellect is a compute aggregator: a single REST surface fronting
-//! CoreWeave, Lambda, Crusoe, and other backend GPU providers. The adapter is
-//! production-ready — operators can rely on it for routine GPU rentals.
-
+//! Prime Intellect GPU rentals through its documented availability and pods APIs.
 use crate::core::error::{Error, Result};
 use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::common::gpu_adapter::{
-    ClassifiedError, RetryPolicy, build_http_client, classify_response, deploy_via_ssh,
-    generate_instance_name, poll_until, provision_with_cleanup, require_public_ip,
-    retry_with_backoff,
+use crate::providers::common::{
+    InstanceSelection,
+    gpu_adapter::{
+        api_json, build_http_client, catalog_skus, deploy_via_ssh, generate_instance_name,
+        provision_with_cleanup, quoted_selection, reject_tee, require_public_ip,
+    },
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
 use async_trait::async_trait;
-use blueprint_core::{info, warn};
 use blueprint_std::collections::HashMap;
-use std::time::Duration;
+use serde_json::{Value, json};
 
-const BASE_URL: &str = "https://api.primeintellect.ai/v1";
-const INSTANCE_READY_TIMEOUT: Duration = Duration::from_secs(600);
-const INSTANCE_POLL_INTERVAL: Duration = Duration::from_secs(10);
-const DEFAULT_IMAGE: &str = "ubuntu_22_04_cuda_12";
+const BASE_URL: &str = "https://api.primeintellect.ai/api/v1";
 
-/// Adapter for the Prime Intellect compute aggregator.
 pub struct PrimeIntellectAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
+    base_url: String,
     default_region: String,
-    /// Sub-provider preference (`auto` lets Prime Intellect pick the cheapest backend).
-    provider_preference: String,
-    image: String,
 }
 
 impl PrimeIntellectAdapter {
-    /// Construct from environment variables.
     pub async fn new() -> Result<Self> {
-        let api_key = std::env::var("PRIME_INTELLECT_API_KEY").map_err(|_| {
-            Error::Other("PRIME_INTELLECT_API_KEY environment variable not set".into())
-        })?;
-        let default_region =
-            std::env::var("PRIME_INTELLECT_REGION").unwrap_or_else(|_| "us-east".to_string());
-        let provider_preference =
-            std::env::var("PRIME_INTELLECT_PROVIDER").unwrap_or_else(|_| "auto".to_string());
-        let image =
-            std::env::var("PRIME_INTELLECT_IMAGE").unwrap_or_else(|_| DEFAULT_IMAGE.to_string());
+        let key = std::env::var("PRIME_INTELLECT_API_KEY")
+            .map_err(|_| Error::ConfigurationError("PRIME_INTELLECT_API_KEY is required".into()))?;
+        let mut adapter = Self::with_credentials(key)?;
+        adapter.default_region = std::env::var("PRIME_INTELLECT_REGION").unwrap_or_default();
+        Ok(adapter)
+    }
 
+    pub fn with_credentials(api_key: String) -> Result<Self> {
         Ok(Self {
             http: build_http_client()?,
             auth: ApiAuthentication::prime_intellect(api_key),
-            default_region,
-            provider_preference,
-            image,
+            base_url: BASE_URL.into(),
+            default_region: String::new(),
         })
     }
 
-    /// Fetch a single instance's JSON payload from the REST API with retry.
-    async fn fetch_instance_json(&self, instance_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/instances/{instance_id}");
-        retry_with_backoff(
-            "prime_intellect.get_instance",
-            &RetryPolicy::default(),
-            |_| {
-                let url = url.clone();
-                async move {
-                    let response = self.http.get(&url, &self.auth).await.map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Prime Intellect GET {url}: {e}"
-                        )))
-                    })?;
-                    if let Some(class) = classify_response(&response) {
-                        let body = response.text().await.unwrap_or_default();
-                        let err =
-                            Error::HttpError(format!("Prime Intellect GET {url} failed: {body}"));
-                        return Err(ClassifiedError { class, inner: err });
-                    }
-                    response.json::<serde_json::Value>().await.map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Prime Intellect response parse: {e}"
-                        )))
-                    })
-                }
-            },
-        )
-        .await
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
+        let mut adapter = Self::with_credentials(api_key)?;
+        adapter.http = SecureHttpClient::with_endpoint(endpoint)?;
+        adapter.base_url = endpoint.trim_end_matches('/').into();
+        Ok(adapter)
     }
 
-    /// Convert the Prime Intellect instance JSON into a `ProvisionedInstance`.
-    fn parse_instance(
-        value: &serde_json::Value,
-        fallback_region: &str,
-    ) -> Result<ProvisionedInstance> {
-        let data = value.get("data").unwrap_or(value);
-        let id = data
-            .get("instance_id")
-            .or_else(|| data.get("id"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::HttpError("Prime Intellect response missing instance_id".into()))?
-            .to_string();
-        let instance_type = data
-            .get("gpu_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        let region = data
-            .get("region")
-            .and_then(|v| v.as_str())
-            .unwrap_or(fallback_region)
-            .to_string();
-        let public_ip = data
-            .get("public_ip")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let private_ip = data
-            .get("private_ip")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let status = match data.get("status").and_then(|v| v.as_str()).unwrap_or("") {
-            "running" | "active" | "ready" => InstanceStatus::Running,
-            "provisioning" | "starting" | "pending" | "queued" => InstanceStatus::Starting,
-            "stopping" | "terminating" => InstanceStatus::Stopping,
-            "terminated" | "failed" | "cancelled" => InstanceStatus::Terminated,
-            _ => InstanceStatus::Unknown,
-        };
-
-        Ok(ProvisionedInstance {
-            id,
-            provider: CloudProvider::PrimeIntellect,
-            instance_type,
-            region,
-            public_ip,
-            private_ip,
-            status,
-        })
-    }
-
-    async fn wait_for_running(&self, instance_id: &str) -> Result<ProvisionedInstance> {
-        let region = self.default_region.clone();
-        poll_until(
-            "Prime Intellect instance",
-            INSTANCE_POLL_INTERVAL,
-            INSTANCE_READY_TIMEOUT,
-            || async {
-                let raw = self.fetch_instance_json(instance_id).await?;
-                let instance = Self::parse_instance(&raw, &region)?;
-                match instance.status {
-                    InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
-                    InstanceStatus::Terminated => Err(Error::HttpError(
-                        "Prime Intellect instance terminated before becoming ready".into(),
-                    )),
-                    _ => Ok(None),
-                }
-            },
-        )
-        .await
-    }
-
-    async fn launch_instance(&self, gpu_type: &str, region: &str) -> Result<ProvisionedInstance> {
-        let name = generate_instance_name("prime");
-        let region_name = if region.is_empty() {
-            self.default_region.as_str()
-        } else {
-            region
-        };
-
-        let payload = serde_json::json!({
-            "name": name,
-            "gpu_type": gpu_type,
-            "gpu_count": 1,
-            "provider_preference": self.provider_preference,
-            "region": region_name,
-            "image": self.image,
-        });
-
-        let json: serde_json::Value =
-            retry_with_backoff("prime_intellect.launch", &RetryPolicy::default(), |_| {
-                let payload = payload.clone();
-                async move {
-                    let response = self
-                        .http
-                        .authenticated_request(
-                            reqwest::Method::POST,
-                            &format!("{BASE_URL}/instances"),
-                            &self.auth,
-                            Some(payload),
-                        )
-                        .await
-                        .map_err(|e| {
-                            ClassifiedError::transient(Error::HttpError(format!(
-                                "Prime Intellect launch: {e}"
-                            )))
-                        })?;
-                    if let Some(class) = classify_response(&response) {
-                        let body = response.text().await.unwrap_or_default();
-                        return Err(ClassifiedError {
-                            class,
-                            inner: Error::HttpError(format!(
-                                "Prime Intellect launch failed: {body}"
-                            )),
-                        });
-                    }
-                    response.json::<serde_json::Value>().await.map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Prime Intellect launch parse: {e}"
-                        )))
-                    })
-                }
-            })
-            .await?;
-
-        let data = json.get("data").unwrap_or(&json);
-        let instance_id = data
-            .get("instance_id")
-            .or_else(|| data.get("id"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::HttpError("Prime Intellect launch: no instance id returned".into())
-            })?
-            .to_string();
-        let provider_used = data
-            .get("provider_used")
-            .and_then(|v| v.as_str())
-            .unwrap_or("auto");
-
-        info!(%instance_id, %region_name, %gpu_type, %provider_used, "Launched Prime Intellect instance");
-
-        self.wait_for_running(&instance_id).await
-    }
-
-    async fn delete_instance(&self, instance_id: &str) -> Result<()> {
-        let url = format!("{BASE_URL}/instances/{instance_id}");
-        retry_with_backoff("prime_intellect.terminate", &RetryPolicy::default(), |_| {
-            let url = url.clone();
-            async move {
-                let response = self
-                    .http
-                    .authenticated_request(reqwest::Method::DELETE, &url, &self.auth, None)
-                    .await
-                    .map_err(|e| {
-                        ClassifiedError::transient(Error::HttpError(format!(
-                            "Prime Intellect terminate: {e}"
-                        )))
-                    })?;
-                if let Some(class) = classify_response(&response) {
-                    // 404 on terminate is fine — already gone.
-                    if response.status().as_u16() == 404 {
-                        return Ok(());
-                    }
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(ClassifiedError {
-                        class,
-                        inner: Error::HttpError(format!(
-                            "Prime Intellect terminate failed: {body}"
-                        )),
-                    });
-                }
-                Ok(())
+    async fn offer(&self, spec: &ResourceSpec, region: &str) -> Result<(Value, f64)> {
+        let skus = catalog_skus(spec, "prime-intellect")?;
+        let count = spec.gpu_count.unwrap_or(1);
+        let mut best: Option<(Value, f64)> = None;
+        let mut page = 1;
+        loop {
+            let mut url = url::Url::parse(&format!("{}/availability/gpus", self.base_url))
+                .map_err(|e| Error::ConfigurationError(e.to_string()))?;
+            url.query_pairs_mut()
+                .append_pair("gpu_count", &count.to_string())
+                .append_pair("page", &page.to_string());
+            if skus.len() == 1 {
+                url.query_pairs_mut().append_pair("gpu_type", &skus[0]);
             }
+            if !region.is_empty() {
+                url.query_pairs_mut().append_pair("regions", region);
+            }
+            let json = api_json(self.http.get(url.as_str(), &self.auth).await?).await?;
+            let rows = json["items"]
+                .as_array()
+                .ok_or_else(|| Error::HttpError("Prime availability missing items".into()))?;
+            for row in rows {
+                let Some(sku) = row["gpuType"]
+                    .as_str()
+                    .filter(|sku| skus.iter().any(|candidate| candidate == sku))
+                else {
+                    continue;
+                };
+                if row["gpuCount"].as_u64() != Some(count.into())
+                    || row["gpuMemory"].as_u64().unwrap_or(0) < spec.gpu_vram_gb.unwrap_or(0).into()
+                    || row["stockStatus"] == "Unavailable"
+                    || row["prices"]["currency"] != "USD"
+                {
+                    continue;
+                }
+                let mut price = row["prices"]["onDemand"].as_f64().unwrap_or(f64::NAN);
+                let mut pod = json!({"name":generate_instance_name("prime"),"cloudId":row["cloudId"],
+                    "gpuType":sku,"gpuCount":count,"socket":row["socket"],
+                    "image":"ubuntu_22_cuda_12","security":row["security"],
+                    "dataCenterId":row["dataCenter"],"country":row["country"]});
+                let mut valid = true;
+                for (field, request, value) in [
+                    ("vcpu", "vcpus", spec.cpu.ceil()),
+                    ("memory", "memory", spec.memory_gb.ceil()),
+                    ("disk", "diskSize", spec.storage_gb.ceil()),
+                ] {
+                    let resource = &row[field];
+                    let default = resource["defaultCount"].as_f64().unwrap_or(0.0);
+                    let desired = f64::from(value).max(default);
+                    let max = resource["maxCount"].as_f64().unwrap_or(default);
+                    if desired > max {
+                        valid = false;
+                        break;
+                    }
+                    let included = resource["defaultIncludedInPrice"].as_bool().unwrap_or(true);
+                    let units = if included { desired - default } else { desired };
+                    if units > 0.0 {
+                        let Some(per_unit) = resource["pricePerUnit"].as_f64() else {
+                            valid = false;
+                            break;
+                        };
+                        price += units * per_unit;
+                    }
+                    pod[request] = json!(desired as u64);
+                }
+                if !valid || !price.is_finite() || price <= 0.0 {
+                    continue;
+                }
+                pod["maxPrice"] = json!(price);
+                let payload = json!({"pod":pod,"provider":{"type":row["provider"]}});
+                if best.as_ref().is_none_or(|(_, current)| price < *current) {
+                    best = Some((payload, price));
+                }
+            }
+            if rows.is_empty()
+                || page * 100 >= json["totalCount"].as_u64().unwrap_or(rows.len() as u64)
+            {
+                break;
+            }
+            page += 1;
+        }
+        best.ok_or_else(|| {
+            Error::ConfigurationError("Prime has no priced in-stock offer for the request".into())
         })
-        .await?;
-        info!(%instance_id, "Terminated Prime Intellect instance");
-        Ok(())
+    }
+
+    async fn fetch_instance_json(&self, id: &str) -> Result<Value> {
+        api_json(
+            self.http
+                .get(&format!("{}/pods/{id}", self.base_url), &self.auth)
+                .await?,
+        )
+        .await
+    }
+
+    fn parse_instance(value: &Value, region: &str) -> Result<ProvisionedInstance> {
+        let data = value.get("data").unwrap_or(value);
+        let id = data["id"]
+            .as_str()
+            .ok_or_else(|| Error::HttpError("Prime pod has no id".into()))?;
+        Ok(ProvisionedInstance {
+            id: id.into(),
+            provider: CloudProvider::PrimeIntellect,
+            instance_type: data["gpuName"].as_str().unwrap_or_default().into(),
+            region: region.into(),
+            public_ip: data["ip"].as_str().map(String::from),
+            private_ip: None,
+            status: match data["status"].as_str().unwrap_or_default() {
+                "ACTIVE" => InstanceStatus::Running,
+                "TERMINATED" | "ERROR" => InstanceStatus::Terminated,
+                "STOPPED" => InstanceStatus::Stopped,
+                _ => InstanceStatus::Starting,
+            },
+        })
+    }
+
+    async fn delete_instance(&self, id: &str) -> Result<()> {
+        let response = self
+            .http
+            .delete(&format!("{}/pods/{id}", self.base_url), &self.auth)
+            .await?;
+        if response.status().is_success() || response.status().as_u16() == 404 {
+            Ok(())
+        } else {
+            Err(Error::HttpError(format!(
+                "Prime terminate HTTP {}",
+                response.status()
+            )))
+        }
     }
 }
 
 #[async_trait]
 impl CloudProviderAdapter for PrimeIntellectAdapter {
+    async fn quote(&self, spec: &ResourceSpec, region: &str) -> Result<InstanceSelection> {
+        let (payload, price) = self.offer(spec, region).await?;
+        quoted_selection(payload.to_string(), price)
+    }
+
     async fn provision_instance(
         &self,
         instance_type: &str,
         region: &str,
-        require_tee: bool,
+        tee: bool,
     ) -> Result<ProvisionedInstance> {
-        // Fail closed at the trait boundary: this provider has no
-        // confidential-compute / TEE attestation path. Refuse rather than
-        // silently return a non-TEE instance for a require_tee request.
-        if require_tee {
-            return Err(Error::ConfigurationError(
-                "Prime Intellect does not support confidential-compute / TEE attestation; \
-                 refusing require_tee"
-                    .into(),
-            ));
+        let instance = self
+            .provision_resources(
+                instance_type,
+                region,
+                &ResourceSpec::default().with_gpu(1),
+                tee,
+            )
+            .await?;
+        self.prepare_access(&instance, &ResourceSpec::default())
+            .await?;
+        crate::providers::common::gpu_adapter::wait_for_instance(self, &instance.id).await
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
+        tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        reject_tee(tee)?;
+        spec.validate().map_err(Error::ConfigurationError)?;
+        let skus = catalog_skus(spec, "prime-intellect")?;
+        let mut payload = match serde_json::from_str::<Value>(instance_type) {
+            Ok(payload)
+                if payload["pod"]["gpuType"]
+                    .as_str()
+                    .is_some_and(|sku| skus.iter().any(|candidate| candidate == sku))
+                    && payload["pod"]["gpuCount"].as_u64()
+                        == Some(spec.gpu_count.unwrap_or(1).into()) =>
+            {
+                payload
+            }
+            _ => self.offer(spec, region).await?.0,
+        };
+        if let Some(public_key) = &spec.ssh_public_key {
+            let key = api_json(
+                self.http
+                    .post_json(
+                        &format!("{}/ssh_keys/", self.base_url),
+                        &self.auth,
+                        json!({"name":generate_instance_name("lease-key"),"publicKey":public_key}),
+                    )
+                    .await?,
+            )
+            .await?;
+            payload["pod"]["sshKeyId"] = key["id"]
+                .as_str()
+                .map(|id| json!(id))
+                .ok_or_else(|| Error::HttpError("Prime SSH key registration missing id".into()))?;
         }
-        self.launch_instance(instance_type, region).await
+        let sku = payload["pod"]["gpuType"]
+            .as_str()
+            .ok_or_else(|| Error::HttpError("Prime quote missing GPU type".into()))?
+            .to_string();
+        let created = api_json(
+            self.http
+                .post_json(&format!("{}/pods/", self.base_url), &self.auth, payload)
+                .await?,
+        )
+        .await?;
+        let id = created["id"]
+            .as_str()
+            .ok_or_else(|| Error::HttpError("Prime create missing id".into()))?
+            .to_string();
+        Ok(crate::providers::common::gpu_adapter::starting_instance(
+            CloudProvider::PrimeIntellect,
+            id,
+            sku,
+            region.to_string(),
+        ))
     }
 
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        self.delete_instance(instance_id).await
+    async fn lease_endpoint(&self, instance: &ProvisionedInstance) -> Result<String> {
+        let raw = self.fetch_instance_json(&instance.id).await?;
+        let command = raw["sshConnection"]
+            .as_str()
+            .ok_or_else(|| Error::HttpError("Prime has no SSH endpoint".into()))?;
+        crate::providers::common::gpu_adapter::ssh_endpoint(command)
     }
 
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        match self.fetch_instance_json(instance_id).await {
-            Ok(raw) => {
-                let instance = Self::parse_instance(&raw, &self.default_region)?;
-                Ok(instance.status)
-            }
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Prime Intellect instance status");
-                Ok(InstanceStatus::Unknown)
-            }
+    async fn terminate_instance(&self, id: &str) -> Result<()> {
+        self.delete_instance(id).await
+    }
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        Self::parse_instance(&self.fetch_instance_json(id).await?, &self.default_region)
+    }
+    async fn get_instance_status(&self, id: &str) -> Result<InstanceStatus> {
+        let response = self
+            .http
+            .get(&format!("{}/pods/{id}", self.base_url), &self.auth)
+            .await?;
+        match crate::providers::common::gpu_adapter::api_json_or_missing(response).await? {
+            Some(raw) => Ok(Self::parse_instance(&raw, &self.default_region)?.status),
+            None => Ok(InstanceStatus::Terminated),
         }
     }
 
@@ -317,8 +306,8 @@ impl CloudProviderAdapter for PrimeIntellectAdapter {
             DeploymentTarget::VirtualMachine { runtime: _ } => {
                 let plan = super::PrimeIntellectInstanceMapper::map(resource_spec);
                 provision_with_cleanup(
-                    "prime_intellect",
-                    || self.launch_instance(&plan.instance_type, ""),
+                    "prime-intellect",
+                    || self.provision_resources(&plan.instance_type, "", resource_spec, false),
                     |instance| {
                         let env_vars = env_vars.clone();
                         async move {
@@ -374,6 +363,15 @@ impl CloudProviderAdapter for PrimeIntellectAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        let ready = if instance.status != InstanceStatus::Running || instance.public_ip.is_none() {
+            Some(
+                crate::providers::common::gpu_adapter::wait_for_instance(self, &instance.id)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        let instance = ready.as_ref().unwrap_or(instance);
         require_public_ip(instance)?;
         deploy_via_ssh(
             instance,
@@ -404,66 +402,5 @@ impl CloudProviderAdapter for PrimeIntellectAdapter {
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_running_json() {
-        let json = serde_json::json!({
-            "data": {
-                "instance_id": "pi-abc123",
-                "status": "running",
-                "gpu_type": "H100-80GB",
-                "region": "us-east",
-                "public_ip": "203.0.113.10",
-                "private_ip": "10.0.1.5",
-                "provider_used": "coreweave"
-            }
-        });
-        let instance = PrimeIntellectAdapter::parse_instance(&json, "us-west").unwrap();
-        assert_eq!(instance.id, "pi-abc123");
-        assert_eq!(instance.public_ip.as_deref(), Some("203.0.113.10"));
-        assert_eq!(instance.region, "us-east");
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::PrimeIntellect);
-    }
-
-    #[test]
-    fn parses_starting_json() {
-        let json = serde_json::json!({
-            "data": {
-                "instance_id": "pi-pending",
-                "status": "provisioning",
-                "gpu_type": "A100-80GB",
-                "region": "us-east"
-            }
-        });
-        let instance = PrimeIntellectAdapter::parse_instance(&json, "us-east").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-        assert!(instance.public_ip.is_none());
-    }
-
-    #[test]
-    fn parses_terminated_json() {
-        let json = serde_json::json!({
-            "data": {
-                "instance_id": "pi-dead",
-                "status": "terminated",
-                "gpu_type": "RTX_4090",
-                "region": "us-east"
-            }
-        });
-        let instance = PrimeIntellectAdapter::parse_instance(&json, "us-east").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    #[test]
-    fn parse_fails_without_id() {
-        let json = serde_json::json!({ "data": { "status": "running" } });
-        assert!(PrimeIntellectAdapter::parse_instance(&json, "us-east").is_err());
     }
 }

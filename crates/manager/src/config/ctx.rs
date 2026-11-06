@@ -28,6 +28,8 @@ pub struct BlueprintManagerContext {
     config: BlueprintManagerConfig,
     #[cfg(feature = "remote-providers")]
     cloud_config: Option<blueprint_remote_providers::CloudConfig>,
+    #[cfg(feature = "remote-providers")]
+    cloud_provisioner: Option<std::sync::Arc<blueprint_remote_providers::CloudProvisioner>>,
 }
 
 impl BlueprintManagerContext {
@@ -105,6 +107,8 @@ impl BlueprintManagerContext {
             db: Mutex::new(None),
             #[cfg(feature = "remote-providers")]
             cloud_config: Self::load_cloud_config(&config),
+            #[cfg(feature = "remote-providers")]
+            cloud_provisioner: None,
             config,
         })
     }
@@ -126,6 +130,23 @@ impl BlueprintManagerContext {
     #[cfg(feature = "remote-providers")]
     pub fn cloud_config(&self) -> &Option<blueprint_remote_providers::CloudConfig> {
         &self.cloud_config
+    }
+
+    /// Supply provider clients with caller-owned credentials and endpoints.
+    #[cfg(feature = "remote-providers")]
+    pub fn with_cloud_provisioner(
+        mut self,
+        provisioner: std::sync::Arc<blueprint_remote_providers::CloudProvisioner>,
+    ) -> Self {
+        self.cloud_provisioner = Some(provisioner);
+        self
+    }
+
+    #[cfg(feature = "remote-providers")]
+    pub fn cloud_provisioner(
+        &self,
+    ) -> Option<&std::sync::Arc<blueprint_remote_providers::CloudProvisioner>> {
+        self.cloud_provisioner.as_ref()
     }
 
     #[cfg(feature = "remote-providers")]

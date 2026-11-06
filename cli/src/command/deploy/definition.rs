@@ -580,7 +580,7 @@ impl ExecutionProfileSpec {
     fn to_profile(&self) -> ExecutionProfile {
         ExecutionProfile {
             confidentiality: self.confidentiality,
-            gpu: self.gpu,
+            gpu: self.gpu.clone(),
         }
     }
 }

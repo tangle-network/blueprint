@@ -43,10 +43,7 @@ impl ProtocolManager {
         match protocol {
             ProtocolType::Tangle => {
                 let client = tangle::TangleProtocolClient::new(env, ctx).await?;
-                #[allow(unused_mut)]
-                let mut handler = tangle::TangleEventHandler::new();
-                #[cfg(feature = "remote-providers")]
-                handler.init_remote_provider(ctx).await?;
+                let handler = tangle::TangleEventHandler::new();
                 Ok(Self::Tangle { client, handler })
             }
         }

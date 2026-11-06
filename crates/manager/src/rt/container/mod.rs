@@ -7,9 +7,9 @@ use blueprint_client_tangle::ConfidentialityPolicy;
 use blueprint_core::{info, warn};
 use k8s_openapi::api::core::v1::{
     Container, EndpointAddress, EndpointPort, EndpointSubset, Endpoints, EnvVar,
-    HostPathVolumeSource, Namespace, NodeAffinity, NodeSelectorRequirement, NodeSelectorTerm, Pod,
-    PodSpec, PreferredSchedulingTerm, ResourceRequirements, Service, ServicePort, ServiceSpec,
-    Volume, VolumeMount,
+    HostPathVolumeSource, Namespace, NodeAffinity, NodeSelector, NodeSelectorRequirement,
+    NodeSelectorTerm, Pod, PodSpec, PreferredSchedulingTerm, ResourceRequirements, Service,
+    ServicePort, ServiceSpec, Volume, VolumeMount,
 };
 use k8s_openapi::api::node::v1::RuntimeClass;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
@@ -153,6 +153,7 @@ impl ContainerInstance {
         let gpu_count = self.limits.gpu_count.unwrap_or(0);
         let gpu_policy = self.limits.gpu_policy;
         let gpu_min_vram_gb = self.limits.gpu_min_vram_gb;
+        let gpu_class = self.limits.gpu_class.clone();
         if gpu_count > 0 {
             match gpu_policy {
                 GpuSchedulingPolicy::Required => {
@@ -261,11 +262,8 @@ impl ContainerInstance {
                         let mut selectors = BTreeMap::new();
                         selectors
                             .insert("gpu.tangle.tools/enabled".to_string(), "true".to_string());
-                        if let Some(vram) = gpu_min_vram_gb {
-                            selectors.insert(
-                                "gpu.tangle.tools/min-vram-gb".to_string(),
-                                vram.to_string(),
-                            );
+                        if let Some(class) = &gpu_class {
+                            selectors.insert("gpu.tangle.tools/class".into(), class.clone());
                         }
                         Some(selectors)
                     } else {
@@ -273,25 +271,45 @@ impl ContainerInstance {
                     }
                 },
                 affinity: {
-                    if matches!(gpu_policy, GpuSchedulingPolicy::Preferred) && gpu_count > 0 {
+                    let required = matches!(gpu_policy, GpuSchedulingPolicy::Required);
+                    if gpu_count > 0 && !matches!(gpu_policy, GpuSchedulingPolicy::None) {
+                        let mut expressions = vec![NodeSelectorRequirement {
+                            key: "gpu.tangle.tools/enabled".into(),
+                            operator: "In".into(),
+                            values: Some(vec!["true".into()]),
+                        }];
+                        if let Some(vram) = gpu_min_vram_gb.filter(|vram| *vram > 0) {
+                            expressions.push(NodeSelectorRequirement {
+                                key: "gpu.tangle.tools/vram-gb".into(),
+                                operator: "Gt".into(),
+                                values: Some(vec![(vram - 1).to_string()]),
+                            });
+                        }
+                        if let Some(class) = &gpu_class {
+                            expressions.push(NodeSelectorRequirement {
+                                key: "gpu.tangle.tools/class".into(),
+                                operator: "In".into(),
+                                values: Some(vec![class.clone()]),
+                            });
+                        }
+                        let term = NodeSelectorTerm {
+                            match_expressions: Some(expressions),
+                            ..Default::default()
+                        };
                         Some(k8s_openapi::api::core::v1::Affinity {
                             node_affinity: Some(NodeAffinity {
-                                preferred_during_scheduling_ignored_during_execution: Some(vec![
-                                    PreferredSchedulingTerm {
-                                        weight: 80,
-                                        preference: NodeSelectorTerm {
-                                            match_expressions: Some(vec![
-                                                NodeSelectorRequirement {
-                                                    key: "gpu.tangle.tools/enabled".to_string(),
-                                                    operator: "In".to_string(),
-                                                    values: Some(vec!["true".to_string()]),
-                                                },
-                                            ]),
-                                            ..Default::default()
-                                        },
+                                required_during_scheduling_ignored_during_execution: required.then(
+                                    || NodeSelector {
+                                        node_selector_terms: vec![term.clone()],
                                     },
-                                ]),
-                                ..Default::default()
+                                ),
+                                preferred_during_scheduling_ignored_during_execution: (!required)
+                                    .then(|| {
+                                        vec![PreferredSchedulingTerm {
+                                            weight: 80,
+                                            preference: term,
+                                        }]
+                                    }),
                             }),
                             ..Default::default()
                         })

@@ -277,6 +277,7 @@ async fn test_auto_deployment_qos_preferences() {
             heartbeat_interval: Duration::from_secs(30),
             required_ports: vec![8080, 9615, 9944],
         },
+        ..Default::default()
     };
 
     // Test that blueprint meets QoS requirements

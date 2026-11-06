@@ -74,6 +74,7 @@ http-body-util.workspace = true
 dirs.workspace = true
 walkdir.workspace = true
 tempfile = { workspace = true }
+zeroize = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs"] }
 
 # Binary extraction
@@ -154,6 +155,7 @@ digitalocean = ["blueprint-faas", "blueprint-faas/digitalocean"]
 dist = false
 
 [dev-dependencies]
+wiremock = { workspace = true }
 alloy-network = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-rpc-types = { workspace = true }

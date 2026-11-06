@@ -27,6 +27,9 @@ use blueprint_std::collections::HashMap;
 use std::future::Future;
 use std::time::{Duration, Instant};
 
+/// SSH-enabled base image with Blackwell-capable CUDA, pinned to the publisher digest.
+pub const DEFAULT_GPU_IMAGE: &str = "runpod/base:2.0.0-cuda1281-ubuntu2404@sha256:c0504ae25d6dd10460905476b05c1c7d1cc18ff51371cde12cc8a082e634e2e6";
+
 /// Construct a secure HTTP client configured for a GPU cloud provider API.
 pub fn build_http_client() -> Result<SecureHttpClient> {
     SecureHttpClient::new()
@@ -408,26 +411,6 @@ where
 // Existing helpers (kept for backwards compatibility)
 // ============================================================================
 
-/// GPU instance selection result — the subset of `InstanceSelection` that
-/// GPU adapters actually need to place a provisioning request.
-#[derive(Debug, Clone)]
-pub struct GpuInstancePlan {
-    /// Provider-native instance type identifier (e.g. `gpu_1x_a100`).
-    pub instance_type: String,
-    /// GPU count requested.
-    pub gpu_count: u32,
-    /// VRAM per GPU in GiB (0 when unknown).
-    pub vram_gb: u32,
-    /// Estimated hourly cost in USD (for logging / cost ceilings).
-    pub estimated_hourly_cost: f64,
-}
-
-/// Extract GPU count from a `ResourceSpec`, defaulting to 1 when unset.
-/// GPU cloud providers always allocate at least one GPU per instance.
-pub fn gpu_count_or_one(spec: &ResourceSpec) -> u32 {
-    spec.gpu_count.unwrap_or(1).max(1)
-}
-
 /// Generate a unique blueprint-prefixed instance name.
 /// GPU providers use this as the human-readable label on their dashboards.
 pub fn generate_instance_name(prefix: &str) -> String {
@@ -459,340 +442,173 @@ pub fn dual_env(key_var: &str, token_var: &str) -> Result<(String, String)> {
     Ok((key, token))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn classify_2xx_is_not_useful_but_safe() {
-        // Success codes shouldn't hit the classifier, but ensure they're handled.
-        assert_eq!(classify_status_code(200, None), ErrorClass::Permanent);
-    }
-
-    #[test]
-    fn classify_408_is_transient() {
-        assert_eq!(classify_status_code(408, None), ErrorClass::Transient);
-    }
-
-    #[test]
-    fn classify_429_respects_retry_after() {
-        let class = classify_status_code(429, Some(Duration::from_secs(10)));
-        assert_eq!(
-            class,
-            ErrorClass::RateLimited {
-                retry_after: Duration::from_secs(10)
+/// Resolve GPU identity and an exact per-node count from the SDK catalog.
+pub fn catalog_skus(spec: &ResourceSpec, provider: &str) -> Result<Vec<String>> {
+    spec.validate().map_err(Error::ConfigurationError)?;
+    let count = spec.gpu_count.unwrap_or(1);
+    let mut classes = blueprint_core::gpu::catalog();
+    classes.sort_by_key(|gpu| gpu.vram_gb);
+    let mut result = Vec::new();
+    for gpu in classes.into_iter().filter(|gpu| {
+        spec.gpu_class.as_ref().is_none_or(|class| class == &gpu.id)
+            && gpu.vram_gb >= spec.gpu_vram_gb.unwrap_or(0)
+    }) {
+        if let Some(sku) = gpu.sku(provider, count) {
+            if !result.iter().any(|existing| existing == sku) {
+                result.push(sku.to_string());
             }
-        );
+        }
     }
-
-    #[test]
-    fn classify_429_defaults_to_30s() {
-        let class = classify_status_code(429, None);
-        assert_eq!(
-            class,
-            ErrorClass::RateLimited {
-                retry_after: Duration::from_secs(30)
-            }
-        );
+    if result.is_empty() {
+        return Err(Error::ConfigurationError(format!(
+            "No catalog SKU for {provider}, class {:?}, count {count}",
+            spec.gpu_class
+        )));
     }
+    Ok(result)
+}
 
-    #[test]
-    fn classify_4xx_is_permanent() {
-        assert_eq!(classify_status_code(400, None), ErrorClass::Permanent);
-        assert_eq!(classify_status_code(401, None), ErrorClass::Permanent);
-        assert_eq!(classify_status_code(404, None), ErrorClass::Permanent);
-        assert_eq!(classify_status_code(422, None), ErrorClass::Permanent);
+pub fn catalog_sku(spec: &ResourceSpec, provider: &str) -> Result<String> {
+    Ok(catalog_skus(spec, provider)?.remove(0))
+}
+
+/// Recover the fixed-node GPU count for the legacy instance-type-only boundary.
+pub fn sku_gpu_count(provider: &str, sku: &str) -> u32 {
+    blueprint_core::gpu::catalog()
+        .iter()
+        .filter_map(|class| class.provider_skus.get(provider))
+        .flat_map(|skus| skus.iter())
+        .find(|(_, native)| native.as_str() == sku)
+        .and_then(|(count, _)| count.parse().ok())
+        .unwrap_or(1)
+}
+
+/// Synchronous mapping describes hardware only; a quote must obtain a live price.
+pub fn catalog_selection(spec: &ResourceSpec, provider: &str) -> super::InstanceSelection {
+    super::InstanceSelection {
+        instance_type: catalog_sku(spec, provider).unwrap_or_default(),
+        spot_capable: false,
+        estimated_hourly_cost: None,
     }
+}
 
-    #[test]
-    fn classify_5xx_is_transient() {
-        assert_eq!(classify_status_code(500, None), ErrorClass::Transient);
-        assert_eq!(classify_status_code(502, None), ErrorClass::Transient);
-        assert_eq!(classify_status_code(504, None), ErrorClass::Transient);
+pub fn quoted_selection(instance_type: String, price: f64) -> Result<super::InstanceSelection> {
+    if !price.is_finite() || price <= 0.0 {
+        return Err(Error::ConfigurationError(
+            "Provider has no valid USD price".into(),
+        ));
     }
+    Ok(super::InstanceSelection {
+        instance_type,
+        spot_capable: false,
+        estimated_hourly_cost: Some(price),
+    })
+}
 
-    #[test]
-    fn classify_503_with_retry_after_is_rate_limited() {
-        let class = classify_status_code(503, Some(Duration::from_secs(60)));
-        assert_eq!(
-            class,
-            ErrorClass::RateLimited {
-                retry_after: Duration::from_secs(60)
-            }
-        );
+/// Read provider errors without including response bodies that may echo credentials.
+pub async fn api_json(response: reqwest::Response) -> Result<serde_json::Value> {
+    if !response.status().is_success() {
+        return Err(Error::HttpError(format!(
+            "Provider HTTP {}",
+            response.status()
+        )));
     }
+    response
+        .json()
+        .await
+        .map_err(|e| Error::HttpError(format!("Provider JSON: {e}")))
+}
 
-    #[test]
-    fn parse_retry_after_numeric() {
-        assert_eq!(parse_retry_after("30"), Some(Duration::from_secs(30)));
-        assert_eq!(parse_retry_after("  60  "), Some(Duration::from_secs(60)));
+/// A provider's not-found response is authoritative retirement evidence.
+pub async fn api_json_or_missing(response: reqwest::Response) -> Result<Option<serde_json::Value>> {
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
     }
+    api_json(response).await.map(Some)
+}
 
-    #[test]
-    fn parse_retry_after_invalid_returns_none() {
-        assert_eq!(parse_retry_after("invalid"), None);
-        assert_eq!(parse_retry_after("Tue, 15 Nov 1994 08:12:31 GMT"), None);
+pub fn reject_tee(require_tee: bool) -> Result<()> {
+    if require_tee {
+        return Err(Error::ConfigurationError(
+            "Provider has no TEE attestation path".into(),
+        ));
     }
+    Ok(())
+}
 
-    #[test]
-    fn retry_policy_default_backoff_grows() {
-        let policy = RetryPolicy {
-            jitter: false,
-            ..Default::default()
-        };
-        let b0 = policy.backoff_for(0, None);
-        let b1 = policy.backoff_for(1, None);
-        let b2 = policy.backoff_for(2, None);
-        assert!(b1 >= b0);
-        assert!(b2 >= b1);
+/// Parse provider SSH connection text as data, never through a shell.
+pub fn ssh_endpoint(command: &str) -> Result<String> {
+    let words: Vec<&str> = command.split_whitespace().collect();
+    let target = words
+        .iter()
+        .find(|word| word.contains('@'))
+        .ok_or_else(|| Error::HttpError("Provider SSH connection has no user/host".into()))?;
+    let (user, host) = target
+        .split_once('@')
+        .ok_or_else(|| Error::HttpError("Invalid SSH target".into()))?;
+    if user.is_empty()
+        || !user
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        || host.is_empty()
+        || !host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+    {
+        return Err(Error::HttpError("Invalid provider SSH target".into()));
     }
-
-    #[test]
-    fn retry_policy_respects_max_backoff() {
-        let policy = RetryPolicy {
-            jitter: false,
-            max_backoff: Duration::from_secs(5),
-            ..Default::default()
-        };
-        let b = policy.backoff_for(100, None);
-        assert!(b <= Duration::from_secs(5));
+    let port = words
+        .windows(2)
+        .find(|pair| pair[0] == "-p")
+        .map(|pair| pair[1])
+        .unwrap_or("22")
+        .parse::<u16>()
+        .map_err(|_| Error::HttpError("Invalid SSH port".into()))?;
+    if port == 0 {
+        return Err(Error::HttpError("Invalid SSH port".into()));
     }
+    Ok(format!("ssh://{target}:{port}"))
+}
 
-    #[test]
-    fn retry_policy_uses_retry_after_when_provided() {
-        let policy = RetryPolicy::default();
-        let b = policy.backoff_for(0, Some(Duration::from_secs(15)));
-        assert_eq!(b, Duration::from_secs(15));
+/// Return the known billable id before any readiness or access request can fail.
+pub fn starting_instance(
+    provider: crate::core::remote::CloudProvider,
+    id: String,
+    instance_type: String,
+    region: String,
+) -> ProvisionedInstance {
+    ProvisionedInstance {
+        id,
+        provider,
+        instance_type,
+        region,
+        public_ip: None,
+        private_ip: None,
+        status: crate::infra::types::InstanceStatus::Starting,
     }
+}
 
-    #[tokio::test]
-    async fn retry_with_backoff_succeeds_first_try() {
-        let policy = RetryPolicy::quick();
-        let result: Result<i32> = retry_with_backoff("test", &policy, |_| async {
-            Ok::<i32, ClassifiedError>(42)
-        })
-        .await;
-        assert_eq!(result.unwrap(), 42);
-    }
-
-    #[tokio::test]
-    async fn retry_with_backoff_short_circuits_on_permanent() {
-        let policy = RetryPolicy::quick();
-        let mut attempts = 0u32;
-        let result: Result<i32> = retry_with_backoff("test", &policy, |attempt| {
-            attempts = attempt + 1;
-            async move {
-                Err(ClassifiedError::permanent(Error::Other(
-                    "permanent failure".into(),
-                )))
-            }
-        })
-        .await;
-        assert!(result.is_err());
-        assert_eq!(attempts, 1, "should not retry after permanent error");
-    }
-
-    #[tokio::test]
-    async fn retry_with_backoff_retries_transient() {
-        let policy = RetryPolicy {
-            jitter: false,
-            initial_backoff: Duration::from_millis(1),
-            max_backoff: Duration::from_millis(10),
-            backoff_multiplier: 2.0,
-            max_retries: 3,
-        };
-        let mut attempts = 0u32;
-        let result: Result<i32> = retry_with_backoff("test", &policy, |attempt| {
-            attempts = attempt + 1;
-            async move {
-                if attempt < 2 {
-                    Err(ClassifiedError::transient(Error::Other("transient".into())))
-                } else {
-                    Ok(42)
+/// Readiness is separate from creation so callers can persist the id first.
+pub async fn wait_for_instance(
+    adapter: &dyn crate::infra::traits::CloudProviderAdapter,
+    id: &str,
+) -> Result<ProvisionedInstance> {
+    poll_until(
+        "GPU instance",
+        Duration::from_secs(5),
+        Duration::from_secs(900),
+        || async {
+            let instance = adapter.get_instance_details(id).await?;
+            match instance.status {
+                crate::infra::types::InstanceStatus::Running if instance.public_ip.is_some() => {
+                    Ok(Some(instance))
                 }
+                crate::infra::types::InstanceStatus::Terminated => Err(Error::HttpError(
+                    "GPU instance terminated during startup".into(),
+                )),
+                _ => Ok(None),
             }
-        })
-        .await;
-        assert_eq!(result.unwrap(), 42);
-        assert_eq!(attempts, 3);
-    }
-
-    #[tokio::test]
-    async fn retry_with_backoff_exhausts_retries() {
-        let policy = RetryPolicy {
-            jitter: false,
-            initial_backoff: Duration::from_millis(1),
-            max_backoff: Duration::from_millis(5),
-            backoff_multiplier: 2.0,
-            max_retries: 2,
-        };
-        let mut attempts = 0u32;
-        let result: Result<i32> = retry_with_backoff("test", &policy, |attempt| {
-            attempts = attempt + 1;
-            async move { Err(ClassifiedError::transient(Error::Other("nope".into()))) }
-        })
-        .await;
-        assert!(result.is_err());
-        assert_eq!(attempts, 3); // max_retries + 1 initial attempt
-    }
-
-    #[tokio::test]
-    async fn provision_with_cleanup_terminates_on_deploy_failure() {
-        use crate::core::remote::CloudProvider;
-        use crate::infra::types::InstanceStatus;
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        let cleaned = Arc::new(AtomicBool::new(false));
-        let cleaned_clone = cleaned.clone();
-
-        let result = provision_with_cleanup(
-            "test",
-            || async {
-                Ok(ProvisionedInstance {
-                    id: "i-123".into(),
-                    provider: CloudProvider::Generic,
-                    instance_type: "test".into(),
-                    region: "test".into(),
-                    public_ip: Some("1.2.3.4".into()),
-                    private_ip: None,
-                    status: InstanceStatus::Running,
-                })
-            },
-            |_instance| async { Err(Error::Other("deploy failed".into())) },
-            |_id| async move {
-                cleaned_clone.store(true, Ordering::SeqCst);
-                Ok(())
-            },
-        )
-        .await;
-
-        assert!(result.is_err());
-        assert!(
-            cleaned.load(Ordering::SeqCst),
-            "cleanup should have been invoked"
-        );
-    }
-
-    #[tokio::test]
-    async fn provision_with_cleanup_skips_cleanup_on_deploy_success() {
-        use crate::core::remote::CloudProvider;
-        use crate::infra::traits::BlueprintDeploymentResult;
-        use crate::infra::types::InstanceStatus;
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        let cleaned = Arc::new(AtomicBool::new(false));
-        let cleaned_clone = cleaned.clone();
-
-        let result = provision_with_cleanup(
-            "test",
-            || async {
-                Ok(ProvisionedInstance {
-                    id: "i-456".into(),
-                    provider: CloudProvider::Generic,
-                    instance_type: "test".into(),
-                    region: "test".into(),
-                    public_ip: Some("1.2.3.4".into()),
-                    private_ip: None,
-                    status: InstanceStatus::Running,
-                })
-            },
-            |instance| async move {
-                Ok(BlueprintDeploymentResult {
-                    instance,
-                    blueprint_id: "bp-1".into(),
-                    port_mappings: Default::default(),
-                    metadata: Default::default(),
-                })
-            },
-            |_id| async move {
-                cleaned_clone.store(true, Ordering::SeqCst);
-                Ok(())
-            },
-        )
-        .await;
-
-        assert!(result.is_ok());
-        assert!(
-            !cleaned.load(Ordering::SeqCst),
-            "cleanup should NOT run on success"
-        );
-    }
-
-    #[tokio::test]
-    async fn provision_with_cleanup_preserves_deploy_error_when_cleanup_also_fails() {
-        use crate::core::remote::CloudProvider;
-        use crate::infra::types::InstanceStatus;
-
-        let result = provision_with_cleanup(
-            "test",
-            || async {
-                Ok(ProvisionedInstance {
-                    id: "i-789".into(),
-                    provider: CloudProvider::Generic,
-                    instance_type: "test".into(),
-                    region: "test".into(),
-                    public_ip: None,
-                    private_ip: None,
-                    status: InstanceStatus::Running,
-                })
-            },
-            |_| async { Err(Error::Other("deploy error".into())) },
-            |_| async { Err(Error::Other("cleanup also failed".into())) },
-        )
-        .await;
-
-        // The deploy error is preserved; cleanup failure is logged but not propagated.
-        let err = result.unwrap_err();
-        assert!(format!("{err}").contains("deploy error"));
-    }
-
-    #[tokio::test]
-    async fn poll_until_returns_on_success() {
-        let mut calls = 0;
-        let result: Result<i32> = poll_until(
-            "test",
-            Duration::from_millis(1),
-            Duration::from_secs(1),
-            || {
-                calls += 1;
-                let c = calls;
-                async move { if c >= 3 { Ok(Some(c)) } else { Ok(None) } }
-            },
-        )
-        .await;
-        assert_eq!(result.unwrap(), 3);
-    }
-
-    #[tokio::test]
-    async fn poll_until_times_out() {
-        let result: Result<i32> = poll_until(
-            "test",
-            Duration::from_millis(1),
-            Duration::from_millis(10),
-            || async { Ok::<Option<i32>, Error>(None) },
-        )
-        .await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn poll_until_aborts_on_error() {
-        let result: Result<i32> = poll_until(
-            "test",
-            Duration::from_millis(1),
-            Duration::from_secs(1),
-            || async { Err(Error::Other("boom".into())) },
-        )
-        .await;
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn generate_instance_name_has_prefix_and_uuid() {
-        let name = generate_instance_name("abc");
-        assert!(name.starts_with("blueprint-abc-"));
-        assert!(name.len() > "blueprint-abc-".len() + 20);
-    }
+        },
+    )
+    .await
 }

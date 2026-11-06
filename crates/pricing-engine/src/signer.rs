@@ -316,7 +316,18 @@ pub fn job_quote_digest_eip712(
     domain: QuoteSigningDomain,
 ) -> Result<[u8; 32]> {
     let native = proto_to_native_job_quote(details)?;
-    Ok(jq::job_quote_digest_eip712(&native, to_jq_domain(domain)))
+    let domain = to_jq_domain(domain);
+    if details.gpu_class.is_empty() && details.gpu_count == 0 && details.duration_secs == 0 {
+        Ok(jq::job_quote_digest_eip712(&native, domain))
+    } else {
+        let resource = jq::GpuResourceCommitment::new(
+            &details.gpu_class,
+            details.gpu_count,
+            details.duration_secs,
+        )
+        .map_err(|e| PricingError::Signing(e.to_string()))?;
+        Ok(jq::gpu_job_quote_digest_eip712(&native, &resource, domain))
+    }
 }
 
 /// Build the on-chain ABI `QuoteDetails` from the proto details and a validated requester.

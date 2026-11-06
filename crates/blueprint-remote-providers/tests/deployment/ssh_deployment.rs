@@ -196,6 +196,7 @@ async fn test_ssh_resource_limits() {
             gpu_count: None,
             allow_spot: false,
             qos: Default::default(),
+            ..Default::default()
         };
         
         let deployment = client.deploy_blueprint(

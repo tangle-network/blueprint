@@ -46,6 +46,7 @@ mod tests {
             allow_spot: false,
             gpu_count: None,
             qos: QosParameters::default(),
+            ..Default::default()
         };
 
         let limits = ResourceLimits::from_spec(&spec);

@@ -13,6 +13,7 @@ pub fn minimal_resource_spec() -> ResourceSpec {
         gpu_count: None,
         allow_spot: false,
         qos: Default::default(),
+        ..Default::default()
     }
 }
 

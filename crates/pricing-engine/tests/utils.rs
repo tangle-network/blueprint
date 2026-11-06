@@ -1,3 +1,4 @@
+use alloy_primitives::U256;
 use blueprint_pricing_engine_lib::CpuBenchmarkResult;
 use blueprint_pricing_engine_lib::pricing::ResourcePricing;
 use blueprint_pricing_engine_lib::pricing_engine;
@@ -19,6 +20,7 @@ pub fn create_test_config() -> OperatorConfig {
         rpc_timeout: 30,
         rpc_max_connections: 100,
         quote_validity_duration_secs: 300,
+        gpu_pricing: HashMap::new(),
     }
 }
 
@@ -26,7 +28,7 @@ pub fn create_test_quote_details() -> pricing_engine::QuoteDetails {
     let resource = pricing_engine::ResourcePricing {
         kind: "CPU".to_string(),
         count: 2,
-        price_per_unit_rate: 0.000001,
+        price_per_unit: U256::from(1000).to_be_bytes_vec(),
     };
 
     let security_commitment = pricing_engine::AssetSecurityCommitment {

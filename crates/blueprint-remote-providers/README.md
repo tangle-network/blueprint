@@ -1,321 +1,75 @@
-# Blueprint Remote Providers
+# Blueprint remote providers
 
-Production-ready multi-cloud infrastructure provisioning for Blueprint services.
+Rent cloud GPUs from a blueprint or the Blueprint Manager. The public SDK
+exports this crate as `blueprint_sdk::remote` with its `remote-providers` feature.
 
-## Supported Providers
+The [GPU catalog](../core/gpu-catalog.json) owns GPU classes and provider SKUs.
+`ResourceSpec` preserves GPU class, count, and per-device VRAM separately from
+system RAM. A provider's fixed node size must match the request exactly.
 
-**Virtual Machines**: AWS EC2, GCP Compute Engine, Azure VMs, DigitalOcean Droplets, Vultr instances
-**Kubernetes**: GKE, EKS, AKS, DOKS, VKE, generic clusters
-**Deployment**: SSH-based binary deployment with real Blueprint execution
+## Rent with caller-owned credentials
 
-## Architecture & Entrypoints
+```rust,no_run
+use blueprint_remote_providers::{CloudProvider, CloudProvisioner, ResourceSpec};
+use blueprint_remote_providers::infra::traits::CloudProviderAdapter;
+use blueprint_remote_providers::providers::runpod::RunPodAdapter;
+use std::{collections::HashMap, time::Duration};
 
-### 1. Cloud Provider Adapters (High-Level)
-
-```rust
-use blueprint_remote_providers::{
-    CloudProviderAdapter, DeploymentTarget, ResourceSpec,
-    AwsAdapter, GcpAdapter, AzureAdapter, DigitalOceanAdapter, VultrAdapter,
+# async fn rent(api_key: String) -> Result<(), Box<dyn std::error::Error>> {
+let adapter = RunPodAdapter::with_credentials(api_key)?;
+let providers = HashMap::from([
+    (CloudProvider::RunPod, Box::new(adapter) as Box<dyn CloudProviderAdapter>),
+]);
+let cloud = CloudProvisioner::with_providers(providers)
+    .with_lease_store(".tangle/gpu-leases");
+cloud.resume_leases().await?;
+let spec = ResourceSpec {
+    gpu_class: Some("nvidia-b200".into()),
+    gpu_count: Some(8),
+    gpu_vram_gb: Some(180),
+    ..ResourceSpec::recommended()
 };
-
-// Provider-specific adapters
-let aws = AwsAdapter::new().await?;
-let gcp = GcpAdapter::new().await?;
-let azure = AzureAdapter::new().await?;
-let digitalocean = DigitalOceanAdapter::new().await?;
-let vultr = VultrAdapter::new().await?;
-
-// Deploy to VM via SSH
-let result = aws.deploy_blueprint_with_target(
-    &DeploymentTarget::VirtualMachine { 
-        runtime: ContainerRuntime::Docker 
-    },
-    "blueprint-image:latest",
-    &ResourceSpec::default(),
-    env_vars,
-).await?;
-
-// Deploy to managed Kubernetes
-let result = gcp.deploy_blueprint_with_target(
-    &DeploymentTarget::ManagedKubernetes {
-        cluster_id: "my-gke-cluster".to_string(),
-        namespace: "blueprints".to_string(),
-    },
-    "blueprint-image:latest",
-    &ResourceSpec::default(),
-    env_vars,
-).await?;
+let lease = cloud.allocate(&spec, Duration::from_secs(3600)).await?;
+println!("{}", lease.endpoint);
+// Transfer lease.access to the authorized lessee over an authenticated channel.
+lease.terminate().await?;
+# Ok(())
+# }
 ```
 
-### 2. Cloud Provisioner (Unified Access)
+`quotes` compares current provider prices. Unknown prices and unavailable SKUs
+are excluded. Allocation tries the next priced candidate if creation fails.
+Access uses a per-lease SSH key; provider account credentials stay in the adapter.
+An optional public key lets the lessee keep their existing private key.
 
-```rust
-use blueprint_remote_providers::{CloudProvisioner, CloudProvider};
+Expiry records use the deployment tracker. Keep the allocating process running
+and reopen the same store with `resume_leases` after restart. Failed retirement
+keeps its record for cleanup. Explicit termination verifies the provider no
+longer has the resource.
 
-// Single provisioner for all providers
-let provisioner = CloudProvisioner::new().await?;
+`CloudProvisioner::new` constructs adapters from the environment. Use adapter
+`with_credentials` constructors and `with_providers` when another application
+owns credentials. `with_endpoint` accepts an explicit provider gateway, scopes
+requests to its origin, and permits HTTP only for loopback test peers.
 
-// Get adapter for specific provider
-let adapter = provisioner.get_adapter(&CloudProvider::AWS)?;
+## Deploy workloads
 
-// Deploy using the adapter
-let result = adapter.deploy_blueprint_with_target(
-    &DeploymentTarget::VirtualMachine { 
-        runtime: ContainerRuntime::Docker 
-    },
-    "blueprint-image:latest",
-    &ResourceSpec::default(),
-    env_vars,
-).await?;
+The adapter deployment API supports SSH/container and Kubernetes workloads.
+Use the allocated instance's actual access endpoint. The manager's remote
+runtime deploys its binary or image onto the machine it rents.
+
+`require_tee` fails closed through [attestation](src/attestation/); read
+[AGENTS.md](AGENTS.md) before changing that boundary. A hardware attestation
+alone does not prove workload binding.
+
+## Check the public boundary
+
+```sh
+cargo test -p blueprint-remote-providers --no-default-features --features std --test gpu_catalog_adapters -- --test-threads=1
+cargo test -p blueprint-remote-providers --no-default-features --features std --test gpu_lease_adversarial -- --test-threads=1
 ```
 
-### 3. SSH Deployment Client (Direct SSH Access)
-
-```rust
-use blueprint_remote_providers::deployment::ssh::{
-    SshDeploymentClient, SshConnection, DeploymentConfig, ContainerRuntime
-};
-use std::collections::HashMap;
-
-// Create SSH connection
-let connection = SshConnection {
-    host: "192.168.1.100".to_string(),
-    port: 22,
-    username: "ubuntu".to_string(),
-    key_path: Some("/path/to/key.pem".to_string()),
-};
-
-// Configure deployment
-let config = DeploymentConfig {
-    name: "my-blueprint".to_string(),
-    namespace: "production".to_string(),
-    runtime: ContainerRuntime::Docker,
-};
-
-// Create SSH client
-let ssh_client = SshDeploymentClient::new(connection, config);
-
-// Deploy container with resource limits
-let mut env_vars = HashMap::new();
-env_vars.insert("ENV".to_string(), "production".to_string());
-
-let resource_spec = ResourceSpec {
-    cpu: 2.0,
-    memory_gb: 4.0,
-    storage_gb: 50.0,
-    gpu_count: None,
-    allow_spot: false,
-    qos: Default::default(),
-};
-
-let container_id = ssh_client
-    .deploy_container_with_resources(
-        "my-blueprint:latest",
-        "my-container",
-        env_vars,
-        Some(&resource_spec),
-    )
-    .await?;
-
-// Health check
-let is_healthy = ssh_client.health_check_container(&container_id).await?;
-
-// Cleanup
-ssh_client.remove_container(&container_id).await?;
-```
-
-### 4. Deployment Tracker (Lifecycle Management)
-
-```rust
-use blueprint_remote_providers::{
-    DeploymentTracker, DeploymentRecord, DeploymentType
-};
-
-// Create tracker
-let tracker_path = std::path::PathBuf::from(".tangle/deployments");
-let tracker = DeploymentTracker::new(&tracker_path).await?;
-
-// Track new deployment
-let mut record = DeploymentRecord::new(
-    "blueprint-id".to_string(),
-    DeploymentType::AwsEc2,
-    ResourceSpec::default(),
-    Some(3600), // 1 hour TTL
-);
-record.set_cloud_info(CloudProvider::AWS, "us-east-1".to_string());
-record.add_resource("instance_id".to_string(), "i-1234567890".to_string());
-
-tracker.track(record.clone()).await?;
-
-// List all deployments
-let deployments = tracker.list_all().await?;
-
-// Get specific deployment
-let deployment = tracker.get(&record.id).await?;
-
-// Remove deployment
-tracker.remove(&record.id).await?;
-```
-
-### 5. Update Manager (Zero-Downtime Updates)
-
-```rust
-use blueprint_remote_providers::deployment::{
-    UpdateManager, UpdateStrategy
-};
-use std::time::Duration;
-
-// Create update manager with strategy
-let strategy = UpdateStrategy::BlueGreen {
-    switch_timeout: Duration::from_secs(300),
-    health_check_duration: Duration::from_secs(60),
-};
-let mut update_manager = UpdateManager::new(strategy);
-
-// Update blueprint
-let new_deployment = update_manager
-    .update_blueprint(
-        adapter.as_ref(),
-        "blueprint:v2.0",
-        &resource_spec,
-        env_vars,
-        &current_deployment,
-    )
-    .await?;
-
-// Rollback if needed
-let rollback_deployment = update_manager
-    .rollback(
-        adapter.as_ref(),
-        "v1.0",
-        &current_deployment,
-    )
-    .await?;
-
-// View version history
-let versions = update_manager.list_versions();
-let history = update_manager.get_history(10);
-
-// Cleanup old versions
-update_manager
-    .cleanup_old_versions(adapter.as_ref(), 5)
-    .await?;
-```
-
-### 6. QoS Tunnel (Metrics & Monitoring)
-
-```rust
-use blueprint_remote_providers::deployment::qos_tunnel::{
-    QosTunnel, QosTunnelManager
-};
-
-// Create QoS tunnel to remote deployment
-let tunnel = QosTunnel::new(
-    "blueprint-id".to_string(),
-    "192.168.1.100".to_string(),
-    9615, // QoS metrics port
-).await?;
-
-// Get metrics endpoint
-let metrics_url = tunnel.local_metrics_url();
-
-// Manage multiple tunnels
-let mut tunnel_manager = QosTunnelManager::new();
-tunnel_manager.create_tunnel(
-    "blueprint-1",
-    "192.168.1.100",
-    9615,
-).await?;
-
-// Get tunnel
-if let Some(tunnel) = tunnel_manager.get_tunnel("blueprint-1") {
-    println!("Metrics at: {}", tunnel.local_metrics_url());
-}
-
-// Close tunnel
-tunnel_manager.close_tunnel("blueprint-1").await?;
-```
-
-### 7. Kubernetes Deployment (Optional Feature)
-
-```rust
-#[cfg(feature = "kubernetes")]
-use blueprint_remote_providers::deployment::kubernetes::{
-    KubernetesDeploymentClient, KubeConfig
-};
-
-// Create Kubernetes client
-let kube_config = KubeConfig {
-    context: Some("my-cluster".to_string()),
-    namespace: "blueprints".to_string(),
-};
-let k8s_client = KubernetesDeploymentClient::new(kube_config).await?;
-
-// Deploy to Kubernetes
-let deployment_result = k8s_client
-    .deploy_blueprint(
-        "blueprint-image:latest",
-        "my-blueprint",
-        &resource_spec,
-        env_vars,
-    )
-    .await?;
-```
-
-## Configuration
-
-Set provider credentials via environment variables:
-
-```bash
-# AWS
-export AWS_ACCESS_KEY_ID="..."
-export AWS_SECRET_ACCESS_KEY="..."
-
-# GCP
-export GCP_PROJECT_ID="my-project"
-export GCP_ACCESS_TOKEN="..."
-
-# Azure
-export AZURE_SUBSCRIPTION_ID="..."
-export AZURE_ACCESS_TOKEN="..."
-
-# DigitalOcean
-export DO_API_TOKEN="..."
-
-# Vultr
-export VULTR_API_KEY="..."
-```
-
-## Features
-
-**Production-Ready**: All critical issues resolved, comprehensive testing implemented
-**Shared Components**: Unified SSH deployment and security group management
-**Real Implementations**: No mocking in production code paths
-**Cost-Controlled Testing**: E2E tests with $0.01-0.10 cloud resource limits
-**Security**: Unified firewall/security group abstractions across providers
-
-## Testing
-
-```bash
-# All tests (197 functions across 44 files)
-cargo test -p blueprint-remote-providers
-
-# Feature-specific tests
-cargo test -p blueprint-remote-providers --features kubernetes
-cargo test -p blueprint-remote-providers --features aws,gcp
-
-# E2E tests (requires cloud credentials)
-cargo test -p blueprint-remote-providers test_multi_provider_real_sdk_integration -- --nocapture
-```
-
-## Provider Support
-
-| Feature | AWS | GCP | Azure | DigitalOcean | Vultr |
-|---------|-----|-----|-------|--------------|-------|
-| **VM Provisioning** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **SSH Deployment** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Managed K8s** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Security Groups** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Health Checks** | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-✅ **PRODUCTION READY** - All critical issues resolved, comprehensive testing implemented
+These integration targets use HTTP provider peers and create no billable GPU
+resources. Live cloud tests require credentials and an explicit spending budget.
+See the [decentralized design](../../docs/gpu-marketplace-strategy.md) for
+catalog, manager, quote, and consumer ownership.

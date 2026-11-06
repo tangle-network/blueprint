@@ -1,12 +1,7 @@
-//! TensorDock — GPU marketplace with a REST API. Hosts A100s and RTX GPUs at
-//! marketplace prices via a JSON API.
-//!
-//! <https://documenter.getpostman.com/view/10839702/UVByJrCz>
-//!
-//! Env vars:
-//! - `TENSORDOCK_API_KEY` — API key.
-//! - `TENSORDOCK_API_TOKEN` — API token (TensorDock uses both).
-//! - `TENSORDOCK_REGION` — optional region hint.
+//! TensorDock Marketplace host pricing and VM lifecycle.
+//! <https://documenter.getpostman.com/view/20973002/2s8YzMYRDc>
+//! The documented Marketplace API uses form bodies with key/token authentication.
+//! Credentials may be supplied by the caller or TENSORDOCK_API_KEY/TENSORDOCK_API_TOKEN.
 
 mod adapter;
 mod instance_mapper;

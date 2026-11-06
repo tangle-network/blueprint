@@ -1,18 +1,16 @@
 # blueprint-core
 
-Core runtime primitives used across the Blueprint SDK.
+Core runtime primitives, GPU catalog, and shared provisioning requirements.
+Most applications use the `blueprint-sdk` re-export.
 
-## What lives here
+The [GPU catalog](gpu-catalog.json) owns class identifiers, hardware properties,
+node count caps, and provider SKUs. `gpu::{catalog, find}` read the embedded JSON
+without requiring `std`. With `std`, `gpu::detect` measures operator devices
+through `nvidia-smi`; host RAM is independent of per-device VRAM.
 
-- Job model: `Job`, `JobId`, `JobCall`, `JobResult`.
-- Extractors and metadata primitives for handler inputs.
-- Core error and extension traits.
+`resources::{ResourceSpec, CloudProvider}` supplies the shared vocabulary for
+pricing, cloud adapters, and the manager. Provider quotes own current prices.
 
-## When to depend directly
-
-Most apps should use `blueprint-sdk`. Depend on `blueprint-core` directly for low-level integrations, custom runtimes, or framework extensions.
-
-## Related links
-
-- Source: https://github.com/tangle-network/blueprint/tree/main/crates/core
-- Runner docs: https://docs.tangle.tools/developers/blueprint-runner/introduction
+Job calls, extractors, metadata, and errors remain available through the source
+exports. See the [decentralized GPU design](../../docs/gpu-marketplace-strategy.md)
+for rental, quote, and consumer boundaries.

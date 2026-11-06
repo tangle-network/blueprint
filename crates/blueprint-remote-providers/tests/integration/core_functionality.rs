@@ -143,6 +143,7 @@ fn test_gpu_instance_selection() {
         storage_gb: 100.0,
         gpu_count: Some(1),
         allow_spot: false,
+        ..Default::default()
     };
     
     let instance = AwsProvisioner::map_instance(&gpu_spec);

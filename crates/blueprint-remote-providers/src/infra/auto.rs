@@ -206,8 +206,9 @@ impl AutoDeploymentManager {
         let enabled_providers = self.enabled_providers.read().await;
 
         if enabled_providers.is_empty() {
-            // Default to AWS if no providers configured
-            return Ok((CloudProvider::AWS, "us-west-2".to_string(), 0.10));
+            return Err(Error::ConfigurationError(
+                "No priced providers configured".into(),
+            ));
         }
 
         let mut best_option = None;

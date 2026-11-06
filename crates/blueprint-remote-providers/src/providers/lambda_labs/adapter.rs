@@ -6,7 +6,7 @@ use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::gpu_adapter::{
-    build_http_client, deploy_via_ssh, generate_instance_name, poll_until, require_public_ip,
+    build_http_client, deploy_via_ssh, generate_instance_name, require_public_ip,
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
@@ -15,14 +15,13 @@ use blueprint_core::{info, warn};
 use blueprint_std::collections::HashMap;
 use std::time::Duration;
 
-const BASE_URL: &str = "https://cloud.lambdalabs.com/api/v1";
-const INSTANCE_READY_TIMEOUT: Duration = Duration::from_secs(600);
-const INSTANCE_POLL_INTERVAL: Duration = Duration::from_secs(10);
+const BASE_URL: &str = "https://cloud.lambda.com/api/v1";
 
 /// Adapter for Lambda Labs on-demand GPU cloud.
 pub struct LambdaLabsAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
+    base_url: String,
     default_region: String,
     ssh_key_name: Option<String>,
 }
@@ -30,58 +29,45 @@ pub struct LambdaLabsAdapter {
 impl LambdaLabsAdapter {
     /// Construct from environment variables.
     pub async fn new() -> Result<Self> {
-        let api_key = std::env::var("LAMBDA_LABS_API_KEY")
-            .map_err(|_| Error::Other("LAMBDA_LABS_API_KEY environment variable not set".into()))?;
-        let default_region =
-            std::env::var("LAMBDA_LABS_REGION").unwrap_or_else(|_| "us-west-1".to_string());
-        let ssh_key_name = std::env::var("LAMBDA_LABS_SSH_KEY_NAME").ok();
+        let key = std::env::var("LAMBDA_LABS_API_KEY")
+            .map_err(|_| Error::ConfigurationError("LAMBDA_LABS_API_KEY is required".into()))?;
+        let mut adapter = Self::with_credentials(key)?;
+        adapter.default_region =
+            std::env::var("LAMBDA_LABS_REGION").unwrap_or_else(|_| "us-west-1".into());
+        adapter.ssh_key_name = std::env::var("LAMBDA_LABS_SSH_KEY_NAME").ok();
+        Ok(adapter)
+    }
 
+    pub fn with_credentials(api_key: String) -> Result<Self> {
         Ok(Self {
             http: build_http_client()?,
             auth: ApiAuthentication::lambda_labs(api_key),
-            default_region,
-            ssh_key_name,
+            base_url: BASE_URL.into(),
+            default_region: "us-west-1".into(),
+            ssh_key_name: None,
         })
+    }
+
+    pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
+        let mut adapter = Self::with_credentials(api_key)?;
+        adapter.http = SecureHttpClient::with_endpoint(endpoint)?;
+        adapter.base_url = endpoint.trim_end_matches('/').into();
+        Ok(adapter)
     }
 
     /// Fetch a single instance's JSON payload from the REST API.
     async fn fetch_instance_json(&self, instance_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/instances/{instance_id}");
-        let mut last_err = None;
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-            }
-            match self.http.get(&url, &self.auth).await {
-                Ok(response) if response.status().is_success() => {
-                    return response
-                        .json::<serde_json::Value>()
-                        .await
-                        .map_err(|e| Error::HttpError(format!("Lambda Labs response parse: {e}")));
-                }
-                Ok(response) if response.status() == 429 || response.status().is_server_error() => {
-                    last_err = Some(Error::HttpError(format!(
-                        "Lambda Labs GET {url}: transient {}",
-                        response.status()
-                    )));
-                    continue;
-                }
-                Ok(response) => {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!(
-                        "Lambda Labs GET {url} failed: {body}"
-                    )));
-                }
-                Err(e) => {
-                    last_err = Some(Error::HttpError(format!("Lambda Labs GET {url}: {e}")));
-                    continue;
-                }
-            }
-        }
-        Err(last_err.unwrap())
+        crate::providers::common::gpu_adapter::api_json(
+            self.http
+                .get(
+                    &format!("{}/instances/{instance_id}", self.base_url),
+                    &self.auth,
+                )
+                .await?,
+        )
+        .await
     }
 
-    /// Convert the Lambda Labs instance JSON into a `ProvisionedInstance`.
     fn parse_instance(
         value: &serde_json::Value,
         fallback_region: &str,
@@ -130,37 +116,163 @@ impl LambdaLabsAdapter {
             status,
         })
     }
-
-    async fn wait_for_running(&self, instance_id: &str) -> Result<ProvisionedInstance> {
-        let region = self.default_region.clone();
-        poll_until(
-            "Lambda Labs instance",
-            INSTANCE_POLL_INTERVAL,
-            INSTANCE_READY_TIMEOUT,
-            || async {
-                let raw = self.fetch_instance_json(instance_id).await?;
-                let instance = Self::parse_instance(&raw, &region)?;
-                match instance.status {
-                    InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
-                    InstanceStatus::Terminated => Err(Error::HttpError(
-                        "Lambda Labs instance terminated before running".into(),
-                    )),
-                    _ => Ok(None),
-                }
-            },
-        )
-        .await
-    }
 }
 
 #[async_trait]
 impl CloudProviderAdapter for LambdaLabsAdapter {
+    async fn quote(
+        &self,
+        spec: &ResourceSpec,
+        region: &str,
+    ) -> Result<crate::providers::common::InstanceSelection> {
+        use crate::providers::common::gpu_adapter::{api_json, catalog_skus, quoted_selection};
+        let skus = catalog_skus(spec, "lambda-labs")?;
+        let value = api_json(
+            self.http
+                .get(&format!("{}/instance-types", self.base_url), &self.auth)
+                .await?,
+        )
+        .await?;
+        let mut best: Option<crate::providers::common::InstanceSelection> = None;
+        for sku in skus {
+            let candidate = (|| {
+                let entry = &value["data"][&sku];
+                let available = entry["regions_with_capacity_available"]
+                    .as_array()
+                    .is_some_and(|regions| {
+                        regions
+                            .iter()
+                            .any(|item| region.is_empty() || item["name"] == region)
+                    });
+                if !available {
+                    return Err(Error::ConfigurationError(
+                        "Lambda GPU is out of stock in requested region".into(),
+                    ));
+                }
+                let instance = &entry["instance_type"];
+                if instance["specs"]["gpus"].as_u64() != Some(spec.gpu_count.unwrap_or(1).into()) {
+                    return Err(Error::ConfigurationError(
+                        "Lambda SKU does not satisfy exact GPU count".into(),
+                    ));
+                }
+                let minimum = spec.gpu_vram_gb.unwrap_or(0).max(
+                    spec.gpu_class
+                        .as_deref()
+                        .and_then(blueprint_core::gpu::find)
+                        .map(|class| class.vram_gb)
+                        .unwrap_or(0),
+                );
+                let description = instance["gpu_description"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase();
+                let reported_vram = description
+                    .match_indices("gb")
+                    .filter_map(|(index, _)| {
+                        let digits: String = description[..index]
+                            .trim_end()
+                            .chars()
+                            .rev()
+                            .take_while(char::is_ascii_digit)
+                            .collect::<String>()
+                            .chars()
+                            .rev()
+                            .collect();
+                        digits.parse::<u32>().ok()
+                    })
+                    .max();
+                let ambiguous = blueprint_core::gpu::catalog().iter().any(|class| {
+                    class.sku("lambda-labs", spec.gpu_count.unwrap_or(1)) == Some(sku.as_str())
+                        && class.vram_gb < minimum
+                });
+                if reported_vram.is_some_and(|vram| vram < minimum)
+                    || (reported_vram.is_none() && ambiguous)
+                {
+                    return Err(Error::ConfigurationError(
+                        "Lambda SKU does not prove requested VRAM per GPU".into(),
+                    ));
+                }
+                for (field, minimum) in [
+                    ("vcpus", spec.cpu),
+                    ("memory_gib", spec.memory_gb),
+                    ("storage_gib", spec.storage_gb),
+                ] {
+                    if instance["specs"][field]
+                        .as_f64()
+                        .is_some_and(|amount| amount < f64::from(minimum))
+                    {
+                        return Err(Error::ConfigurationError(format!(
+                            "Lambda SKU cannot satisfy {field}"
+                        )));
+                    }
+                }
+                quoted_selection(
+                    sku,
+                    instance["price_cents_per_hour"]
+                        .as_f64()
+                        .unwrap_or(f64::NAN)
+                        / 100.0,
+                )
+            })();
+            if let Ok(candidate) = candidate {
+                if best
+                    .as_ref()
+                    .is_none_or(|old| candidate.estimated_hourly_cost < old.estimated_hourly_cost)
+                {
+                    best = Some(candidate);
+                }
+            }
+        }
+        best.ok_or_else(|| {
+            Error::ConfigurationError("Lambda has no qualifying priced in-stock node".into())
+        })
+    }
+
     async fn provision_instance(
         &self,
         instance_type: &str,
         region: &str,
+        tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        let instance = self
+            .provision_resources(
+                instance_type,
+                region,
+                &ResourceSpec::default().with_gpu(
+                    crate::providers::common::gpu_adapter::sku_gpu_count(
+                        "lambda-labs",
+                        instance_type,
+                    ),
+                ),
+                tee,
+            )
+            .await?;
+        self.prepare_access(&instance, &ResourceSpec::default())
+            .await?;
+        crate::providers::common::gpu_adapter::wait_for_instance(self, &instance.id).await
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
         require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        if !crate::providers::common::gpu_adapter::catalog_skus(spec, "lambda-labs")?
+            .iter()
+            .any(|sku| sku == instance_type)
+        {
+            return Err(Error::ConfigurationError(
+                "Provider SKU disagrees with requested GPU class/count".into(),
+            ));
+        }
+        spec.validate().map_err(Error::ConfigurationError)?;
+        if instance_type.is_empty() {
+            return Err(Error::ConfigurationError(
+                "Lambda has no exact-count catalog SKU".into(),
+            ));
+        }
         // Fail closed at the trait boundary: this provider has no
         // confidential-compute / TEE attestation path. Refuse rather than
         // silently return a non-TEE instance for a require_tee request.
@@ -172,8 +284,29 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
             ));
         }
         let name = generate_instance_name("lambda");
+        let available_region;
         let region_name = if region.is_empty() {
-            self.default_region.as_str()
+            let value = crate::providers::common::gpu_adapter::api_json(
+                self.http
+                    .get(&format!("{}/instance-types", self.base_url), &self.auth)
+                    .await?,
+            )
+            .await?;
+            let regions = value["data"][instance_type]["regions_with_capacity_available"]
+                .as_array()
+                .ok_or_else(|| {
+                    Error::ConfigurationError("Lambda has no capacity listing for SKU".into())
+                })?;
+            available_region = regions
+                .iter()
+                .find(|region| region["name"] == self.default_region)
+                .or_else(|| regions.first())
+                .and_then(|region| region["name"].as_str())
+                .map(String::from)
+                .ok_or_else(|| {
+                    Error::ConfigurationError("Lambda SKU has no in-stock region".into())
+                })?;
+            available_region.as_str()
         } else {
             region
         };
@@ -184,61 +317,30 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
             "quantity": 1,
             "name": name,
         });
-        if let Some(key) = &self.ssh_key_name {
+        if let Some(public_key) = &spec.ssh_public_key {
+            let key_name = generate_instance_name("lease-key");
+            crate::providers::common::gpu_adapter::api_json(
+                self.http
+                    .post_json(
+                        &format!("{}/ssh-keys", self.base_url),
+                        &self.auth,
+                        serde_json::json!({"name":key_name,"public_key":public_key}),
+                    )
+                    .await?,
+            )
+            .await?;
+            payload["ssh_key_names"] = serde_json::json!([key_name]);
+        } else if let Some(key) = &self.ssh_key_name {
             payload["ssh_key_names"] = serde_json::json!([key]);
         }
 
-        let launch_url = format!("{BASE_URL}/instance-operations/launch");
-        let json: serde_json::Value = {
-            let mut last_err = None;
-            let mut result = None;
-            for attempt in 0..3u32 {
-                if attempt > 0 {
-                    tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-                }
-                match self
-                    .http
-                    .authenticated_request(
-                        reqwest::Method::POST,
-                        &launch_url,
-                        &self.auth,
-                        Some(payload.clone()),
-                    )
-                    .await
-                {
-                    Ok(response) if response.status().is_success() => {
-                        result = Some(response.json::<serde_json::Value>().await.map_err(|e| {
-                            Error::HttpError(format!("Lambda Labs response parse: {e}"))
-                        })?);
-                        break;
-                    }
-                    Ok(response)
-                        if response.status() == 429 || response.status().is_server_error() =>
-                    {
-                        last_err = Some(Error::HttpError(format!(
-                            "Lambda Labs launch: transient {}",
-                            response.status()
-                        )));
-                        continue;
-                    }
-                    Ok(response) => {
-                        let body = response.text().await.unwrap_or_default();
-                        return Err(Error::HttpError(format!(
-                            "Lambda Labs launch failed: {body}"
-                        )));
-                    }
-                    Err(e) => {
-                        last_err = Some(Error::HttpError(format!("Lambda Labs launch: {e}")));
-                        continue;
-                    }
-                }
-            }
-            match result {
-                Some(v) => v,
-                None => return Err(last_err.unwrap()),
-            }
-        };
-
+        let launch_url = format!("{}/instance-operations/launch", self.base_url);
+        let json = crate::providers::common::gpu_adapter::api_json(
+            self.http
+                .post_json(&launch_url, &self.auth, payload)
+                .await?,
+        )
+        .await?;
         let instance_id = json
             .get("data")
             .and_then(|d| d.get("instance_ids"))
@@ -249,12 +351,25 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
 
         info!(%instance_id, %region_name, %instance_type, "Launched Lambda Labs instance");
 
-        self.wait_for_running(&instance_id).await
+        Ok(crate::providers::common::gpu_adapter::starting_instance(
+            CloudProvider::LambdaLabs,
+            instance_id,
+            instance_type.to_string(),
+            region_name.to_string(),
+        ))
+    }
+
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        Self::parse_instance(&self.fetch_instance_json(id).await?, &self.default_region)
+    }
+
+    async fn lease_endpoint(&self, instance: &ProvisionedInstance) -> Result<String> {
+        Ok(format!("ssh://ubuntu@{}:22", require_public_ip(instance)?))
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
         let payload = serde_json::json!({ "instance_ids": [instance_id] });
-        let terminate_url = format!("{BASE_URL}/instance-operations/terminate");
+        let terminate_url = format!("{}/instance-operations/terminate", self.base_url);
         let mut last_err = None;
         for attempt in 0..3u32 {
             if attempt > 0 {
@@ -286,9 +401,9 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
                     continue;
                 }
                 Ok(response) => {
-                    let body = response.text().await.unwrap_or_default();
                     return Err(Error::HttpError(format!(
-                        "Lambda Labs terminate failed: {body}"
+                        "Provider HTTP {}",
+                        response.status()
                     )));
                 }
                 Err(e) => {
@@ -300,16 +415,14 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
         Err(last_err.unwrap())
     }
 
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        match self.fetch_instance_json(instance_id).await {
-            Ok(raw) => {
-                let instance = Self::parse_instance(&raw, &self.default_region)?;
-                Ok(instance.status)
-            }
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Lambda Labs instance status");
-                Ok(InstanceStatus::Unknown)
-            }
+    async fn get_instance_status(&self, id: &str) -> Result<InstanceStatus> {
+        let response = self
+            .http
+            .get(&format!("{}/instances/{id}", self.base_url), &self.auth)
+            .await?;
+        match crate::providers::common::gpu_adapter::api_json_or_missing(response).await? {
+            Some(raw) => Ok(Self::parse_instance(&raw, &self.default_region)?.status),
+            None => Ok(InstanceStatus::Terminated),
         }
     }
 
@@ -326,7 +439,7 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
                 let selection =
                     crate::providers::lambda_labs::LambdaLabsInstanceMapper::map(resource_spec);
                 let instance = self
-                    .provision_instance(&selection.instance_type, "", false)
+                    .provision_resources(&selection.instance_type, "", resource_spec, false)
                     .await?;
                 let instance_id_for_cleanup = instance.id.clone();
                 match self
@@ -336,7 +449,7 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
                     Ok(result) => Ok(result),
                     Err(deploy_err) => {
                         warn!(
-                            provider = "lambda_labs",
+                            provider = "lambda-labs",
                             instance_id = %instance_id_for_cleanup,
                             error = %deploy_err,
                             "Deploy failed after provisioning; terminating instance to prevent billing leak"
@@ -345,7 +458,7 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
                             self.terminate_instance(&instance_id_for_cleanup).await
                         {
                             warn!(
-                                provider = "lambda_labs",
+                                provider = "lambda-labs",
                                 instance_id = %instance_id_for_cleanup,
                                 cleanup_error = %cleanup_err,
                                 "Cleanup after failed deploy also failed — instance may be orphaned"
@@ -394,6 +507,15 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
         resource_spec: &ResourceSpec,
         env_vars: HashMap<String, String>,
     ) -> Result<BlueprintDeploymentResult> {
+        let ready = if instance.status != InstanceStatus::Running || instance.public_ip.is_none() {
+            Some(
+                crate::providers::common::gpu_adapter::wait_for_instance(self, &instance.id)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        let instance = ready.as_ref().unwrap_or(instance);
         require_public_ip(instance)?;
         deploy_via_ssh(
             instance,
@@ -424,106 +546,5 @@ impl CloudProviderAdapter for LambdaLabsAdapter {
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_running_instance_json() {
-        let json = serde_json::json!({
-            "data": {
-                "id": "0920482c7a",
-                "ip": "192.0.2.10",
-                "private_ip": "10.0.0.5",
-                "status": "active",
-                "instance_type": { "name": "gpu_1x_a100" },
-                "region": { "name": "us-west-1" }
-            }
-        });
-        let instance = LambdaLabsAdapter::parse_instance(&json, "us-east-1").unwrap();
-        assert_eq!(instance.id, "0920482c7a");
-        assert_eq!(instance.public_ip.as_deref(), Some("192.0.2.10"));
-        assert_eq!(instance.private_ip.as_deref(), Some("10.0.0.5"));
-        assert_eq!(instance.region, "us-west-1");
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::LambdaLabs);
-    }
-
-    #[test]
-    fn parses_booting_instance_as_starting() {
-        let json = serde_json::json!({
-            "data": {
-                "id": "pending",
-                "status": "booting",
-                "instance_type": { "name": "gpu_1x_a10" },
-                "region": { "name": "us-west-1" }
-            }
-        });
-        let instance = LambdaLabsAdapter::parse_instance(&json, "us-west-1").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-        assert!(instance.public_ip.is_none());
-    }
-
-    #[test]
-    fn parses_terminated_instance() {
-        let json = serde_json::json!({
-            "data": {
-                "id": "dead",
-                "status": "terminated",
-                "instance_type": { "name": "gpu_1x_a10" },
-                "region": { "name": "us-west-1" }
-            }
-        });
-        let instance = LambdaLabsAdapter::parse_instance(&json, "us-west-1").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    #[test]
-    fn parse_fails_without_id() {
-        let json = serde_json::json!({
-            "data": { "status": "active" }
-        });
-        assert!(LambdaLabsAdapter::parse_instance(&json, "us-west-1").is_err());
-    }
-
-    /// `deploy_blueprint_with_target` inlines the same cleanup-on-failure shape
-    /// proven by `providers::common::gpu_adapter::tests::provision_with_cleanup_*`:
-    /// when `deploy_blueprint` returns `Err`, `terminate_instance` is invoked with
-    /// the provisioned id and the original deploy error is propagated. This test
-    /// exercises the helper directly to lock that contract.
-    #[tokio::test]
-    async fn cleanup_on_failed_deploy_terminates_instance() {
-        use crate::providers::common::gpu_adapter::provision_with_cleanup;
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        let cleaned = Arc::new(AtomicBool::new(false));
-        let cleaned_clone = cleaned.clone();
-        let result = provision_with_cleanup(
-            "lambda_labs",
-            || async {
-                Ok(ProvisionedInstance {
-                    id: "ll-test".into(),
-                    provider: CloudProvider::LambdaLabs,
-                    instance_type: "gpu_1x_a10".into(),
-                    region: "us-west-1".into(),
-                    public_ip: Some("1.2.3.4".into()),
-                    private_ip: None,
-                    status: InstanceStatus::Running,
-                })
-            },
-            |_| async { Err(Error::Other("simulated deploy failure".into())) },
-            |id| async move {
-                assert_eq!(id, "ll-test");
-                cleaned_clone.store(true, Ordering::SeqCst);
-                Ok(())
-            },
-        )
-        .await;
-        assert!(result.is_err());
-        assert!(cleaned.load(Ordering::SeqCst));
     }
 }

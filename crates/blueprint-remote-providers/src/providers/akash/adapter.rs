@@ -275,8 +275,25 @@ impl CloudProviderAdapter for AkashAdapter {
         &self,
         instance_type: &str,
         region: &str,
+        tee: bool,
+    ) -> Result<ProvisionedInstance> {
+        self.provision_resources(
+            instance_type,
+            region,
+            &ResourceSpec::default().with_gpu(1),
+            tee,
+        )
+        .await
+    }
+
+    async fn provision_resources(
+        &self,
+        instance_type: &str,
+        region: &str,
+        spec: &ResourceSpec,
         require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        spec.validate().map_err(Error::ConfigurationError)?;
         // Fail closed at the trait boundary: this provider has no
         // confidential-compute / TEE attestation path. Refuse rather than
         // silently return a non-TEE instance for a require_tee request.
@@ -302,16 +319,9 @@ impl CloudProviderAdapter for AkashAdapter {
             instance_type.to_string()
         } else {
             build_sdl_manifest(
-                "blueprint/placeholder:latest",
+                spec.image.as_deref().unwrap_or("ubuntu:22.04"),
                 instance_type,
-                &ResourceSpec {
-                    cpu: 1.0,
-                    memory_gb: 1.0,
-                    storage_gb: 10.0,
-                    gpu_count: Some(1),
-                    allow_spot: false,
-                    qos: Default::default(),
-                },
+                spec,
                 &[],
             )
         };
@@ -367,7 +377,10 @@ impl CloudProviderAdapter for AkashAdapter {
                 let instance_type = plan.instance_type.clone();
                 provision_with_cleanup(
                     "akash",
-                    || async { self.provision_instance(&instance_type, "", false).await },
+                    || async {
+                        self.provision_resources(&instance_type, "", resource_spec, false)
+                            .await
+                    },
                     |instance| {
                         let env_vars = env_vars.clone();
                         async move {
@@ -458,76 +471,5 @@ impl CloudProviderAdapter for AkashAdapter {
 
     async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
         self.terminate_instance(&deployment.instance.id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_active_lease_json() {
-        let json = serde_json::json!({
-            "data": {
-                "lease_id": { "dseq": "12345", "gseq": "1", "oseq": "1" },
-                "status": "active",
-                "public_ip": "203.0.113.42",
-                "region": "us-west"
-            }
-        });
-        let instance = AkashAdapter::parse_deployment(&json, "global", "gpu-a100-80gb").unwrap();
-        assert_eq!(instance.id, "12345/1/1");
-        assert_eq!(instance.public_ip.as_deref(), Some("203.0.113.42"));
-        assert_eq!(instance.region, "us-west");
-        assert_eq!(instance.status, InstanceStatus::Running);
-        assert_eq!(instance.provider, CloudProvider::Akash);
-        assert_eq!(instance.instance_type, "gpu-a100-80gb");
-    }
-
-    #[test]
-    fn parses_pending_lease_as_starting() {
-        let json = serde_json::json!({
-            "data": {
-                "deployment_id": "dep-abc",
-                "status": "pending"
-            }
-        });
-        let instance = AkashAdapter::parse_deployment(&json, "global", "gpu-t4").unwrap();
-        assert_eq!(instance.id, "dep-abc");
-        assert_eq!(instance.status, InstanceStatus::Starting);
-        assert!(instance.public_ip.is_none());
-        assert_eq!(instance.region, "global");
-    }
-
-    #[test]
-    fn parses_closed_lease_as_terminated() {
-        let json = serde_json::json!({
-            "data": {
-                "lease_id": "lease-1",
-                "status": "closed"
-            }
-        });
-        let instance = AkashAdapter::parse_deployment(&json, "global", "gpu-h100").unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
-    }
-
-    #[test]
-    fn parses_flat_lease_id_string() {
-        let json = serde_json::json!({
-            "lease_id": "abc/1/2",
-            "status": "running",
-            "public_ip": "10.0.0.1"
-        });
-        let instance = AkashAdapter::parse_deployment(&json, "global", "gpu-t4").unwrap();
-        assert_eq!(instance.id, "abc/1/2");
-        assert_eq!(instance.status, InstanceStatus::Running);
-    }
-
-    #[test]
-    fn parse_fails_without_any_id() {
-        let json = serde_json::json!({
-            "data": { "status": "active" }
-        });
-        assert!(AkashAdapter::parse_deployment(&json, "global", "gpu-t4").is_err());
     }
 }

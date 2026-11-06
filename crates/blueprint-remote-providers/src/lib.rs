@@ -9,6 +9,7 @@ pub mod auth_integration;
 pub mod config;
 pub mod core;
 pub mod infra;
+pub mod leases;
 pub mod monitoring;
 pub mod observability;
 pub mod pricing;
@@ -24,6 +25,7 @@ pub use config::{AwsConfig, AzureConfig, CloudConfig, DigitalOceanConfig, GcpCon
 pub use core::{CloudProvider, Error, ResourceSpec, Result};
 pub use deployment::{DeploymentTracker, SshDeploymentClient};
 pub use infra::{CloudProvisioner, InstanceStatus, ProvisionedInstance};
+pub use leases::{Lease, LeaseAccess, ProviderQuote};
 pub use monitoring::{HealthCheckResult, HealthMonitor, HealthStatus};
 pub use pricing::{PricingService, ServiceCostReport as CostReport};
 pub use providers::{ProvisionedInfrastructure, ProvisioningConfig};

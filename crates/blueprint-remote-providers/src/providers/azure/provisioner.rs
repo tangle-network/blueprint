@@ -105,6 +105,7 @@ impl AzureProvisioner {
         config: &ProvisioningConfig,
     ) -> Result<ProvisionedInfrastructure> {
         let token = self.get_access_token().await?;
+        spec.validate().map_err(Error::ConfigurationError)?;
         let vm_name = config.name.clone();
         let location = if config.region.is_empty() {
             "eastus"
@@ -487,13 +488,12 @@ impl AzureProvisioner {
     }
 
     /// Select VM size based on resource requirements
-    fn select_vm_size(&self, spec: &ResourceSpec) -> &'static str {
+    fn select_vm_size(&self, spec: &ResourceSpec) -> String {
+        if spec.gpu_count.is_some() || spec.gpu_class.is_some() {
+            return crate::providers::common::gpu_adapter::catalog_sku(spec, "azure")
+                .unwrap_or_default();
+        }
         match (spec.cpu, spec.memory_gb, spec.gpu_count) {
-            // GPU instances
-            (_, _, Some(gpu)) if gpu >= 4 => "Standard_NC24ads_A100_v4",
-            (_, _, Some(gpu)) if gpu >= 2 => "Standard_NC12s_v3",
-            (_, _, Some(_)) => "Standard_NC6s_v3",
-
             // High memory
             (cpu, mem, _) if mem > cpu * 8.0 => {
                 if mem <= 16.0 {
@@ -517,6 +517,7 @@ impl AzureProvisioner {
             (cpu, mem, _) if cpu <= 4.0 && mem <= 16.0 => "Standard_B4ms",
             _ => "Standard_D4s_v5",
         }
+        .into()
     }
 
     /// Terminate an Azure VM

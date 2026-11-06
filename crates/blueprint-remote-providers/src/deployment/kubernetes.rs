@@ -22,11 +22,13 @@ use kube::{
 pub struct KubernetesDeploymentClient {
     client: Client,
     namespace: String,
+    node_selector: Option<BTreeMap<String, String>>,
 }
 
 impl KubernetesDeploymentClient {
     /// Create a new Kubernetes deployment client
     pub async fn new(namespace: Option<String>) -> Result<Self> {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let config = kube::Config::infer()
             .await
             .map_err(|e| Error::ConfigurationError(format!("Failed to infer k8s config: {}", e)))?;
@@ -37,7 +39,20 @@ impl KubernetesDeploymentClient {
 
         let namespace = namespace.unwrap_or_else(|| "default".to_string());
 
-        Ok(Self { client, namespace })
+        Ok(Self::with_client(client, namespace))
+    }
+
+    pub fn with_client(client: Client, namespace: String) -> Self {
+        Self {
+            client,
+            namespace,
+            node_selector: None,
+        }
+    }
+
+    pub fn with_node_selector(mut self, selector: BTreeMap<String, String>) -> Self {
+        self.node_selector = Some(selector);
+        self
     }
 
     /// Deploy a Blueprint service to Kubernetes with QoS port exposure
@@ -171,6 +186,10 @@ impl KubernetesDeploymentClient {
                 ); // 50% request
             }
 
+            if let Some(count) = spec.gpu_count {
+                limits.insert("nvidia.com/gpu".into(), Quantity(count.to_string()));
+                requests.insert("nvidia.com/gpu".into(), Quantity(count.to_string()));
+            }
             container.resources = Some(k8s_openapi::api::core::v1::ResourceRequirements {
                 limits: Some(limits),
                 requests: Some(requests),
@@ -207,6 +226,7 @@ impl KubernetesDeploymentClient {
                     }),
                     spec: Some(PodSpec {
                         containers: vec![container],
+                        node_selector: self.node_selector.clone(),
                         ..Default::default()
                     }),
                 },

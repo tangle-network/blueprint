@@ -217,7 +217,7 @@ testing-faas = [
 cronjob = ["blueprint-producers-extra/cron"]
 
 ## Enable remote cloud deployment providers
-remote-providers = ["dep:blueprint-remote-providers"]
+remote-providers = ["std", "dep:blueprint-remote-providers", "blueprint-remote-providers/std"]
 
 ## Enable FaaS (Function-as-a-Service) execution support
 faas = ["blueprint-runner/faas"]
@@ -238,3 +238,9 @@ tee = ["dep:blueprint-tee", "blueprint-runner/tee"]
 [package.metadata.docs.rs]
 features = ["tangle", "tangle-aggregation", "tangle-p2p-aggregation", "evm", "networking", "round-based-compat", "gossip", "agg-sig-gossip", "local-store", "macros", "build", "testing", "cronjob"]
 rustdoc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+wiremock.workspace = true
