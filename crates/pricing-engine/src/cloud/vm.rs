@@ -226,9 +226,8 @@ impl PricingFetcher {
         if exact_sku.is_empty() || region.is_empty() {
             return Ok(None);
         }
-        // As checked 2026-11-06, Compute machine types are not Billing SKU ids.
-        // Pricing a GPU/core/RAM component as a whole VM would underquote it.
-        // Source: https://cloud.google.com/billing/docs/reference/rest/v1/services.skus/list
+        // Compute machine types are not Billing SKU ids; components do not quote a whole VM.
+        // https://cloud.google.com/billing/docs/reference/rest/v1/services.skus/list
         if provider == CloudProvider::GCP {
             return Ok(None);
         }
@@ -441,17 +440,13 @@ impl PricingFetcher {
         region: &str,
         sku: Option<&str>,
     ) -> Result<Vec<InstanceInfo>> {
-        let base = self.endpoint(&provider)?;
         let path: &str = match provider {
             CloudProvider::Azure => "/api/retail/prices",
             CloudProvider::DigitalOcean => "/v2/sizes?per_page=200",
             CloudProvider::Vultr => "/v2/plans?per_page=100",
-            _ => {
-                return Err(PricingError::Config(
-                    "No whole-instance pricing API configured".into(),
-                ));
-            }
+            _ => return Ok(Vec::new()),
         };
+        let base = self.endpoint(&provider)?;
         let mut url = base
             .join(path)
             .map_err(|_| PricingError::Config("Invalid provider pricing route".into()))?;
