@@ -1,139 +1,38 @@
-//! Integration tests for cloud deployment commands.
-
+//! Cloud behavior through the shipped CLI process boundary.
 #![cfg(feature = "remote-providers")]
 
-#[cfg(test)]
-mod cloud_tests {
-    use std::process::Command;
+use std::process::{Command, Output};
 
-    /// Test that cloud help command works
-    #[test]
-    fn test_cloud_help() {
-        let output = Command::new("cargo")
-            .args(&[
-                "run",
-                "-p",
-                "cargo-tangle",
-                "--",
-                "tangle",
-                "cloud",
-                "--help",
-            ])
-            .output()
-            .expect("Failed to execute command");
+fn command(args: &[&str]) -> Output {
+    let home = tempfile::tempdir().unwrap();
+    Command::new(env!("CARGO_BIN_EXE_cargo-tangle"))
+        .args(["tangle", "cloud"])
+        .args(args)
+        .env_clear()
+        .env("HOME", home.path())
+        .env("XDG_CONFIG_HOME", home.path())
+        .env("PATH", "/usr/bin:/bin")
+        .current_dir(home.path())
+        .output()
+        .unwrap()
+}
 
-        assert!(
-            output.status.success() || output.status.code() == Some(0),
-            "Cloud help command should work"
-        );
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(
-            stdout.contains("Cloud deployment") || stdout.contains("configure"),
-            "Help should mention cloud commands"
-        );
-    }
-
-    /// Test cloud configure help
-    #[test]
-    fn test_cloud_configure_help() {
-        let output = Command::new("cargo")
-            .args(&[
-                "run",
-                "-p",
-                "cargo-tangle",
-                "--",
-                "tangle",
-                "cloud",
-                "configure",
-                "--help",
-            ])
-            .output()
-            .expect("Failed to execute command");
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        assert!(
-            stdout.contains("provider") || stderr.contains("provider"),
-            "Configure help should mention provider"
-        );
-    }
-
-    /// Test cloud estimate help
-    #[test]
-    fn test_cloud_estimate_help() {
-        let output = Command::new("cargo")
-            .args(&[
-                "run",
-                "-p",
-                "cargo-tangle",
-                "--",
-                "tangle",
-                "cloud",
-                "estimate",
-                "--help",
-            ])
-            .output()
-            .expect("Failed to execute command");
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        assert!(
-            stdout.contains("cost")
-                || stdout.contains("compare")
-                || stderr.contains("cost")
-                || stderr.contains("compare"),
-            "Estimate help should mention cost or compare"
-        );
-    }
-
-    /// Test that invalid provider is rejected
-    #[test]
-    fn test_invalid_provider() {
-        let output = Command::new("cargo")
-            .args(&[
-                "run",
-                "-p",
-                "cargo-tangle",
-                "--",
-                "tangle",
-                "cloud",
-                "configure",
-                "invalid",
-            ])
-            .output()
-            .expect("Failed to execute command");
-
-        assert!(!output.status.success(), "Invalid provider should fail");
-    }
-
-    /// Test cloud status without deployments
-    #[test]
-    fn test_cloud_status_empty() {
-        // This test would normally check actual status
-        // For now, just verify the command structure exists
-        let output = Command::new("cargo")
-            .args(&[
-                "run",
-                "-p",
-                "cargo-tangle",
-                "--",
-                "tangle",
-                "cloud",
-                "status",
-                "--help",
-            ])
-            .output()
-            .expect("Failed to execute command");
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        assert!(
-            stdout.contains("deployment") || stderr.contains("deployment"),
-            "Status help should mention deployments"
-        );
-    }
+#[test]
+fn invalid_duration_and_missing_deployment_fail_without_fabricated_results() {
+    let duration = command(&["estimate", "--duration", "0h"]);
+    assert!(
+        !duration.status.success(),
+        "zero duration was priced: {}",
+        String::from_utf8_lossy(&duration.stdout)
+    );
+    assert!(
+        duration.stdout.is_empty(),
+        "invalid requests must not print estimates"
+    );
+    let status = command(&["status", "missing-deployment"]);
+    assert!(
+        !status.status.success(),
+        "missing deployment was shown as running"
+    );
+    assert!(!String::from_utf8_lossy(&status.stdout).contains("54.123.45.67"));
 }
