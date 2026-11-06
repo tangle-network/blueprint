@@ -33,6 +33,8 @@ pub enum ProviderCredentials {
         region: Option<String>,
         #[serde(default)]
         ssh_key_name: Option<String>,
+        #[serde(default)]
+        firewall_ruleset_ids: Vec<String>,
     },
     #[serde(rename = "bittensor-lium")]
     BittensorLium {
@@ -101,8 +103,13 @@ impl CloudProvisioner {
                 ProviderCredentials::BittensorLium { .. } => {
                     Box::new(adapter!(BittensorLiumAdapter))
                 }
-                ProviderCredentials::LambdaLabs { ssh_key_name, .. } => {
-                    let mut adapter = adapter!(LambdaLabsAdapter);
+                ProviderCredentials::LambdaLabs {
+                    ssh_key_name,
+                    firewall_ruleset_ids,
+                    ..
+                } => {
+                    let mut adapter = adapter!(LambdaLabsAdapter)
+                        .with_firewall_rulesets(firewall_ruleset_ids.clone());
                     if let Some(name) = ssh_key_name {
                         adapter = adapter.with_ssh_key_name(name.clone());
                     }

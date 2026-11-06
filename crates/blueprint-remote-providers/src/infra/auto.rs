@@ -229,9 +229,15 @@ impl AutoDeploymentManager {
         let pricing = self.pricing_fetcher.read().await;
         let mut best: Option<(CloudProvider, String, f64)> = None;
         for provider in providers {
-            let sku =
-                super::mapper::InstanceTypeMapper::map_to_instance_type(spec, &provider.provider)
-                    .instance_type;
+            let selection = match super::mapper::InstanceTypeMapper::map_to_instance_type(
+                spec,
+                &provider.provider,
+            ) {
+                Ok(selection) => selection,
+                Err(Error::Provider(crate::managed::ProviderErrorCode::Unsupported)) => continue,
+                Err(error) => return Err(error),
+            };
+            let sku = selection.instance_type;
             match pricing
                 .quote_instance(provider.provider.clone(), &provider.region, &sku)
                 .await

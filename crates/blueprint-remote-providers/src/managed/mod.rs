@@ -1,5 +1,6 @@
 //! One native provider primitive for SDK leases and external orchestrators.
 
+pub mod bootstrap;
 mod credentials;
 mod metadata;
 mod operations;

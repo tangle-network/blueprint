@@ -8,7 +8,5 @@
 //! - `RUNPOD_CLOUD_TYPE` — `SECURE` or `COMMUNITY`.
 
 mod adapter;
-mod instance_mapper;
 
 pub use adapter::RunPodAdapter;
-pub use instance_mapper::RunPodInstanceMapper;

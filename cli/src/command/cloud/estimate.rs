@@ -91,7 +91,14 @@ async fn estimate_live(opts: EstimateOptions, hours: f64) -> Result<()> {
             .get(&provider)
             .ok_or_else(|| eyre!("Configure a provider region before requesting its live price"))?;
         let native = provider.clone();
-        let selection = InstanceTypeMapper::map_to_instance_type(&spec, &native);
+        let selection = match InstanceTypeMapper::map_to_instance_type(&spec, &native) {
+            Ok(selection) => selection,
+            Err(error) if !opts.compare => return Err(error.into()),
+            Err(error) => {
+                eprintln!("{provider}: {error}");
+                continue;
+            }
+        };
         match pricing
             .quote_instance(native, &settings.region, &selection.instance_type)
             .await

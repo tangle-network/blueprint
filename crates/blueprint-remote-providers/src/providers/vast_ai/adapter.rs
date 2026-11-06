@@ -1,473 +1,434 @@
-//! Vast.ai `CloudProviderAdapter` — spot GPU marketplace.
-//!
-//! Provisioning flow:
-//! 1. POST `/api/v0/bundles/` with a search query to find matching offers.
-//! 2. Pick the cheapest offer within `max_price_per_hour` and above `min_reliability`.
-//! 3. Call `/api/v0/asks/{offer_id}/` to rent the instance (PUT with config).
-//! 4. Poll `/api/v0/instances/` until the instance is `running` with an SSH host/port.
-
-use crate::core::error::{Error, Result};
-use crate::core::remote::CloudProvider;
-use crate::core::resources::ResourceSpec;
-use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
-use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::common::gpu_adapter::{deploy_via_ssh, poll_until, require_public_ip};
-use crate::providers::vast_ai::VastAiInstanceMapper;
+//! Vast native offers and one identity-scoped container lifecycle.
+use crate::infra::traits::CloudProviderAdapter;
+use crate::managed::{
+    ManagedLeaseIdentity, ManagedMetadata, ManagedProviderAdapter, ManagedResource,
+    ManagedResourceKind, NativeOffer, ProviderErrorCode,
+};
 use crate::security::{ApiAuthentication, SecureHttpClient};
-use crate::shared::SshDeploymentConfig;
+use crate::{CloudProvider, Error, InstanceStatus, ProvisionedInstance, ResourceSpec, Result};
 use async_trait::async_trait;
-use blueprint_core::{info, warn};
-use blueprint_std::collections::HashMap;
-use std::time::Duration;
+use serde_json::{Value, json};
+use std::collections::HashSet;
 
 const BASE_URL: &str = "https://console.vast.ai/api/v0";
-const INSTANCE_READY_TIMEOUT: Duration = Duration::from_secs(900);
-const INSTANCE_POLL_INTERVAL: Duration = Duration::from_secs(10);
-const DEFAULT_IMAGE: &str = "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime";
-
 pub struct VastAiAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
     base_url: String,
-    max_price_per_hour: f64,
     min_reliability: f64,
 }
-
 impl VastAiAdapter {
     pub async fn new() -> Result<Self> {
-        let api_key = std::env::var("VAST_AI_API_KEY")
-            .map_err(|_| Error::Other("VAST_AI_API_KEY environment variable not set".into()))?;
-        let mut adapter = Self::with_credentials(api_key)?;
-        adapter.max_price_per_hour = std::env::var("VAST_AI_MAX_PRICE_PER_HOUR")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(adapter.max_price_per_hour);
-        adapter.min_reliability = std::env::var("VAST_AI_MIN_RELIABILITY")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(adapter.min_reliability);
+        let key = std::env::var("VAST_AI_API_KEY")
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderNotConfigured))?;
+        let mut adapter = Self::with_credentials(key)?;
+        if let Ok(value) = std::env::var("VAST_AI_MIN_RELIABILITY") {
+            adapter.min_reliability = value
+                .parse()
+                .ok()
+                .filter(|n: &f64| n.is_finite() && (0.0..=1.0).contains(n))
+                .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        }
         Ok(adapter)
     }
-
-    /// Construct with caller-owned credentials and the provider's default endpoint.
     pub fn with_credentials(api_key: String) -> Result<Self> {
         Self::with_endpoint(api_key, BASE_URL)
     }
-
-    /// Construct with an explicit API endpoint for the same provider.
     pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
         Ok(Self {
             http: SecureHttpClient::with_endpoint(endpoint)?,
             auth: ApiAuthentication::vast_ai(api_key),
-            base_url: endpoint.trim_end_matches('/').to_string(),
-            max_price_per_hour: 2.0,
+            base_url: endpoint.trim_end_matches('/').into(),
             min_reliability: 0.95,
         })
     }
-
-    /// Search for cheapest eligible offer matching the query.
-    async fn find_cheapest_offer(&self, query: serde_json::Value) -> Result<i64> {
-        // Vast.ai's `/bundles/` search endpoint is POST per the official REST API
-        // documentation (https://docs.vast.ai/api-reference/search/search-offers).
-        // Older third-party docs mistakenly listed PUT; using PUT returns 4xx.
+    fn constraints(spec: &ResourceSpec) -> Result<()> {
+        if spec.tee_required
+            || spec.source_network.is_some()
+            || spec.volume_gb.is_some()
+            || spec.volume_id.is_some()
+            || !spec.env.is_empty()
+            || spec.manifest.is_some()
+        {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        Ok(())
+    }
+    async fn search(
+        &self,
+        spec: &ResourceSpec,
+        spot: bool,
+        id: Option<&str>,
+    ) -> Result<Vec<Value>> {
+        let mut query = json!({"verified":{"eq":true},"rentable":{"eq":true},"rented":{"eq":false},
+            "num_gpus":{"eq":spec.gpu_count},"cpu_cores":{"gte":spec.cpu},"cpu_ram":{"gte":f64::from(spec.memory_gb)*1000.0},
+            "disk_space":{"gte":spec.storage_gb},"allocated_storage":spec.storage_gb,
+            "reliability2":{"gte":self.min_reliability},"type":if spot {"bid"} else {"on-demand"},"limit":65535});
+        if let Some(class) = spec
+            .gpu_class
+            .as_deref()
+            .and_then(blueprint_core::gpu::find)
+        {
+            let sku = class
+                .sku("vast-ai", spec.gpu_count.unwrap_or(0))
+                .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
+            query["gpu_name"] = json!({"eq":sku});
+        }
+        if let Some(id) = id {
+            query["id"] = json!({"eq":id.parse::<u64>().map_err(|_|Error::Provider(ProviderErrorCode::InvalidRequest))?});
+        }
+        let response = self
+            .http
+            .post_json(&format!("{}/bundles/", self.base_url), &self.auth, query)
+            .await?;
+        let document: Value = response
+            .json()
+            .await
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?;
+        document["offers"]
+            .as_array()
+            .cloned()
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))
+    }
+    fn price(raw: &Value, spot: bool) -> Option<f64> {
+        let price = if spot {
+            let bid = raw["min_bid"]
+                .as_f64()
+                .filter(|bid| (0.001..=128.0).contains(bid))?;
+            let disk = raw["storage_total_cost"]
+                .as_f64()
+                .filter(|disk| disk.is_finite() && *disk >= 0.0)?;
+            bid + disk
+        } else {
+            raw["dph_total"].as_f64()?
+        };
+        (price.is_finite() && price > 0.0).then_some(price)
+    }
+    fn instance(raw: &Value) -> Result<ProvisionedInstance> {
+        Ok(ProvisionedInstance {
+            id: raw["id"]
+                .as_u64()
+                .filter(|id| *id > 0)
+                .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?
+                .to_string(),
+            provider: CloudProvider::VastAi,
+            instance_type: format!(
+                "{}x {}",
+                raw["num_gpus"].as_u64().unwrap_or(0),
+                raw["gpu_name"].as_str().unwrap_or("")
+            ),
+            region: raw["geolocation"].as_str().unwrap_or("").into(),
+            public_ip: raw["public_ipaddr"].as_str().map(str::to_owned),
+            private_ip: None,
+            status: match raw["actual_status"].as_str() {
+                Some("running") => InstanceStatus::Running,
+                Some("loading" | "scheduling" | "creating") => InstanceStatus::Starting,
+                Some("stopped" | "offline") => InstanceStatus::Stopped,
+                Some("exited") => InstanceStatus::Terminated,
+                _ => InstanceStatus::Unknown,
+            },
+        })
+    }
+    fn managed(raw: &Value) -> Result<Option<ManagedResource>> {
+        let Some(metadata) = ManagedMetadata::from_label(raw["label"].as_str().unwrap_or(""))?
+        else {
+            return Ok(None);
+        };
+        let count = raw["num_gpus"].as_u64().and_then(|n| u32::try_from(n).ok());
+        let class = blueprint_core::gpu::catalog().into_iter().find(|class| {
+            count.is_some_and(|count| class.sku("vast-ai", count) == raw["gpu_name"].as_str())
+        });
+        let mut resource = metadata.bind(Self::instance(raw)?, ManagedResourceKind::Instance);
+        resource.gpu_class = class.as_ref().map(|class| class.id.clone());
+        resource.gpu_vram_gb = class.map(|class| class.vram_gb);
+        resource.gpu_count = count;
+        resource.hourly_cost_usd = raw["dph_total"]
+            .as_f64()
+            .filter(|price| price.is_finite() && *price > 0.0);
+        resource.created_at = raw["start_date"]
+            .as_f64()
+            .filter(|time| time.is_finite() && *time > 0.0)
+            .and_then(|time| chrono::DateTime::from_timestamp(time as i64, 0));
+        resource.preempted = raw["is_bid"].as_bool() == Some(true)
+            && raw["actual_status"] == "stopped"
+            && raw["intended_status"] == "running";
+        if let (Some(host), Some(port)) = (
+            raw["ssh_host"].as_str(),
+            raw["ssh_port"]
+                .as_u64()
+                .filter(|port| (1..=65535).contains(port)),
+        ) {
+            let candidate = format!("ssh://root@{host}:{port}");
+            if let Ok(url) = url::Url::parse(&candidate) {
+                if url.host_str() == Some(host)
+                    && url.password().is_none()
+                    && url.path().is_empty()
+                    && url.query().is_none()
+                    && url.fragment().is_none()
+                {
+                    resource.ssh_endpoint = Some(candidate);
+                }
+            }
+        }
+        Ok(Some(resource))
+    }
+    async fn raw_instance(&self, id: &str) -> Result<Option<Value>> {
+        let id = id
+            .parse::<u64>()
+            .ok()
+            .filter(|id| *id > 0)
+            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let response = self
+            .http
+            .get(&format!("{}/instances/{id}/", self.base_url), &self.auth)
+            .await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        let document: Value = response
+            .json()
+            .await
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?;
+        document["instances"]
+            .as_object()
+            .map(|_| Some(document["instances"].clone()))
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))
+    }
+}
+#[async_trait]
+impl ManagedProviderAdapter for VastAiAdapter {
+    async fn offers(&self, spec: &ResourceSpec, region: &str) -> Result<Vec<NativeOffer>> {
+        spec.validate()
+            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        Self::constraints(spec)?;
+        let count = spec
+            .gpu_count
+            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let classes = blueprint_core::gpu::catalog();
+        let mut offers = Vec::new();
+        for spot in [true, false] {
+            if spot && !spec.allow_spot {
+                continue;
+            }
+            for raw in self.search(spec, spot, None).await? {
+                let Some(id) = raw["id"].as_u64().filter(|id| *id > 0) else {
+                    continue;
+                };
+                if raw["num_gpus"].as_u64() != Some(u64::from(count))
+                    || raw["rentable"].as_bool() != Some(true)
+                    || raw["rented"].as_bool() != Some(false)
+                    || (raw["verified"].as_bool() != Some(true)
+                        && raw["verification"].as_str() != Some("verified"))
+                    || raw["reliability2"]
+                        .as_f64()
+                        .is_none_or(|r| !r.is_finite() || r < self.min_reliability)
+                    || raw["cpu_cores_effective"]
+                        .as_f64()
+                        .or_else(|| raw["cpu_cores"].as_f64())
+                        .is_none_or(|cpu| cpu < f64::from(spec.cpu))
+                    || raw["cpu_ram"]
+                        .as_f64()
+                        .is_none_or(|ram| ram / 1000.0 < f64::from(spec.memory_gb))
+                    || raw["disk_space"]
+                        .as_f64()
+                        .is_none_or(|disk| disk < f64::from(spec.storage_gb))
+                {
+                    continue;
+                }
+                let Some(class) = classes
+                    .iter()
+                    .find(|class| class.sku("vast-ai", count) == raw["gpu_name"].as_str())
+                else {
+                    continue;
+                };
+                if spec.gpu_class.as_ref().is_some_and(|id| id != &class.id)
+                    || spec.gpu_vram_gb.is_some_and(|vram| class.vram_gb < vram)
+                {
+                    continue;
+                }
+                let Some(location) = raw["geolocation"]
+                    .as_str()
+                    .filter(|location| !location.is_empty())
+                else {
+                    continue;
+                };
+                if !region.is_empty() && location != region {
+                    continue;
+                }
+                let Some(price) = Self::price(&raw, spot) else {
+                    continue;
+                };
+                offers.push(NativeOffer {
+                    provider: CloudProvider::VastAi,
+                    native_id: id.to_string(),
+                    instance_type: format!("{count}x {}", raw["gpu_name"].as_str().unwrap_or("")),
+                    region: location.into(),
+                    gpu_class: class.id.clone(),
+                    gpu_count: count,
+                    hourly_cost_usd: price,
+                    spot,
+                    pricing_source: format!("{}/bundles/", self.base_url),
+                    underlying: None,
+                });
+            }
+        }
+        Ok(offers)
+    }
+    async fn create(
+        &self,
+        spec: &ResourceSpec,
+        offer: &NativeOffer,
+        fingerprint: &str,
+    ) -> Result<ManagedResource> {
+        Self::constraints(spec)?;
+        let image = spec
+            .image
+            .as_ref()
+            .filter(|image| {
+                !image.is_empty()
+                    && !image.starts_with('-')
+                    && !image.chars().any(|c| c.is_whitespace() || c.is_control())
+            })
+            .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
+        let metadata = ManagedMetadata::for_spec(spec, fingerprint, chrono::Utc::now())?;
+        let mut body = json!({"client_id":"me","image":image,"disk":spec.storage_gb,"label":metadata.label()?,"runtype":"args","target_state":"running",
+            "env":spec.ports.iter().map(|port|format!("-p {port}:{port}")).collect::<Vec<_>>().join(" ")});
+        if let Some(command) = &spec.command {
+            body["args"] = json!(command);
+        }
+        if offer.spot {
+            let raw = self
+                .search(spec, true, Some(offer.native_id.as_str()))
+                .await?
+                .into_iter()
+                .find(|raw| {
+                    raw["id"].as_u64().map(|id| id.to_string()).as_deref()
+                        == Some(offer.native_id.as_str())
+                })
+                .ok_or(Error::Provider(ProviderErrorCode::NoStock))?;
+            if Self::price(&raw, true).is_none_or(|price| price > offer.hourly_cost_usd) {
+                return Err(Error::Provider(ProviderErrorCode::NoStock));
+            }
+            body["price"] = raw["min_bid"].clone();
+        }
         let response = self
             .http
             .authenticated_request(
-                reqwest::Method::POST,
-                &format!("{}/bundles/", self.base_url),
+                reqwest::Method::PUT,
+                &format!(
+                    "{}/asks/{}/",
+                    self.base_url,
+                    urlencoding::encode(&offer.native_id)
+                ),
                 &self.auth,
-                Some(serde_json::json!({ "q": query })),
+                Some(body),
             )
-            .await
-            .map_err(|e| Error::HttpError(format!("Vast.ai search: {e}")))?;
-        if !response.status().is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(Error::HttpError(format!("Vast.ai search failed: {body}")));
-        }
-        let json: serde_json::Value = response
+            .await?;
+        let document: Value = response
             .json()
             .await
-            .map_err(|e| Error::HttpError(format!("Vast.ai search parse: {e}")))?;
-        let offers = json
-            .get("offers")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| Error::HttpError("Vast.ai search: no offers field".into()))?;
-        let offer = offers
-            .iter()
-            .find(|o| {
-                let price = o
-                    .get("dph_total")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(f64::MAX);
-                let reliability = o
-                    .get("reliability2")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0);
-                price <= self.max_price_per_hour && reliability >= self.min_reliability
-            })
-            .ok_or_else(|| {
-                Error::HttpError(format!(
-                    "Vast.ai: no offers within price={:.2}/hr reliability>={:.2}",
-                    self.max_price_per_hour, self.min_reliability
-                ))
-            })?;
-        offer
-            .get("id")
-            .and_then(|v| v.as_i64())
-            .ok_or_else(|| Error::HttpError("Vast.ai offer missing id".into()))
-    }
-
-    async fn fetch_instance(&self, instance_id: i64) -> Result<serde_json::Value> {
-        let url = format!("{}/instances/", self.base_url);
-        let mut last_err = None;
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-            }
-            match self.http.get(&url, &self.auth).await {
-                Ok(response) if response.status().is_success() => {
-                    let json: serde_json::Value = response
-                        .json()
-                        .await
-                        .map_err(|e| Error::HttpError(format!("Vast.ai instances parse: {e}")))?;
-                    let instances = json
-                        .get("instances")
-                        .and_then(|v| v.as_array())
-                        .ok_or_else(|| Error::HttpError("Vast.ai: no instances array".into()))?;
-                    return instances
-                        .iter()
-                        .find(|i| i.get("id").and_then(|v| v.as_i64()) == Some(instance_id))
-                        .cloned()
-                        .ok_or_else(|| {
-                            Error::HttpError(format!("Vast.ai instance {instance_id} not found"))
-                        });
-                }
-                Ok(response) if response.status() == 429 || response.status().is_server_error() => {
-                    last_err = Some(Error::HttpError(format!(
-                        "Vast.ai GET instances: transient {}",
-                        response.status()
-                    )));
-                    continue;
-                }
-                Ok(response) => {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!(
-                        "Vast.ai list instances failed: {body}"
-                    )));
-                }
-                Err(e) => {
-                    last_err = Some(Error::HttpError(format!("Vast.ai GET instances: {e}")));
-                    continue;
-                }
-            }
-        }
-        Err(last_err.unwrap())
-    }
-
-    fn parse_instance(value: &serde_json::Value) -> Result<ProvisionedInstance> {
-        let id = value
-            .get("id")
-            .and_then(|v| v.as_i64())
-            .ok_or_else(|| Error::HttpError("Vast.ai instance missing id".into()))?
-            .to_string();
-        let gpu_name = value
-            .get("gpu_name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        let num_gpus = value.get("num_gpus").and_then(|v| v.as_i64()).unwrap_or(1);
-        let instance_type = format!("{num_gpus}x {gpu_name}");
-        let region = value
-            .get("geolocation")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        let public_ip = value
-            .get("public_ipaddr")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let status = match value
-            .get("actual_status")
-            .or_else(|| value.get("cur_state"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-        {
-            "running" => InstanceStatus::Running,
-            "loading" | "scheduling" | "creating" => InstanceStatus::Starting,
-            "stopped" | "offline" => InstanceStatus::Stopped,
-            "exited" => InstanceStatus::Terminated,
-            _ => InstanceStatus::Unknown,
-        };
-        Ok(ProvisionedInstance {
-            id,
-            provider: CloudProvider::VastAi,
-            instance_type,
-            region,
-            public_ip,
-            private_ip: None,
-            status,
-        })
-    }
-
-    async fn wait_for_running(&self, instance_id: i64) -> Result<ProvisionedInstance> {
-        poll_until(
-            "Vast.ai instance",
-            INSTANCE_POLL_INTERVAL,
-            INSTANCE_READY_TIMEOUT,
-            || async {
-                let raw = self.fetch_instance(instance_id).await?;
-                let instance = Self::parse_instance(&raw)?;
-                match instance.status {
-                    InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
-                    InstanceStatus::Terminated => Err(Error::HttpError(
-                        "Vast.ai instance terminated before running".into(),
-                    )),
-                    _ => Ok(None),
-                }
+            .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let id = document["new_contract"]
+            .as_u64()
+            .filter(|id| *id > 0)
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let mut resource = metadata.bind(
+            ProvisionedInstance {
+                id: id.to_string(),
+                provider: CloudProvider::VastAi,
+                instance_type: offer.instance_type.clone(),
+                region: offer.region.clone(),
+                public_ip: None,
+                private_ip: None,
+                status: InstanceStatus::Starting,
             },
-        )
-        .await
+            ManagedResourceKind::Instance,
+        );
+        resource.gpu_class = Some(offer.gpu_class.clone());
+        resource.gpu_count = Some(offer.gpu_count);
+        resource.gpu_vram_gb =
+            blueprint_core::gpu::find(&offer.gpu_class).map(|class| class.vram_gb);
+        resource.hourly_cost_usd = Some(offer.hourly_cost_usd);
+        Ok(resource)
+    }
+    async fn status(
+        &self,
+        identity: &ManagedLeaseIdentity,
+        id: &str,
+    ) -> Result<Option<ManagedResource>> {
+        let Some(raw) = self.raw_instance(id).await? else {
+            return Ok(None);
+        };
+        let resource = Self::managed(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+        if resource.namespace != identity.namespace || resource.lease_id != identity.lease_id {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Ok(Some(resource))
+    }
+    async fn list(&self, namespace: &str) -> Result<Vec<ManagedResource>> {
+        let base = self.base_url.strip_suffix("/v0").unwrap_or(&self.base_url);
+        let mut url = format!("{base}/v1/instances?limit=25");
+        let mut seen = HashSet::new();
+        let mut resources = Vec::new();
+        loop {
+            let response = self.http.get(&url, &self.auth).await?;
+            let document: Value = response
+                .json()
+                .await
+                .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?;
+            for raw in document["instances"]
+                .as_array()
+                .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?
+            {
+                if let Some(resource) = Self::managed(raw)? {
+                    if resource.namespace == namespace {
+                        resources.push(resource);
+                    }
+                }
+            }
+            let Some(token) = document["next_token"]
+                .as_str()
+                .filter(|token| !token.is_empty())
+            else {
+                break;
+            };
+            if !seen.insert(token.to_owned()) {
+                return Err(Error::Provider(ProviderErrorCode::Conflict));
+            }
+            url = format!(
+                "{base}/v1/instances?limit=25&after_token={}",
+                urlencoding::encode(token)
+            );
+        }
+        Ok(resources)
+    }
+    async fn destroy(&self, identity: &ManagedLeaseIdentity, id: &str) -> Result<()> {
+        if <Self as ManagedProviderAdapter>::status(self, identity, id)
+            .await?
+            .is_none()
+        {
+            return Ok(());
+        }
+        self.http
+            .delete(
+                &format!("{}/instances/{}/", self.base_url, urlencoding::encode(id)),
+                &self.auth,
+            )
+            .await?;
+        Ok(())
     }
 }
-
 #[async_trait]
 impl CloudProviderAdapter for VastAiAdapter {
-    async fn provision_instance(
-        &self,
-        instance_type: &str,
-        _region: &str,
-        require_tee: bool,
-    ) -> Result<ProvisionedInstance> {
-        // Fail closed at the trait boundary: this provider has no
-        // confidential-compute / TEE attestation path. Refuse rather than
-        // silently return a non-TEE instance for a require_tee request.
-        if require_tee {
-            return Err(Error::ConfigurationError(
-                "Vast.ai does not support confidential-compute / TEE attestation; \
-                 refusing require_tee"
-                    .into(),
-            ));
-        }
-        // `instance_type` carries the serialized search query from the mapper.
-        let query: serde_json::Value = if instance_type.is_empty() {
-            VastAiInstanceMapper::build_query(
-                &ResourceSpec::basic(),
-                Some(self.max_price_per_hour),
-                Some(self.min_reliability),
-            )
-        } else {
-            let mut base: serde_json::Value = serde_json::from_str(instance_type)
-                .map_err(|e| Error::HttpError(format!("Vast.ai query parse: {e}")))?;
-            base["dph_total"] = serde_json::json!({ "lte": self.max_price_per_hour });
-            base["reliability2"] = serde_json::json!({ "gte": self.min_reliability });
-            base
-        };
-
-        let offer_id = self.find_cheapest_offer(query).await?;
-        info!(%offer_id, "Selected Vast.ai offer");
-
-        let rent_body = serde_json::json!({
-            "client_id": "me",
-            "image": DEFAULT_IMAGE,
-            "disk": 50,
-            "label": format!("blueprint-{}", uuid::Uuid::new_v4()),
-            "runtype": "ssh_direc",
-        });
-        let rent_url = format!("{}/asks/{offer_id}/", self.base_url);
-        let json: serde_json::Value = {
-            let mut last_err = None;
-            let mut result = None;
-            for attempt in 0..3u32 {
-                if attempt > 0 {
-                    tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-                }
-                match self
-                    .http
-                    .authenticated_request(
-                        reqwest::Method::PUT,
-                        &rent_url,
-                        &self.auth,
-                        Some(rent_body.clone()),
-                    )
-                    .await
-                {
-                    Ok(response) if response.status().is_success() => {
-                        result =
-                            Some(response.json::<serde_json::Value>().await.map_err(|e| {
-                                Error::HttpError(format!("Vast.ai rent parse: {e}"))
-                            })?);
-                        break;
-                    }
-                    Ok(response)
-                        if response.status() == 429 || response.status().is_server_error() =>
-                    {
-                        last_err = Some(Error::HttpError(format!(
-                            "Vast.ai rent: transient {}",
-                            response.status()
-                        )));
-                        continue;
-                    }
-                    Ok(response) => {
-                        let body = response.text().await.unwrap_or_default();
-                        return Err(Error::HttpError(format!("Vast.ai rent failed: {body}")));
-                    }
-                    Err(e) => {
-                        last_err = Some(Error::HttpError(format!("Vast.ai rent: {e}")));
-                        continue;
-                    }
-                }
-            }
-            match result {
-                Some(v) => v,
-                None => return Err(last_err.unwrap()),
-            }
-        };
-        let instance_id = json
-            .get("new_contract")
-            .and_then(|v| v.as_i64())
-            .ok_or_else(|| Error::HttpError("Vast.ai rent: no new_contract".into()))?;
-
-        info!(%instance_id, %offer_id, "Rented Vast.ai instance");
-        self.wait_for_running(instance_id).await
+    fn managed(&self) -> Option<&dyn ManagedProviderAdapter> {
+        Some(self)
     }
-
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        let id: i64 = instance_id
-            .parse()
-            .map_err(|_| Error::Other(format!("Invalid Vast.ai instance id: {instance_id}")))?;
-        let url = format!("{}/instances/{id}/", self.base_url);
-        let mut last_err = None;
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-            }
-            match self.http.delete(&url, &self.auth).await {
-                Ok(response) if response.status().is_success() => {
-                    info!(%instance_id, "Terminated Vast.ai instance");
-                    return Ok(());
-                }
-                Ok(response) if response.status() == reqwest::StatusCode::NOT_FOUND => {
-                    info!(%instance_id, "Vast.ai instance already terminated (404)");
-                    return Ok(());
-                }
-                Ok(response) if response.status() == 429 || response.status().is_server_error() => {
-                    last_err = Some(Error::HttpError(format!(
-                        "Vast.ai terminate: transient {}",
-                        response.status()
-                    )));
-                    continue;
-                }
-                Ok(response) => {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!(
-                        "Vast.ai terminate failed: {body}"
-                    )));
-                }
-                Err(e) => {
-                    last_err = Some(Error::HttpError(format!("Vast.ai terminate: {e}")));
-                    continue;
-                }
-            }
-        }
-        Err(last_err.unwrap())
-    }
-
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        let id: i64 = instance_id
-            .parse()
-            .map_err(|_| Error::Other(format!("Invalid Vast.ai instance id: {instance_id}")))?;
-        match self.fetch_instance(id).await {
-            Ok(raw) => Ok(Self::parse_instance(&raw)?.status),
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Vast.ai instance status");
-                Ok(InstanceStatus::Unknown)
-            }
-        }
-    }
-
-    async fn deploy_blueprint_with_target(
-        &self,
-        target: &crate::core::deployment_target::DeploymentTarget,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        use crate::core::deployment_target::DeploymentTarget;
-        match target {
-            DeploymentTarget::VirtualMachine { runtime: _ } => {
-                let selection = VastAiInstanceMapper::map(resource_spec);
-                let instance = self
-                    .provision_instance(&selection.instance_type, "", false)
-                    .await?;
-                let instance_id_for_cleanup = instance.id.clone();
-                match self
-                    .deploy_blueprint(&instance, blueprint_image, resource_spec, env_vars)
-                    .await
-                {
-                    Ok(result) => Ok(result),
-                    Err(deploy_err) => {
-                        warn!(
-                            provider = "vast_ai",
-                            instance_id = %instance_id_for_cleanup,
-                            error = %deploy_err,
-                            "Deploy failed after provisioning; terminating instance to prevent billing leak"
-                        );
-                        if let Err(cleanup_err) =
-                            self.terminate_instance(&instance_id_for_cleanup).await
-                        {
-                            warn!(
-                                provider = "vast_ai",
-                                instance_id = %instance_id_for_cleanup,
-                                cleanup_error = %cleanup_err,
-                                "Cleanup after failed deploy also failed — instance may be orphaned"
-                            );
-                        }
-                        Err(deploy_err)
-                    }
-                }
-            }
-            _ => Err(Error::ConfigurationError(
-                "Vast.ai only supports VirtualMachine deployment targets".into(),
-            )),
-        }
-    }
-
-    async fn deploy_blueprint(
-        &self,
-        instance: &ProvisionedInstance,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        require_public_ip(instance)?;
-        deploy_via_ssh(
-            instance,
-            blueprint_image,
-            resource_spec,
-            env_vars,
-            SshDeploymentConfig::vast_ai(),
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        Self::instance(
+            &self
+                .raw_instance(id)
+                .await?
+                .ok_or(Error::Provider(ProviderErrorCode::NotFound))?,
         )
-        .await
-    }
-
-    async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
-        if let Some(endpoint) = deployment.qos_grpc_endpoint() {
-            // Reuse the pre-built pooled client instead of rebuilding the
-            // TLS stack on every (interval-driven) health probe.
-            match self
-                .http
-                .get(&format!("{endpoint}/health"), &ApiAuthentication::None)
-                .await
-            {
-                Ok(response) => Ok(response.status().is_success()),
-                Err(_) => Ok(false),
-            }
-        } else {
-            Ok(false)
-        }
-    }
-
-    async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
-        self.terminate_instance(&deployment.instance.id).await
     }
 }

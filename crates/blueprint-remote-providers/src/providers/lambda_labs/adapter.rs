@@ -1,448 +1,511 @@
-//! Lambda Labs `CloudProviderAdapter` implementation.
-
-use crate::core::error::{Error, Result};
-use crate::core::remote::CloudProvider;
-use crate::core::resources::ResourceSpec;
-use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
-use crate::infra::types::{InstanceStatus, ProvisionedInstance};
-use crate::providers::common::gpu_adapter::{
-    deploy_via_ssh, generate_instance_name, poll_until, require_public_ip,
+//! Lambda Cloud native SKUs, atomic instance tags and namespace-scoped recovery.
+use crate::infra::traits::CloudProviderAdapter;
+use crate::managed::{
+    ManagedLeaseIdentity, ManagedMetadata, ManagedProviderAdapter, ManagedResource,
+    ManagedResourceKind, NativeOffer, ProviderErrorCode, bootstrap,
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
-use crate::shared::SshDeploymentConfig;
+use crate::{CloudProvider, Error, InstanceStatus, ProvisionedInstance, ResourceSpec, Result};
 use async_trait::async_trait;
-use blueprint_core::{info, warn};
-use blueprint_std::collections::HashMap;
-use std::time::Duration;
+use serde_json::{Value, json};
+use std::collections::{BTreeMap, HashSet};
 
-const BASE_URL: &str = "https://cloud.lambdalabs.com/api/v1";
-const INSTANCE_READY_TIMEOUT: Duration = Duration::from_secs(600);
-const INSTANCE_POLL_INTERVAL: Duration = Duration::from_secs(10);
+const BASE_URL: &str = "https://cloud.lambda.ai/api/v1";
 
-/// Adapter for Lambda Labs on-demand GPU cloud.
 pub struct LambdaLabsAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
     base_url: String,
-    default_region: String,
+    default_region: Option<String>,
     ssh_key_name: Option<String>,
+    firewall_ruleset_ids: Vec<String>,
 }
 
 impl LambdaLabsAdapter {
-    /// Construct from environment variables.
     pub async fn new() -> Result<Self> {
-        let api_key = std::env::var("LAMBDA_LABS_API_KEY")
-            .map_err(|_| Error::Other("LAMBDA_LABS_API_KEY environment variable not set".into()))?;
-        let mut adapter = Self::with_credentials(api_key)?;
-        if let Ok(region) = std::env::var("LAMBDA_LABS_REGION") {
-            adapter.default_region = region;
-        }
+        let key = std::env::var("LAMBDA_LABS_API_KEY")
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderNotConfigured))?;
+        let mut adapter = Self::with_credentials(key)?;
+        adapter.default_region = std::env::var("LAMBDA_LABS_REGION").ok();
         adapter.ssh_key_name = std::env::var("LAMBDA_LABS_SSH_KEY_NAME").ok();
         Ok(adapter)
     }
 
-    /// Construct with caller-owned credentials and the provider's default endpoint.
     pub fn with_credentials(api_key: String) -> Result<Self> {
         Self::with_endpoint(api_key, BASE_URL)
     }
 
-    /// Construct with an explicit API endpoint for the same provider.
     pub fn with_endpoint(api_key: String, endpoint: &str) -> Result<Self> {
         Ok(Self {
             http: SecureHttpClient::with_endpoint(endpoint)?,
             auth: ApiAuthentication::lambda_labs(api_key),
-            base_url: endpoint.trim_end_matches('/').to_string(),
-            default_region: "us-west-1".into(),
+            base_url: endpoint.trim_end_matches('/').into(),
+            default_region: None,
             ssh_key_name: None,
+            firewall_ruleset_ids: Vec::new(),
         })
     }
 
-    /// Select an existing provider SSH key for a legacy instance launch.
     #[must_use]
     pub fn with_ssh_key_name(mut self, name: String) -> Self {
         self.ssh_key_name = Some(name);
         self
     }
 
-    /// Fetch a single instance's JSON payload from the REST API.
-    async fn fetch_instance_json(&self, instance_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{}/instances/{instance_id}", self.base_url);
-        let mut last_err = None;
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-            }
-            match self.http.get(&url, &self.auth).await {
-                Ok(response) if response.status().is_success() => {
-                    return response
-                        .json::<serde_json::Value>()
-                        .await
-                        .map_err(|e| Error::HttpError(format!("Lambda Labs response parse: {e}")));
-                }
-                Ok(response) if response.status() == 429 || response.status().is_server_error() => {
-                    last_err = Some(Error::HttpError(format!(
-                        "Lambda Labs GET {url}: transient {}",
-                        response.status()
-                    )));
-                    continue;
-                }
-                Ok(response) => {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!(
-                        "Lambda Labs GET {url} failed: {body}"
-                    )));
-                }
-                Err(e) => {
-                    last_err = Some(Error::HttpError(format!("Lambda Labs GET {url}: {e}")));
-                    continue;
-                }
-            }
-        }
-        Err(last_err.unwrap())
+    #[must_use]
+    pub fn with_firewall_rulesets(mut self, ids: Vec<String>) -> Self {
+        self.firewall_ruleset_ids = ids;
+        self
     }
 
-    /// Convert the Lambda Labs instance JSON into a `ProvisionedInstance`.
-    fn parse_instance(
-        value: &serde_json::Value,
-        fallback_region: &str,
-    ) -> Result<ProvisionedInstance> {
-        let data = value.get("data").unwrap_or(value);
-        let id = data
-            .get("id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::HttpError("Lambda Labs response missing id".into()))?
-            .to_string();
-        let instance_type = data
-            .get("instance_type")
-            .and_then(|v| v.get("name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        let region = data
-            .get("region")
-            .and_then(|v| v.get("name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or(fallback_region)
-            .to_string();
-        let public_ip = data
-            .get("ip")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let private_ip = data
-            .get("private_ip")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let status = match data.get("status").and_then(|v| v.as_str()).unwrap_or("") {
-            "active" => InstanceStatus::Running,
-            "booting" => InstanceStatus::Starting,
-            "terminating" => InstanceStatus::Stopping,
-            "terminated" => InstanceStatus::Terminated,
-            _ => InstanceStatus::Unknown,
-        };
+    async fn data(&self, path: &str) -> Result<Value> {
+        let response = self
+            .http
+            .get(&format!("{}/{path}", self.base_url), &self.auth)
+            .await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(Error::Provider(ProviderErrorCode::NotFound));
+        }
+        let document: Value = response
+            .json()
+            .await
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?;
+        document
+            .get("data")
+            .cloned()
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))
+    }
 
+    fn instance(raw: &Value) -> Result<ProvisionedInstance> {
         Ok(ProvisionedInstance {
-            id,
+            id: raw["id"]
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?
+                .into(),
             provider: CloudProvider::LambdaLabs,
-            instance_type,
-            region,
-            public_ip,
-            private_ip,
-            status,
+            instance_type: raw["instance_type"]["name"].as_str().unwrap_or("").into(),
+            region: raw["region"]["name"].as_str().unwrap_or("").into(),
+            public_ip: raw["ip"].as_str().map(str::to_owned),
+            private_ip: raw["private_ip"].as_str().map(str::to_owned),
+            status: match raw["status"].as_str() {
+                Some("active") => InstanceStatus::Running,
+                Some("booting") => InstanceStatus::Starting,
+                Some("terminating") => InstanceStatus::Stopping,
+                Some("terminated") => InstanceStatus::Terminated,
+                Some("preempted") => InstanceStatus::Stopped,
+                _ => InstanceStatus::Unknown,
+            },
         })
     }
 
-    async fn wait_for_running(&self, instance_id: &str) -> Result<ProvisionedInstance> {
-        let region = self.default_region.clone();
-        poll_until(
-            "Lambda Labs instance",
-            INSTANCE_POLL_INTERVAL,
-            INSTANCE_READY_TIMEOUT,
-            || async {
-                let raw = self.fetch_instance_json(instance_id).await?;
-                let instance = Self::parse_instance(&raw, &region)?;
-                match instance.status {
-                    InstanceStatus::Running if instance.public_ip.is_some() => Ok(Some(instance)),
-                    InstanceStatus::Terminated => Err(Error::HttpError(
-                        "Lambda Labs instance terminated before running".into(),
-                    )),
-                    _ => Ok(None),
+    fn managed(raw: &Value) -> Result<Option<ManagedResource>> {
+        let mut tags = BTreeMap::new();
+        if let Some(values) = raw["tags"].as_array() {
+            for tag in values {
+                let key = tag["key"]
+                    .as_str()
+                    .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+                let value = tag["value"]
+                    .as_str()
+                    .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+                if tags.insert(key.into(), value.into()).is_some() {
+                    return Err(Error::Provider(ProviderErrorCode::Conflict));
                 }
-            },
-        )
-        .await
+            }
+        } else if !raw["tags"].is_null() {
+            return Err(Error::Provider(ProviderErrorCode::ProviderError));
+        }
+        let Some(metadata) = ManagedMetadata::from_tags(&tags)? else {
+            return Ok(None);
+        };
+        let instance = Self::instance(raw)?;
+        let count = raw["instance_type"]["specs"]["gpus"]
+            .as_u64()
+            .and_then(|count| u32::try_from(count).ok())
+            .filter(|count| *count > 0);
+        let class = blueprint_core::gpu::catalog().into_iter().find(|class| {
+            count.is_some_and(|count| {
+                class.sku("lambda-labs", count) == Some(instance.instance_type.as_str())
+            })
+        });
+        let mut resource = metadata.bind(instance, ManagedResourceKind::Instance);
+        resource.gpu_class = class.as_ref().map(|class| class.id.clone());
+        resource.gpu_vram_gb = class.map(|class| class.vram_gb);
+        resource.gpu_count = count;
+        resource.hourly_cost_usd = raw["instance_type"]["price_cents_per_hour"]
+            .as_u64()
+            .filter(|cents| *cents > 0)
+            .map(|cents| cents as f64 / 100.0);
+        resource.created_at = raw["created_at"]
+            .as_str()
+            .or_else(|| raw["created"].as_str())
+            .and_then(|date| date.parse().ok());
+        resource.preempted = raw["status"].as_str() == Some("preempted");
+        resource.ssh_endpoint = resource
+            .instance
+            .public_ip
+            .as_ref()
+            .and_then(|ip| ip.parse::<std::net::Ipv4Addr>().ok())
+            .map(|ip| format!("ssh://ubuntu@{ip}:22"));
+        Ok(Some(resource))
+    }
+
+    fn network(value: &str) -> Option<(u64, u64)> {
+        let (address, bits) = value.split_once('/').unwrap_or((value, "32"));
+        let address = u32::from(address.parse::<std::net::Ipv4Addr>().ok()?);
+        let bits = bits.parse::<u32>().ok().filter(|bits| *bits <= 32)?;
+        let mask = u32::MAX.checked_shl(32 - bits).unwrap_or(0);
+        Some((u64::from(address & mask), u64::from(address | !mask)))
+    }
+
+    async fn verify_network(&self, spec: &ResourceSpec, region: &str) -> Result<()> {
+        let unsupported = || Error::Provider(ProviderErrorCode::Unsupported);
+        if region == "us-south-1" {
+            return if spec.source_network.is_none() {
+                Ok(())
+            } else {
+                Err(unsupported())
+            };
+        }
+        let requested = spec
+            .source_network
+            .as_deref()
+            .map(Self::network)
+            .unwrap_or(Some((0, u64::from(u32::MAX))))
+            .ok_or_else(unsupported)?;
+        let global = self.data("firewall-rulesets/global").await?;
+        let mut rules = global["rules"]
+            .as_array()
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?
+            .clone();
+        let mut ids = HashSet::new();
+        for id in &self.firewall_ruleset_ids {
+            if id.is_empty()
+                || id.len() > 128
+                || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                || !ids.insert(id)
+            {
+                return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+            }
+            let set = self
+                .data(&format!("firewall-rulesets/{}", urlencoding::encode(id)))
+                .await?;
+            if set["id"].as_str() != Some(id.as_str())
+                || set["region"]["name"].as_str() != Some(region)
+            {
+                return Err(unsupported());
+            }
+            rules.extend(
+                set["rules"]
+                    .as_array()
+                    .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?
+                    .iter()
+                    .cloned(),
+            );
+        }
+        let mut ports = spec.ports.clone();
+        ports.push(22);
+        ports.sort_unstable();
+        ports.dedup();
+        for port in ports {
+            let mut intervals = Vec::new();
+            for rule in &rules {
+                if !matches!(rule["protocol"].as_str(), Some("tcp" | "all")) {
+                    continue;
+                }
+                let range = rule["port_range"]
+                    .as_array()
+                    .filter(|range| range.len() == 2)
+                    .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+                let low = range[0]
+                    .as_u64()
+                    .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+                let high = range[1]
+                    .as_u64()
+                    .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+                if !(1..=65535).contains(&low) || high < low || high > 65535 {
+                    return Err(Error::Provider(ProviderErrorCode::ProviderError));
+                }
+                if u64::from(port) < low || u64::from(port) > high {
+                    continue;
+                }
+                let source = rule["source_network"]
+                    .as_str()
+                    .and_then(Self::network)
+                    .ok_or_else(unsupported)?;
+                if source.0 < requested.0 || source.1 > requested.1 {
+                    return Err(unsupported());
+                }
+                intervals.push(source);
+            }
+            intervals.sort_unstable();
+            let mut covered = requested.0;
+            for (start, end) in intervals {
+                if start > covered {
+                    return Err(unsupported());
+                }
+                covered = covered.max(end + 1);
+            }
+            if covered <= requested.1 {
+                return Err(unsupported());
+            }
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ManagedProviderAdapter for LambdaLabsAdapter {
+    async fn offers(&self, spec: &ResourceSpec, region: &str) -> Result<Vec<NativeOffer>> {
+        spec.validate()
+            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        if spec.tee_required || spec.volume_gb.is_some() {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        let count = spec
+            .gpu_count
+            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let types = self.data("instance-types").await?;
+        let types = types
+            .as_object()
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?;
+        let region = if region.is_empty() {
+            self.default_region.as_deref().unwrap_or("")
+        } else {
+            region
+        };
+        let classes = blueprint_core::gpu::catalog();
+        let mut offers = Vec::new();
+        for entry in types.values() {
+            let native = &entry["instance_type"];
+            let Some(sku) = native["name"].as_str() else {
+                continue;
+            };
+            if native["specs"]["gpus"].as_u64() != Some(u64::from(count)) {
+                continue;
+            }
+            let Some(class) = classes
+                .iter()
+                .find(|class| class.sku("lambda-labs", count) == Some(sku))
+            else {
+                continue;
+            };
+            if spec.gpu_class.as_ref().is_some_and(|id| id != &class.id)
+                || spec
+                    .gpu_vram_gb
+                    .is_some_and(|minimum| class.vram_gb < minimum)
+                || native["specs"]["vcpus"]
+                    .as_f64()
+                    .is_none_or(|cpu| cpu < f64::from(spec.cpu))
+                || native["specs"]["memory_gib"]
+                    .as_f64()
+                    .is_none_or(|memory| memory * 1.073_741_824 < f64::from(spec.memory_gb))
+                || native["specs"]["storage_gib"]
+                    .as_f64()
+                    .is_none_or(|storage| storage * 1.073_741_824 < f64::from(spec.storage_gb))
+            {
+                continue;
+            }
+            let Some(price) = native["price_cents_per_hour"]
+                .as_u64()
+                .filter(|price| *price > 0)
+                .map(|price| price as f64 / 100.0)
+            else {
+                continue;
+            };
+            let Some(regions) = entry["regions_with_capacity_available"].as_array() else {
+                continue;
+            };
+            for capacity in regions {
+                let Some(id) = capacity["name"].as_str().filter(|id| !id.is_empty()) else {
+                    continue;
+                };
+                if !region.is_empty() && id != region {
+                    continue;
+                }
+                offers.push(NativeOffer {
+                    provider: CloudProvider::LambdaLabs,
+                    native_id: sku.into(),
+                    instance_type: sku.into(),
+                    region: id.into(),
+                    gpu_class: class.id.clone(),
+                    gpu_count: count,
+                    hourly_cost_usd: price,
+                    spot: false,
+                    pricing_source: format!("{}/instance-types", self.base_url),
+                    underlying: None,
+                });
+            }
+        }
+        let had_stock = !offers.is_empty();
+        let mut supported = Vec::new();
+        for offer in offers {
+            match self.verify_network(spec, &offer.region).await {
+                Ok(()) => supported.push(offer),
+                Err(Error::Provider(ProviderErrorCode::Unsupported)) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        if had_stock && supported.is_empty() {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        Ok(supported)
+    }
+
+    async fn create(
+        &self,
+        spec: &ResourceSpec,
+        offer: &NativeOffer,
+        fingerprint: &str,
+    ) -> Result<ManagedResource> {
+        spec.validate()
+            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        if spec.tee_required
+            || spec.volume_gb.is_some()
+            || offer.spot
+            || offer.provider != CloudProvider::LambdaLabs
+        {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        self.verify_network(spec, &offer.region).await?;
+        let key = self
+            .ssh_key_name
+            .as_ref()
+            .filter(|name| !name.is_empty())
+            .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
+        let metadata = ManagedMetadata::for_spec(spec, fingerprint, chrono::Utc::now())?;
+        let mut body = json!({"name":metadata.name(),"region_name":offer.region,"instance_type_name":offer.instance_type,
+            "quantity":1,"ssh_key_names":[key],"tags":metadata.tags().into_iter().map(|(key,value)|json!({"key":key,"value":value})).collect::<Vec<_>>(),
+            "firewall_rulesets":self.firewall_ruleset_ids.iter().map(|id|json!({"id":id})).collect::<Vec<_>>()});
+        let mut mounts = Vec::new();
+        if let Some(id) = &spec.volume_id {
+            let path = spec
+                .volume_mount_path
+                .as_deref()
+                .unwrap_or("/mnt/blueprint-data");
+            body["file_system_mounts"] = json!([{"file_system_id":id,"mount_point":path}]);
+            mounts.push((path.to_owned(), path.to_owned()));
+        }
+        if let Some(image) = &spec.image {
+            let mut env = bootstrap::workload_environment(spec)?;
+            env.extend(metadata.env());
+            let user_data = bootstrap::gpu_container_cloud_init(
+                image,
+                &env,
+                &spec.ports,
+                &mounts,
+                spec.command.as_deref(),
+            )?;
+            if user_data.len() > 1_048_576 {
+                return Err(Error::Provider(ProviderErrorCode::Unsupported));
+            }
+            body["user_data"] = json!(user_data);
+        } else if !spec.env.is_empty() || spec.command.is_some() || spec.manifest.is_some() {
+            return Err(Error::Provider(ProviderErrorCode::Unsupported));
+        }
+        let response = self
+            .http
+            .post_json(
+                &format!("{}/instance-operations/launch", self.base_url),
+                &self.auth,
+                body,
+            )
+            .await?;
+        let response: Value = response
+            .json()
+            .await
+            .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let ids = response["data"]["instance_ids"]
+            .as_array()
+            .filter(|ids| ids.len() == 1)
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let id = ids[0]
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        let instance = ProvisionedInstance {
+            id: id.into(),
+            provider: CloudProvider::LambdaLabs,
+            instance_type: offer.instance_type.clone(),
+            region: offer.region.clone(),
+            public_ip: None,
+            private_ip: None,
+            status: InstanceStatus::Starting,
+        };
+        let mut resource = metadata.bind(instance, ManagedResourceKind::Instance);
+        resource.gpu_class = Some(offer.gpu_class.clone());
+        resource.gpu_count = Some(offer.gpu_count);
+        resource.gpu_vram_gb =
+            blueprint_core::gpu::find(&offer.gpu_class).map(|class| class.vram_gb);
+        resource.hourly_cost_usd = Some(offer.hourly_cost_usd);
+        Ok(resource)
+    }
+
+    async fn status(
+        &self,
+        identity: &ManagedLeaseIdentity,
+        id: &str,
+    ) -> Result<Option<ManagedResource>> {
+        let raw = match self
+            .data(&format!("instances/{}", urlencoding::encode(id)))
+            .await
+        {
+            Ok(value) => value,
+            Err(Error::Provider(ProviderErrorCode::NotFound)) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let resource = Self::managed(&raw)?.ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+        if resource.namespace != identity.namespace || resource.lease_id != identity.lease_id {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Ok(Some(resource))
+    }
+
+    async fn list(&self, namespace: &str) -> Result<Vec<ManagedResource>> {
+        let mut resources = Vec::new();
+        let data = self.data("instances").await?;
+        for raw in data
+            .as_array()
+            .ok_or(Error::Provider(ProviderErrorCode::ProviderError))?
+        {
+            if let Some(resource) = Self::managed(raw)? {
+                if resource.namespace == namespace {
+                    resources.push(resource);
+                }
+            }
+        }
+        Ok(resources)
+    }
+
+    async fn destroy(&self, identity: &ManagedLeaseIdentity, id: &str) -> Result<()> {
+        if <Self as ManagedProviderAdapter>::status(self, identity, id)
+            .await?
+            .is_none()
+        {
+            return Ok(());
+        }
+        self.http
+            .post_json(
+                &format!("{}/instance-operations/terminate", self.base_url),
+                &self.auth,
+                json!({"instance_ids":[id]}),
+            )
+            .await?;
+        Ok(())
     }
 }
 
 #[async_trait]
 impl CloudProviderAdapter for LambdaLabsAdapter {
-    async fn provision_instance(
-        &self,
-        instance_type: &str,
-        region: &str,
-        require_tee: bool,
-    ) -> Result<ProvisionedInstance> {
-        // Fail closed at the trait boundary: this provider has no
-        // confidential-compute / TEE attestation path. Refuse rather than
-        // silently return a non-TEE instance for a require_tee request.
-        if require_tee {
-            return Err(Error::ConfigurationError(
-                "Lambda Labs does not support confidential-compute / TEE attestation; \
-                 refusing require_tee"
-                    .into(),
-            ));
-        }
-        let name = generate_instance_name("lambda");
-        let region_name = if region.is_empty() {
-            self.default_region.as_str()
-        } else {
-            region
-        };
-
-        let mut payload = serde_json::json!({
-            "region_name": region_name,
-            "instance_type_name": instance_type,
-            "quantity": 1,
-            "name": name,
-        });
-        if let Some(key) = &self.ssh_key_name {
-            payload["ssh_key_names"] = serde_json::json!([key]);
-        }
-
-        let launch_url = format!("{}/instance-operations/launch", self.base_url);
-        let json: serde_json::Value = {
-            let mut last_err = None;
-            let mut result = None;
-            for attempt in 0..3u32 {
-                if attempt > 0 {
-                    tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-                }
-                match self
-                    .http
-                    .authenticated_request(
-                        reqwest::Method::POST,
-                        &launch_url,
-                        &self.auth,
-                        Some(payload.clone()),
-                    )
-                    .await
-                {
-                    Ok(response) if response.status().is_success() => {
-                        result = Some(response.json::<serde_json::Value>().await.map_err(|e| {
-                            Error::HttpError(format!("Lambda Labs response parse: {e}"))
-                        })?);
-                        break;
-                    }
-                    Ok(response)
-                        if response.status() == 429 || response.status().is_server_error() =>
-                    {
-                        last_err = Some(Error::HttpError(format!(
-                            "Lambda Labs launch: transient {}",
-                            response.status()
-                        )));
-                        continue;
-                    }
-                    Ok(response) => {
-                        let body = response.text().await.unwrap_or_default();
-                        return Err(Error::HttpError(format!(
-                            "Lambda Labs launch failed: {body}"
-                        )));
-                    }
-                    Err(e) => {
-                        last_err = Some(Error::HttpError(format!("Lambda Labs launch: {e}")));
-                        continue;
-                    }
-                }
-            }
-            match result {
-                Some(v) => v,
-                None => return Err(last_err.unwrap()),
-            }
-        };
-
-        let instance_id = json
-            .get("data")
-            .and_then(|d| d.get("instance_ids"))
-            .and_then(|ids| ids.get(0))
-            .and_then(|id| id.as_str())
-            .ok_or_else(|| Error::HttpError("Lambda Labs launch: no instance id returned".into()))?
-            .to_string();
-
-        info!(%instance_id, %region_name, %instance_type, "Launched Lambda Labs instance");
-
-        self.wait_for_running(&instance_id).await
+    fn managed(&self) -> Option<&dyn ManagedProviderAdapter> {
+        Some(self)
     }
-
-    async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        let payload = serde_json::json!({ "instance_ids": [instance_id] });
-        let terminate_url = format!("{}/instance-operations/terminate", self.base_url);
-        let mut last_err = None;
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-            }
-            match self
-                .http
-                .authenticated_request(
-                    reqwest::Method::POST,
-                    &terminate_url,
-                    &self.auth,
-                    Some(payload.clone()),
-                )
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    info!(%instance_id, "Terminated Lambda Labs instance");
-                    return Ok(());
-                }
-                Ok(response) if response.status() == reqwest::StatusCode::NOT_FOUND => {
-                    info!(%instance_id, "Lambda Labs instance already terminated (404)");
-                    return Ok(());
-                }
-                Ok(response) if response.status() == 429 || response.status().is_server_error() => {
-                    last_err = Some(Error::HttpError(format!(
-                        "Lambda Labs terminate: transient {}",
-                        response.status()
-                    )));
-                    continue;
-                }
-                Ok(response) => {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!(
-                        "Lambda Labs terminate failed: {body}"
-                    )));
-                }
-                Err(e) => {
-                    last_err = Some(Error::HttpError(format!("Lambda Labs terminate: {e}")));
-                    continue;
-                }
-            }
-        }
-        Err(last_err.unwrap())
-    }
-
-    async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
-        match self.fetch_instance_json(instance_id).await {
-            Ok(raw) => {
-                let instance = Self::parse_instance(&raw, &self.default_region)?;
-                Ok(instance.status)
-            }
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Lambda Labs instance status");
-                Ok(InstanceStatus::Unknown)
-            }
-        }
-    }
-
-    async fn deploy_blueprint_with_target(
-        &self,
-        target: &crate::core::deployment_target::DeploymentTarget,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        use crate::core::deployment_target::DeploymentTarget;
-        match target {
-            DeploymentTarget::VirtualMachine { runtime: _ } => {
-                let selection =
-                    crate::providers::lambda_labs::LambdaLabsInstanceMapper::map(resource_spec);
-                let instance = self
-                    .provision_instance(&selection.instance_type, "", false)
-                    .await?;
-                let instance_id_for_cleanup = instance.id.clone();
-                match self
-                    .deploy_blueprint(&instance, blueprint_image, resource_spec, env_vars)
-                    .await
-                {
-                    Ok(result) => Ok(result),
-                    Err(deploy_err) => {
-                        warn!(
-                            provider = "lambda_labs",
-                            instance_id = %instance_id_for_cleanup,
-                            error = %deploy_err,
-                            "Deploy failed after provisioning; terminating instance to prevent billing leak"
-                        );
-                        if let Err(cleanup_err) =
-                            self.terminate_instance(&instance_id_for_cleanup).await
-                        {
-                            warn!(
-                                provider = "lambda_labs",
-                                instance_id = %instance_id_for_cleanup,
-                                cleanup_error = %cleanup_err,
-                                "Cleanup after failed deploy also failed — instance may be orphaned"
-                            );
-                        }
-                        Err(deploy_err)
-                    }
-                }
-            }
-            DeploymentTarget::ManagedKubernetes { .. } => Err(Error::ConfigurationError(
-                "Lambda Labs does not offer managed Kubernetes".into(),
-            )),
-            DeploymentTarget::GenericKubernetes {
-                context: _,
-                namespace,
-            } => {
-                #[cfg(feature = "kubernetes")]
-                {
-                    use crate::shared::SharedKubernetesDeployment;
-                    SharedKubernetesDeployment::deploy_to_generic_k8s(
-                        namespace,
-                        blueprint_image,
-                        resource_spec,
-                        env_vars,
-                    )
-                    .await
-                }
-                #[cfg(not(feature = "kubernetes"))]
-                {
-                    let _ = (namespace, blueprint_image, resource_spec, env_vars);
-                    Err(Error::ConfigurationError(
-                        "Kubernetes feature not enabled".into(),
-                    ))
-                }
-            }
-            DeploymentTarget::Serverless { .. } => Err(Error::ConfigurationError(
-                "Lambda Labs does not offer serverless deployment".into(),
-            )),
-        }
-    }
-
-    async fn deploy_blueprint(
-        &self,
-        instance: &ProvisionedInstance,
-        blueprint_image: &str,
-        resource_spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        require_public_ip(instance)?;
-        deploy_via_ssh(
-            instance,
-            blueprint_image,
-            resource_spec,
-            env_vars,
-            SshDeploymentConfig::lambda_labs(),
+    async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
+        Self::instance(
+            &self
+                .data(&format!("instances/{}", urlencoding::encode(id)))
+                .await?,
         )
-        .await
-    }
-
-    async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
-        if let Some(endpoint) = deployment.qos_grpc_endpoint() {
-            // Reuse the pre-built pooled client instead of rebuilding the
-            // TLS stack on every (interval-driven) health probe.
-            match self
-                .http
-                .get(&format!("{endpoint}/health"), &ApiAuthentication::None)
-                .await
-            {
-                Ok(response) => Ok(response.status().is_success()),
-                Err(_) => Ok(false),
-            }
-        } else {
-            Ok(false)
-        }
-    }
-
-    async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
-        self.terminate_instance(&deployment.instance.id).await
     }
 }

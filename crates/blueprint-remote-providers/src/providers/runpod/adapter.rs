@@ -1,16 +1,12 @@
 //! Runpod REST v2: live inventory and one identity-scoped pod lifecycle.
-use crate::core::deployment_target::DeploymentTarget;
-use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
+use crate::infra::traits::CloudProviderAdapter;
 use crate::managed::{
     ManagedLeaseIdentity, ManagedMetadata, ManagedProviderAdapter, ManagedResource,
     ManagedResourceKind, NativeOffer, ProviderErrorCode,
 };
-use crate::providers::common::gpu_adapter::{deploy_via_ssh, require_public_ip};
 use crate::security::{ApiAuthentication, SecureHttpClient};
-use crate::shared::SshDeploymentConfig;
 use crate::{CloudProvider, Error, InstanceStatus, ProvisionedInstance, ResourceSpec, Result};
 use async_trait::async_trait;
-use blueprint_std::collections::HashMap;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashSet};
 
@@ -19,7 +15,6 @@ const BASE_URL: &str = "https://api.runpod.io/v2";
 pub struct RunPodAdapter {
     http: SecureHttpClient,
     auth: ApiAuthentication,
-    health_http: reqwest::Client,
     base_url: String,
     cloud_type: String,
     default_region: Option<String>,
@@ -45,7 +40,6 @@ impl RunPodAdapter {
         Ok(Self {
             http: SecureHttpClient::with_endpoint(endpoint)?,
             auth: ApiAuthentication::runpod(api_key),
-            health_http: crate::create_default_provider_client()?,
             base_url: endpoint.trim_end_matches('/').into(),
             cloud_type: "SECURE".into(),
             default_region: None,
@@ -285,7 +279,7 @@ impl ManagedProviderAdapter for RunPodAdapter {
             .as_ref()
             .filter(|image| !image.is_empty())
             .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
-        let mut env = spec.env.clone();
+        let mut env = crate::managed::bootstrap::workload_environment(spec)?;
         env.extend(metadata.env());
         if let Some(key) = &spec.ssh_public_key {
             env.insert("PUBLIC_KEY".into(), key.clone());
@@ -422,26 +416,6 @@ impl CloudProviderAdapter for RunPodAdapter {
     fn managed(&self) -> Option<&dyn ManagedProviderAdapter> {
         Some(self)
     }
-
-    async fn provision_instance(
-        &self,
-        _instance_type: &str,
-        _region: &str,
-        _require_tee: bool,
-    ) -> Result<ProvisionedInstance> {
-        Err(Error::Provider(ProviderErrorCode::Unsupported))
-    }
-
-    async fn terminate_instance(&self, _id: &str) -> Result<()> {
-        Err(Error::Provider(ProviderErrorCode::Unsupported))
-    }
-
-    async fn get_instance_status(&self, id: &str) -> Result<InstanceStatus> {
-        self.get_instance_details(id)
-            .await
-            .map(|instance| instance.status)
-    }
-
     async fn get_instance_details(&self, id: &str) -> Result<ProvisionedInstance> {
         Self::instance(
             &self
@@ -449,102 +423,5 @@ impl CloudProviderAdapter for RunPodAdapter {
                 .await?
                 .ok_or(Error::Provider(ProviderErrorCode::NotFound))?,
         )
-    }
-
-    async fn deploy_blueprint_with_target(
-        &self,
-        target: &DeploymentTarget,
-        image: &str,
-        spec: &ResourceSpec,
-        env: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        match target {
-            DeploymentTarget::GenericKubernetes { namespace, .. } => {
-                #[cfg(feature = "kubernetes")]
-                {
-                    crate::shared::SharedKubernetesDeployment::deploy_to_generic_k8s(
-                        namespace, image, spec, env,
-                    )
-                    .await
-                }
-                #[cfg(not(feature = "kubernetes"))]
-                {
-                    let _ = (namespace, image, spec, env);
-                    Err(Error::Provider(ProviderErrorCode::Unsupported))
-                }
-            }
-            _ => Err(Error::Provider(ProviderErrorCode::Unsupported)),
-        }
-    }
-
-    async fn deploy_blueprint(
-        &self,
-        instance: &ProvisionedInstance,
-        image: &str,
-        spec: &ResourceSpec,
-        env: HashMap<String, String>,
-    ) -> Result<BlueprintDeploymentResult> {
-        let identity = spec
-            .ownership
-            .as_ref()
-            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
-        <Self as ManagedProviderAdapter>::status(self, identity, &instance.id)
-            .await?
-            .ok_or(Error::Provider(ProviderErrorCode::NotFound))?;
-        require_public_ip(instance)?;
-        let raw = self
-            .pod(&instance.id)
-            .await?
-            .ok_or(Error::Provider(ProviderErrorCode::NotFound))?;
-        let metadata = ManagedMetadata::from_env(
-            &serde_json::from_value(raw["env"].clone())
-                .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?,
-        )?
-        .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
-        let mut result =
-            deploy_via_ssh(instance, image, spec, env, SshDeploymentConfig::runpod()).await?;
-        result.metadata.extend(metadata.tags());
-        Ok(result)
-    }
-
-    async fn health_check_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<bool> {
-        let tags = deployment
-            .metadata
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        let metadata = ManagedMetadata::from_tags(&tags)?
-            .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
-        if !<Self as ManagedProviderAdapter>::status(
-            self,
-            &metadata.identity,
-            &deployment.instance.id,
-        )
-        .await?
-        .is_some_and(|resource| resource.instance.status == InstanceStatus::Running)
-        {
-            return Ok(false);
-        }
-        let Some(endpoint) = deployment.qos_grpc_endpoint() else {
-            return Ok(false);
-        };
-        Ok(self
-            .health_http
-            .get(format!("{endpoint}/health"))
-            .send()
-            .await
-            .is_ok_and(|response| response.status().is_success()))
-    }
-
-    async fn cleanup_blueprint(&self, deployment: &BlueprintDeploymentResult) -> Result<()> {
-        let tags = deployment
-            .metadata
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        let metadata = ManagedMetadata::from_tags(&tags)?
-            .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
-        <Self as ManagedProviderAdapter>::destroy(self, &metadata.identity, &deployment.instance.id)
-            .await
     }
 }

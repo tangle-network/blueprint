@@ -280,33 +280,47 @@ async fn lambda_cannot_turn_three_requested_gpus_into_an_eight_gpu_launch() {
 async fn vast_search_and_bid_preserve_native_query_fields_and_requested_class() {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let peer = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/bundles/"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"offers":[{
-            "id":7001,"gpu_name":"B200","num_gpus":8,"dph_total":0.5,
-            "min_bid":0.4,"reliability":0.999,"reliability2":0.999,
-            "verified":true,"verification":"verified","rentable":true,"rented":false,
-            "gpu_ram":180000,"geolocation":"synthetic-region"
-        }]})))
-        .mount(&peer)
-        .await;
-    Mock::given(method("PUT"))
-        .and(path("/asks/7001/"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({"success":true,"new_contract":8001})),
-        )
-        .mount(&peer)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/instances/"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({"instances":[{
-                "id":8001,"gpu_name":"B200","num_gpus":8,"actual_status":"running",
-                "public_ipaddr":"192.0.2.12","geolocation":"synthetic-region"
-            }]})),
-        )
-        .mount(&peer)
-        .await;
+    use std::sync::{Arc, Mutex};
+    use wiremock::{Request, matchers::path_regex};
+    let state = Arc::new(Mutex::new(std::collections::BTreeMap::<u64, Value>::new()));
+    Mock::given(path_regex("^/(bundles/|asks/[0-9]+/|instances/[0-9]+/|v1/instances)$"))
+        .respond_with(move |request: &Request| {
+            let mut state = state.lock().unwrap();
+            match (request.method.as_str(), request.url.path()) {
+                ("POST", "/bundles/") => {
+                    let body: Value = request.body_json().unwrap();
+                    let offers = [(7001,0.4),(7002,0.45)].into_iter()
+                        .filter(|(id,_)|body["id"]["eq"].as_u64().is_none_or(|requested|requested==*id))
+                        .map(|(id,bid)|json!({"id":id,"gpu_name":"B200","num_gpus":8,"dph_total":bid+0.1,
+                            "min_bid":bid,"storage_total_cost":0.0,"reliability2":0.999,"verified":true,"rentable":true,"rented":false,
+                            "cpu_cores_effective":128,"cpu_ram":2048000,"disk_space":4096,"geolocation":"synthetic-region"})).collect::<Vec<_>>();
+                    ResponseTemplate::new(200).set_body_json(json!({"offers":offers}))
+                },
+                ("PUT", path) => {
+                    let body:Value=request.body_json().unwrap();
+                    let id=path.trim_start_matches("/asks/").trim_end_matches('/').parse::<u64>().unwrap()+1000;
+                    state.insert(id,json!({"id":id,"label":body["label"],"gpu_name":"B200","num_gpus":8,
+                        "actual_status":if id==8002 {"stopped"} else {"running"},"intended_status":"running","is_bid":true,
+                        "public_ipaddr":"192.0.2.12","ssh_host":"ssh.synthetic.invalid","ssh_port":22001,
+                        "dph_total":0.47,"geolocation":"synthetic-region","start_date":1793959200}));
+                    ResponseTemplate::new(200).set_body_json(json!({"success":true,"new_contract":id}))
+                },
+                ("GET", "/v1/instances") => {
+                    let offset=request.url.query_pairs().find(|(key,_)|key=="after_token").and_then(|(_,value)|value.parse::<usize>().ok()).unwrap_or(0);
+                    let rows=state.values().rev().cloned().collect::<Vec<_>>();
+                    ResponseTemplate::new(200).set_body_json(json!({"instances":rows.iter().skip(offset).take(1).collect::<Vec<_>>(),
+                        "next_token":(offset+1<rows.len()).then(||(offset+1).to_string())}))
+                },
+                ("GET", path) => {
+                    let id=path.trim_start_matches("/instances/").trim_end_matches('/').parse::<u64>().unwrap();
+                    state.get(&id).map(|raw|ResponseTemplate::new(200).set_body_json(json!({"instances":raw}))).unwrap_or_else(||ResponseTemplate::new(404))
+                },
+                ("DELETE", path) => {
+                    let id=path.trim_start_matches("/instances/").trim_end_matches('/').parse::<u64>().unwrap();state.remove(&id);ResponseTemplate::new(204)
+                },
+                _=>ResponseTemplate::new(404),
+            }
+        }).mount(&peer).await;
     let credentials = serde_json::from_value(json!({"provider":"vast-ai",
         "api_key":"synthetic-local-peer-key","endpoint":peer.uri()
     }))
@@ -323,7 +337,7 @@ async fn vast_search_and_bid_preserve_native_query_fields_and_requested_class() 
     });
     spec.lease_duration_secs = Some(3600);
     spec.image = Some("example.invalid/synthetic-image:v1".into());
-    provisioner
+    let instance = provisioner
         .provision_with_requirements(CloudProvider::VastAi, &spec, "synthetic-region", false)
         .await
         .unwrap();
@@ -346,6 +360,103 @@ async fn vast_search_and_bid_preserve_native_query_fields_and_requested_class() 
         json!({"nested_query":null,"gpu_name":{"eq":"B200"},"num_gpus":{"eq":8},
             "type":"bid","bid":0.4,"image":"example.invalid/synthetic-image:v1"}),
         "synthetic native peer prices are test inputs, never observed stock or a public price table"
+    );
+    let identity = spec.ownership.as_ref().unwrap();
+    let mut second = spec.clone();
+    second.ownership.as_mut().unwrap().namespace = "synthetic-cell-b".into();
+    second.ownership.as_mut().unwrap().lease_id = "vast-second".into();
+    let quotes = provisioner.quotes(&second).await.unwrap();
+    assert_eq!(
+        quotes.quotes.len(),
+        4,
+        "both native offers and both rental types must survive selection"
+    );
+    let candidate = quotes
+        .quotes
+        .iter()
+        .find(|quote| quote.offer.native_id == "7002" && quote.offer.spot)
+        .unwrap();
+    let other = provisioner
+        .create_managed(&second, &candidate.candidate)
+        .await
+        .unwrap();
+    assert_eq!(
+        other.instance.id, "8002",
+        "an explicitly selected second candidate must not rent the first offer"
+    );
+    let status = provisioner
+        .status_managed(
+            &CloudProvider::VastAi,
+            second.ownership.as_ref().unwrap(),
+            "8002",
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(status.preempted);
+    assert_eq!(status.hourly_cost_usd, Some(0.47));
+    assert_eq!(
+        status.ssh_endpoint.as_deref(),
+        Some("ssh://root@ssh.synthetic.invalid:22001")
+    );
+    assert!(status.endpoint_url.is_none() && status.worker_url.is_none());
+    assert_eq!(
+        provisioner
+            .list_managed(&identity.namespace)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        provisioner
+            .destroy_managed(&CloudProvider::VastAi, identity, Some("8002"))
+            .await
+            .is_err()
+    );
+    provisioner
+        .destroy_managed(&CloudProvider::VastAi, identity, Some(&instance.id))
+        .await
+        .unwrap();
+    assert!(
+        provisioner
+            .list_managed(&identity.namespace)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        provisioner
+            .list_managed("synthetic-cell-b")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    provisioner
+        .destroy_managed(
+            &CloudProvider::VastAi,
+            second.ownership.as_ref().unwrap(),
+            Some("8002"),
+        )
+        .await
+        .unwrap();
+    assert!(
+        provisioner
+            .list_managed("synthetic-cell-b")
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let requests = peer.received_requests().await.unwrap();
+    let second_launches = requests
+        .iter()
+        .filter(|request| request.method == "PUT" && request.url.path() == "/asks/7002/")
+        .collect::<Vec<_>>();
+    assert_eq!(second_launches.len(), 1);
+    assert_eq!(
+        second_launches[0].body_json::<Value>().unwrap()["price"],
+        0.45
     );
 }
 
@@ -434,26 +545,44 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
         }})))
         .mount(&peer)
         .await;
-    Mock::given(method("GET"))
-        .and(path("/instances"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":[]})))
-        .mount(&peer)
-        .await;
-    Mock::given(method("POST"))
-        .and(path("/instance-operations/launch"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(json!({"data":{"instance_ids":["synthetic-lambda-eight"]}})),
-        )
-        .mount(&peer)
-        .await;
-    Mock::given(method("GET")).and(path("/instances/synthetic-lambda-eight"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data":{
-            "id":"synthetic-lambda-eight","status":"active","ip":"192.0.2.14",
-            "instance_type":{"name":"gpu_8x_b200_sxm6","specs":{"gpus":8}},"region":{"name":"us-test-1"}
-        }}))).mount(&peer).await;
+    use std::sync::{Arc, Mutex};
+    use wiremock::{Request, matchers::path_regex};
+    let instances = Arc::new(Mutex::new(
+        std::collections::BTreeMap::<String, Value>::new(),
+    ));
+    Mock::given(path_regex("^/(instances(/[^/]+)?|instance-operations/(launch|terminate)|firewall-rulesets/[^/]+)$"))
+        .respond_with(move |request: &Request| {
+            assert_eq!(request.headers.get("authorization").unwrap(), "Bearer synthetic-local-peer-key");
+            let mut state = instances.lock().unwrap();
+            match (request.method.as_str(), request.url.path()) {
+                ("GET", "/firewall-rulesets/global") => ResponseTemplate::new(200).set_body_json(json!({"data":{
+                    "id":"global","rules":[{"protocol":"tcp","port_range":[22,22],"source_network":"192.0.2.0/24"}]}})),
+                ("GET", "/firewall-rulesets/existing-app") => ResponseTemplate::new(200).set_body_json(json!({"data":{
+                    "id":"existing-app","region":{"name":"us-test-1"},
+                    "rules":[{"protocol":"tcp","port_range":[8000,8000],"source_network":"192.0.2.0/24"}]}})),
+                ("GET", "/instances") => ResponseTemplate::new(200).set_body_json(json!({"data":state.values().cloned().collect::<Vec<_>>(),"page_token":null})),
+                ("POST", "/instance-operations/launch") => {
+                    let body: Value = request.body_json().unwrap();
+                    let id = format!("synthetic-lambda-{}", state.len() + 1);
+                    state.insert(id.clone(), json!({"id":id,"name":body["name"],"tags":body["tags"],
+                        "status":"active","ip":"192.0.2.14","created":"2026-11-06T10:00:00Z",
+                        "instance_type":{"name":body["instance_type_name"],"specs":{"gpus":8},"price_cents_per_hour":6400},
+                        "region":{"name":body["region_name"]}}));
+                    ResponseTemplate::new(200).set_body_json(json!({"data":{"instance_ids":[id]}}))
+                },
+                ("POST", "/instance-operations/terminate") => {
+                    let body: Value = request.body_json().unwrap();
+                    for id in body["instance_ids"].as_array().unwrap() { state.remove(id.as_str().unwrap()); }
+                    ResponseTemplate::new(200).set_body_json(json!({"data":{}}))
+                },
+                ("GET", path) => state.get(path.trim_start_matches("/instances/"))
+                    .map(|raw| ResponseTemplate::new(200).set_body_json(json!({"data":raw})))
+                    .unwrap_or_else(||ResponseTemplate::new(404)),
+                _ => ResponseTemplate::new(404),
+            }
+        }).mount(&peer).await;
     let credentials = serde_json::from_value(json!({"provider":"lambda-labs",
-        "api_key":"synthetic-local-peer-key","endpoint":peer.uri(),"ssh_key_name":"synthetic-key"
+        "api_key":"synthetic-local-peer-key","endpoint":peer.uri(),"ssh_key_name":"synthetic-key","firewall_ruleset_ids":["existing-app"]
     }))
     .unwrap();
     let provisioner = CloudProvisioner::from_credentials(vec![credentials]).unwrap();
@@ -465,6 +594,7 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
     spec.env
         .insert("MODEL_KEY".into(), "synthetic-bootstrap-secret".into());
     spec.endpoint_port = Some(8000);
+    spec.source_network = Some("192.0.2.0/24".into());
     spec.ports = vec![8000];
     spec.validate()
         .expect("the integration request must be valid");
@@ -473,7 +603,7 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
         lease_id: "lambda-eight".into(),
     });
     spec.lease_duration_secs = Some(3600);
-    provisioner
+    let instance = provisioner
         .provision_with_requirements(CloudProvider::LambdaLabs, &spec, "us-test-1", false)
         .await
         .unwrap();
@@ -490,8 +620,87 @@ async fn lambda_native_sku_launch_includes_the_custom_workload_bootstrap() {
         json!({"sku":"gpu_8x_b200_sxm6","user_data":true,"tags":true}),
         "a native VM rental must carry the requested container and recovery identity"
     );
+    assert_eq!(launch["firewall_rulesets"], json!([{"id":"existing-app"}]));
+    assert!(
+        !requests.iter().any(|request| request.method != "GET"
+            && request.url.path().starts_with("/firewall-rulesets"))
+    );
     #[cfg(unix)]
     execute_cloud_init_startup(launch["user_data"].as_str().unwrap());
+    let identity = spec.ownership.as_ref().unwrap();
+    let status = provisioner
+        .status_managed(&CloudProvider::LambdaLabs, identity, &instance.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status.gpu_count, Some(8));
+    assert_eq!(status.gpu_vram_gb, Some(180));
+    assert_eq!(status.hourly_cost_usd, Some(64.0));
+    assert_eq!(
+        status.ssh_endpoint.as_deref(),
+        Some("ssh://ubuntu@192.0.2.14:22")
+    );
+    assert!(status.endpoint_url.is_none() && status.worker_url.is_none());
+    let mut second = spec.clone();
+    second.ownership.as_mut().unwrap().namespace = "synthetic-cell-b".into();
+    second.ownership.as_mut().unwrap().lease_id = "lambda-other".into();
+    let quotes = provisioner.quotes(&second).await.unwrap();
+    let other = provisioner
+        .create_managed(&second, &quotes.quotes[0].candidate)
+        .await
+        .unwrap();
+    assert_eq!(
+        provisioner
+            .list_managed(&identity.namespace)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        provisioner
+            .destroy_managed(
+                &CloudProvider::LambdaLabs,
+                identity,
+                Some(&other.instance.id)
+            )
+            .await
+            .is_err()
+    );
+    provisioner
+        .destroy_managed(&CloudProvider::LambdaLabs, identity, Some(&instance.id))
+        .await
+        .unwrap();
+    assert!(
+        provisioner
+            .list_managed(&identity.namespace)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        provisioner
+            .list_managed("synthetic-cell-b")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    provisioner
+        .destroy_managed(
+            &CloudProvider::LambdaLabs,
+            second.ownership.as_ref().unwrap(),
+            Some(&other.instance.id),
+        )
+        .await
+        .unwrap();
+    assert!(
+        provisioner
+            .list_managed("synthetic-cell-b")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[cfg(unix)]
