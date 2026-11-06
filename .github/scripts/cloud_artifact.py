@@ -3,16 +3,18 @@
 
 import hashlib
 from pathlib import Path
-import subprocess
 import shutil
+import subprocess
 import sys
 import tarfile
+import tempfile
 
 from check_cloud_distribution import check
 
 ROOT = Path(__file__).resolve().parents[2]
-TARGETS = ("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu")
+TARGETS = {"x86_64-unknown-linux-gnu": 62, "aarch64-unknown-linux-gnu": 183}
 OUTPUT = ROOT / "target/cloud-artifacts"
+VERIFIED = ROOT / "target/verified-cloud-artifacts"
 
 
 def digest(path):
@@ -20,20 +22,41 @@ def digest(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def verify():
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-    for target in TARGETS:
-        archive = OUTPUT / f"cargo-tangle-cloud-{target}.tar.xz"
-        # Native jobs upload files; cargo-dist downloads them into its distribution directory.
-        for filename in (archive.name, archive.name + ".sha256"):
-            incoming = ROOT / "target/distrib" / filename
-            if incoming.exists():
-                shutil.copyfile(incoming, OUTPUT / filename)
-        expected = (archive.with_suffix(archive.suffix + ".sha256")).read_text().split()
-        assert expected == [digest(archive), archive.name]
-        with tarfile.open(archive, "r:xz") as source:
-            name = f"cargo-tangle-cloud-{target}/cargo-tangle"
-            assert source.getmember(name).isfile(), name
+def inspect_archive(archive, target, execute=False):
+    with tarfile.open(archive, "r:xz") as source:
+        member = source.getmember(f"cargo-tangle-cloud-{target}/cargo-tangle")
+        assert member.isfile() and member.size > 64, "missing CLI executable"
+        with source.extractfile(member) as binary:
+            header = binary.read(20)
+            assert header[:6] == b"\x7fELF\x02\x01", "expected little-endian ELF64"
+            assert int.from_bytes(header[18:20], "little") == TARGETS[target], "wrong ELF architecture"
+            if execute:
+                with tempfile.TemporaryDirectory(prefix="cargo-tangle-cloud-extracted-") as folder:
+                    path = Path(folder) / "cargo-tangle"
+                    with path.open("wb") as out:
+                        out.write(header)
+                        shutil.copyfileobj(binary, out)
+                    path.chmod(0o700)
+                    check(path)
+
+
+def verify(targets, source):
+    VERIFIED.mkdir(parents=True, exist_ok=True)
+    # Pinned cargo-dist logs extra-artifact subprocess failures and still copies existing
+    # outputs. Publish verified paths only after every input passes; clear stale outputs first.
+    for target in targets:
+        assert target in TARGETS, "unsupported cloud artifact target"
+        for suffix in (".tar.xz", ".tar.xz.sha256"):
+            (VERIFIED / f"cargo-tangle-cloud-{target}{suffix}").unlink(missing_ok=True)
+    files = []
+    for target in targets:
+        archive = source / f"cargo-tangle-cloud-{target}.tar.xz"
+        checksum = archive.with_suffix(archive.suffix + ".sha256")
+        assert checksum.read_text().split() == [digest(archive), archive.name], "checksum mismatch"
+        inspect_archive(archive, target)
+        files.extend((archive, checksum))
+    for path in files:
+        shutil.copyfile(path, VERIFIED / path.name)
 
 
 def build(target):
@@ -46,7 +69,6 @@ def build(target):
         "--no-default-features", "--features", "cloud-only",
     ], cwd=ROOT, check=True)
     binary = ROOT / f"target/cloud-only/{target}/dist/cargo-tangle"
-    check(binary)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     stem = f"cargo-tangle-cloud-{target}"
     archive = OUTPUT / f"{stem}.tar.xz"
@@ -55,13 +77,16 @@ def build(target):
             out.add(source, arcname=f"{stem}/{filename}")
     checksum = digest(archive)
     archive.with_suffix(archive.suffix + ".sha256").write_text(f"{checksum}  {archive.name}\n")
-    print(f"built {archive.name}; sha256 {checksum}")
+    inspect_archive(archive, target, execute=True)
+    print(f"built and executed {archive.name}; sha256 {checksum}")
 
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["verify"]:
-        verify()
+        verify(TARGETS, ROOT / "target/distrib")
+    elif len(sys.argv) == 4 and sys.argv[1] == "verify":
+        verify((sys.argv[2],), Path(sys.argv[3]))
     elif len(sys.argv) == 3 and sys.argv[1] == "build":
         build(sys.argv[2])
     else:
-        raise SystemExit("usage: cloud_artifact.py build <target> | verify")
+        raise SystemExit("usage: cloud_artifact.py build <target> | verify [<target> <source-dir>]")

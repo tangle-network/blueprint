@@ -45,10 +45,10 @@ cargo-dist-version = "0.28.7-prerelease.1"
 [[dist.extra-artifacts]]
 build = ["python3", ".github/scripts/cloud_artifact.py", "verify"]
 artifacts = [
-    "target/cloud-artifacts/cargo-tangle-cloud-x86_64-unknown-linux-gnu.tar.xz",
-    "target/cloud-artifacts/cargo-tangle-cloud-x86_64-unknown-linux-gnu.tar.xz.sha256",
-    "target/cloud-artifacts/cargo-tangle-cloud-aarch64-unknown-linux-gnu.tar.xz",
-    "target/cloud-artifacts/cargo-tangle-cloud-aarch64-unknown-linux-gnu.tar.xz.sha256",
+    "target/verified-cloud-artifacts/cargo-tangle-cloud-x86_64-unknown-linux-gnu.tar.xz",
+    "target/verified-cloud-artifacts/cargo-tangle-cloud-x86_64-unknown-linux-gnu.tar.xz.sha256",
+    "target/verified-cloud-artifacts/cargo-tangle-cloud-aarch64-unknown-linux-gnu.tar.xz",
+    "target/verified-cloud-artifacts/cargo-tangle-cloud-aarch64-unknown-linux-gnu.tar.xz.sha256",
 ]
 
 [dist.github-custom-runners]

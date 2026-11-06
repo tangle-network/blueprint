@@ -19,8 +19,6 @@ Create, run, and operate blueprints on Tangle EVM.
     - [Deploy Blueprint to Cloud](#deploy-blueprint-to-cloud)
     - [Monitor Cloud Deployments](#monitor-cloud-deployments)
   - [Key Management](#key-management)
-  - [Generating Keys from the Command Line](#generating-keys-from-the-command-line)
-    - [Flags](#flags)
 
 ## Overview
 
@@ -30,8 +28,6 @@ The CLI bundles every workflow needed for the EVM-only SDK:
 - `cargo tangle blueprint run --protocol tangle` boots a manager connected to the Tangle v2 contracts.
 - `cargo tangle blueprint register-tangle` registers an operator against `ITangle`, `MultiAssetDelegation`, and `OperatorStatusRegistry`.
 - `cargo tangle key *` manages local and remote k256 keys via `blueprint-keystore`.
-
-All Substrate helpers have been removed; the CLI now targets EVM-first flows only.
 
 ## Installation
 
@@ -562,26 +558,4 @@ cargo tangle operator status \
 
 Omit `--operator` to query the locally configured operator. Add `--json` for machine-friendly output (timestamp, raw status code, online boolean).
 
-## Need More?
-
 - End-to-end demos and advanced options live on the [CLI reference](https://docs.tangle.tools/developers/cli/reference).
-- For pricing/QoS flows, combine the CLI with `crates/pricing-engine` and the new `OPERATOR_*` env vars described in that README.
-
-## Generating Keys from the Command Line
-
-The following command will generate a keypair for a given key type:
-
-```shell
-cargo tangle blueprint generate-keys -k <KEY_TYPE> -p <PATH> -s <SURI/SEED> --show-secret
-```
-
-where it is optional to include the path, seed, or the show-secret flags.
-
-### Flags
-
-- `-k` or `--key-type`: Required flag. The key type to generate (sr25519, ecdsa, bls_bn254, ed25519, bls381).
-- `-p` or `--path`: The path to write the generated keypair to. If not provided, the keypair will be written solely to stdout.
-- `-s` or `--seed`: The suri/seed to generate the keypair from. If not provided, a random keypair will be generated.
-- `--show-secret`: Denotes that the Private Key should also be printed to stdout. If not provided, only the public key will be printed.
-
-For all of our features for created and using keys, see the [key management](https://docs.tangle.tools/developers/cli/keys) section of our CLI docs.
