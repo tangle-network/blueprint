@@ -127,5 +127,6 @@ async fn a_refusal_after_the_rental_retires_it_instead_of_renting_again() {
     let requests = peer.received_requests().await.unwrap();
     let count = |verb: &str| requests.iter().filter(|r| r.method == verb).count();
     assert_eq!((count("POST"), count("DELETE")), (1, 1));
-    assert!(provisioner.list_managed("lease-cell").await.unwrap().is_empty());
+    let listed = provisioner.list_managed("lease-cell").await.unwrap();
+    assert!(listed.is_empty(), "{listed:?}");
 }

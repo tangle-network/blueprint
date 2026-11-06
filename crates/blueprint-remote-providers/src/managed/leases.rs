@@ -12,7 +12,6 @@ pub struct LeaseAccess {
 }
 
 impl LeaseAccess {
-    /// Present only when the SDK generated the key; hand it to the lessee alone.
     pub fn private_key(&self) -> Option<&str> {
         self.private_key.as_deref().map(String::as_str)
     }
@@ -118,7 +117,8 @@ impl CloudProvisioner {
                     | ProviderErrorCode::RateLimited
                     | ProviderErrorCode::Unsupported),
                 )) => {
-                    self.destroy_managed(&quote.offer.provider, identity, None).await?;
+                    self.destroy_managed(&quote.offer.provider, identity, None)
+                        .await?;
                     refusal = code;
                 }
                 Err(error) => return Err(error),
@@ -129,8 +129,7 @@ impl CloudProvisioner {
 
     /// Retire every lease in `namespace` with a resource past its provider-recorded deadline.
     ///
-    /// Provider listings are the only state read, so this is safe after a restart. Each
-    /// provider is handled on its own; one failing account never stops the others.
+    /// Reads only provider listings, so it is restart-safe; one failing provider stops no other.
     pub async fn retire_expired(&self, namespace: &str) -> RetireReport {
         let now = chrono::Utc::now();
         let mut report = RetireReport::default();
