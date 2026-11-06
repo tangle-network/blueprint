@@ -35,7 +35,7 @@ jsonwebtoken = { workspace = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml = { workspace = true }
-blueprint-core = { workspace = true, features = ["tracing"] }
+blueprint-core = { workspace = true, features = ["tracing", "schema"] }
 
 # Blueprint dependencies (removed blueprint-manager and blueprint-qos to avoid cyclic dependency)
 # blueprint-auth.workspace = true
@@ -73,6 +73,8 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 libc = { workspace = true }
 rand = { workspace = true }
 urlencoding = { workspace = true }
+
+schemars = { version = "1.2.1", features = ["chrono04"] }
 
 [dev-dependencies]
 mockall = { workspace = true }

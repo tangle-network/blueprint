@@ -21,7 +21,11 @@ CPU and non-Blackwell deployment consumers remain part of this crate's scope.
 Read the [public exports](src/lib.rs), [adapter trait](src/infra/traits.rs), and
 [manifest](Cargo.toml) for available methods and feature gates. Provider-specific
 configuration is owned by its implementation. Keep credential values out of
-argv, logs, and Git.
+argv, logs, and Git. `managed::BoundaryRequest` and `BoundaryResponse` own the
+versioned process contract; `execute_boundary` runs the same managed SDK verbs.
+The CLI catalog emits their derived schema and its digest. Credentials are
+provider-tagged objects supplied on stdin; the process never discovers them
+from an inherited environment.
 
 The [rental design](../../docs/gpu-marketplace-strategy.md) defines managed
 allocation, lease retirement, ranking, and the shared process boundary. Central

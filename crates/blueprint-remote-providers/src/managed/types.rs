@@ -1,7 +1,7 @@
 use crate::{CloudProvider, InstanceStatus, ProvisionedInstance};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderErrorCode {
     InvalidRequest,
@@ -28,7 +28,7 @@ impl core::fmt::Display for ProviderErrorCode {
 }
 
 /// Identity advertised by the native seller, without guessed region aliases.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UnderlyingAllocation {
     pub cloud: String,
@@ -37,7 +37,7 @@ pub struct UnderlyingAllocation {
 }
 
 /// An available whole-node offer, before the SDK applies its common ranking.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeOffer {
     pub provider: CloudProvider,
@@ -53,7 +53,7 @@ pub struct NativeOffer {
 }
 
 /// Opaque candidate is returned unchanged to `create_managed`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderQuote {
     #[serde(flatten)]
     pub offer: NativeOffer,
@@ -65,20 +65,20 @@ pub struct ProviderQuote {
     pub measurement: Option<blueprint_core::resources::ThroughputMeasurement>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Serialize, Deserialize)]
 pub struct ProviderFailure {
     pub provider: CloudProvider,
     pub code: ProviderErrorCode,
 }
 
 /// Failed providers remain visible beside the full ranked priced list.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Serialize, Deserialize)]
 pub struct QuoteSet {
     pub quotes: Vec<ProviderQuote>,
     pub errors: Vec<ProviderFailure>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedResourceKind {
     Instance,
@@ -86,7 +86,7 @@ pub enum ManagedResourceKind {
     Firewall,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
 pub struct ManagedResource {
     pub instance: ProvisionedInstance,
     pub namespace: String,

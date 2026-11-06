@@ -9,6 +9,7 @@ use alloc::{
 use serde::{Deserialize, Serialize};
 
 /// Essential resource specification for deployments
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceSpec {
@@ -82,6 +83,7 @@ pub struct ResourceSpec {
 }
 
 /// Immutable file-set identity shared with inference weight staging.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WeightSource {
@@ -106,6 +108,7 @@ impl WeightSource {
 }
 
 /// A recipe's normalized rental constraints; engine configuration stays with inference-core.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GpuArm {
@@ -160,6 +163,7 @@ impl GpuArm {
 }
 
 /// Raw serving counters pinned to an immutable model, allocation and provider SKU.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ThroughputMeasurement {
@@ -193,6 +197,7 @@ impl ThroughputMeasurement {
 }
 
 /// Caller-owned identity used for deterministic provider tags and recovery.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ManagedLeaseIdentity {
     pub namespace: String,
@@ -410,6 +415,7 @@ impl ResourceSpec {
 }
 
 /// QoS parameters for pricing calculations
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct QosParameters {
     pub priority: f32,
@@ -451,6 +457,7 @@ impl Default for ResourceSpec {
 }
 
 /// Cloud provider types for cost tracking and pricing
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum CloudProvider {
     /// AWS (Amazon Web Services)

@@ -5,7 +5,7 @@ use blueprint_std::collections::HashMap;
 use serde::Deserialize;
 
 /// Each tag selects its adapter's actual caller-owned constructor.
-#[derive(Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+#[derive(schemars::JsonSchema, Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 #[serde(tag = "provider", deny_unknown_fields)]
 pub enum ProviderCredentials {
     #[serde(rename = "runpod")]

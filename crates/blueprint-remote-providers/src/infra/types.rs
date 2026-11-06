@@ -4,7 +4,7 @@ use crate::core::remote::CloudProvider;
 use serde::{Deserialize, Serialize};
 
 /// Provisioned instance details
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
 pub struct ProvisionedInstance {
     pub id: String,
     pub provider: CloudProvider,
@@ -16,7 +16,7 @@ pub struct ProvisionedInstance {
 }
 
 /// Instance status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InstanceStatus {
     Starting,
     Running,

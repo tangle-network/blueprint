@@ -43,6 +43,7 @@ use url::Url;
 
 mod config;
 mod estimate;
+mod json;
 mod logs;
 mod policy;
 mod preflight;
@@ -54,6 +55,26 @@ pub use policy::{CostOptimization, RemoteDeploymentPolicy};
 
 #[derive(Subcommand, Debug)]
 pub enum CloudCommands {
+    /// Print the SDK catalog and generated boundary schema.
+    Catalog {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Rank the full set of configured provider offers.
+    Quote {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Allocate the exact quoted candidate supplied on stdin.
+    Create {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Retire caller-owned native resources and verify absence.
+    Destroy {
+        #[arg(long, required = true)]
+        json: bool,
+    },
     /// Set up cloud provider access
     #[command(visible_alias = "cfg")]
     Configure {
@@ -142,7 +163,11 @@ pub enum CloudCommands {
     #[command(visible_alias = "up")]
     Update {
         /// Service ID to update
-        service_id: String,
+        #[arg(conflicts_with = "json")]
+        service_id: Option<String>,
+
+        #[arg(long)]
+        json: bool,
 
         /// New blueprint image to deploy
         #[arg(short, long)]
@@ -215,7 +240,10 @@ pub enum CloudCommands {
 
     /// List configured providers
     #[command(visible_alias = "ls")]
-    List,
+    List {
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Validate cloud/TEE readiness and emit bootstrap env settings
     #[command(visible_alias = "check")]
@@ -254,6 +282,10 @@ pub enum CloudCommands {
 /// * Termination is rejected or fails
 pub async fn execute(command: CloudCommands) -> Result<()> {
     match command {
+        CloudCommands::Catalog { .. } => json::execute("catalog").await,
+        CloudCommands::Quote { .. } => json::execute("quote").await,
+        CloudCommands::Create { .. } => json::execute("create").await,
+        CloudCommands::Destroy { .. } => json::execute("destroy").await,
         CloudCommands::Configure {
             provider,
             region,
@@ -285,7 +317,14 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
             .await
         }
 
-        CloudCommands::Status { service_id, watch } => status::show_status(service_id, watch).await,
+        CloudCommands::Status { json: true, .. } => json::execute("status").await,
+        CloudCommands::Status {
+            service_id, watch, ..
+        } => {
+            let service_id =
+                service_id.ok_or_else(|| color_eyre::eyre::eyre!("service ID is required"))?;
+            status::show_status(service_id, watch).await
+        }
 
         CloudCommands::Terminate {
             service_id,
@@ -318,7 +357,8 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
             lines,
         } => logs::stream_logs(service_id, follow, level, search, since, lines).await,
 
-        CloudCommands::List => config::list_providers().await,
+        CloudCommands::List { json: true } => json::execute("list").await,
+        CloudCommands::List { json: false } => config::list_providers().await,
 
         CloudCommands::Preflight {
             provider,

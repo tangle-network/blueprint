@@ -20,6 +20,8 @@ tracing = { workspace = true }
 serde = { workspace = true, features = ["alloc", "derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
+schemars = { version = "1.2.1", default-features = false, features = ["derive"], optional = true }
+
 [dev-dependencies]
 # Path-only test dependency avoids a publish-time cycle through the SDK.
 blueprint-sdk = { path = "../sdk", features = ["std"] }
@@ -31,6 +33,7 @@ tokio = { workspace = true, features = ["full"] }
 default = ["std", "tracing"]
 std = ["futures-util/std"]
 tracing = []
+schema = ["dep:schemars"]
 
 [lints]
 workspace = true
