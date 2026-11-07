@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.27](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.26...blueprint-manager-v0.4.0-alpha.27) - 2026-11-07
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.4.0-alpha.26](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.25...blueprint-manager-v0.4.0-alpha.26) - 2026-11-07
 
 ### Added

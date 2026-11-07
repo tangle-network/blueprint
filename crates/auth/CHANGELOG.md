@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.21](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.2.0-alpha.20...blueprint-auth-v0.2.0-alpha.21) - 2026-11-07
+
+### Added
+
+- *(auth)* add scoped EIP-191 sessions with live owner predicates (#1653)
+
 ## [0.2.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-auth-v0.2.0-alpha.19...blueprint-auth-v0.2.0-alpha.20) - 2026-11-07
 
 ### Other
