@@ -49,6 +49,6 @@ pub fn provider_catalog() -> Result<Vec<ProviderDescriptor>> {
             .collect();
         providers.push(ProviderDescriptor { id, credentials });
     }
-    providers.sort_by_key(|provider| provider.id.catalog_key());
+    providers.sort_by(|left, right| left.id.catalog_key().cmp(right.id.catalog_key()));
     Ok(providers)
 }
