@@ -79,7 +79,7 @@ async fn test_real_ssh_deployment_with_container() {
                 storage_gb: 10.0,
                 gpu_count: None,
                 allow_spot: false,
-                qos: Default::default(),
+                ..Default::default()
             };
 
             let mut env_vars = HashMap::new();
@@ -264,7 +264,7 @@ mod stress_tests {
                     storage_gb: 10.0,
                     gpu_count: None,
                     allow_spot: false,
-                    qos: Default::default(),
+                    ..Default::default()
                 };
 
                 // Deploy and verify

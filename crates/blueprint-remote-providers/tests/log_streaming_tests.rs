@@ -212,7 +212,7 @@ async fn test_deployment_record_compatibility() {
             storage_gb: 20.0,
             gpu_count: None,
             allow_spot: false,
-            qos: Default::default(),
+            ..Default::default()
         },
         resource_ids: resource_ids.clone(),
         deployed_at: Utc::now(),

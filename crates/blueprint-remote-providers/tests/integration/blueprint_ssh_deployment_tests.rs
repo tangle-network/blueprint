@@ -157,7 +157,7 @@ async fn test_real_blueprint_deployment_with_all_features() {
         storage_gb: 20.0,
         gpu_count: None,
         allow_spot: false,
-        qos: blueprint_remote_providers::core::resources::QosParameters::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -378,7 +378,7 @@ async fn test_blueprint_update(
         storage_gb: 20.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();

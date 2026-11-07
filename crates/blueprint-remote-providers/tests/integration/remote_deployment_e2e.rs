@@ -170,7 +170,7 @@ async fn test_aws_vm_deployment() -> Result<()> {
         storage_gb: 10.0,
         gpu_count: None,
         allow_spot: true,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     let target = DeploymentTarget::VirtualMachine {
@@ -212,7 +212,7 @@ async fn test_gcp_vm_deployment() -> Result<()> {
         storage_gb: 10.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     let target = DeploymentTarget::VirtualMachine {
