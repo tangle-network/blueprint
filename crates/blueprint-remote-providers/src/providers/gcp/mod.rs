@@ -10,7 +10,7 @@ use crate::providers::common::{InstanceSelection, ProvisionedInfrastructure, Pro
 #[cfg(feature = "gcp")]
 use crate::security::auth;
 #[cfg(feature = "gcp")]
-use blueprint_core::{info, warn};
+use blueprint_core::info;
 #[cfg(feature = "gcp")]
 use blueprint_std::collections::HashMap;
 
@@ -395,17 +395,14 @@ impl GcpProvisioner {
                 Error::ConfigurationError(format!("Failed to terminate instance: {}", e))
             })?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            warn!("Failed to terminate GCE instance: {}", error_text);
             return Err(Error::ConfigurationError(format!(
-                "Failed to terminate GCE instance {} in zone {}: {}",
-                instance_name, zone, error_text
+                "Failed to terminate GCE instance {instance_name} in zone {zone}: {status} {error_text}"
             )));
-        } else {
-            info!("Terminated GCE instance: {}", instance_name);
         }
-
+        info!("Terminated GCE instance: {}", instance_name);
         Ok(())
     }
 

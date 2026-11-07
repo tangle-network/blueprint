@@ -7,8 +7,10 @@ use crate::core::remote::CloudProvider;
 use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
+use crate::managed::ProviderErrorCode;
 use crate::providers::common::gpu_adapter::{
-    build_http_client, deploy_via_ssh, generate_instance_name, poll_until, require_public_ip,
+    ClassifiedError, RetryPolicy, build_http_client, deploy_via_ssh, generate_instance_name,
+    poll_until, require_public_ip, retry_with_backoff,
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
@@ -43,44 +45,26 @@ impl HetznerAdapter {
         })
     }
 
+    /// The server's JSON; a server Hetzner no longer has is `ProviderErrorCode::NotFound`.
     async fn fetch_server(&self, server_id: &str) -> Result<serde_json::Value> {
-        let url = format!("{BASE_URL}/servers/{server_id}");
-        let mut last_err = None;
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-            }
-            match self.http.get(&url, &self.auth).await {
-                Ok(response) if response.status().is_success() => {
-                    let body: serde_json::Value = response
-                        .json()
-                        .await
-                        .map_err(|e| Error::HttpError(format!("Hetzner response parse: {e}")))?;
-                    return body
-                        .get("server")
-                        .cloned()
-                        .ok_or_else(|| Error::HttpError("Hetzner response missing server".into()));
-                }
-                Ok(response) if response.status() == 429 || response.status().is_server_error() => {
-                    last_err = Some(Error::HttpError(format!(
-                        "Hetzner GET {url}: transient {}",
-                        response.status()
-                    )));
-                    continue;
-                }
-                Ok(response) => {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!(
-                        "Hetzner GET {url} failed: {body}"
-                    )));
-                }
-                Err(e) => {
-                    last_err = Some(Error::HttpError(format!("Hetzner GET {url}: {e}")));
-                    continue;
-                }
-            }
+        let url = &format!("{BASE_URL}/servers/{server_id}");
+        let response = retry_with_backoff(
+            "Hetzner GET server",
+            &RetryPolicy::quick(),
+            |_| async move { Ok::<_, ClassifiedError>(self.http.get(url, &self.auth).await?) },
+        )
+        .await?;
+        // The client answers only success and 404; every other status is already an error.
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(Error::Provider(ProviderErrorCode::NotFound));
         }
-        Err(last_err.unwrap())
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| Error::HttpError(format!("Hetzner response parse: {e}")))?;
+        body.get("server")
+            .cloned()
+            .ok_or_else(|| Error::HttpError("Hetzner response missing server".into()))
     }
 
     fn parse_server(value: &serde_json::Value) -> Result<ProvisionedInstance> {
@@ -285,50 +269,23 @@ impl CloudProviderAdapter for HetznerAdapter {
     }
 
     async fn terminate_instance(&self, instance_id: &str) -> Result<()> {
-        let url = format!("{BASE_URL}/servers/{instance_id}");
-        let mut last_err = None;
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-            }
-            match self.http.delete(&url, &self.auth).await {
-                Ok(response) if response.status().is_success() => {
-                    info!(%instance_id, "Terminated Hetzner server");
-                    return Ok(());
-                }
-                Ok(response) if response.status() == reqwest::StatusCode::NOT_FOUND => {
-                    info!(%instance_id, "Hetzner server already terminated (404)");
-                    return Ok(());
-                }
-                Ok(response) if response.status() == 429 || response.status().is_server_error() => {
-                    last_err = Some(Error::HttpError(format!(
-                        "Hetzner delete server: transient {}",
-                        response.status()
-                    )));
-                    continue;
-                }
-                Ok(response) => {
-                    let body = response.text().await.unwrap_or_default();
-                    return Err(Error::HttpError(format!(
-                        "Hetzner delete server failed: {body}"
-                    )));
-                }
-                Err(e) => {
-                    last_err = Some(Error::HttpError(format!("Hetzner delete server: {e}")));
-                    continue;
-                }
-            }
-        }
-        Err(last_err.unwrap())
+        let url = &format!("{BASE_URL}/servers/{instance_id}");
+        // The client answers only success and 404, which is Hetzner saying the server is gone.
+        retry_with_backoff(
+            "Hetzner DELETE server",
+            &RetryPolicy::quick(),
+            |_| async move { Ok::<_, ClassifiedError>(self.http.delete(url, &self.auth).await?) },
+        )
+        .await?;
+        info!(%instance_id, "Terminated Hetzner server");
+        Ok(())
     }
 
     async fn get_instance_status(&self, instance_id: &str) -> Result<InstanceStatus> {
         match self.fetch_server(instance_id).await {
             Ok(raw) => Ok(Self::parse_server(&raw)?.status),
-            Err(e) => {
-                warn!(%instance_id, error = %e, "Failed to get Hetzner server status");
-                Ok(InstanceStatus::Unknown)
-            }
+            Err(Error::Provider(ProviderErrorCode::NotFound)) => Ok(InstanceStatus::Terminated),
+            Err(error) => Err(error),
         }
     }
 

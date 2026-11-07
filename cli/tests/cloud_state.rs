@@ -578,7 +578,7 @@ fn a_provider_that_cannot_start_fails_only_its_own_deployments() {
         stdout(&running)
     );
     let unknown = machine.cli_with(&["status", "i-crusoe"], Some(&aws), &env);
-    assert!(unknown.status.success(), "{}", stderr(&unknown));
+    assert!(!unknown.status.success(), "{}", stdout(&unknown));
     assert!(
         stdout(&unknown).contains("unknown (") && stdout(&unknown).contains("CRUSOE_PROJECT_ID"),
         "{}",
@@ -611,6 +611,38 @@ fn gcp_answers_and_terminates_in_the_records_zone() {
     assert!(output.status.success(), "{}", stderr(&output));
     assert!(*gcp.deleted.lock().unwrap());
     assert!(machine.tracked().is_empty());
+}
+
+#[test]
+fn a_rejected_credential_fails_only_its_own_records() {
+    let machine = Machine::tracking_in(&[
+        ("i-aws", CloudProvider::AWS, "us-east-1"),
+        ("i-gcp", CloudProvider::GCP, "europe-west1-b"),
+    ]);
+    let (aws, gcp) = (FakeAws::refusing(""), FakeGcp::serving("/i-gcp "));
+    let [project, _, compute] = gcp.env();
+    let env = [project, ("GCP_ACCESS_TOKEN", "revoked"), compute];
+    for args in [&["status"][..], &["status", "i-gcp"]] {
+        let output = machine.cli_with(args, Some(&aws), &env);
+        assert!(!output.status.success(), "{args:?}: {}", stdout(&output));
+        let shown = stdout(&output) + &stderr(&output);
+        assert!(shown.contains("401 Unauthorized"), "{args:?}: {shown}");
+    }
+    let listed = stdout(&machine.cli_with(&["status"], Some(&aws), &env));
+    assert!(
+        listed.contains("running") && listed.contains("failed"),
+        "{listed}"
+    );
+    let output = machine.cli_with(&["terminate", "--all", "--yes"], Some(&aws), &env);
+    assert!(!output.status.success(), "{}", stdout(&output));
+    let refused = stderr(&output);
+    assert!(
+        refused.contains("i-gcp") && refused.contains("401"),
+        "{refused}"
+    );
+    assert_eq!(aws.terminated(), ["i-aws"]);
+    assert_eq!(machine.tracked(), ["i-gcp"]);
+    assert!(!*gcp.deleted.lock().unwrap());
 }
 
 #[test]
@@ -666,9 +698,11 @@ fn ovh_requests_carry_ovhs_signature() {
         "{}",
         stdout(&output)
     );
+    // OVH answers a bad signature 400; the client keeps provider error bodies out of the output.
     let output = machine.cli_with(&["status", "i-ovh"], None, &peer.env("wrong"));
+    assert!(!output.status.success(), "{}", stdout(&output));
     assert!(
-        stdout(&output).contains("Invalid signature"),
+        stdout(&output).contains("unknown (Provider operation failed: provider_error)"),
         "{}",
         stdout(&output)
     );
@@ -680,7 +714,11 @@ fn a_refused_ovh_delete_fails_and_keeps_the_record() {
     let peer = FakeOvh::serving("i-ovh", true);
     let output = machine.cli_with(&["terminate", "i-ovh", "--yes"], None, &peer.env("secret"));
     assert!(!output.status.success(), "{}", stdout(&output));
-    assert!(stderr(&output).contains("refused"), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("auth_rejected"),
+        "{}",
+        stderr(&output)
+    );
     assert_eq!(machine.tracked(), ["i-ovh"]);
 }
 
