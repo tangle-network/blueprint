@@ -155,6 +155,17 @@ impl CloudProvisioner {
         }
     }
 
+    /// Limit a caller-owned allocator to providers explicitly enabled by its operator.
+    pub fn only_providers(mut self, enabled: &[CloudProvider]) -> Self {
+        self.providers
+            .retain(|provider, _| enabled.contains(provider));
+        self.init_errors
+            .retain(|provider, _| enabled.contains(provider));
+        self.regions
+            .retain(|provider, _| enabled.contains(provider));
+        self
+    }
+
     pub fn with_regions(mut self, regions: HashMap<CloudProvider, String>) -> Self {
         self.regions = regions;
         self

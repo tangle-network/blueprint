@@ -18,7 +18,7 @@ use std::task::{Context, Poll};
 use tokio::task::JoinHandle;
 
 #[cfg(feature = "remote-providers")]
-pub(crate) mod remote_provider_integration;
+pub mod remote_provider_integration;
 
 pub struct BlueprintManagerHandle {
     shutdown_call: Option<tokio::sync::oneshot::Sender<()>>,

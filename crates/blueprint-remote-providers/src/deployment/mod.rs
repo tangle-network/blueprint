@@ -11,7 +11,7 @@ pub mod update_manager;
 #[cfg(feature = "kubernetes")]
 pub mod kubernetes;
 
-pub use manager_integration::{RemoteDeploymentConfig, RemoteDeploymentExtensions};
+pub use manager_integration::RemoteDeploymentConfig;
 pub use qos_tunnel::{QosTunnel, QosTunnelManager};
 pub use ssh::SshDeploymentClient;
 pub use tracker::{DeploymentRecord, DeploymentTracker, DeploymentType};

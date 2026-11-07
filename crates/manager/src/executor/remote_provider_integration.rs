@@ -4,17 +4,19 @@
 
 use crate::config::BlueprintManagerContext;
 use crate::error::{Error, Result};
-use blueprint_core::info;
+use blueprint_core::{info, warn};
 use blueprint_remote_providers::deployment::DeploymentType;
 use blueprint_remote_providers::deployment::manager_integration::{
-    RemoteDeploymentConfig, RemoteDeploymentRegistry, TtlManager,
+    RemoteDeploymentConfig, RemoteDeploymentRegistry,
 };
+use blueprint_remote_providers::managed::{Lease, ManagedLeaseIdentity, RetireReport};
 use blueprint_remote_providers::{
     CloudProvider, CloudProvisioner, DeploymentTracker, ResourceSpec,
 };
 use blueprint_std::collections::HashMap;
 use blueprint_std::sync::Arc;
 use chrono::Utc;
+use std::time::Duration;
 
 fn env_bool(name: &str) -> bool {
     std::env::var(name)
@@ -58,7 +60,9 @@ pub enum DeployArtifact<'a> {
 pub struct RemoteProviderManager {
     provisioner: Arc<CloudProvisioner>,
     registry: Arc<RemoteDeploymentRegistry>,
-    ttl_manager: Arc<TtlManager>,
+    namespace: String,
+    max_hourly_cost: f64,
+    retirement: tokio::task::JoinHandle<()>,
     provider_regions: HashMap<CloudProvider, String>,
     enabled: bool,
 }
@@ -76,26 +80,65 @@ impl RemoteProviderManager {
             return Ok(None);
         }
 
-        // Create deployment tracker
-        let tracker_path = ctx.data_dir().join("remote_deployments");
-        let tracker = Arc::new(DeploymentTracker::new(&tracker_path).await?);
+        Self::with_provisioner(
+            CloudProvisioner::new().await?,
+            ctx.data_dir(),
+            configured_provider_regions(ctx),
+            ctx.remote_deployment_opts.max_hourly_cost,
+        )
+        .await
+        .map(Some)
+    }
 
-        // Create registry and provisioner
-        let registry = Arc::new(RemoteDeploymentRegistry::new(tracker.clone()));
-        let provisioner = Arc::new(CloudProvisioner::new().await?);
-        let provider_regions = configured_provider_regions(ctx);
-
-        // Create TTL manager for automatic cleanup
-        let (expiry_tx, _expiry_rx) = tokio::sync::mpsc::unbounded_channel();
-        let ttl_manager = Arc::new(TtlManager::new(registry.clone(), expiry_tx));
-
-        Ok(Some(Self {
+    /// Use caller-owned provider clients; useful for embedding the manager with explicit credentials.
+    pub async fn with_provisioner(
+        provisioner: CloudProvisioner,
+        state_dir: &std::path::Path,
+        provider_regions: HashMap<CloudProvider, String>,
+        max_hourly_cost: f64,
+    ) -> Result<Self> {
+        use sha2::{Digest, Sha256};
+        if !max_hourly_cost.is_finite() || max_hourly_cost <= 0.0 {
+            return Err(Error::Other(
+                "Manager GPU spending cap must be positive and finite".into(),
+            ));
+        }
+        let enabled = provider_regions.keys().cloned().collect::<Vec<_>>();
+        let provisioner = Arc::new(
+            provisioner
+                .only_providers(&enabled)
+                .with_regions(provider_regions.clone()),
+        );
+        let tracker =
+            Arc::new(DeploymentTracker::new(&state_dir.join("remote_deployments")).await?);
+        let registry = Arc::new(RemoteDeploymentRegistry::new(tracker));
+        // Resolve aliases before hashing: the same manager state keeps its ownership after restart.
+        let state_dir = std::fs::canonicalize(state_dir)?;
+        let namespace = format!(
+            "bpm-{:x}",
+            Sha256::digest(state_dir.as_os_str().as_encoded_bytes())
+        );
+        let retire_namespace = namespace.clone();
+        let retire_provisioner = provisioner.clone();
+        let retirement = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                let report = retire_provisioner.retire_expired(&retire_namespace).await;
+                for failure in report.failures {
+                    warn!(provider = %failure.provider, code = %failure.code, "GPU lease retirement will retry");
+                }
+            }
+        });
+        Ok(Self {
             provisioner,
             registry,
-            ttl_manager,
+            namespace,
+            max_hourly_cost,
+            retirement,
             provider_regions,
             enabled: true,
-        }))
+        })
     }
 
     /// Handle service initiated event. The artifact controls what gets
@@ -149,7 +192,11 @@ impl RemoteProviderManager {
         } else {
             CloudProvider::DigitalOcean
         };
-        let provider = self.select_configured_provider(preferred_provider, tee_required, is_gpu)?;
+        let provider = if is_gpu && !tee_required {
+            preferred_provider
+        } else {
+            self.select_configured_provider(preferred_provider, tee_required)?
+        };
 
         // Use configured region when available.
         let region = self
@@ -270,10 +317,142 @@ impl RemoteProviderManager {
             }
         }
 
-        self.ttl_manager
-            .register_ttl(blueprint_id, service_id, 3600)
-            .await; // 1 hour default
+        Ok(())
+    }
 
+    fn lease_identity(&self, blueprint_id: u64, service_id: u64) -> ManagedLeaseIdentity {
+        ManagedLeaseIdentity {
+            namespace: self.namespace.clone(),
+            lease_id: format!("{blueprint_id:x}-{service_id:x}"),
+        }
+    }
+
+    /// Reconcile provider-recorded deadlines without an in-memory lease or tracker entry.
+    pub async fn retire_expired(&self) -> RetireReport {
+        self.provisioner.retire_expired(&self.namespace).await
+    }
+
+    async fn allocate_service(
+        &self,
+        blueprint_id: u64,
+        service_id: u64,
+        mut spec: ResourceSpec,
+        artifact: Option<DeployArtifact<'_>>,
+        mut env: HashMap<String, String>,
+    ) -> Result<()> {
+        let identity = self.lease_identity(blueprint_id, service_id);
+        if spec
+            .ownership
+            .as_ref()
+            .is_some_and(|owner| owner != &identity)
+            || (artifact.is_some() && spec.ssh_public_key.is_some())
+            || (artifact.is_none() && (!spec.env.is_empty() || !env.is_empty()))
+        {
+            return Err(Error::Other(
+                "GPU request cannot be delivered by this manager".into(),
+            ));
+        }
+        spec.ownership = Some(identity.clone());
+        spec.max_hourly_cost_usd = Some(
+            spec.max_hourly_cost_usd
+                .map_or(self.max_hourly_cost, |cap| cap.min(self.max_hourly_cost)),
+        );
+        let ttl = Duration::from_secs(spec.lease_duration_secs.unwrap_or(3600));
+        // Workload credentials are delivered over SSH, never in a provider launch request.
+        env.extend(std::mem::take(&mut spec.env));
+        env.entry("BLUEPRINT_ID".into())
+            .or_insert_with(|| blueprint_id.to_string());
+        env.entry("SERVICE_ID".into())
+            .or_insert_with(|| service_id.to_string());
+        let lease = self.provisioner.allocate(&spec, ttl).await?;
+        let Some(artifact) = artifact else {
+            return Ok(());
+        };
+        if let Err(error) = self.deploy_lease(&lease, artifact, &spec, env).await {
+            let cleanup = self
+                .provisioner
+                .destroy_managed(
+                    &lease.resource.instance.provider,
+                    &identity,
+                    Some(&lease.resource.instance.id),
+                )
+                .await;
+            return match cleanup {
+                Ok(()) => Err(error),
+                Err(cleanup) => Err(Error::Other(format!(
+                    "GPU deployment failed ({error}); cleanup remains pending ({cleanup})"
+                ))),
+            };
+        }
+        Ok(())
+    }
+
+    async fn deploy_lease(
+        &self,
+        lease: &Lease,
+        artifact: DeployArtifact<'_>,
+        spec: &ResourceSpec,
+        env: HashMap<String, String>,
+    ) -> Result<()> {
+        use blueprint_remote_providers::deployment::ssh::{
+            ContainerRuntime, DeploymentConfig, SshConnection, SshDeploymentClient,
+        };
+        use std::io::Write;
+        let endpoint = lease
+            .resource
+            .ssh_endpoint
+            .as_deref()
+            .ok_or_else(|| Error::Other("GPU lease has no SSH endpoint".into()))?;
+        let endpoint = url::Url::parse(endpoint)
+            .map_err(|_| Error::Other("Invalid GPU SSH endpoint".into()))?;
+        if endpoint.scheme() != "ssh"
+            || endpoint.username().is_empty()
+            || endpoint.password().is_some()
+        {
+            return Err(Error::Other("Invalid GPU SSH endpoint".into()));
+        }
+        let mut key = tempfile::NamedTempFile::new()?;
+        key.write_all(
+            lease
+                .access
+                .private_key()
+                .ok_or_else(|| Error::Other("GPU lease has no upload key".into()))?
+                .as_bytes(),
+        )?;
+        let client = SshDeploymentClient::new(
+            SshConnection {
+                host: endpoint
+                    .host_str()
+                    .ok_or_else(|| Error::Other("GPU SSH endpoint has no host".into()))?
+                    .into(),
+                port: endpoint.port().unwrap_or(22),
+                user: endpoint.username().into(),
+                key_path: Some(key.path().into()),
+                password: None,
+                jump_host: None,
+            },
+            ContainerRuntime::Docker,
+            DeploymentConfig {
+                name: lease.resource.lease_id.clone(),
+                namespace: self.namespace.clone(),
+                ..Default::default()
+            },
+        )
+        .await?;
+        match artifact {
+            DeployArtifact::ContainerImage(image) => {
+                client.deploy_blueprint(image, spec, env).await?;
+            }
+            DeployArtifact::GithubBinary {
+                archive_url,
+                sha256_hex,
+                binary_name,
+            } => {
+                client
+                    .deploy_github_binary(archive_url, sha256_hex, binary_name, spec, &env)
+                    .await?;
+            }
+        }
         Ok(())
     }
 
@@ -288,14 +467,28 @@ impl RemoteProviderManager {
             blueprint_id, service_id
         );
 
-        // Remove TTL registration for the terminated service
-        self.ttl_manager
-            .unregister_ttl(blueprint_id, service_id)
-            .await;
-
-        // Clean up deployment from registry
-        self.registry.cleanup(blueprint_id, service_id).await?;
-
+        if self.registry.get(blueprint_id, service_id).await.is_some() {
+            return Ok(self.registry.cleanup(blueprint_id, service_id).await?);
+        }
+        let identity = self.lease_identity(blueprint_id, service_id);
+        let mut failures = Vec::new();
+        for provider in self.provider_regions.keys() {
+            if self.provisioner.get_adapter(provider)?.managed().is_some() {
+                if let Err(error) = self
+                    .provisioner
+                    .destroy_managed(provider, &identity, None)
+                    .await
+                {
+                    failures.push(format!("{provider}: {error}"));
+                }
+            }
+        }
+        if !failures.is_empty() {
+            return Err(Error::Other(format!(
+                "GPU lease cleanup remains pending: {}",
+                failures.join("; ")
+            )));
+        }
         Ok(())
     }
 }
@@ -307,7 +500,6 @@ impl RemoteProviderManager {
         &self,
         preferred: CloudProvider,
         tee_required: bool,
-        is_gpu: bool,
     ) -> Result<CloudProvider> {
         let ordered_candidates = if tee_required {
             // TEE only on hyperscalers with confidential compute
@@ -315,33 +507,6 @@ impl RemoteProviderManager {
                 preferred,
                 CloudProvider::AWS,
                 CloudProvider::GCP,
-                CloudProvider::Azure,
-            ]
-        } else if is_gpu {
-            // GPU workloads: GPU marketplaces first (cheapest), then
-            // decentralized, then hyperscalers as fallback
-            vec![
-                preferred,
-                CloudProvider::VastAi,
-                CloudProvider::RunPod,
-                CloudProvider::Fluidstack,
-                CloudProvider::TensorDock,
-                CloudProvider::LambdaLabs,
-                CloudProvider::Paperspace,
-                CloudProvider::CoreWeave,
-                CloudProvider::Crusoe,
-                CloudProvider::PrimeIntellect,
-                // NOTE: Hetzner sells GPU-matrix dedicated servers, but that's
-                // their Robot API / manual ordering flow — not the Cloud API
-                // this adapter uses. Keep Hetzner in the CPU list only until
-                // someone wires up the Robot API.
-                CloudProvider::Akash,
-                CloudProvider::IoNet,
-                CloudProvider::Render,
-                CloudProvider::BittensorLium,
-                // Hyperscaler fallback (have GPUs but more expensive)
-                CloudProvider::GCP,
-                CloudProvider::AWS,
                 CloudProvider::Azure,
             ]
         } else {
@@ -378,21 +543,8 @@ fn deployment_type_from_provider(provider: &CloudProvider) -> DeploymentType {
         CloudProvider::Azure => DeploymentType::AzureVm,
         CloudProvider::DigitalOcean => DeploymentType::DigitalOceanDroplet,
         CloudProvider::Vultr => DeploymentType::VultrInstance,
-        CloudProvider::LambdaLabs => DeploymentType::LambdaLabsInstance,
-        CloudProvider::RunPod => DeploymentType::RunPodInstance,
-        CloudProvider::VastAi => DeploymentType::VastAiInstance,
-        CloudProvider::CoreWeave => DeploymentType::CoreWeaveWorkload,
-        CloudProvider::Paperspace => DeploymentType::PaperspaceMachine,
-        CloudProvider::Fluidstack => DeploymentType::FluidstackServer,
-        CloudProvider::TensorDock => DeploymentType::TensorDockServer,
-        CloudProvider::Akash => DeploymentType::AkashLease,
-        CloudProvider::IoNet => DeploymentType::IoNetCluster,
-        CloudProvider::PrimeIntellect => DeploymentType::PrimeIntellectPod,
-        CloudProvider::Render => DeploymentType::RenderDispersedNode,
-        CloudProvider::BittensorLium => DeploymentType::BittensorLiumMiner,
         CloudProvider::Hetzner => DeploymentType::HetznerServer,
         CloudProvider::Ovh => DeploymentType::OvhInstance,
-        CloudProvider::Crusoe => DeploymentType::CrusoeVm,
         _ => DeploymentType::SshRemote,
     }
 }
@@ -506,21 +658,14 @@ fn provider_default_region(provider: &CloudProvider) -> &'static str {
         CloudProvider::Azure => "eastus",
         CloudProvider::DigitalOcean => "nyc3",
         CloudProvider::Vultr => "ewr",
-        CloudProvider::LambdaLabs => "us-west-1",
-        CloudProvider::RunPod => "US",
-        CloudProvider::VastAi => "global",
-        CloudProvider::CoreWeave => "ORD1",
-        CloudProvider::Paperspace => "NY2",
-        CloudProvider::Fluidstack => "us-east",
-        CloudProvider::TensorDock => "us-central",
-        CloudProvider::Akash => "global",
-        CloudProvider::IoNet => "us-east",
-        CloudProvider::PrimeIntellect => "us-east",
-        CloudProvider::Render => "oregon",
-        CloudProvider::BittensorLium => "global",
         CloudProvider::Hetzner => "fsn1",
         CloudProvider::Ovh => "GRA11",
-        CloudProvider::Crusoe => "us-east1",
         _ => "default",
+    }
+}
+
+impl Drop for RemoteProviderManager {
+    fn drop(&mut self) {
+        self.retirement.abort();
     }
 }
