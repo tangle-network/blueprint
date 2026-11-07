@@ -400,13 +400,12 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
                 .map_err(|_| Error::Provider(ProviderErrorCode::Indeterminate))?
                 .to_owned()
         };
-        let native_ceiling = spec
-            .max_hourly_cost_usd
-            .map(|cap| (cap / f64::from(offer.gpu_count) - 0.01).next_down());
-        let expected_price = native_ceiling.map_or(
-            original_offer.hourly_cost_usd / f64::from(offer.gpu_count),
-            |ceiling| ceiling.min(original_offer.hourly_cost_usd / f64::from(offer.gpu_count)),
-        );
+        // Lium may bill one cent above the submitted per-device price.
+        let ceiling = original_offer
+            .hourly_cost_usd
+            .min(offer.hourly_cost_usd)
+            .min(spec.max_hourly_cost_usd.unwrap_or(f64::INFINITY));
+        let expected_price = (ceiling / f64::from(offer.gpu_count) - 0.01).next_down();
         if !expected_price.is_finite() || expected_price <= 0.0 {
             return Err(Error::Provider(ProviderErrorCode::Unsupported));
         }
