@@ -20,6 +20,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[cfg(unix)]
+#[path = "../../blueprint-remote-providers/tests/fixtures/ssh_process.rs"]
+mod ssh_process;
+
 #[derive(Default)]
 struct Seller {
     pods: BTreeMap<String, Value>,
@@ -29,6 +33,7 @@ struct Seller {
     keys: BTreeMap<String, Vec<String>>,
     barrier: Option<Arc<tokio::sync::Barrier>>,
     delay_create: bool,
+    with_ssh: bool,
 }
 
 async fn seller(
@@ -66,10 +71,13 @@ async fn seller(
         let launch: Value = serde_json::from_slice(&body).unwrap();
         state.launches.push(launch.clone());
         let id = format!("lease-{}", state.launches.len());
-        let pod = json!({"id":id,"name":launch["name"],"env":launch["env"],
+        let mut pod = json!({"id":id,"name":launch["name"],"env":launch["env"],
             "gpu":{"id":launch["gpu"]["id"],"count":launch["gpu"]["count"],"vcpuCount":8,"memory":64},
             "ports":launch["ports"],"image":launch["image"],"mounts":launch["mounts"],
             "status":"RUNNING","dataCenterId":"US-TEST-1","cost":9.0});
+        if state.with_ssh {
+            pod["ssh"] = json!({"direct":{"host":"gpu-peer.invalid","port":22,"username":"root"}});
+        }
         state.pods.insert(id, pod.clone());
         return (StatusCode::CREATED, Json(pod));
     }
@@ -158,6 +166,17 @@ async fn seller(
     }
 }
 
+async fn peer(
+    initial: Seller,
+) -> anyhow::Result<(String, Arc<Mutex<Seller>>, tokio::task::JoinHandle<()>)> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let endpoint = format!("http://{}", listener.local_addr()?);
+    let state = Arc::new(Mutex::new(initial));
+    let router = Router::new().fallback(seller).with_state(state.clone());
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    Ok((endpoint, state, server))
+}
+
 fn spec(ttl: u64) -> ResourceSpec {
     ResourceSpec {
         gpu_class: Some("nvidia-h200".into()),
@@ -169,7 +188,7 @@ fn spec(ttl: u64) -> ResourceSpec {
     }
 }
 
-async fn manager(endpoint: &str, state: &std::path::Path) -> RemoteProviderManager {
+async fn manager(endpoint: &str, state: &std::path::Path) -> anyhow::Result<RemoteProviderManager> {
     let credentials = serde_json::from_value(
         json!({"provider":"runpod","api_key":"synthetic-local-peer-key","endpoint":endpoint}),
     )
@@ -181,24 +200,24 @@ async fn manager(endpoint: &str, state: &std::path::Path) -> RemoteProviderManag
         20.0,
     )
     .await
-    .unwrap()
+    .map_err(Into::into)
 }
 
 #[tokio::test]
 async fn manager_retires_owned_gpu_leases_after_restart_and_retries_refused_cleanup()
 -> anyhow::Result<()> {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let endpoint = format!("http://{}", listener.local_addr()?);
-    let seller_state = Arc::new(Mutex::new(Seller::default()));
-    let router = Router::new()
-        .fallback(seller)
-        .with_state(seller_state.clone());
-    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let (endpoint, seller_state, server) = peer(Seller::default()).await?;
     let own_state = tempfile::tempdir()?;
     let foreign_state = tempfile::tempdir()?;
-    let own = manager(&endpoint, own_state.path()).await;
-    let foreign = manager(&endpoint, foreign_state.path()).await;
+    let own = manager(&endpoint, own_state.path()).await?;
+    let foreign = manager(&endpoint, foreign_state.path()).await?;
+    let owner_file = std::path::Path::new("blueprint/manager-owner");
+    let original_owner = std::fs::read_to_string(own_state.path().join(owner_file))?;
+    assert_ne!(
+        original_owner,
+        std::fs::read_to_string(foreign_state.path().join(owner_file))?
+    );
     own.on_service_initiated(1, 1, Some(spec(1)), None, HashMap::new())
         .await?;
     own.on_service_initiated(1, 2, Some(spec(3600)), None, HashMap::new())
@@ -269,7 +288,22 @@ async fn manager_retires_owned_gpu_leases_after_restart_and_retries_refused_clea
     assert_eq!(seller_state.lock().unwrap().pods.len(), 3);
     tokio::time::sleep(Duration::from_millis(1100)).await;
     drop(own);
-    let restarted = manager(&endpoint, own_state.path()).await;
+    let archive = tempfile::tempdir()?;
+    let recovered = archive.path().join("state");
+    std::fs::rename(own_state.path(), &recovered)?;
+    std::fs::create_dir(own_state.path())?;
+    let replacement = manager(&endpoint, own_state.path()).await?;
+    assert_ne!(
+        original_owner,
+        std::fs::read_to_string(own_state.path().join(owner_file))?
+    );
+    replacement.on_service_terminated(1, 2).await?;
+    assert_eq!(seller_state.lock().unwrap().pods.len(), 3);
+    let restarted = manager(&endpoint, &recovered).await?;
+    assert_eq!(
+        original_owner,
+        std::fs::read_to_string(recovered.join(owner_file))?
+    );
     assert!(
         !restarted.retire_expired().await.failures.is_empty(),
         "failed TTL cleanup must be retryable after restart"
@@ -308,6 +342,15 @@ async fn manager_retires_owned_gpu_leases_after_restart_and_retries_refused_clea
     );
     foreign.on_service_terminated(1, 1).await?;
     assert!(seller_state.lock().unwrap().pods.is_empty());
+    drop(replacement);
+    for invalid in ["", "truncated-owner"] {
+        std::fs::write(own_state.path().join(owner_file), invalid)?;
+        assert!(manager(&endpoint, own_state.path()).await.is_err());
+        assert_eq!(
+            std::fs::read_to_string(own_state.path().join(owner_file))?,
+            invalid
+        );
+    }
     server.abort();
     Ok(())
 }
@@ -364,22 +407,19 @@ async fn allocation_worker() -> anyhow::Result<()> {
     use blueprint_remote_providers::providers::digitalocean::adapter::DigitalOceanAdapter;
     use blueprint_remote_providers::providers::{RunPodAdapter, VastAiAdapter};
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    let adapters: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>> = HashMap::from([
-        (
-            CloudProvider::RunPod,
-            Box::new(RunPodAdapter::with_endpoint("synthetic".into(), &endpoint)?)
-                as Box<dyn CloudProviderAdapter>,
-        ),
-        (
-            CloudProvider::VastAi,
-            Box::new(VastAiAdapter::with_endpoint("synthetic".into(), &endpoint)?)
-                as Box<dyn CloudProviderAdapter>,
-        ),
-        (
-            CloudProvider::DigitalOcean,
-            Box::new(DigitalOceanAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
-        ),
-    ]);
+    let mut adapters: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>> = HashMap::new();
+    adapters.insert(
+        CloudProvider::RunPod,
+        Box::new(RunPodAdapter::with_endpoint("synthetic".into(), &endpoint)?),
+    );
+    adapters.insert(
+        CloudProvider::VastAi,
+        Box::new(VastAiAdapter::with_endpoint("synthetic".into(), &endpoint)?),
+    );
+    adapters.insert(
+        CloudProvider::DigitalOcean,
+        Box::new(DigitalOceanAdapter::new().await?),
+    );
     let provider = if std::env::var("GPU_LIFECYCLE_PROVIDER")? == "runpod" {
         CloudProvider::RunPod
     } else {
@@ -397,14 +437,39 @@ async fn allocation_worker() -> anyhow::Result<()> {
         20.0,
     )
     .await?;
-    reqwest::get(format!("{endpoint}/synchronize"))
-        .await?
-        .error_for_status()?;
+    let alternatives = std::env::var_os("GPU_LIFECYCLE_ALTERNATIVES").is_some();
+    if !alternatives {
+        reqwest::get(format!("{endpoint}/synchronize"))
+            .await?
+            .error_for_status()?;
+    }
     let mut request = spec(3600);
     request.provider = Some(provider);
+    if alternatives {
+        request.gpu_class = None;
+        request.gpu_count = None;
+        request.ports = vec![8000, 12345];
+        request.endpoint_port = Some(8000);
+        request.arms = serde_json::from_value(json!([("nvidia-h200",2),("nvidia-b200",8)].map(|(gpu_class,gpu_count)|json!({
+            "family":"fixture","arm":gpu_class,"gpu_class":gpu_class,"gpu_count":gpu_count,"tp":1,"replicas":1
+        }))))?;
+    }
+    let artifact = alternatives.then_some(DeployArtifact::ContainerImage(
+        "example.invalid/workload:v1",
+    ));
+    let env = if alternatives {
+        HashMap::from([("SECRET_TOKEN".into(), std::env::var("SSH_PROCESS_SECRET")?)])
+    } else {
+        HashMap::new()
+    };
     let result = manager
-        .on_service_initiated(9, 9, Some(request), None, HashMap::new())
+        .on_service_initiated(9, 9, Some(request), artifact, env)
         .await;
+    if alternatives {
+        result?;
+        manager.on_service_terminated(9, 9).await?;
+        return Ok(());
+    }
     std::fs::write(
         std::env::var_os("GPU_LIFECYCLE_RESULT").unwrap(),
         if result.is_ok() {
@@ -419,15 +484,12 @@ async fn allocation_worker() -> anyhow::Result<()> {
 #[tokio::test]
 async fn separate_processes_share_one_service_lock_across_different_gpu_providers_and_cpu_inventory()
 -> anyhow::Result<()> {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let endpoint = format!("http://{}", listener.local_addr()?);
-    let state = Arc::new(Mutex::new(Seller {
+    let (endpoint, state, server) = peer(Seller {
         barrier: Some(Arc::new(tokio::sync::Barrier::new(2))),
         delay_create: true,
         ..Default::default()
-    }));
-    let router = Router::new().fallback(seller).with_state(state.clone());
-    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    })
+    .await?;
     let directory = tempfile::tempdir()?;
     let mut children = Vec::new();
     for provider in ["runpod", "vast-ai"] {
@@ -437,6 +499,10 @@ async fn separate_processes_share_one_service_lock_across_different_gpu_provider
             .env("GPU_LIFECYCLE_PEER", &endpoint)
             .env("GPU_LIFECYCLE_PROVIDER", provider)
             .env("GPU_LIFECYCLE_STATE", directory.path())
+            .env(
+                "XDG_CACHE_HOME",
+                directory.path().join(format!("cache-{provider}")),
+            )
             .env("GPU_LIFECYCLE_RESULT", &receipt)
             .env("DIGITALOCEAN_TOKEN", "synthetic-cpu-provider-key")
             .kill_on_drop(true)
@@ -482,11 +548,7 @@ async fn separate_processes_share_one_service_lock_across_different_gpu_provider
 #[tokio::test]
 async fn unavailable_adapter_does_not_prevent_other_owned_cleanup() -> anyhow::Result<()> {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let endpoint = format!("http://{}", listener.local_addr()?);
-    let state = Arc::new(Mutex::new(Seller::default()));
-    let router = Router::new().fallback(seller).with_state(state.clone());
-    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let (endpoint, state, server) = peer(Seller::default()).await?;
     let directory = tempfile::tempdir()?;
     let credentials = serde_json::from_value(
         json!({"provider":"runpod","api_key":"synthetic-local-peer-key","endpoint":endpoint}),
@@ -512,6 +574,49 @@ async fn unavailable_adapter_does_not_prevent_other_owned_cleanup() -> anyhow::R
         state.lock().unwrap().pods.is_empty(),
         "a different adapter failure must not strand the owned rental"
     );
+    server.abort();
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn selected_arm_reaches_the_manager_uploaded_container() -> anyhow::Result<()> {
+    let (endpoint, state, server) = peer(Seller {
+        with_ssh: true,
+        ..Default::default()
+    })
+    .await?;
+    let directory = tempfile::tempdir()?;
+    let mut command = ssh_process::command(
+        directory.path(),
+        &std::env::current_exe()?,
+        "allocation_worker",
+        "trusted",
+    )?;
+    command
+        .env("GPU_LIFECYCLE_PEER", &endpoint)
+        .env("GPU_LIFECYCLE_PROVIDER", "runpod")
+        .env("GPU_LIFECYCLE_STATE", directory.path())
+        .env("GPU_LIFECYCLE_ALTERNATIVES", "1")
+        .env("DIGITALOCEAN_TOKEN", "synthetic-cpu-provider-key");
+    let output = tokio::process::Command::from(command).output().await?;
+    assert!(!String::from_utf8_lossy(&output.stderr).contains(ssh_process::SECRET));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let receipt: Value =
+        serde_json::from_slice(&std::fs::read(directory.path().join("docker.json"))?)?;
+    assert!(
+        receipt["arguments"]
+            .as_array()
+            .unwrap()
+            .windows(2)
+            .any(|pair| pair == [json!("--gpus"), json!("2")])
+    );
+    assert_eq!(state.lock().unwrap().launches.len(), 1);
+    assert!(state.lock().unwrap().pods.is_empty());
     server.abort();
     Ok(())
 }

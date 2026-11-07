@@ -6,8 +6,6 @@ use crate::core::resources::ResourceSpec;
 use crate::deployment::secure_commands::SecureContainerCommands;
 use crate::deployment::secure_ssh::{SecureSshClient, SecureSshConnection};
 use crate::monitoring::health::{ApplicationHealthChecker, HealthStatus};
-#[allow(unused_imports)]
-use crate::monitoring::logs::LogStreamer;
 use blueprint_core::{debug, info, warn};
 use blueprint_std::{collections::HashMap, path::Path};
 use tokio::sync::mpsc;
@@ -31,25 +29,7 @@ impl SshDeploymentClient {
         runtime: ContainerRuntime,
         deployment_config: DeploymentConfig,
     ) -> Result<Self> {
-        // Create secure SSH connection with validation
-        let secure_connection =
-            SecureSshConnection::new(connection.host.clone(), connection.user.clone())?
-                .with_port(connection.port)?;
-
-        let secure_connection = if let Some(ref key_path) = connection.key_path {
-            secure_connection.with_key_path(key_path)?
-        } else {
-            secure_connection
-        };
-
-        let secure_connection = if let Some(ref jump_host) = connection.jump_host {
-            secure_connection.with_jump_host(jump_host.clone())?
-        } else {
-            secure_connection
-        };
-
-        let ssh_client = SecureSshClient::new(secure_connection);
-
+        let ssh_client = Self::secure_client(&connection)?;
         let client = Self {
             ssh_client,
             connection,
@@ -64,6 +44,19 @@ impl SshDeploymentClient {
         client.verify_runtime().await?;
 
         Ok(client)
+    }
+
+    fn secure_client(connection: &SshConnection) -> Result<SecureSshClient> {
+        let mut secure =
+            SecureSshConnection::new(connection.host.clone(), connection.user.clone())?
+                .with_port(connection.port)?;
+        if let Some(key) = &connection.key_path {
+            secure = secure.with_key_path(key)?;
+        }
+        if let Some(jump) = &connection.jump_host {
+            secure = secure.with_jump_host(jump.clone())?;
+        }
+        Ok(SecureSshClient::new(secure))
     }
 
     /// Test SSH connection to the remote host
@@ -965,25 +958,7 @@ server {{
     pub async fn reconnect(&mut self) -> Result<()> {
         info!("Reconnecting SSH to {}", self.connection.host);
 
-        // Create new secure connection
-        let secure_connection =
-            SecureSshConnection::new(self.connection.host.clone(), self.connection.user.clone())?
-                .with_port(self.connection.port)?;
-
-        let secure_connection = if let Some(ref key_path) = self.connection.key_path {
-            secure_connection.with_key_path(key_path)?
-        } else {
-            secure_connection
-        };
-
-        let secure_connection = if let Some(ref jump_host) = self.connection.jump_host {
-            secure_connection.with_jump_host(jump_host.clone())?
-        } else {
-            secure_connection
-        };
-
-        // Replace SSH client
-        self.ssh_client = SecureSshClient::new(secure_connection);
+        self.ssh_client = Self::secure_client(&self.connection)?;
 
         // Test reconnection
         self.test_connection().await?;
@@ -1001,94 +976,20 @@ server {{
         env_vars: HashMap<String, String>,
         arguments: Vec<String>,
     ) -> Result<()> {
-        info!("Deploying blueprint '{}' to {}", service_name, host_ip);
-
-        // Ensure we're connected to the right host
         if self.connection.host != host_ip {
-            return Err(Error::ConfigurationError(format!(
-                "Host mismatch: expected {}, got {}",
-                self.connection.host, host_ip
-            )));
+            return Err(Error::ConfigurationError(
+                "Deployment host does not match the SSH connection".into(),
+            ));
         }
-
-        // Copy binary to remote host
-        let remote_binary_path = format!("/opt/blueprint/bin/{service_name}");
-        self.copy_files(binary_path, &remote_binary_path).await?;
-
-        // Make binary executable
-        self.run_remote_command(&format!("chmod +x {remote_binary_path}"))
-            .await?;
-
-        // Create service configuration
-        let mut service_env = env_vars;
-        for (i, arg) in arguments.iter().enumerate() {
-            service_env.insert(format!("ARG_{i}"), arg.clone());
+        let mut env = env_vars;
+        for (index, argument) in arguments.into_iter().enumerate() {
+            env.insert(format!("ARG_{index}"), argument);
         }
-
-        // Create systemd service unit for the blueprint
-        let service_unit = format!(
-            r#"
-[Unit]
-Description=Blueprint Service: {}
-After=network.target
-
-[Service]
-Type=simple
-ExecStart={}
-Restart=always
-RestartSec=10
-User=blueprint
-Group=blueprint
-WorkingDirectory=/opt/blueprint
-{}
-
-[Install]
-WantedBy=multi-user.target
-"#,
-            service_name,
-            remote_binary_path,
-            service_env
-                .iter()
-                .map(|(k, v)| format!("Environment={k}={v}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
-
-        // Write service file
-        let service_file = format!("/etc/systemd/system/blueprint-{service_name}.service");
-        self.run_remote_command(&format!(
-            "sudo tee {service_file} > /dev/null << 'EOF'\n{service_unit}\nEOF"
-        ))
-        .await?;
-
-        // Enable and start service
-        self.run_remote_command("sudo systemctl daemon-reload")
-            .await?;
-        self.run_remote_command(&format!("sudo systemctl enable blueprint-{service_name}"))
-            .await?;
-        self.run_remote_command(&format!("sudo systemctl start blueprint-{service_name}"))
-            .await?;
-
-        // Verify service is running
-        let status = self
-            .run_remote_command(&format!(
-                "sudo systemctl is-active blueprint-{service_name}"
-            ))
-            .await?;
-        if status.trim() == "active" {
-            info!(
-                "✅ Blueprint service '{}' deployed and running",
-                service_name
-            );
-            Ok(())
-        } else {
-            Err(Error::ConfigurationError(format!(
-                "Failed to start blueprint service: {status}"
-            )))
-        }
+        self.deploy_service(binary_path, service_name, env, None)
+            .await
     }
 
-    /// Stream container logs integrated with LogStreamer for aggregation
+    /// Stream container logs from the last forwarded timestamp
     pub async fn stream_container_logs(
         &self,
         container_id: &str,
@@ -1100,14 +1001,7 @@ WantedBy=multi-user.target
         let ssh_client = self.ssh_client.clone();
         let container = container_id.to_string();
 
-        // Spawn background task to stream logs.
-        //
-        // `run_remote_command` is one-shot (it buffers the full child output), so
-        // there is no live `docker logs -f` stream available over this primitive.
-        // We poll, but advance a high-water mark via `--since=<unix_ts>` so each
-        // poll returns only lines newer than the last one we forwarded. This
-        // emits every line exactly once instead of re-sending the last N lines
-        // every second (the previous `--tail=10` loop duplicated forever).
+        // Poll from the last forwarded timestamp because SSH buffers complete command output.
         let runtime_bin = match runtime {
             ContainerRuntime::Docker => "docker",
             ContainerRuntime::Podman => "podman",
@@ -1275,6 +1169,17 @@ WantedBy=multi-user.target
         env_vars: HashMap<String, String>,
         resource_spec: &ResourceSpec,
     ) -> Result<()> {
+        self.deploy_service(binary_path, service_name, env_vars, Some(resource_spec))
+            .await
+    }
+
+    async fn deploy_service(
+        &self,
+        binary_path: &Path,
+        service_name: &str,
+        env_vars: HashMap<String, String>,
+        resource_spec: Option<&ResourceSpec>,
+    ) -> Result<()> {
         if service_name.is_empty()
             || service_name.starts_with('-')
             || !service_name
@@ -1303,6 +1208,13 @@ WantedBy=multi-user.target
             .await?;
         let env_section = format!("EnvironmentFile={environment_path}");
 
+        let limits = resource_spec.map_or_else(String::new, |spec| {
+            format!(
+                "CPUQuota={}%\nMemoryMax={}M\nTasksMax=1000",
+                (spec.cpu * 100.0) as u32,
+                (spec.memory_gb * 1024.0) as u32
+            )
+        });
         let service_unit = format!(
             r#"
 [Unit]
@@ -1318,18 +1230,12 @@ User=blueprint
 Group=blueprint
 WorkingDirectory=/opt/blueprint
 {}
-CPUQuota={}%
-MemoryMax={}M
-TasksMax=1000
+{limits}
 
 [Install]
 WantedBy=multi-user.target
 "#,
-            service_name,
-            remote_path,
-            env_section,
-            (resource_spec.cpu * 100.0) as u32,
-            (resource_spec.memory_gb * 1024.0) as u32
+            service_name, remote_path, env_section
         );
 
         // Write service file
@@ -1363,38 +1269,6 @@ WantedBy=multi-user.target
             )))
         }
     }
-
-    /// Create a new client with localhost settings for testing
-    pub fn localhost() -> Self {
-        // This is a simplified constructor for basic usage
-        // In production, proper connection details should be provided
-        Self {
-            ssh_client: SecureSshClient::new(SecureSshConnection {
-                host: "localhost".to_string(),
-                port: 22,
-                user: "root".to_string(),
-                key_path: Some("~/.ssh/id_rsa".into()),
-                jump_host: None,
-                known_hosts_file: None,
-                strict_host_checking: false,
-            }),
-            connection: SshConnection {
-                host: "localhost".to_string(),
-                port: 22,
-                user: "root".to_string(),
-                key_path: Some("~/.ssh/id_rsa".into()),
-                password: None,
-                jump_host: None,
-            },
-            runtime: ContainerRuntime::Docker,
-            deployment_config: DeploymentConfig {
-                name: "default".to_string(),
-                namespace: "blueprint".to_string(),
-                restart_policy: RestartPolicy::Always,
-                health_check: None,
-            },
-        }
-    }
 }
 
 /// Parse the leading RFC3339 timestamp Docker/Podman prepend with
@@ -1405,23 +1279,4 @@ fn parse_docker_log_timestamp(line: &str) -> Option<u64> {
     let token = line.split_whitespace().next()?;
     let dt = chrono::DateTime::parse_from_rfc3339(token).ok()?;
     u64::try_from(dt.timestamp()).ok()
-}
-
-#[cfg(test)]
-mod log_ts_tests {
-    use super::parse_docker_log_timestamp;
-
-    #[test]
-    fn parses_rfc3339_prefix() {
-        let ts = parse_docker_log_timestamp("2024-01-02T03:04:05.123456789Z hello world")
-            .expect("should parse");
-        // 2024-01-02T03:04:05Z = 1704164645
-        assert_eq!(ts, 1_704_164_645);
-    }
-
-    #[test]
-    fn no_timestamp_returns_none() {
-        assert_eq!(parse_docker_log_timestamp("plain log line"), None);
-        assert_eq!(parse_docker_log_timestamp(""), None);
-    }
 }

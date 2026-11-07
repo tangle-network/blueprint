@@ -3,7 +3,7 @@
 //! Replaces the insecure SSH implementation with proper security controls
 
 use crate::core::error::{Error, Result};
-use blueprint_core::{info, warn};
+use blueprint_core::warn;
 use blueprint_std::path::{Path, PathBuf};
 use shell_escape::escape;
 use tokio::process::Command;
@@ -18,8 +18,6 @@ pub struct SecureSshConnection {
     pub jump_host: Option<String>,
     /// Known hosts file path for host key verification
     pub known_hosts_file: Option<PathBuf>,
-    /// Whether to perform strict host key checking
-    pub strict_host_checking: bool,
 }
 
 impl SecureSshConnection {
@@ -35,7 +33,6 @@ impl SecureSshConnection {
             key_path: None,
             jump_host: None,
             known_hosts_file: None,
-            strict_host_checking: true, // SECURE DEFAULT
         })
     }
 
@@ -75,29 +72,10 @@ impl SecureSshConnection {
         Ok(self)
     }
 
-    /// Enable or disable strict host key checking (DANGEROUS if disabled)
-    pub fn with_strict_host_checking(mut self, strict: bool) -> Self {
-        if !strict {
-            warn!("SECURITY WARNING: Disabling strict host key checking - MITM attacks possible!");
-        }
-        self.strict_host_checking = strict;
-        self
-    }
-
     /// Validate hostname format and security
     fn validate_hostname(host: &str) -> Result<()> {
         if host.is_empty() || host.len() > 253 {
             return Err(Error::ConfigurationError("Invalid hostname length".into()));
-        }
-
-        // Check for dangerous characters that could be used for injection
-        let dangerous_chars = [
-            ';', '&', '|', '`', '$', '(', ')', '{', '}', '<', '>', '"', '\'', '\\',
-        ];
-        if host.chars().any(|c| dangerous_chars.contains(&c)) {
-            return Err(Error::ConfigurationError(format!(
-                "Hostname contains dangerous characters: {host}"
-            )));
         }
 
         // Basic hostname format validation
@@ -117,16 +95,6 @@ impl SecureSshConnection {
     fn validate_username(user: &str) -> Result<()> {
         if user.is_empty() || user.len() > 32 {
             return Err(Error::ConfigurationError("Invalid username length".into()));
-        }
-
-        // Check for dangerous characters
-        let dangerous_chars = [
-            ';', '&', '|', '`', '$', '(', ')', '{', '}', '<', '>', '"', '\'', '\\',
-        ];
-        if user.chars().any(|c| dangerous_chars.contains(&c)) {
-            return Err(Error::ConfigurationError(format!(
-                "Username contains dangerous characters: {user}"
-            )));
         }
 
         // Username should be alphanumeric + underscore/hyphen
@@ -201,23 +169,18 @@ impl SecureSshClient {
         // Validate command for basic safety
         self.validate_command(command)?;
 
-        let ssh_cmd = self.build_secure_ssh_command(command)?;
+        Self::output(&self.build_secure_ssh_command(command)?).await
+    }
 
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(&ssh_cmd)
-            .output()
-            .await
-            .map_err(|e| Error::ConfigurationError(format!("SSH command failed: {e}")))?;
-
+    async fn output(command: &str) -> Result<String> {
+        let output = Command::new("sh").arg("-c").arg(command).output().await?;
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(Error::ConfigurationError(format!(
-                "Remote command failed: {stderr}"
+                "Remote command failed: {}",
+                String::from_utf8_lossy(&output.stderr)
             )));
         }
-
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
 
     /// Stream a new owner-only file only after strict host verification.
@@ -232,9 +195,32 @@ impl SecureSshClient {
                 "Invalid protected remote path".into(),
             ));
         }
-        let script = format!("umask 077; set -C; cat > {}", escape(remote_path.into()));
-        self.run_remote_input(&format!("sh -c {}", escape(script.into())), content)
+        let path = escape(remote_path.into());
+        let reserve = format!("umask 077; set -C; : > {path}");
+        self.run_remote_input(&format!("sh -c {}", escape(reserve.into())), b"")
+            .await?;
+        let cleanup = escape(format!("rm -f {path}").into());
+        let write = format!(
+            "set -e; trap {cleanup} EXIT; trap 'exit 1' HUP INT TERM; cat > {path}; test \"$(wc -c < {path})\" -eq {}; trap - EXIT",
+            content.len()
+        );
+        if self
+            .run_remote_input(&format!("sh -c {}", escape(write.into())), content)
             .await
+            .is_err()
+        {
+            self.run_remote_input(&format!("rm -f {path}"), b"")
+                .await
+                .map_err(|_| {
+                    Error::ConfigurationError(
+                        "Credential transfer failed; owned staging cleanup is unconfirmed".into(),
+                    )
+                })?;
+            return Err(Error::ConfigurationError(
+                "SSH input transfer failed".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Execute an SDK-generated installation script without placing its contents in argv.
@@ -244,11 +230,6 @@ impl SecureSshClient {
 
     async fn run_remote_input(&self, command: &str, content: &[u8]) -> Result<()> {
         use tokio::io::AsyncWriteExt;
-        if !self.connection.strict_host_checking {
-            return Err(Error::ConfigurationError(
-                "Credential transfer requires trusted SSH host identity".into(),
-            ));
-        }
         let ssh = self.build_secure_ssh_command(command)?;
         let mut child = Command::new("sh")
             .args(["-c", &ssh])
@@ -275,67 +256,40 @@ impl SecureSshClient {
         Ok(())
     }
 
-    /// Build secure SSH command with proper escaping and validation
-    fn build_secure_ssh_command(&self, command: &str) -> Result<String> {
-        let mut ssh_cmd = String::from("ssh");
-
-        // Add security options based on configuration
-        if self.connection.strict_host_checking {
-            ssh_cmd.push_str(" -o StrictHostKeyChecking=yes");
-
-            // Use known hosts file if provided, otherwise use default
-            if let Some(ref known_hosts) = self.connection.known_hosts_file {
-                let known_hosts_str = known_hosts.to_str().ok_or_else(|| {
-                    Error::ConfigurationError("Known hosts path contains invalid UTF-8".to_string())
-                })?;
-                ssh_cmd.push_str(&format!(
-                    " -o UserKnownHostsFile={}",
-                    escape(known_hosts_str.into())
-                ));
-            }
-        } else {
-            // DANGEROUS: Only allow if explicitly configured
-            warn!("Using insecure SSH configuration - MITM attacks possible!");
-            ssh_cmd.push_str(" -o StrictHostKeyChecking=no");
-            ssh_cmd.push_str(" -o UserKnownHostsFile=/dev/null");
+    fn transport_command(&self, program: &str, port_flag: &str) -> Result<String> {
+        let mut command = format!(
+            "{program} -o StrictHostKeyChecking=yes -o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes"
+        );
+        if let Some(path) = &self.connection.known_hosts_file {
+            let path = path
+                .to_str()
+                .ok_or_else(|| Error::ConfigurationError("Invalid known-hosts path".into()))?;
+            command.push_str(&format!(" -o UserKnownHostsFile={}", escape(path.into())));
         }
-
-        // Add connection timeout and other security options
-        ssh_cmd.push_str(" -o ConnectTimeout=30");
-        ssh_cmd.push_str(" -o ServerAliveInterval=60");
-        ssh_cmd.push_str(" -o ServerAliveCountMax=3");
-        ssh_cmd.push_str(" -o BatchMode=yes"); // Disable interactive prompts
-
-        // Add port if not default (with validation)
         if self.connection.port != 22 {
-            ssh_cmd.push_str(&format!(" -p {}", self.connection.port));
+            command.push_str(&format!(" {port_flag} {}", self.connection.port));
         }
-
-        // Add identity file if provided (with validation and escaping)
-        if let Some(ref key_path) = self.connection.key_path {
-            let key_path_str = key_path.to_str().ok_or_else(|| {
-                Error::ConfigurationError("SSH key path contains invalid UTF-8".to_string())
-            })?;
-            let escaped_path = escape(key_path_str.into());
-            ssh_cmd.push_str(&format!(" -i {escaped_path}"));
+        if let Some(path) = &self.connection.key_path {
+            let path = path
+                .to_str()
+                .ok_or_else(|| Error::ConfigurationError("Invalid SSH key path".into()))?;
+            command.push_str(&format!(" -i {}", escape(path.into())));
         }
-
-        // Add jump host if provided (with validation and escaping)
-        if let Some(ref jump_host) = self.connection.jump_host {
-            let escaped_jump = escape(jump_host.into());
-            ssh_cmd.push_str(&format!(" -J {escaped_jump}"));
+        if let Some(jump) = &self.connection.jump_host {
+            command.push_str(&format!(" -J {}", escape(jump.as_str().into())));
         }
+        Ok(command)
+    }
 
-        // Add user@host with proper escaping
-        let escaped_user = escape(self.connection.user.as_str().into());
-        let escaped_host = escape(self.connection.host.as_str().into());
-        ssh_cmd.push_str(&format!(" {escaped_user}@{escaped_host}"));
-
-        // Add the command to execute with proper escaping
-        let escaped_command = escape(command.into());
-        ssh_cmd.push_str(&format!(" {escaped_command}"));
-
-        Ok(ssh_cmd)
+    fn build_secure_ssh_command(&self, command: &str) -> Result<String> {
+        let mut ssh = self.transport_command("ssh", "-p")?;
+        ssh.push_str(&format!(
+            " {}@{} {}",
+            escape(self.connection.user.as_str().into()),
+            escape(self.connection.host.as_str().into()),
+            escape(command.into())
+        ));
+        Ok(ssh)
     }
 
     /// Allowed command prefixes for SSH execution.
@@ -435,85 +389,26 @@ impl SecureSshClient {
         self.validate_local_path(local_path)?;
         self.validate_remote_path(remote_path)?;
 
-        let scp_cmd = self.build_secure_scp_command(local_path, remote_path)?;
-
-        info!(
-            "Copying files via SCP: {} -> {}",
-            local_path.display(),
-            remote_path
-        );
-
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(&scp_cmd)
-            .output()
+        Self::output(&self.build_secure_scp_command(local_path, remote_path)?)
             .await
-            .map_err(|e| Error::ConfigurationError(format!("SCP failed: {e}")))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::ConfigurationError(format!(
-                "File copy failed: {stderr}"
-            )));
-        }
-
-        info!("Files copied successfully");
-        Ok(())
+            .map(|_| ())
     }
 
-    /// Build secure SCP command
     fn build_secure_scp_command(&self, local_path: &Path, remote_path: &str) -> Result<String> {
-        let mut scp_cmd = String::from("scp");
-
-        // Add security options (same as SSH)
-        if self.connection.strict_host_checking {
-            scp_cmd.push_str(" -o StrictHostKeyChecking=yes");
-            if let Some(ref known_hosts) = self.connection.known_hosts_file {
-                let known_hosts_str = known_hosts.to_str().ok_or_else(|| {
-                    Error::ConfigurationError("Known hosts path contains invalid UTF-8".to_string())
-                })?;
-                scp_cmd.push_str(&format!(
-                    " -o UserKnownHostsFile={}",
-                    escape(known_hosts_str.into())
-                ));
-            }
-        } else {
-            warn!("Using insecure SCP configuration");
-            scp_cmd.push_str(" -o StrictHostKeyChecking=no");
-            scp_cmd.push_str(" -o UserKnownHostsFile=/dev/null");
-        }
-
-        // Add port if not default
-        if self.connection.port != 22 {
-            scp_cmd.push_str(&format!(" -P {}", self.connection.port));
-        }
-
-        // Add identity file if provided
-        if let Some(ref key_path) = self.connection.key_path {
-            let key_path_str = key_path.to_str().ok_or_else(|| {
-                Error::ConfigurationError("SSH key path contains invalid UTF-8".to_string())
-            })?;
-            let escaped_path = escape(key_path_str.into());
-            scp_cmd.push_str(&format!(" -i {escaped_path}"));
-        }
-
-        // Add source and destination with proper escaping
-        let local_path_str = local_path.to_str().ok_or_else(|| {
-            Error::ConfigurationError("Local path contains invalid UTF-8".to_string())
-        })?;
-        let escaped_local = escape(local_path_str.into());
-        let escaped_user = escape(self.connection.user.as_str().into());
-        let escaped_host = escape(self.connection.host.as_str().into());
-        let escaped_remote = escape(remote_path.into());
-
-        scp_cmd.push_str(&format!(
-            " {escaped_local} {escaped_user}@{escaped_host}:{escaped_remote}"
+        let local = local_path
+            .to_str()
+            .ok_or_else(|| Error::ConfigurationError("Local path contains invalid UTF-8".into()))?;
+        let mut scp = self.transport_command("scp", "-P")?;
+        scp.push_str(&format!(
+            " {} {}@{}:{}",
+            escape(local.into()),
+            escape(self.connection.user.as_str().into()),
+            escape(self.connection.host.as_str().into()),
+            escape(remote_path.into())
         ));
-
-        Ok(scp_cmd)
+        Ok(scp)
     }
 
-    /// Validate local file path
     fn validate_local_path(&self, path: &Path) -> Result<()> {
         if !path.exists() {
             return Err(Error::ConfigurationError(format!(

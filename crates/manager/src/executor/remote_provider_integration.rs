@@ -54,6 +54,7 @@ pub struct RemoteProviderManager {
     provisioner: Arc<CloudProvisioner>,
     registry: Arc<RemoteDeploymentRegistry>,
     namespace: String,
+    state_dir: std::path::PathBuf,
     max_hourly_cost: f64,
     retirement: tokio::task::JoinHandle<()>,
     provider_regions: HashMap<CloudProvider, String>,
@@ -89,7 +90,7 @@ impl RemoteProviderManager {
         provider_regions: HashMap<CloudProvider, String>,
         max_hourly_cost: f64,
     ) -> Result<Self> {
-        use sha2::{Digest, Sha256};
+        use std::io::Write;
         if !max_hourly_cost.is_finite() || max_hourly_cost <= 0.0 {
             return Err(Error::Other(
                 "Manager GPU spending cap must be positive and finite".into(),
@@ -104,12 +105,48 @@ impl RemoteProviderManager {
         let tracker =
             Arc::new(DeploymentTracker::new(&state_dir.join("remote_deployments")).await?);
         let registry = Arc::new(RemoteDeploymentRegistry::new(tracker));
-        // Resolve aliases before hashing: the same manager state keeps its ownership after restart.
         let state_dir = std::fs::canonicalize(state_dir)?;
-        let namespace = format!(
-            "bpm-{:x}",
-            Sha256::digest(state_dir.as_os_str().as_encoded_bytes())
-        );
+        let namespace = {
+            let _guard = blueprint_remote_providers::managed::lock_lease(
+                &state_dir,
+                &ManagedLeaseIdentity {
+                    namespace: "manager-owner".into(),
+                    lease_id: "initialize".into(),
+                },
+            )
+            .await?;
+            let path = state_dir.join("blueprint/manager-owner");
+            let mut options = std::fs::OpenOptions::new();
+            options.create_new(true).write(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            match options.open(&path) {
+                Ok(mut file) => {
+                    file.write_all(format!("{}\n", uuid::Uuid::new_v4()).as_bytes())?;
+                    file.sync_all()?;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error.into()),
+            }
+            if !std::fs::symlink_metadata(&path)?.file_type().is_file() {
+                return Err(Error::Other(
+                    "Invalid persisted manager owner identity".into(),
+                ));
+            }
+            let saved = std::fs::read_to_string(&path)?;
+            let owner = uuid::Uuid::parse_str(saved.trim())
+                .map_err(|_| Error::Other("Invalid persisted manager owner identity".into()))?;
+            if saved != format!("{owner}\n") || owner.get_version() != Some(uuid::Version::Random) {
+                return Err(Error::Other(
+                    "Invalid persisted manager owner identity".into(),
+                ));
+            }
+            std::fs::File::open(path.parent().expect("owner file has a parent"))?.sync_all()?;
+            format!("bpm-{owner}")
+        };
         let retire_namespace = namespace.clone();
         let retire_provisioner = provisioner.clone();
         let retirement = tokio::spawn(async move {
@@ -126,6 +163,7 @@ impl RemoteProviderManager {
             provisioner,
             registry,
             namespace,
+            state_dir,
             max_hourly_cost,
             retirement,
             provider_regions,
@@ -335,7 +373,8 @@ impl RemoteProviderManager {
         env.entry("SERVICE_ID".into())
             .or_insert_with(|| service_id.to_string());
         let lease = {
-            let _guard = blueprint_remote_providers::managed::lock_lease(&identity).await?;
+            let _guard =
+                blueprint_remote_providers::managed::lock_lease(&self.state_dir, &identity).await?;
             if self
                 .provisioner
                 .list_managed(&self.namespace)
@@ -430,6 +469,7 @@ impl RemoteProviderManager {
         let mut assigned = spec.clone();
         assigned.gpu_count = lease.resource.gpu_count;
         assigned.gpu_class = lease.resource.gpu_class.clone();
+        assigned.arms.clear();
         match artifact {
             DeployArtifact::ContainerImage(image) => {
                 client.deploy_blueprint(image, &assigned, env).await?;
@@ -440,7 +480,7 @@ impl RemoteProviderManager {
                 binary_name,
             } => {
                 client
-                    .deploy_github_binary(archive_url, sha256_hex, binary_name, spec, &env)
+                    .deploy_github_binary(archive_url, sha256_hex, binary_name, &assigned, &env)
                     .await?;
             }
         }
@@ -459,7 +499,8 @@ impl RemoteProviderManager {
             return Ok(());
         }
         let identity = self.lease_identity(blueprint_id, service_id);
-        let _guard = blueprint_remote_providers::managed::lock_lease(&identity).await?;
+        let _guard =
+            blueprint_remote_providers::managed::lock_lease(&self.state_dir, &identity).await?;
         let mut failures = Vec::new();
         for provider in self.provider_regions.keys() {
             let adapter = match self.provisioner.get_adapter(provider) {
@@ -547,100 +588,62 @@ fn deployment_type_from_provider(provider: &CloudProvider) -> DeploymentType {
 fn configured_provider_regions(ctx: &BlueprintManagerContext) -> HashMap<CloudProvider, String> {
     let mut regions = HashMap::new();
     if let Some(config) = ctx.cloud_config() {
-        if let Some(aws) = &config.aws {
-            if aws.enabled {
-                regions.insert(CloudProvider::AWS, aws.region.clone());
-            }
+        if let Some(aws) = config.aws.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::AWS, aws.region.clone());
         }
-        if let Some(gcp) = &config.gcp {
-            if gcp.enabled {
-                regions.insert(CloudProvider::GCP, gcp.region.clone());
-            }
+        if let Some(gcp) = config.gcp.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::GCP, gcp.region.clone());
         }
-        if let Some(azure) = &config.azure {
-            if azure.enabled {
-                regions.insert(CloudProvider::Azure, azure.region.clone());
-            }
+        if let Some(azure) = config.azure.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::Azure, azure.region.clone());
         }
-        if let Some(do_cfg) = &config.digital_ocean {
-            if do_cfg.enabled {
-                regions.insert(CloudProvider::DigitalOcean, do_cfg.region.clone());
-            }
+        if let Some(do_cfg) = config.digital_ocean.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::DigitalOcean, do_cfg.region.clone());
         }
-        if let Some(vultr) = &config.vultr {
-            if vultr.enabled {
-                regions.insert(CloudProvider::Vultr, vultr.region.clone());
-            }
+        if let Some(vultr) = config.vultr.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::Vultr, vultr.region.clone());
         }
-        if let Some(cfg) = &config.lambda_labs {
-            if cfg.enabled {
-                regions.insert(CloudProvider::LambdaLabs, cfg.region.clone());
-            }
+        if let Some(cfg) = config.lambda_labs.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::LambdaLabs, cfg.region.clone());
         }
-        if let Some(cfg) = &config.runpod {
-            if cfg.enabled {
-                regions.insert(CloudProvider::RunPod, cfg.region.clone());
-            }
+        if let Some(cfg) = config.runpod.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::RunPod, cfg.region.clone());
         }
-        if let Some(cfg) = &config.vast_ai {
-            if cfg.enabled {
-                regions.insert(CloudProvider::VastAi, "global".to_string());
-            }
+        if let Some(cfg) = config.vast_ai.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::VastAi, "global".to_string());
         }
-        if let Some(cfg) = &config.coreweave {
-            if cfg.enabled {
-                regions.insert(CloudProvider::CoreWeave, cfg.region.clone());
-            }
+        if let Some(cfg) = config.coreweave.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::CoreWeave, cfg.region.clone());
         }
-        if let Some(cfg) = &config.paperspace {
-            if cfg.enabled {
-                regions.insert(CloudProvider::Paperspace, cfg.region.clone());
-            }
+        if let Some(cfg) = config.paperspace.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::Paperspace, cfg.region.clone());
         }
-        if let Some(cfg) = &config.fluidstack {
-            if cfg.enabled {
-                regions.insert(CloudProvider::Fluidstack, cfg.region.clone());
-            }
+        if let Some(cfg) = config.fluidstack.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::Fluidstack, cfg.region.clone());
         }
-        if let Some(cfg) = &config.tensordock {
-            if cfg.enabled {
-                regions.insert(CloudProvider::TensorDock, cfg.region.clone());
-            }
+        if let Some(cfg) = config.tensordock.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::TensorDock, cfg.region.clone());
         }
-        if let Some(cfg) = &config.akash {
-            if cfg.enabled {
-                regions.insert(CloudProvider::Akash, "global".to_string());
-            }
+        if let Some(cfg) = config.akash.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::Akash, "global".to_string());
         }
-        if let Some(cfg) = &config.io_net {
-            if cfg.enabled {
-                regions.insert(CloudProvider::IoNet, cfg.region.clone());
-            }
+        if let Some(cfg) = config.io_net.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::IoNet, cfg.region.clone());
         }
-        if let Some(cfg) = &config.prime_intellect {
-            if cfg.enabled {
-                regions.insert(CloudProvider::PrimeIntellect, cfg.region.clone());
-            }
+        if let Some(cfg) = config.prime_intellect.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::PrimeIntellect, cfg.region.clone());
         }
-        if let Some(cfg) = &config.render {
-            if cfg.enabled {
-                regions.insert(CloudProvider::Render, cfg.region.clone());
-            }
+        if let Some(cfg) = config.render.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::Render, cfg.region.clone());
         }
-        if let Some(cfg) = &config.bittensor_lium {
-            if cfg.enabled {
-                regions.insert(CloudProvider::BittensorLium, "global".to_string());
-            }
+        if let Some(cfg) = config.bittensor_lium.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::BittensorLium, "global".to_string());
         }
-        if let Some(cfg) = &config.hetzner {
-            if cfg.enabled {
-                regions.insert(CloudProvider::Hetzner, cfg.region.clone());
-            }
+        if let Some(cfg) = config.hetzner.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::Hetzner, cfg.region.clone());
         }
-        if let Some(cfg) = &config.crusoe {
-            if cfg.enabled {
-                regions.insert(CloudProvider::Crusoe, cfg.region.clone());
-            }
+        if let Some(cfg) = config.crusoe.as_ref().filter(|cfg| cfg.enabled) {
+            regions.insert(CloudProvider::Crusoe, cfg.region.clone());
         }
     }
     regions

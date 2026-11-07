@@ -154,14 +154,6 @@ impl SecureContainerCommands {
             return false;
         }
 
-        // Check for dangerous characters that could be used for injection
-        let dangerous_chars = [
-            ';', '&', '|', '`', '$', '(', ')', '{', '}', '[', ']', '<', '>', '"', '\'', '\\',
-        ];
-        if image.chars().any(|c| dangerous_chars.contains(&c)) {
-            return false;
-        }
-
         // Must not start with slash, dash, or dot
         if image.starts_with('/') || image.starts_with('-') || image.starts_with('.') {
             return false;

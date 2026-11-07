@@ -28,21 +28,25 @@ pub(super) async fn lock(
     provider: &CloudProvider,
     identity: &ManagedLeaseIdentity,
 ) -> Result<fs::File> {
-    lock_scope(provider.catalog_key(), identity).await
-}
-
-/// Serialize one lease across provider choice, processes and manager restarts.
-/// Hold this guard across inventory and allocation; dropping it releases the OS lock.
-pub async fn lock_lease(identity: &ManagedLeaseIdentity) -> Result<fs::File> {
-    lock_scope("lease", identity).await
-}
-
-async fn lock_scope(scope: &str, identity: &ManagedLeaseIdentity) -> Result<fs::File> {
-    identity.validate().map_err(|_| invalid())?;
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|path| PathBuf::from(path).join(".cache")))
         .ok_or_else(invalid)?;
+    lock_scope(base, provider.catalog_key(), identity).await
+}
+
+/// Serialize service inventory and allocation in the manager's shared state store.
+pub async fn lock_lease(state_dir: &Path, identity: &ManagedLeaseIdentity) -> Result<fs::File> {
+    let base = fs::canonicalize(state_dir).map_err(|_| invalid())?;
+    lock_scope(base, "lease", identity).await
+}
+
+async fn lock_scope(
+    base: PathBuf,
+    scope: &str,
+    identity: &ManagedLeaseIdentity,
+) -> Result<fs::File> {
+    identity.validate().map_err(|_| invalid())?;
     if !base.is_absolute()
         || base
             .components()
