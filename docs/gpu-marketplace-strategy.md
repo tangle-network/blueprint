@@ -31,9 +31,9 @@ from the catalog. Local operator hardware is measured per device rather than
 inferred from host RAM.
 
 The managed create/status/list/destroy operations are the provider primitive.
-The SDK's lease allocation wraps it with access and retirement. The manager
-uploads and starts the blueprint it rents capacity for. Blueprints share the
-same adapters.
+`allocate(spec, ttl)` adds per-lease SSH access; `retire_expired(namespace)`
+retires leases from their provider-recorded deadlines. The manager uploads and
+starts the blueprint it rents capacity for. Blueprints share the same adapters.
 
 The process boundary is `cargo tangle cloud
 catalog/quote/create/status/list/destroy --json`. Credentials and requests arrive

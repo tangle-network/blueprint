@@ -1,6 +1,5 @@
 //! Deployment orchestration and tracking
 
-pub mod error_recovery;
 pub mod manager_integration;
 pub mod qos_tunnel;
 pub mod secure_commands;
@@ -12,9 +11,6 @@ pub mod update_manager;
 #[cfg(feature = "kubernetes")]
 pub mod kubernetes;
 
-pub use error_recovery::{
-    CircuitBreaker, DeploymentTransaction, ErrorRecovery, RecoveryStrategy, SshConnectionRecovery,
-};
 pub use manager_integration::{RemoteDeploymentConfig, RemoteDeploymentExtensions};
 pub use qos_tunnel::{QosTunnel, QosTunnelManager};
 pub use ssh::SshDeploymentClient;
