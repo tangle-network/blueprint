@@ -61,12 +61,13 @@ impl RemoteDeploymentRegistry {
     /// Remove and cleanup a deployment
     pub async fn cleanup(&self, blueprint_id: u64, service_id: u64) -> Result<()> {
         let mut deployments = self.deployments.write().await;
-        if let Some(config) = deployments.remove(&(blueprint_id, service_id)) {
+        if let Some(config) = deployments.get(&(blueprint_id, service_id)) {
             info!(
                 "Cleaning up remote deployment {} for blueprint {} service {}",
                 config.instance_id, blueprint_id, service_id
             );
-            let _ = self.tracker.handle_termination(&config.instance_id).await;
+            self.tracker.handle_termination(&config.instance_id).await?;
+            deployments.remove(&(blueprint_id, service_id));
         }
         Ok(())
     }

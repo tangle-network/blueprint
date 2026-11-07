@@ -64,7 +64,6 @@ pub struct RemoteProviderManager {
     max_hourly_cost: f64,
     retirement: tokio::task::JoinHandle<()>,
     provider_regions: HashMap<CloudProvider, String>,
-    enabled: bool,
 }
 
 impl RemoteProviderManager {
@@ -137,7 +136,6 @@ impl RemoteProviderManager {
             max_hourly_cost,
             retirement,
             provider_regions,
-            enabled: true,
         })
     }
 
@@ -159,10 +157,6 @@ impl RemoteProviderManager {
         artifact: Option<DeployArtifact<'_>>,
         extra_env: HashMap<String, String>,
     ) -> Result<()> {
-        if !self.enabled {
-            return Ok(());
-        }
-
         let artifact_kind = match &artifact {
             Some(DeployArtifact::ContainerImage(_)) => "container",
             Some(DeployArtifact::GithubBinary { .. }) => "github_binary",
@@ -175,16 +169,20 @@ impl RemoteProviderManager {
 
         // Use provided resources or default
         let resource_spec = resource_requirements.unwrap_or_else(ResourceSpec::minimal);
-        let tee_required = env_bool("BLUEPRINT_REMOTE_TEE_REQUIRED");
+        let tee_required = env_bool("BLUEPRINT_REMOTE_TEE_REQUIRED") || resource_spec.tee_required;
+        if !tee_required
+            && (resource_spec.gpu_count.is_some()
+                || resource_spec.gpu_class.is_some()
+                || !resource_spec.arms.is_empty())
+        {
+            return self
+                .allocate_service(blueprint_id, service_id, resource_spec, artifact, extra_env)
+                .await;
+        }
 
-        // Select provider based on workload type. GPU workloads use a
-        // GPU-first candidate list so operators who configured RunPod/Vast/Lambda
-        // get those before falling back to GCP/AWS.
-        let is_gpu = resource_spec.gpu_count.is_some();
+        // CPU and confidential-compute requests retain their existing provisioning path.
         let preferred_provider = if tee_required {
             CloudProvider::AWS
-        } else if is_gpu {
-            CloudProvider::RunPod
         } else if resource_spec.cpu > 8.0 {
             CloudProvider::Vultr
         } else if resource_spec.memory_gb > 32.0 {
@@ -192,11 +190,7 @@ impl RemoteProviderManager {
         } else {
             CloudProvider::DigitalOcean
         };
-        let provider = if is_gpu && !tee_required {
-            preferred_provider
-        } else {
-            self.select_configured_provider(preferred_provider, tee_required)?
-        };
+        let provider = self.select_configured_provider(preferred_provider, tee_required)?;
 
         // Use configured region when available.
         let region = self
@@ -340,6 +334,8 @@ impl RemoteProviderManager {
         artifact: Option<DeployArtifact<'_>>,
         mut env: HashMap<String, String>,
     ) -> Result<()> {
+        spec.validate()
+            .map_err(|_| Error::Other("Invalid GPU resource request".into()))?;
         let identity = self.lease_identity(blueprint_id, service_id);
         if spec
             .ownership
@@ -458,10 +454,6 @@ impl RemoteProviderManager {
 
     /// Handle service terminated event
     pub async fn on_service_terminated(&self, blueprint_id: u64, service_id: u64) -> Result<()> {
-        if !self.enabled {
-            return Ok(());
-        }
-
         info!(
             "Remote provider handling service termination: blueprint={}, service={}",
             blueprint_id, service_id
