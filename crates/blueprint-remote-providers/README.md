@@ -39,52 +39,39 @@ explicit budget and provider-confirmed retirement.
 
 ## Durable GPU allocation
 
-`CloudProvisioner::allocate` and the no-create `recover_lease` require explicit
-private SDK state on Unix (other platforms fail closed without a protected-file
-implementation). For a deliberately new caller state directory, call
-`initialize_lease_state_dir(path).await`; on every subsequent start use
-`with_lease_state_dir(path)`. Initialization refuses an existing file; opening
-never initializes, repairs, or imports authorizations from provider metadata.
-At least one checked native account is required before initialization or attachment;
-unsupported configurations create no SDK files. The manager wires this to its
-existing data directory and persisted owner ID.
+Canonical `allocate` and no-create `recover_lease` require Unix private state and
+checked native accounts. For deliberately new state, call
+`initialize_lease_state_dir(path).await`; on restart, use
+`with_lease_state_dir(path)`. Initialization never clobbers; opening never repairs
+or imports provider metadata. The manager uses its data directory and owner ID.
 
-The private `blueprint/lease-authorizations.json` binds the normalized request,
-public SSH key, original candidate/price/deadline, and configured account digests
-before native creation. It contains no private SSH key, workload environment, or
-raw account credential. Once an attempt is recorded, absence or an uncertain
-response never authorizes another create for that lease identity. Use a new
-identity for a new intentional attempt. `recover_lease` never requests capacity;
-`None` means all original configured accounts were successfully inspected.
-An unavailable account remains an error. Recovery checks the actual billed rate
-against the original quote and caller cap, and keeps the original deadline.
-`retire_expired` uses that deadline even if mutable native metadata extends it.
-It checks original account obligations before listing; removed or changed accounts
-remain visible failures even when a new account lists nothing. Correctly bound
-authorizations continue cleaning up independently of failed historical bindings.
+`blueprint/lease-authorizations.json` preserves original request, public key,
+quote, account bindings, and deadline before creation, without environment secrets,
+private keys, or raw credentials. An attempted identity never creates again,
+including after uncertain responses or proven absence; use a new identity for a
+new attempt. Recovery checks every original account before returning `None` for
+absence, validates actual billing against the original quote and caller cap,
+and keeps the original deadline. Retirement checks private obligations before
+listing: missing/changed accounts remain visible failures while correctly bound
+leases clean up independently. Native metadata cannot extend retirement.
 
-Fresh allocation can generate an SSH key and return its private half once.
-Recovery requires the matching caller-owned public key; a lost generated private
-key cannot be replaced and is never persisted by the SDK. Keep the key yourself
-if recovery access is required. Exact credential/config digests identify inputs,
-not vendor-verified accounts: changing credentials, endpoint, region defaults, or
-native launch configuration fails recovery even for a same-account rotation.
-Operator reconciliation is required; the SDK does not infer account continuity.
-Use `from_credentials`, `with_credentials`, or the environment factory for checked
-native bindings; custom `with_providers` alone cannot authorize strong recovery.
-Calling `only_providers` after attaching state selects fresh offers while retaining
-original accounts for recovery and cleanup.
+Without a supplied public key, fresh allocation returns a generated private key
+once. Retain the matching key for recovery; lost access is not replaced. Checked
+bindings come from `from_credentials`, `with_credentials`, or the environment
+factory; custom `with_providers` alone cannot establish a context. Bindings digest
+exact credentials, endpoint, region defaults and native configuration, not a
+vendor-verified account ID. Changes, including same-account rotation, require
+operator reconciliation. After state attachment, `only_providers` narrows fresh
+offers while retaining original accounts for recovery and cleanup.
 
-Carry the latest SDK state, caller records, and caller-owned key together when
-moving hosts, after stopping the old writer. OS locks coordinate one shared
-filesystem, not independently copied stores. Missing/corrupt state fails closed;
-coherent owner-controlled rollback is outside this storage boundary. Lium's
-relative `termination_hours` is a coarse vendor guard; SDK retirement is the
-original absolute deadline and requires a running reconciler.
+Carry latest SDK state, caller records and keys together when moving, after
+stopping the old writer. OS locks do not coordinate independent copies; coherent
+owner-controlled rollback is outside this boundary. Missing/corrupt state fails
+closed. Lium's relative timeout is a coarse guard; a running `retire_expired`
+reconciler enforces the original absolute deadline.
 
-This changes the allocation default and the `ManagedProviderAdapter::create`
-argument to prepared `ManagedMetadata`; custom implementations must migrate and
-preserve it exactly. `ManagedResource` and its native allocation fingerprint are
-unchanged. The low-level quoted create/status/list/destroy path remains available
-without strong restart guarantees. These APIs require a new SDK release; read
-manifests and registry metadata for the containing release before adopting it.
+Custom `ManagedProviderAdapter::create` implementations preserve prepared
+`ManagedMetadata` exactly; manifests and registry metadata identify the containing
+release. Low-level quoted operations retain weaker restart guarantees. Legacy
+Lium orphan retries preserve native timestamps and require exact original metadata
+before another rent request.

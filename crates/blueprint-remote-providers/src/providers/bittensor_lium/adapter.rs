@@ -351,13 +351,12 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
                 .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?,
         )?;
         metadata.check_deadline()?;
-        let fingerprint = metadata.request_fingerprint.clone();
         let mut original_offer = offer.clone();
         let mut owned = Vec::new();
         for raw in self.templates().await? {
             if let Some(existing) = Self::metadata(&raw)? {
                 if existing.identity == metadata.identity {
-                    if existing.request_fingerprint != fingerprint
+                    if existing.request_fingerprint != metadata.request_fingerprint
                         || existing.created_at != metadata.created_at
                         || existing.expires_at != metadata.expires_at
                         || raw["is_private"].as_bool() != Some(true)

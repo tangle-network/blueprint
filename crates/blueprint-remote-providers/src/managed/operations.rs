@@ -53,9 +53,6 @@ impl CloudProvisioner {
     ) -> Result<ResourceSpec> {
         spec.validate()
             .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
-        spec.ownership
-            .as_ref()
-            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
         if spec.lease_duration_secs.is_none_or(|seconds| seconds == 0) {
             return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
         }
@@ -140,28 +137,26 @@ impl CloudProvisioner {
             }
             Ok(())
         };
-        let finish = async |resource: ManagedResource| -> Result<ManagedResource> {
-            if let Some(metadata) = metadata {
-                metadata.check_deadline()?;
-            }
-            validate(&resource)?;
-            let id = resource.instance.id.clone();
-            let resource = native
-                .status(identity, &id)
-                .await?
-                .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
-            assigned(&resource, &id)?;
-            let resource = native.complete(&resolved, resource).await?;
-            assigned(&resource, &id)?;
-            if let Some(metadata) = metadata {
-                metadata.check_deadline()?;
-            }
-            Ok(resource)
-        };
+        if let Some(metadata) = metadata {
+            metadata.check_deadline()?;
+        }
         if observed {
             assigned(&resource, &resource.instance.id)?;
+        } else {
+            validate(&resource)?;
         }
-        finish(resource).await
+        let id = resource.instance.id.clone();
+        let resource = native
+            .status(identity, &id)
+            .await?
+            .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
+        assigned(&resource, &id)?;
+        let resource = native.complete(&resolved, resource).await?;
+        assigned(&resource, &id)?;
+        if let Some(metadata) = metadata {
+            metadata.check_deadline()?;
+        }
+        Ok(resource)
     }
 
     pub(super) async fn create_prepared(
@@ -188,12 +183,22 @@ impl CloudProvisioner {
         let _guard = super::ownership::lock(provider, identity).await?;
         let native = self.managed_adapter(provider)?;
         let existing = native.list(&identity.namespace).await?;
-        let mut existing = existing.into_iter().filter(|resource| {
+        let owned = |resource: &ManagedResource| {
             resource.namespace == identity.namespace
                 && resource.lease_id == identity.lease_id
-                && resource.kind == ManagedResourceKind::Instance
                 && resource.is_present()
-        });
+        };
+        let template_expiry = if intent.is_none() {
+            existing
+                .iter()
+                .find(|resource| owned(resource) && resource.kind == ManagedResourceKind::Template)
+                .and_then(|resource| resource.expires_at)
+        } else {
+            None
+        };
+        let mut existing = existing
+            .into_iter()
+            .filter(|resource| owned(resource) && resource.kind == ManagedResourceKind::Instance);
         if let Some(resource) = existing.next() {
             if intent.is_some() || existing.next().is_some() {
                 return Err(Error::Provider(ProviderErrorCode::Conflict));
@@ -218,11 +223,20 @@ impl CloudProvisioner {
                     && valid_offer(&resolved, offer)
             })
             .ok_or(Error::Provider(ProviderErrorCode::NoStock))?;
-        let metadata = metadata::ManagedMetadata::for_spec(
+        let mut metadata = metadata::ManagedMetadata::for_spec(
             spec,
             &candidate.allocation_fingerprint()?,
             chrono::Utc::now(),
         )?;
+        if let Some(expires_at) = template_expiry {
+            // Legacy quoted retries keep the orphan template's deadline. The
+            // adapter still requires exact original metadata before any POST.
+            metadata.created_at = expires_at
+                .checked_sub_signed(metadata.expires_at - metadata.created_at)
+                .filter(|created| *created <= chrono::Utc::now())
+                .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+            metadata.expires_at = expires_at;
+        }
         if let Some(intent) = intent {
             let row = authorization::Authorization {
                 intent: authorization::intent(intent)?,
