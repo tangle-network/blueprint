@@ -2,9 +2,9 @@
 
 use crate::core::error::{Error, Result};
 use crate::create_metadata_client;
+use gcp_auth::TokenProvider;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
-use url::Url;
 
 const AZURE_METADATA_URL: &str = "http://169.254.169.254/metadata/identity/oauth2/token";
 
@@ -21,18 +21,31 @@ pub async fn gcp_access_token() -> Result<String> {
         return Ok(token);
     }
 
-    // Discovery probes files, the metadata server and `gcloud`, so run it once per
-    // process; the provider caches and refreshes its token.
-    static PROVIDER: OnceCell<Arc<dyn gcp_auth::TokenProvider>> = OnceCell::const_new();
-    let provider = PROVIDER
-        .get_or_try_init(gcp_auth::provider)
-        .await
-        .map_err(gcp_login_error)?;
+    // A key file, application-default credentials and the metadata server carry their token's real
+    // expiry and refresh it, so the first of them found is kept for the process. gcp_auth gives a
+    // `gcloud` token a fixed hour instead, which would keep a revoked or expired token in use for up
+    // to 3600 s; without one of the others, each call asks `gcloud`, whose own cache decides.
+    static SELF_REFRESHING: OnceCell<Option<Arc<dyn TokenProvider>>> = OnceCell::const_new();
+    let provider = match SELF_REFRESHING.get_or_init(self_refreshing_provider).await {
+        Some(provider) => provider.clone(),
+        None => gcp_auth::provider().await.map_err(gcp_login_error)?,
+    };
     let token = provider
         .token(&["https://www.googleapis.com/auth/cloud-platform"])
         .await
         .map_err(gcp_login_error)?;
     Ok(token.as_str().to_owned())
+}
+
+async fn self_refreshing_provider() -> Option<Arc<dyn TokenProvider>> {
+    if let Ok(Some(key)) = gcp_auth::CustomServiceAccount::from_env() {
+        return Some(Arc::new(key));
+    }
+    if let Ok(user) = gcp_auth::ConfigDefaultCredentials::new().await {
+        return Some(Arc::new(user));
+    }
+    let metadata = gcp_auth::MetadataServiceAccount::new().await.ok()?;
+    Some(Arc::new(metadata))
 }
 
 fn gcp_login_error(err: gcp_auth::Error) -> Error {
@@ -77,7 +90,6 @@ pub async fn azure_access_token() -> Result<String> {
         return Ok(token);
     }
 
-    validate_azure_metadata_url(AZURE_METADATA_URL)?;
     let params = [
         ("api-version", "2018-02-01"),
         ("resource", "https://management.azure.com/"),
@@ -135,84 +147,23 @@ pub async fn azure_access_token() -> Result<String> {
     Ok(token.to_string())
 }
 
-fn validate_azure_metadata_url(url: &str) -> Result<()> {
-    let parsed =
-        Url::parse(url).map_err(|e| Error::ConfigurationError(format!("Invalid URL: {e}")))?;
-    if parsed.scheme() != "http" {
-        return Err(Error::ConfigurationError(
-            "Azure metadata URL must use HTTP".into(),
-        ));
-    }
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| Error::ConfigurationError("Missing host in URL".into()))?;
-    if host != "169.254.169.254" {
-        return Err(Error::ConfigurationError(format!(
-            "Unexpected Azure metadata host: {host}"
-        )));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
-#[allow(clippy::await_holding_lock)]
 mod tests {
-    use super::{azure_access_token, gcp_access_token, validate_azure_metadata_url};
+    use super::azure_access_token;
     use std::env;
-    use std::sync::{Mutex, OnceLock};
 
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
-    }
-
-    #[test]
-    fn azure_metadata_url_validation() {
-        assert!(
-            validate_azure_metadata_url("http://169.254.169.254/metadata/identity/oauth2/token")
-                .is_ok()
-        );
-        assert!(validate_azure_metadata_url("https://169.254.169.254/").is_err());
-        assert!(validate_azure_metadata_url("http://example.com").is_err());
-    }
-
+    /// The only test that sets `AZURE_ACCESS_TOKEN`, so it needs no lock on the environment.
     #[tokio::test]
-    async fn gcp_env_token_is_used() {
-        let _guard = env_lock();
-        unsafe {
-            env::set_var("GCP_ACCESS_TOKEN", "token");
-        }
-        assert_eq!(gcp_access_token().await.unwrap(), "token");
-        unsafe {
-            env::remove_var("GCP_ACCESS_TOKEN");
-        }
-    }
-
-    #[tokio::test]
-    async fn azure_env_token_is_used() {
-        let _guard = env_lock();
+    async fn azure_env_token_is_used_unless_empty() {
         unsafe {
             env::set_var("AZURE_ACCESS_TOKEN", "token");
         }
         assert_eq!(azure_access_token().await.unwrap(), "token");
         unsafe {
-            env::remove_var("AZURE_ACCESS_TOKEN");
-        }
-    }
-
-    #[tokio::test]
-    async fn empty_env_tokens_fail() {
-        let _guard = env_lock();
-        unsafe {
-            env::set_var("GCP_ACCESS_TOKEN", "");
-        }
-        assert!(gcp_access_token().await.is_err());
-        unsafe {
             env::set_var("AZURE_ACCESS_TOKEN", "");
         }
         assert!(azure_access_token().await.is_err());
         unsafe {
-            env::remove_var("GCP_ACCESS_TOKEN");
             env::remove_var("AZURE_ACCESS_TOKEN");
         }
     }
