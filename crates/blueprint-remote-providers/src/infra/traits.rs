@@ -46,6 +46,24 @@ pub trait CloudProviderAdapter: Send + Sync {
         None
     }
 
+    /// Terminate an instance in the region its deployment record names.
+    ///
+    /// Providers whose instance IDs are global ignore the region.
+    async fn terminate_instance_in(&self, instance_id: &str, _region: Option<&str>) -> Result<()> {
+        self.terminate_instance(instance_id).await
+    }
+
+    /// Get an instance's status in the region its deployment record names.
+    ///
+    /// Providers whose instance IDs are global ignore the region.
+    async fn get_instance_status_in(
+        &self,
+        instance_id: &str,
+        _region: Option<&str>,
+    ) -> Result<InstanceStatus> {
+        self.get_instance_status(instance_id).await
+    }
+
     /// Lossy legacy calls cannot allocate a managed GPU lease.
     async fn provision_instance(
         &self,

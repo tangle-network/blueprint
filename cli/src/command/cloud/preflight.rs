@@ -1,6 +1,6 @@
 //! Remote deployment preflight checks and bootstrap helpers.
 
-use super::config::{CloudConfig, CloudProvider};
+use super::config::{CloudConfig, CloudProvider, credentials_present};
 use color_eyre::{Result, eyre::eyre};
 use std::fmt::Write as _;
 use std::net::IpAddr;
@@ -36,7 +36,7 @@ pub async fn run(
 
     for selected in &providers {
         let configured = config.providers.contains_key(selected);
-        let credentials_ok = credentials_present(selected);
+        let credentials_ok = credentials_present(selected).await;
         let supports_tee = selected.supports_tee();
         let tee_ok = !tee_required || supports_tee;
         let gcp_cidrs_ok = if *selected == CloudProvider::GCP {
@@ -147,45 +147,6 @@ fn selected_providers(config: &CloudConfig, provider: Option<CloudProvider>) -> 
 
 fn yes_no(v: bool) -> &'static str {
     if v { "yes" } else { "no" }
-}
-
-fn credentials_present(provider: &CloudProvider) -> bool {
-    match provider {
-        CloudProvider::AWS => {
-            let env_ok = std::env::var("AWS_ACCESS_KEY_ID").is_ok()
-                && std::env::var("AWS_SECRET_ACCESS_KEY").is_ok();
-            let file_ok = dirs::home_dir()
-                .map(|home| home.join(".aws").join("credentials"))
-                .map(|path| path.exists())
-                .unwrap_or(false);
-            env_ok || file_ok
-        }
-        CloudProvider::GCP => {
-            std::env::var("GCP_PROJECT_ID").is_ok()
-                && std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
-                    .ok()
-                    .map(PathBuf::from)
-                    .map(|path| path.exists())
-                    .unwrap_or(false)
-        }
-        CloudProvider::Azure => {
-            std::env::var("AZURE_SUBSCRIPTION_ID").is_ok()
-                && std::env::var("AZURE_CLIENT_ID").is_ok()
-                && std::env::var("AZURE_CLIENT_SECRET").is_ok()
-                && std::env::var("AZURE_TENANT_ID").is_ok()
-        }
-        CloudProvider::DigitalOcean => std::env::var("DIGITALOCEAN_TOKEN").is_ok(),
-        CloudProvider::Vultr => std::env::var("VULTR_API_KEY").is_ok(),
-        CloudProvider::Hetzner => std::env::var("HETZNER_API_TOKEN").is_ok(),
-        CloudProvider::RunPod => std::env::var("RUNPOD_API_KEY").is_ok(),
-        CloudProvider::LambdaLabs => std::env::var("LAMBDA_LABS_API_KEY").is_ok(),
-        CloudProvider::PrimeIntellect => std::env::var("PRIME_INTELLECT_API_KEY").is_ok(),
-        CloudProvider::VastAi => std::env::var("VAST_AI_API_KEY").is_ok(),
-        CloudProvider::Crusoe => {
-            std::env::var("CRUSOE_API_KEY").is_ok() && std::env::var("CRUSOE_API_SECRET").is_ok()
-        }
-        _ => false,
-    }
 }
 
 fn gcp_cidr_prerequisites_met() -> bool {
@@ -317,7 +278,7 @@ fn render_bootstrap_env(
     out
 }
 
-fn region_env_var(provider: &CloudProvider) -> &'static str {
+pub(super) fn region_env_var(provider: &CloudProvider) -> &'static str {
     match provider {
         CloudProvider::AWS => "AWS_DEFAULT_REGION",
         CloudProvider::GCP => "GCP_DEFAULT_REGION",
@@ -325,6 +286,7 @@ fn region_env_var(provider: &CloudProvider) -> &'static str {
         CloudProvider::DigitalOcean => "DO_REGION",
         CloudProvider::Vultr => "VULTR_DEFAULT_REGION",
         CloudProvider::Hetzner => "HETZNER_REGION",
+        CloudProvider::Ovh => "OVH_REGION",
         CloudProvider::RunPod => "RUNPOD_REGION",
         CloudProvider::LambdaLabs => "LAMBDA_LABS_REGION",
         CloudProvider::PrimeIntellect => "PRIME_INTELLECT_REGION",
@@ -342,7 +304,7 @@ fn region_for_provider(config: &CloudConfig, provider: &CloudProvider) -> String
         .unwrap_or_else(|| default_region(provider).to_string())
 }
 
-fn default_region(provider: &CloudProvider) -> &'static str {
+pub(super) fn default_region(provider: &CloudProvider) -> &'static str {
     match provider {
         CloudProvider::AWS => "us-east-1",
         CloudProvider::GCP => "us-central1",
@@ -350,6 +312,7 @@ fn default_region(provider: &CloudProvider) -> &'static str {
         CloudProvider::DigitalOcean => "nyc3",
         CloudProvider::Vultr => "ewr",
         CloudProvider::Hetzner => "fsn1",
+        CloudProvider::Ovh => "GRA11",
         CloudProvider::RunPod => "US",
         CloudProvider::LambdaLabs => "us-west-1",
         CloudProvider::PrimeIntellect => "us-east",

@@ -321,6 +321,7 @@ fn resolve_provider_region(ctx: &BlueprintManagerContext, provider: &CloudProvid
         CloudProvider::DigitalOcean => "nyc3".to_string(),
         CloudProvider::Vultr => "ewr".to_string(),
         CloudProvider::Hetzner => "fsn1".to_string(),
+        CloudProvider::Ovh => "GRA11".to_string(),
         CloudProvider::RunPod => "US".to_string(),
         CloudProvider::LambdaLabs => "us-west-1".to_string(),
         CloudProvider::PrimeIntellect => "us-east".to_string(),
@@ -359,6 +360,7 @@ fn deployment_type_for_provider(
             DeploymentType::BittensorLiumMiner
         }
         blueprint_remote_providers::CloudProvider::Hetzner => DeploymentType::HetznerServer,
+        blueprint_remote_providers::CloudProvider::Ovh => DeploymentType::OvhInstance,
         blueprint_remote_providers::CloudProvider::Crusoe => DeploymentType::CrusoeVm,
         blueprint_remote_providers::CloudProvider::Linode
         | blueprint_remote_providers::CloudProvider::Generic

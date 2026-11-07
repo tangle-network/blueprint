@@ -7,7 +7,6 @@ use super::CloudProvider;
 use clap::{Args, ValueEnum};
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Remote deployment policy configuration.

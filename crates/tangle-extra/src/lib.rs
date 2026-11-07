@@ -46,7 +46,6 @@
 //! let round_handle = RoundKeeper::start(config.clone(), shutdown.subscribe());
 //! ```
 
-
 extern crate alloc;
 
 pub mod aggregating_consumer;

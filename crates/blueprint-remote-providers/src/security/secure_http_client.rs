@@ -94,6 +94,11 @@ impl SecureHttpClient {
                             "api.render.com",
                             "api.lium.ai",
                             "lium.io",
+                            "api.hetzner.cloud",
+                            "api.crusoecloud.com",
+                            "api.rendernetwork.com",
+                            "api.ovh.com",
+                            "api.us.ovhcloud.com",
                             "kubernetes.default.svc",
                             "kubernetes.default.svc.cluster.local",
                         ]
@@ -115,8 +120,13 @@ impl SecureHttpClient {
         method: Method,
         url: &str,
         auth: &ApiAuthentication,
+        body: Option<&serde_json::Value>,
     ) -> Result<reqwest::RequestBuilder> {
-        let request = self.client.request(method, self.url(url)?);
+        let url = self.url(url)?;
+        let mut request = self.client.request(method.clone(), url.clone());
+        if let Some(body) = body {
+            request = request.json(body);
+        }
         Ok(match auth {
             ApiAuthentication::Bearer { token } => request.bearer_auth(token),
             ApiAuthentication::ApiKey { key, header_name } => {
@@ -124,6 +134,34 @@ impl SecureHttpClient {
                     .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
                 value.set_sensitive(true);
                 request.header(header_name, value)
+            }
+            ApiAuthentication::Ovh {
+                application_key,
+                application_secret,
+                consumer_key,
+                timestamp,
+            } => {
+                use sha1::{Digest, Sha1};
+                // OVH signs the exact URL and body sent; `json()` serializes the same way.
+                let body = body.map(ToString::to_string).unwrap_or_default();
+                let timestamp = timestamp.to_string();
+                let signed = [
+                    application_secret.as_str(),
+                    consumer_key,
+                    method.as_str(),
+                    url.as_str(),
+                    &body,
+                    &timestamp,
+                ]
+                .join("+");
+                request
+                    .header("X-Ovh-Application", application_key.as_str())
+                    .header("X-Ovh-Consumer", consumer_key.as_str())
+                    .header("X-Ovh-Timestamp", timestamp)
+                    .header(
+                        "X-Ovh-Signature",
+                        format!("$1${}", hex::encode(Sha1::digest(signed))),
+                    )
             }
             ApiAuthentication::None => request,
         })
@@ -181,11 +219,8 @@ impl SecureHttpClient {
         auth: &ApiAuthentication,
         body: Option<serde_json::Value>,
     ) -> Result<Response> {
-        let mut request = self.authenticated(method, url, auth)?;
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
-        self.send(request).await
+        self.send(self.authenticated(method, url, auth, body.as_ref())?)
+            .await
     }
 
     pub async fn get(&self, url: &str, auth: &ApiAuthentication) -> Result<Response> {
@@ -223,9 +258,8 @@ impl SecureHttpClient {
             return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
         }
         self.send(
-            self.authenticated(Method::POST, url, auth)?
-                .header("Idempotency-Key", key)
-                .json(&body),
+            self.authenticated(Method::POST, url, auth, Some(&body))?
+                .header("Idempotency-Key", key),
         )
         .await
     }
@@ -236,8 +270,8 @@ impl SecureHttpClient {
         auth: &ApiAuthentication,
         form: &std::collections::HashMap<String, String>,
     ) -> Result<Response> {
-        self.send(self.authenticated(Method::POST, url, auth)?.form(form))
-            .await
+        let request = self.authenticated(Method::POST, url, auth, None)?;
+        self.send(request.form(form)).await
     }
 
     pub async fn delete(&self, url: &str, auth: &ApiAuthentication) -> Result<Response> {
@@ -253,6 +287,13 @@ pub enum ApiAuthentication {
     Bearer { token: String },
     /// API key in custom header
     ApiKey { key: String, header_name: String },
+    /// OVH's signed headers; `timestamp` is OVH's clock, from `/auth/time`.
+    Ovh {
+        application_key: String,
+        application_secret: String,
+        consumer_key: String,
+        timestamp: i64,
+    },
     /// No authentication
     None,
 }
@@ -269,6 +310,7 @@ impl std::fmt::Debug for ApiAuthentication {
                 .field("key", &"[REDACTED]")
                 .field("header_name", header_name)
                 .finish(),
+            Self::Ovh { .. } => f.debug_struct("Ovh").finish_non_exhaustive(),
             Self::None => write!(f, "None"),
         }
     }
