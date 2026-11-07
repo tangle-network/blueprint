@@ -1,6 +1,6 @@
 [package]
 name = "blueprint-producers-extra"
-version = "0.2.0"
+version = "0.2.1"
 description = "Additional job call producers for the Blueprint SDK"
 authors.workspace = true
 edition.workspace = true
