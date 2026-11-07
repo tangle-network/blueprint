@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.2.0...blueprint-remote-providers-v0.3.0) - 2026-11-07
+
+### Fixed
+
+- *(remote-providers)* preserve orphan template lease timestamps (#1662)
+- *(remote-providers)* [**breaking**] recover owned leases without new stock or rental (#1660)
+- *(remote-providers)* use native mode type for Unix ownership checks (#1661)
+- *(remote-providers)* ask gcloud for each GCP token instead of reusing one for an hour (#1658)
+- *(manager)* scope GPU leases and protect SSH workload delivery (#1651)
+
+### Other
+
+- *(remote-providers)* retire self-generated resource-limit assertions (#1657)
+
 ## [0.2.0](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.2.0-alpha.26...blueprint-remote-providers-v0.2.0) - 2026-11-07
 
 ### Added
