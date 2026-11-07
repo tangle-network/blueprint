@@ -460,19 +460,19 @@ impl RemoteProviderManager {
         );
 
         if self.registry.get(blueprint_id, service_id).await.is_some() {
-            return Ok(self.registry.cleanup(blueprint_id, service_id).await?);
+            self.registry.cleanup(blueprint_id, service_id).await?;
+            return Ok(());
         }
         let identity = self.lease_identity(blueprint_id, service_id);
         let mut failures = Vec::new();
         for provider in self.provider_regions.keys() {
-            if self.provisioner.get_adapter(provider)?.managed().is_some() {
-                if let Err(error) = self
+            if self.provisioner.get_adapter(provider)?.managed().is_some()
+                && let Err(error) = self
                     .provisioner
                     .destroy_managed(provider, &identity, None)
                     .await
-                {
-                    failures.push(format!("{provider}: {error}"));
-                }
+            {
+                failures.push(format!("{provider}: {error}"));
             }
         }
         if !failures.is_empty() {
