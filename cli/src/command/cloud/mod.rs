@@ -73,35 +73,7 @@ pub enum CloudCommands {
 
     /// Estimate deployment costs
     #[command(visible_alias = "cost")]
-    Estimate {
-        /// Compare all providers
-        #[arg(short = 'c', long)]
-        compare: bool,
-
-        /// Specific provider to estimate
-        #[arg(short, long)]
-        provider: Option<CloudProvider>,
-
-        /// CPU cores
-        #[arg(long, default_value = "4")]
-        cpu: f32,
-
-        /// Memory in GB
-        #[arg(long, default_value = "16")]
-        memory: f32,
-
-        /// Number of GPUs
-        #[arg(long)]
-        gpu: Option<u32>,
-
-        /// Duration (e.g., 1h, 24h, 30d)
-        #[arg(short = 'd', long, default_value = "24h")]
-        duration: String,
-
-        /// Include spot pricing
-        #[arg(short, long)]
-        spot: bool,
-    },
+    Estimate(estimate::EstimateOptions),
 
     /// Check deployment status
     #[command(visible_alias = "s")]
@@ -192,26 +164,7 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
 
         CloudCommands::ShowPolicy => policy::show_policy().await,
 
-        CloudCommands::Estimate {
-            compare,
-            provider,
-            cpu,
-            memory,
-            gpu,
-            duration,
-            spot,
-        } => {
-            estimate::estimate(estimate::EstimateOptions {
-                compare,
-                provider,
-                cpu,
-                memory,
-                gpu,
-                duration,
-                spot,
-            })
-            .await
-        }
+        CloudCommands::Estimate(options) => estimate::estimate(options).await,
 
         CloudCommands::Status { service_id, watch } => status::show_status(service_id, watch).await,
 

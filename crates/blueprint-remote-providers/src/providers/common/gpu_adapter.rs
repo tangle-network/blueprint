@@ -272,6 +272,17 @@ impl ClassifiedError {
     }
 }
 
+/// [`SecureHttpClient`] errors: rate limits and indeterminate answers retry; the rest are final.
+impl From<Error> for ClassifiedError {
+    fn from(inner: Error) -> Self {
+        use crate::managed::ProviderErrorCode::{Indeterminate, RateLimited};
+        match inner {
+            Error::Provider(RateLimited | Indeterminate) => Self::transient(inner),
+            inner => Self::permanent(inner),
+        }
+    }
+}
+
 // ============================================================================
 // Polling with retry
 // ============================================================================
