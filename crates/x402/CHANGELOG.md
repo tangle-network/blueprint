@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-x402-v0.2.0-alpha.22...blueprint-x402-v0.2.0-alpha.23) - 2026-11-07
+
+### Fixed
+
+- *(x402)* [**breaking**] require every token's EIP-712 domain; refuse unknown transfer methods (#1645)
+
 ## [0.2.0-alpha.22](https://github.com/tangle-network/blueprint/compare/blueprint-x402-v0.2.0-alpha.21...blueprint-x402-v0.2.0-alpha.22) - 2026-11-06
 
 ### Other
