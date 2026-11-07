@@ -9,7 +9,8 @@ use crate::core::resources::ResourceSpec;
 use crate::infra::traits::{BlueprintDeploymentResult, CloudProviderAdapter};
 use crate::infra::types::{InstanceStatus, ProvisionedInstance};
 use crate::providers::common::gpu_adapter::{
-    build_http_client, deploy_via_ssh, generate_instance_name, poll_until, require_public_ip,
+    ClassifiedError, RetryPolicy, deploy_via_ssh, generate_instance_name, poll_until,
+    require_public_ip, retry_with_backoff,
 };
 use crate::security::{ApiAuthentication, SecureHttpClient};
 use crate::shared::SshDeploymentConfig;
@@ -69,7 +70,8 @@ impl OvhAdapter {
         }
         .to_owned();
         Ok(Self {
-            http: build_http_client()?,
+            // Requests go only to the API root the operator named.
+            http: SecureHttpClient::with_endpoint(&api)?,
             api,
             project: var("OVH_CLOUD_PROJECT_SERVICE"),
             application_key: var("OVH_APPLICATION_KEY"),
@@ -111,40 +113,23 @@ impl OvhAdapter {
     /// One signed call under `/cloud/project/{project}`, retrying rate limits and server errors.
     /// `Ok(None)` means OVH answered 404.
     async fn call(&self, method: Method, path: &str, body: Option<Value>) -> Result<Option<Value>> {
-        let url = format!("{}/cloud/project/{}{path}", self.api, self.project);
-        let mut last = String::new();
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt))).await;
-            }
+        let url = &format!("{}/cloud/project/{}{path}", self.api, self.project);
+        let (method, body) = (&method, &body);
+        let response = retry_with_backoff("OVH call", &RetryPolicy::quick(), |_| async move {
             let auth = self.auth().await?;
-            let response = match self
-                .http
-                .authenticated_request(method.clone(), &url, &auth, body.clone())
-                .await
-            {
-                Ok(response) => response,
-                Err(error) => {
-                    last = error.to_string();
-                    continue;
-                }
-            };
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            if status.is_success() {
-                return serde_json::from_str(&text)
-                    .map(Some)
-                    .or_else(|_| Ok(Some(Value::Null)));
-            }
-            if status == StatusCode::NOT_FOUND {
-                return Ok(None);
-            }
-            last = format!("OVH {method} {path}: {status} {text}");
-            if status != StatusCode::TOO_MANY_REQUESTS && !status.is_server_error() {
-                break;
-            }
+            Ok::<_, ClassifiedError>(
+                self.http
+                    .authenticated_request(method.clone(), url, &auth, body.clone())
+                    .await?,
+            )
+        })
+        .await?;
+        // The client answers only success and 404; every other status is already an error.
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
         }
-        Err(Error::HttpError(last))
+        let text = response.text().await.unwrap_or_default();
+        Ok(Some(serde_json::from_str(&text).unwrap_or(Value::Null)))
     }
 
     fn parse_instance(value: &Value) -> Result<ProvisionedInstance> {

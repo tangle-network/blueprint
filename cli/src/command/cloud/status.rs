@@ -1,7 +1,9 @@
 //! Cloud deployment status and termination, read from the deployment tracker and the provider.
 
 use super::open_tracker;
-use blueprint_remote_providers::{CloudProvider, CloudProvisioner, deployment::DeploymentRecord};
+use blueprint_remote_providers::{
+    CloudProvider, CloudProvisioner, Error, deployment::DeploymentRecord,
+};
 use chrono::Utc;
 use color_eyre::{
     Result,
@@ -17,14 +19,19 @@ pub async fn show_status(service_id: Option<String>, watch: bool) -> Result<()> 
         if watch {
             print!("\x1B[2J\x1B[1;1H"); // Clear screen
         }
-        display_status(service_id.as_deref()).await?;
+        let shown = display_status(service_id.as_deref()).await;
         if !watch {
-            return Ok(());
+            return shown;
+        }
+        if let Err(error) = shown {
+            eprintln!("{error:#}");
         }
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
 }
 
+/// Print what the tracker and each provider say; a provider that fails its lookup fails the
+/// command after every record is printed.
 async fn display_status(service_id: Option<&str>) -> Result<()> {
     let mut records = open_tracker().await?.list_all().await?;
     records.sort_by(|left, right| left.id.cmp(&right.id));
@@ -34,9 +41,11 @@ async fn display_status(service_id: Option<&str>) -> Result<()> {
         let state = provider_state(&provisioner, &record).await;
         print_details(
             &record,
-            &state.unwrap_or_else(|error| format!("unknown ({error:#})")),
+            &state
+                .as_ref()
+                .map_or_else(|error| format!("unknown ({error:#})"), Clone::clone),
         );
-        return Ok(());
+        return state.map(drop);
     }
     if records.is_empty() {
         println!("No tracked deployments.");
@@ -52,6 +61,7 @@ async fn display_status(service_id: Option<&str>) -> Result<()> {
         "{:<40} {:<14} {:<14} {:<12} {:<12} {:<16} {:<10} {:<10}",
         "ID", "Provider", "Region", "Tracked", "Provider", "IP", "Uptime", "TTL"
     );
+    let mut failed = 0;
     for (record, state) in records.iter().zip(states) {
         println!(
             "{:<40} {:<14} {:<14} {:<12} {:<12} {:<16} {:<10} {:<10}",
@@ -59,15 +69,24 @@ async fn display_status(service_id: Option<&str>) -> Result<()> {
             provider_name(record),
             record.region.as_deref().unwrap_or("unknown"),
             tracked_state(record),
-            state.unwrap_or_else(|_| "unknown".to_owned()),
+            state.as_deref().unwrap_or("failed"),
             public_ip(record),
             uptime(record),
             ttl(record),
         );
+        if let Err(error) = state {
+            eprintln!("{}: {error:#}", record.id);
+            failed += 1;
+        }
     }
     println!("\n{} tracked deployments", records.len());
     println!("  View details:  cargo tangle cloud status <id>");
     println!("  Terminate:     cargo tangle cloud terminate <id>");
+    ensure!(
+        failed == 0,
+        "{failed} of {} deployments could not be read from their provider",
+        records.len()
+    );
     Ok(())
 }
 
@@ -175,16 +194,24 @@ fn find(records: Vec<DeploymentRecord>, id: &str) -> Result<DeploymentRecord> {
         .ok_or_else(|| eyre!("Deployment {id} is not in the deployment tracker"))
 }
 
-/// The provider's answer for a record, or why it could not give one.
+/// The provider's answer for a record. A record that no provider in this environment can answer
+/// for reads as unknown; a provider that fails or refuses the lookup is an error.
 async fn provider_state(
     provisioner: &CloudProvisioner,
     record: &DeploymentRecord,
 ) -> Result<String> {
-    let (provider, instance) = target(record)?;
-    let state = provisioner
+    let (provider, instance) = match target(record) {
+        Ok(target) => target,
+        Err(error) => return Ok(format!("unknown ({error})")),
+    };
+    match provisioner
         .get_status_in(provider, instance, record.region.as_deref())
-        .await?;
-    Ok(format!("{state:?}").to_lowercase())
+        .await
+    {
+        Ok(state) => Ok(format!("{state:?}").to_lowercase()),
+        Err(error @ Error::ProviderNotConfigured(_)) => Ok(format!("unknown ({error})")),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn instance_id(record: &DeploymentRecord) -> Option<&str> {

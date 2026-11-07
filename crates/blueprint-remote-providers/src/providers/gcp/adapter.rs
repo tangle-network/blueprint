@@ -358,24 +358,27 @@ impl CloudProviderAdapter for GcpAdapter {
 
         let access_token = auth::gcp_access_token().await?;
 
-        let client = crate::create_provider_client(30)?;
-        match client.get(&url).bearer_auth(&access_token).send().await {
-            Ok(response) if response.status().is_success() => {
-                if let Ok(instance) = response.json::<serde_json::Value>().await {
-                    match instance["status"].as_str() {
-                        Some("RUNNING") => Ok(InstanceStatus::Running),
-                        Some("PROVISIONING") | Some("STAGING") => Ok(InstanceStatus::Starting),
-                        Some("TERMINATED") | Some("STOPPING") => Ok(InstanceStatus::Terminated),
-                        _ => Ok(InstanceStatus::Unknown),
-                    }
-                } else {
-                    Ok(InstanceStatus::Unknown)
-                }
+        // A refused credential or a failed request is an error, never an instance state.
+        let response = crate::create_provider_client(30)?
+            .get(&url)
+            .bearer_auth(&access_token)
+            .send()
+            .await
+            .map_err(|error| Error::HttpError(format!("GCP instance lookup failed: {error}")))?;
+        match response.status() {
+            status if status == 404 => return Ok(InstanceStatus::Terminated),
+            status if !status.is_success() => {
+                return Err(Error::HttpError(format!("GCP instance lookup: {status}")));
             }
-            Ok(response) if response.status() == 404 => Ok(InstanceStatus::Terminated),
-            Ok(_) => Ok(InstanceStatus::Unknown),
-            Err(_) => Ok(InstanceStatus::Unknown),
+            _ => {}
         }
+        let instance: serde_json::Value = response.json().await.unwrap_or_default();
+        Ok(match instance["status"].as_str() {
+            Some("RUNNING") => InstanceStatus::Running,
+            Some("PROVISIONING" | "STAGING") => InstanceStatus::Starting,
+            Some("TERMINATED" | "STOPPING") => InstanceStatus::Terminated,
+            _ => InstanceStatus::Unknown,
+        })
     }
 
     async fn deploy_blueprint_with_target(
