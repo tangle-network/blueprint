@@ -177,7 +177,10 @@ async fn lium_rents_the_recorded_executor_with_the_requested_count_and_lifetime(
     assert!(body.get("coldkey").is_none());
     assert_eq!(body["volume_id"], "external-volume-id");
     assert_eq!(body["initial_port_count"], 2);
-    assert_eq!(body["expected_price_per_gpu_hour"], 6.03);
+    assert!(
+        (body["expected_price_per_gpu_hour"].as_f64().unwrap() + 0.01) * 8.0 <= 48.24,
+        "the native one-cent tolerance must fit within the uncapped selected quote"
+    );
     let template: Value = requests
         .iter()
         .find(|request| request.method == "POST" && request.url.path() == "/templates")
@@ -283,8 +286,9 @@ async fn lium_rents_the_recorded_executor_with_the_requested_count_and_lifetime(
         .body_json()
         .unwrap();
     assert!(
-        (cap_body["expected_price_per_gpu_hour"].as_f64().unwrap() + 0.01) * 8.0 <= 48.32,
-        "the native API's one-cent tolerance must fit inside the caller's node-hour cap"
+        (cap_body["expected_price_per_gpu_hour"].as_f64().unwrap() + 0.01) * 8.0
+            <= quote.offer.hourly_cost_usd,
+        "a higher caller cap must not replace the selected quote ceiling"
     );
     provisioner
         .destroy_managed(
