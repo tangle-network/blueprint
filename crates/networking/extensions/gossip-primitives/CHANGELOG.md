@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.15](https://github.com/tangle-network/blueprint/compare/blueprint-gossip-primitives-v0.2.0-alpha.14...blueprint-gossip-primitives-v0.2.0-alpha.15) - 2026-11-07
+
+### Other
+
+- Format the std-only crate roots (#1644)
+- mark tangle-extra, client-evm, client-tangle and gossip-primitives std-only (#1628)
+
 ## [0.2.0-alpha.14](https://github.com/tangle-network/blueprint/compare/blueprint-gossip-primitives-v0.2.0-alpha.13...blueprint-gossip-primitives-v0.2.0-alpha.14) - 2026-11-06
 
 ### Other
