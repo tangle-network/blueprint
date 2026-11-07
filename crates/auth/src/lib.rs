@@ -52,6 +52,8 @@ pub mod db;
 pub mod models;
 /// OAuth 2.0 JWT assertion verifier and per-service policy
 pub mod oauth;
+/// Resource-scoped EIP-191 sessions and live ownership policies
+pub mod owner;
 /// Paseto token generation and validation
 pub mod paseto_tokens;
 /// Authenticated Proxy Server built on top of Axum.

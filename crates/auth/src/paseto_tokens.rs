@@ -207,12 +207,20 @@ impl PasetoTokenManager {
             scopes,
         );
 
+        self.generate_token_with_claims(&claims)
+    }
+
+    /// Encrypt authoritative claims, including an absolute expiry chosen by the owner policy.
+    pub(crate) fn generate_token_with_claims(
+        &self,
+        claims: &AccessTokenClaims,
+    ) -> Result<String, PasetoError> {
         // Create proper PASETO claims with standard fields
         let mut paseto_claims =
             Claims::new().map_err(|e| PasetoError::SerializationError(e.to_string()))?;
 
         // Add our custom claims as JSON
-        let custom_json = serde_json::to_string(&claims)
+        let custom_json = serde_json::to_string(claims)
             .map_err(|e| PasetoError::SerializationError(e.to_string()))?;
         paseto_claims
             .add_additional("data", custom_json)
