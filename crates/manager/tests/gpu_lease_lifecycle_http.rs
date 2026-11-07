@@ -5,7 +5,9 @@ use axum::body::{Body, to_bytes};
 use axum::extract::State;
 use axum::http::{Method, Request, StatusCode};
 use axum::{Json, Router};
-use blueprint_manager::executor::remote_provider_integration::RemoteProviderManager;
+use blueprint_manager::executor::remote_provider_integration::{
+    DeployArtifact, RemoteProviderManager,
+};
 use blueprint_remote_providers::deployment::DeploymentType;
 use blueprint_remote_providers::deployment::manager_integration::{
     RemoteDeploymentConfig, RemoteDeploymentRegistry,
@@ -148,21 +150,39 @@ async fn manager_retires_owned_gpu_leases_after_restart_and_retries_refused_clea
             .is_err(),
         "GPU migration must not weaken the confidential-compute gate"
     );
+    let mut upload = spec(3600);
+    upload
+        .env
+        .insert("WORKER_TOKEN".into(), "synthetic-worker-secret".into());
+    assert!(
+        own.on_service_initiated(
+            1,
+            5,
+            Some(upload),
+            Some(DeployArtifact::ContainerImage(
+                "example.invalid/workload:v1"
+            )),
+            HashMap::new()
+        )
+        .await
+        .is_err(),
+        "an allocated node without an upload endpoint must be retired on deployment failure"
+    );
     {
         let mut state = seller_state.lock().unwrap();
-        assert_eq!(state.launches.len(), 3);
+        assert_eq!(state.launches.len(), 4);
+        assert_eq!(state.pods.len(), 3);
         assert!(state.launches.iter().all(|body| {
             body["env"]["PUBLIC_KEY"]
                 .as_str()
                 .is_some_and(|key| key.starts_with("ssh-ed25519 "))
         }));
-        assert!(
-            !state
-                .launches
-                .iter()
-                .any(|body| body.to_string().contains("synthetic-local-peer-key")
-                    || body.to_string().contains("PRIVATE KEY"))
-        );
+        assert!(!state.launches.iter().any(|body| {
+            body.to_string().contains("synthetic-local-peer-key")
+                || body.to_string().contains("PRIVATE KEY")
+                || body.to_string().contains("synthetic-worker-secret")
+                || body.to_string().contains("WORKER_TOKEN")
+        }));
         state.deny_delete = true;
     }
     assert!(

@@ -30,13 +30,6 @@ fn env_bool(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn supports_tee(provider: &CloudProvider) -> bool {
-    matches!(
-        provider,
-        CloudProvider::AWS | CloudProvider::GCP | CloudProvider::Azure
-    )
-}
-
 /// What to deploy onto a provisioned VM.
 ///
 /// Container images go through `docker pull` + `docker run`.
@@ -62,6 +55,7 @@ pub struct RemoteProviderManager {
     registry: Arc<RemoteDeploymentRegistry>,
     namespace: String,
     max_hourly_cost: f64,
+    allocation: tokio::sync::Mutex<()>,
     retirement: tokio::task::JoinHandle<()>,
     provider_regions: HashMap<CloudProvider, String>,
 }
@@ -134,6 +128,7 @@ impl RemoteProviderManager {
             registry,
             namespace,
             max_hourly_cost,
+            allocation: tokio::sync::Mutex::new(()),
             retirement,
             provider_regions,
         })
@@ -157,16 +152,6 @@ impl RemoteProviderManager {
         artifact: Option<DeployArtifact<'_>>,
         extra_env: HashMap<String, String>,
     ) -> Result<()> {
-        let artifact_kind = match &artifact {
-            Some(DeployArtifact::ContainerImage(_)) => "container",
-            Some(DeployArtifact::GithubBinary { .. }) => "github_binary",
-            None => "none",
-        };
-        info!(
-            "Remote provider handling service initiation: blueprint={}, service={}, artifact={}",
-            blueprint_id, service_id, artifact_kind
-        );
-
         // Use provided resources or default
         let resource_spec = resource_requirements.unwrap_or_else(ResourceSpec::minimal);
         let tee_required = env_bool("BLUEPRINT_REMOTE_TEE_REQUIRED") || resource_spec.tee_required;
@@ -192,20 +177,11 @@ impl RemoteProviderManager {
         };
         let provider = self.select_configured_provider(preferred_provider, tee_required)?;
 
-        // Use configured region when available.
         let region = self
             .provider_regions
             .get(&provider)
-            .map(String::as_str)
-            .unwrap_or_else(|| provider_default_region(&provider));
-
-        if tee_required && !supports_tee(&provider) {
-            return Err(Error::TeePrerequisiteMissing {
-                prerequisite: format!("{provider} confidential-compute support"),
-                hint: "Select AWS, GCP, or Azure when BLUEPRINT_REMOTE_TEE_REQUIRED=true"
-                    .to_string(),
-            });
-        }
+            .expect("selected provider is configured")
+            .as_str();
 
         let instance = self
             .provisioner
@@ -360,7 +336,25 @@ impl RemoteProviderManager {
             .or_insert_with(|| blueprint_id.to_string());
         env.entry("SERVICE_ID".into())
             .or_insert_with(|| service_id.to_string());
-        let lease = self.provisioner.allocate(&spec, ttl).await?;
+        let lease = {
+            let _guard = self.allocation.lock().await;
+            if self
+                .provisioner
+                .list_managed(&self.namespace)
+                .await?
+                .iter()
+                .any(|resource| {
+                    resource.namespace == identity.namespace
+                        && resource.lease_id == identity.lease_id
+                        && resource.is_present()
+                })
+            {
+                return Err(Error::Other(
+                    "GPU service already owns a lease; retire it before allocating again".into(),
+                ));
+            }
+            self.provisioner.allocate(&spec, ttl).await?
+        };
         let Some(artifact) = artifact else {
             return Ok(());
         };
@@ -516,7 +510,7 @@ impl RemoteProviderManager {
 
         for candidate in ordered_candidates {
             if self.provider_regions.contains_key(&candidate)
-                && (!tee_required || supports_tee(&candidate))
+                && (!tee_required || candidate.supports_tee())
             {
                 return Ok(candidate);
             }
@@ -641,19 +635,6 @@ fn configured_provider_regions(ctx: &BlueprintManagerContext) -> HashMap<CloudPr
         }
     }
     regions
-}
-
-fn provider_default_region(provider: &CloudProvider) -> &'static str {
-    match provider {
-        CloudProvider::AWS => "us-east-1",
-        CloudProvider::GCP => "us-central1",
-        CloudProvider::Azure => "eastus",
-        CloudProvider::DigitalOcean => "nyc3",
-        CloudProvider::Vultr => "ewr",
-        CloudProvider::Hetzner => "fsn1",
-        CloudProvider::Ovh => "GRA11",
-        _ => "default",
-    }
 }
 
 impl Drop for RemoteProviderManager {
