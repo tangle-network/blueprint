@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.8](https://github.com/tangle-network/blueprint/compare/blueprint-core-v0.2.0-alpha.7...blueprint-core-v0.2.0-alpha.8) - 2026-11-07
+
+### Added
+
+- *(remote-providers)* add OVH Public Cloud as a cloud provider (#1640)
+
+### Other
+
+- Ship native GPU sellers through one managed lease boundary (#1643)
+- Share GPU resource requests and preserve scheduling metadata (#1630)
+
 ## [0.2.0-alpha.7](https://github.com/tangle-network/blueprint/compare/blueprint-core-v0.2.0-alpha.6...blueprint-core-v0.2.0-alpha.7) - 2026-11-06
 
 ### Added
