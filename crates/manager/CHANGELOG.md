@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0...blueprint-manager-v0.5.0) - 2026-11-07
+
+### Fixed
+
+- *(core)* validate common GPU constraints against serving arms (#1663)
+- *(remote-providers)* [**breaking**] recover owned leases without new stock or rental (#1660)
+- *(manager)* scope GPU leases and protect SSH workload delivery (#1651)
+
 ## [0.4.0](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.4.0-alpha.26...blueprint-manager-v0.4.0) - 2026-11-07
 
 ### Other
