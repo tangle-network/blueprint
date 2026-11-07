@@ -8,7 +8,7 @@ use blueprint_remote_providers::{
     deployment::{DeploymentRecord, DeploymentType},
 };
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
@@ -79,8 +79,12 @@ impl Machine {
         self.cli_with(args, aws, &[])
     }
 
-    /// No test exports `AWS_REGION`: each record names its own region.
     fn cli_with(&self, args: &[&str], aws: Option<&FakeAws>, env: &[(&str, &str)]) -> Output {
+        self.command(args, aws, env).output().unwrap()
+    }
+
+    /// No test exports `AWS_REGION`: each record names its own region.
+    fn command(&self, args: &[&str], aws: Option<&FakeAws>, env: &[(&str, &str)]) -> Command {
         let binary = std::env::var_os("CARGO_TANGLE_TEST_BIN")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_cargo-tangle").into());
         let mut command = Command::new(binary);
@@ -99,7 +103,8 @@ impl Machine {
                 .env("AWS_SECRET_ACCESS_KEY", "test")
                 .env("AWS_EC2_METADATA_DISABLED", "true");
         }
-        command.envs(env.iter().copied()).output().unwrap()
+        command.envs(env.iter().copied());
+        command
     }
 }
 
@@ -643,6 +648,38 @@ fn a_rejected_credential_fails_only_its_own_records() {
     assert_eq!(aws.terminated(), ["i-aws"]);
     assert_eq!(machine.tracked(), ["i-gcp"]);
     assert!(!*gcp.deleted.lock().unwrap());
+}
+
+/// A long-running `status --watch` asks gcloud again instead of keeping a token Compute refused.
+#[test]
+fn watch_asks_gcloud_again_after_compute_refuses_its_token() {
+    let machine = Machine::tracking_in(&[("i-gcp", CloudProvider::GCP, "europe-west1-b")]);
+    let gcp = FakeGcp::serving("/i-gcp ");
+    // gcloud, found on PATH in HOME, prints a revoked token first and the accepted one after.
+    let gcloud = machine.0.path().join("gcloud");
+    std::fs::write(&gcloud, "#!/bin/sh\ncase \"$*\" in *print-access-token*)\n  [ -e \"$HOME/asked\" ] && echo token || { touch \"$HOME/asked\"; echo revoked; } ;;\n*) echo p ;;\nesac\n").unwrap();
+    std::fs::set_permissions(&gcloud, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let [project, _, compute] = gcp.env();
+    let path = format!("{}:/usr/bin:/bin", machine.0.path().display());
+    let mut watch = machine
+        .command(
+            &["status", "i-gcp", "--watch"],
+            None,
+            &[project, compute, ("PATH", path.as_str())],
+        )
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let running = std::io::BufReader::new(watch.stdout.take().unwrap())
+        .lines()
+        .map_while(Result::ok)
+        .take_while(|_| std::time::Instant::now() < deadline)
+        .any(|line| line.contains("Provider state:  running"));
+    watch.kill().unwrap();
+    watch.wait().unwrap();
+    assert!(running, "status --watch kept the token Compute refused");
 }
 
 #[test]
