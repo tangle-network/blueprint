@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0-alpha.28](https://github.com/tangle-network/blueprint/compare/blueprint-qos-v0.2.0-alpha.27...blueprint-qos-v0.2.0-alpha.28) - 2026-11-07
+## [0.2.0](https://github.com/tangle-network/blueprint/compare/blueprint-qos-v0.2.0-alpha.27...blueprint-qos-v0.2.0) - 2026-11-07
 
 ### Other
 
