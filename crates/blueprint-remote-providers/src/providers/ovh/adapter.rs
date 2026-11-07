@@ -134,7 +134,7 @@ impl OvhAdapter {
             if status.is_success() {
                 return serde_json::from_str(&text)
                     .map(Some)
-                    .or_else(|_| Ok(Some(Value::Null)));
+                    .or(Ok(Some(Value::Null)));
             }
             if status == StatusCode::NOT_FOUND {
                 return Ok(None);
