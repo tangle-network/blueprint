@@ -26,9 +26,9 @@ blueprint metadata cannot override them. Linux release archives use `.tar.xz`.
 ## Remote GPU leases
 
 `RemoteProviderManager` uses `CloudProvisioner::allocate` for GPU requests that
-do not require confidential compute. The request supplies an SSH-ready image;
-no image is inferred from GPU metadata. The manager's configured spending cap
-and enabled provider regions constrain SDK quote selection. Workload environment
+do not require confidential compute. The request supplies an SSH-ready image and
+any provider-required boot command; neither is inferred. The manager's spending
+cap and enabled provider regions constrain SDK quote selection. Workload environment
 is uploaded over lease SSH access, never placed in the provider launch request.
 
 Provider ownership combines a persisted random manager identity and service IDs.
