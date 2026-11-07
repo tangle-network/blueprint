@@ -5,10 +5,14 @@
 //! <https://docs.coreweave.com/>
 //!
 //! Env vars:
-//! - `COREWEAVE_TOKEN` — API / kubeconfig token (used to pull kubeconfig).
-//! - `COREWEAVE_REGION` — datacenter identifier (e.g. `ORD1`, `LAS1`).
+//! - `COREWEAVE_TOKEN` — enables this adapter in the environment-based factory;
+//!   Kubernetes authentication still comes from the configured kubeconfig.
 //! - `COREWEAVE_NAMESPACE` — tenant Kubernetes namespace.
-//! - `KUBECONFIG` — path to the pre-configured kubeconfig (takes precedence).
+//! - `KUBECONFIG` — path to the pre-configured kubeconfig.
+//!
+//! Raw VM creation, status, termination, and deployment cleanup return
+//! `Unsupported`; this adapter cannot prove an instance or Kubernetes workload
+//! was retired. Use the Kubernetes deployment owner for cleanup.
 
 mod adapter;
 mod instance_mapper;
