@@ -91,6 +91,7 @@ impl CloudProvisioner {
                     > resolved
                         .max_hourly_cost_usd
                         .unwrap_or(candidate.offer.hourly_cost_usd)
+                        .min(candidate.offer.hourly_cost_usd)
             {
                 return Err(Error::Provider(ProviderErrorCode::Conflict));
             }
