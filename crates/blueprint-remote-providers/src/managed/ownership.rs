@@ -76,7 +76,7 @@ async fn lock_scope(
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::{MetadataExt, PermissionsExt};
-                    let mode = metadata.permissions().mode();
+                    let mode = metadata.permissions().mode() as libc::mode_t;
                     if (metadata.uid() != 0 && metadata.uid() != unsafe { libc::geteuid() })
                         || (mode & 0o022 != 0 && mode & libc::S_ISVTX == 0)
                     {
