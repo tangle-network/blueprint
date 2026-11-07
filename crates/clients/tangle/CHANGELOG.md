@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-client-tangle-v0.2.0-alpha.19...blueprint-client-tangle-v0.2.0-alpha.20) - 2026-11-07
+
+### Other
+
+- Bind GPU allocation and exact resource prices to public RFQ quotes (#1632)
+- mark tangle-extra, client-evm, client-tangle and gossip-primitives std-only (#1628)
+- Share GPU resource requests and preserve scheduling metadata (#1630)
+
 ## [0.2.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-client-tangle-v0.2.0-alpha.18...blueprint-client-tangle-v0.2.0-alpha.19) - 2026-11-06
 
 ### Other

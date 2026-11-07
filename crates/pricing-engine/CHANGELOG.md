@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.25](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.24...blueprint-pricing-engine-v0.3.0-alpha.25) - 2026-11-07
+
+### Other
+
+- Bind GPU allocation and exact resource prices to public RFQ quotes (#1632)
+- Share GPU resource requests and preserve scheduling metadata (#1630)
+
 ## [0.3.0-alpha.24](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.0-alpha.23...blueprint-pricing-engine-v0.3.0-alpha.24) - 2026-11-06
 
 ### Other
