@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.6.0...cargo-tangle-v0.6.1) - 2026-11-07
+
+### Fixed
+
+- *(remote-providers)* ask gcloud for each GCP token instead of reusing one for an hour (#1658)
+
 ## [0.6.0](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.30...cargo-tangle-v0.6.0) - 2026-11-07
 
 ### Added
