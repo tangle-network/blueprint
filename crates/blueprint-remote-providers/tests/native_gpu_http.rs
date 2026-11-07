@@ -24,14 +24,31 @@ mod lambda_sku;
 #[path = "native_gpu_http/lium.rs"]
 mod lium;
 
+type RunpodPeerState =
+    std::sync::Arc<std::sync::Mutex<(u64, std::collections::BTreeMap<String, Value>, Vec<Value>)>>;
+
 async fn runpod_v2_peer() -> MockServer {
+    runpod_peer_state().await.0
+}
+
+async fn runpod_peer_state() -> (MockServer, RunpodPeerState) {
     use std::sync::{Arc, Mutex};
     use wiremock::{Request, matchers::path_regex};
     let peer = MockServer::start().await;
     let state = Arc::new(Mutex::new((
         0u64,
         std::collections::BTreeMap::<String, Value>::new(),
+        ["NVIDIA H200", "NVIDIA B200"]
+            .map(|sku| {
+                json!({
+                    "id":sku,"secure":true,"community":false,
+                    "maxCount":{"secure":8,"community":0},"price":{"secure":4.5,"community":0},
+                    "availability":"HIGH","dataCenters":[{"id":"US-TEST-1","availability":"HIGH"}]
+                })
+            })
+            .to_vec(),
     )));
+    let handle = state.clone();
     Mock::given(path_regex("^/(catalog/gpus|pods(/[^/]+)?)$"))
         .respond_with(move |request: &Request| {
             if request.headers.get("authorization").and_then(|header| header.to_str().ok()) != Some("Bearer synthetic-local-peer-key") {
@@ -39,19 +56,16 @@ async fn runpod_v2_peer() -> MockServer {
             }
             let mut state = state.lock().unwrap();
             match (request.method.as_str(), request.url.path()) {
-                ("GET", "/catalog/gpus") => ResponseTemplate::new(200).set_body_json(json!({"gpus":[{
-                    "id":"NVIDIA H200","memory":141,"secure":true,"community":false,
-                    "maxCount":{"secure":8,"community":0},"price":{"secure":4.5,"community":0},
-                    "availability":"HIGH","dataCenters":[{"id":"US-TEST-1","availability":"HIGH"}]
-                }]})),
+                ("GET", "/catalog/gpus") => ResponseTemplate::new(200).set_body_json(json!({"gpus":state.2})),
                 ("POST", "/pods") => {
                     let Ok(body) = request.body_json::<Value>() else { return ResponseTemplate::new(400); };
                     state.0 += 1;
                     let id = format!("synthetic{}", state.0);
+                    let price=state.2.iter().find(|offer|offer["id"]==body["gpu"]["id"]).unwrap()["price"]["secure"].as_f64().unwrap()*body["gpu"]["count"].as_f64().unwrap();
                     let pod = json!({
                         "id":id,"name":body["name"],"gpu":{"id":body["gpu"]["id"],"count":body["gpu"]["count"],"vcpuCount":8,"memory":64},
                         "env":body["env"],"ports":body["ports"],"mounts":body["mounts"],"image":body["image"],
-                        "status":"RUNNING","dataCenterId":"US-TEST-1","cost":9.0,
+                        "status":"RUNNING","dataCenterId":"US-TEST-1","cost":price,
                         "ssh":{"direct":{"host":"192.0.2.10","port":22334,"username":"root"}},
                         "runtime":{"ports":[{"private":8000,"public":null,"type":"http","ip":null}]}
                     });
@@ -78,7 +92,7 @@ async fn runpod_v2_peer() -> MockServer {
                 _ => ResponseTemplate::new(404),
             }
         }).mount(&peer).await;
-    peer
+    (peer, handle)
 }
 
 #[tokio::test]

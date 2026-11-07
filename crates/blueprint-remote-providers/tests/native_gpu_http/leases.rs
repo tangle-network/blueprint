@@ -130,3 +130,54 @@ async fn a_refusal_after_the_rental_retires_it_instead_of_renting_again() {
     let listed = provisioner.list_managed("lease-cell").await.unwrap();
     assert!(listed.is_empty(), "{listed:?}");
 }
+
+#[tokio::test]
+async fn restart_adopts_eight_b200_without_stock_or_a_new_price_ceiling() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let (peer, state) = runpod_peer_state().await;
+    let provisioner = || {
+        CloudProvisioner::from_credentials(vec![
+            serde_json::from_value(json!({
+                "provider":"runpod","api_key":"synthetic-local-peer-key","endpoint":peer.uri()
+            }))
+            .unwrap(),
+        ])
+        .unwrap()
+    };
+    let mut spec = lease_spec("restart-eight");
+    spec.gpu_class = Some("nvidia-b200".into());
+    spec.gpu_count = Some(8);
+    spec.max_hourly_cost_usd = Some(40.0);
+    spec.ssh_public_key = Some(
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMo32AY0vFK7g5FBIBcyPdxaxSEM5rEc0kEzMVveA9b+".into(),
+    );
+    let ttl = Duration::from_secs(3600);
+    let original = provisioner().allocate(&spec, ttl).await.unwrap();
+    let stock = std::mem::take(&mut state.lock().unwrap().2);
+    let recovered = provisioner()
+        .allocate(&spec, ttl)
+        .await
+        .expect("owned capacity must recover without fresh stock");
+    assert_eq!(
+        recovered.resource.instance.id,
+        original.resource.instance.id
+    );
+    assert_eq!(recovered.resource.expires_at, original.resource.expires_at);
+    assert_eq!(recovered.resource.hourly_cost_usd, Some(36.0));
+    state.lock().unwrap().2 = stock;
+    for offer in &mut state.lock().unwrap().2 {
+        offer["price"]["secure"] = json!(1.0);
+    }
+    let recovered = provisioner()
+        .allocate(&spec, ttl)
+        .await
+        .expect("a cheaper new market quote cannot invalidate the original authorized rate");
+    assert_eq!(recovered.resource.hourly_cost_usd, Some(36.0));
+    assert_eq!(recovered.resource.expires_at, original.resource.expires_at);
+    assert!(recovered.access.private_key().is_none());
+    assert_eq!(
+        state.lock().unwrap().0,
+        1,
+        "restart must never create another node"
+    );
+}
