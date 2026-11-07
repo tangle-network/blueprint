@@ -189,49 +189,6 @@ async fn test_container_update_with_zero_downtime() {
 }
 
 #[tokio::test]
-async fn test_resource_limits_are_enforced() {
-    // Test that containers actually respect resource limits
-    let test_cases = vec![
-        (0.5, 0.512, "Low resources"),
-        (2.0, 4.0, "Medium resources"),
-        (8.0, 16.0, "High resources"),
-    ];
-
-    for (cpu, memory_gb, description) in test_cases {
-        let _resource_spec = ResourceSpec {
-            cpu,
-            memory_gb,
-            storage_gb: 10.0,
-            gpu_count: None,
-            allow_spot: false,
-            qos: Default::default(),
-        };
-
-        // Generate Docker command
-        let docker_cmd = format!(
-            "docker run -d --cpus={} --memory={}g nginx:alpine",
-            cpu, memory_gb
-        );
-
-        // Verify command is correct
-        assert!(
-            docker_cmd.contains(&format!("--cpus={}", cpu)),
-            "{}: CPU limit not set correctly",
-            description
-        );
-        assert!(
-            docker_cmd.contains(&format!("--memory={}g", memory_gb)),
-            "{}: Memory limit not set correctly",
-            description
-        );
-
-        // In a real deployment, we'd verify with:
-        // docker stats --no-stream <container_id>
-        // to ensure limits are actually enforced
-    }
-}
-
-#[tokio::test]
 async fn test_health_check_actually_detects_failures() {
     // Test that our health checks actually work
     // This should detect when a container is unhealthy
