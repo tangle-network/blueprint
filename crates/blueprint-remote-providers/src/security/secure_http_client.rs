@@ -270,11 +270,8 @@ impl SecureHttpClient {
         auth: &ApiAuthentication,
         form: &std::collections::HashMap<String, String>,
     ) -> Result<Response> {
-        self.send(
-            self.authenticated(Method::POST, url, auth, None)?
-                .form(form),
-        )
-        .await
+        let request = self.authenticated(Method::POST, url, auth, None)?;
+        self.send(request.form(form)).await
     }
 
     pub async fn delete(&self, url: &str, auth: &ApiAuthentication) -> Result<Response> {
