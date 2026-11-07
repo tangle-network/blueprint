@@ -132,6 +132,12 @@ fn gpu_ports_and_credentials_cross_processes_without_secret_argv_or_logs() -> an
         }
         assert!(!args.contains(&Value::from("127.0.0.1:9615:9615")));
         assert!(!receipt.to_string().contains(SECRET));
+        let installed = root.join("opt/blueprint/bin/blueprint");
+        assert_eq!(std::fs::read(&installed)?, b"#!/bin/sh\nexit 0\n");
+        assert_eq!(
+            std::fs::metadata(installed)?.permissions().mode() & 0o777,
+            0o755
+        );
         let native = root.join("opt/blueprint/config/blueprint.env");
         assert!(std::fs::read_to_string(&native)?.contains(SECRET));
         assert_eq!(

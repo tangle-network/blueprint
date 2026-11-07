@@ -567,7 +567,7 @@ case '{archive_url}' in
 esac
 
 # Locate the binary within extracted files.
-BINARY_PATH=$(find "$WORK_DIR" -name '{binary_name}' -type f -executable -print -quit 2>/dev/null || find "$WORK_DIR" -name '{binary_name}' -type f -print -quit)
+BINARY_PATH=$(find "$WORK_DIR" -name '{binary_name}' -type f -print -quit)
 if [ -z "$BINARY_PATH" ]; then
     echo "ERROR: binary '{binary_name}' not found after extraction" >&2
     exit 1
@@ -835,21 +835,8 @@ sudo systemctl is-active blueprint-runtime
             self.deployment_config.name, self.deployment_config.namespace
         );
 
-        // Stop and remove old container
-        let stop_cmd = match self.runtime {
-            ContainerRuntime::Docker => {
-                format!("docker stop {container_name} && docker rm {container_name}")
-            }
-            ContainerRuntime::Podman => {
-                format!("podman stop {container_name} && podman rm {container_name}")
-            }
-            ContainerRuntime::Containerd => {
-                format!("ctr task kill {container_name} && ctr container rm {container_name}")
-            }
-        };
-
-        // Try to stop and remove old container (might not exist)
-        match self.run_remote_command(&stop_cmd).await {
+        // A previous container may already be absent.
+        match self.cleanup_deployment(&container_name).await {
             Ok(_) => info!(
                 "Successfully stopped and removed old container: {}",
                 container_name
@@ -1089,21 +1076,14 @@ server {{
 
     /// Parse memory usage string (e.g., "100MiB / 1GiB") to MB
     fn parse_memory_usage(&self, mem_str: &str) -> f64 {
-        let parts: Vec<&str> = mem_str.split('/').collect();
-        if let Some(used) = parts.first() {
-            let used = used.trim();
-            if used.ends_with("GiB") {
-                used.replace("GiB", "").trim().parse::<f64>().unwrap_or(0.0) * 1024.0
-            } else if used.ends_with("MiB") {
-                used.replace("MiB", "").trim().parse::<f64>().unwrap_or(0.0)
-            } else if used.ends_with("KiB") {
-                used.replace("KiB", "").trim().parse::<f64>().unwrap_or(0.0) / 1024.0
-            } else {
-                0.0
-            }
-        } else {
-            0.0
-        }
+        let used = mem_str.split('/').next().unwrap_or("").trim();
+        [("GiB", 1024.0), ("MiB", 1.0), ("KiB", 1.0 / 1024.0)]
+            .into_iter()
+            .find_map(|(unit, scale)| {
+                used.strip_suffix(unit)
+                    .map(|value| value.trim().parse::<f64>().unwrap_or(0.0) * scale)
+            })
+            .unwrap_or(0.0)
     }
 
     /// Check blueprint-specific health endpoints

@@ -412,10 +412,12 @@ async fn allocation_worker() -> anyhow::Result<()> {
         CloudProvider::RunPod,
         Box::new(RunPodAdapter::with_endpoint("synthetic".into(), &endpoint)?),
     );
-    adapters.insert(
-        CloudProvider::VastAi,
-        Box::new(VastAiAdapter::with_endpoint("synthetic".into(), &endpoint)?),
-    );
+    if std::env::var_os("VAST_AI_API_KEY").is_some() {
+        adapters.insert(
+            CloudProvider::VastAi,
+            Box::new(VastAiAdapter::with_endpoint("synthetic".into(), &endpoint)?),
+        );
+    }
     adapters.insert(
         CloudProvider::DigitalOcean,
         Box::new(DigitalOceanAdapter::new().await?),
@@ -481,6 +483,57 @@ async fn allocation_worker() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn worker(
+    endpoint: &str,
+    state: &std::path::Path,
+    provider: &str,
+) -> anyhow::Result<tokio::process::Command> {
+    let mut command = tokio::process::Command::new(std::env::current_exe()?);
+    command
+        .args(["--exact", "allocation_worker", "--test-threads=1"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("HOME", state)
+        .env("GPU_LIFECYCLE_PEER", endpoint)
+        .env("GPU_LIFECYCLE_PROVIDER", provider)
+        .env("GPU_LIFECYCLE_STATE", state)
+        .env("XDG_CACHE_HOME", state.join(format!("cache-{provider}")))
+        .env("GPU_LIFECYCLE_RESULT", state.join(provider))
+        .env("DIGITALOCEAN_TOKEN", "synthetic-cpu-provider-key")
+        .kill_on_drop(true);
+    Ok(command)
+}
+
+#[tokio::test]
+async fn restart_missing_enabled_vast_credentials_cannot_rent_runpod() -> anyhow::Result<()> {
+    let (endpoint, state, server) = peer(Seller {
+        barrier: Some(Arc::new(tokio::sync::Barrier::new(1))),
+        ..Default::default()
+    })
+    .await?;
+    let directory = tempfile::tempdir()?;
+    for (provider, expected) in [("vast-ai", "allocated"), ("runpod", "refused")] {
+        let mut command = worker(&endpoint, directory.path(), provider)?;
+        if provider == "vast-ai" {
+            command.env("VAST_AI_API_KEY", "synthetic-present-key");
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_secs(30), command.status())
+                .await??
+                .success()
+        );
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join(provider))?,
+            expected
+        );
+    }
+    assert_eq!(state.lock().unwrap().vast.len(), 1);
+    assert!(state.lock().unwrap().pods.is_empty());
+    assert_eq!(state.lock().unwrap().launches.len(), 1);
+    server.abort();
+    Ok(())
+}
+
 #[tokio::test]
 async fn separate_processes_share_one_service_lock_across_different_gpu_providers_and_cpu_inventory()
 -> anyhow::Result<()> {
@@ -494,18 +547,8 @@ async fn separate_processes_share_one_service_lock_across_different_gpu_provider
     let mut children = Vec::new();
     for provider in ["runpod", "vast-ai"] {
         let receipt = directory.path().join(provider);
-        let child = tokio::process::Command::new(std::env::current_exe()?)
-            .args(["--exact", "allocation_worker", "--test-threads=1"])
-            .env("GPU_LIFECYCLE_PEER", &endpoint)
-            .env("GPU_LIFECYCLE_PROVIDER", provider)
-            .env("GPU_LIFECYCLE_STATE", directory.path())
-            .env(
-                "XDG_CACHE_HOME",
-                directory.path().join(format!("cache-{provider}")),
-            )
-            .env("GPU_LIFECYCLE_RESULT", &receipt)
-            .env("DIGITALOCEAN_TOKEN", "synthetic-cpu-provider-key")
-            .kill_on_drop(true)
+        let child = worker(&endpoint, directory.path(), provider)?
+            .env("VAST_AI_API_KEY", "synthetic-present-key")
             .spawn()?;
         children.push((child, receipt));
     }
@@ -518,14 +561,9 @@ async fn separate_processes_share_one_service_lock_across_different_gpu_provider
         );
         allocated += usize::from(std::fs::read_to_string(receipt)? == "allocated");
     }
-    let status = tokio::process::Command::new(std::env::current_exe()?)
-        .args(["--exact", "allocation_worker", "--test-threads=1"])
-        .env_clear()
-        .env("GPU_LIFECYCLE_PEER", &endpoint)
+    let status = worker(&endpoint, directory.path(), "runpod")?
         .env("GPU_LIFECYCLE_INIT_FAILURE", "1")
         .env("OVH_APPLICATION_KEY", "synthetic-uninitialized-provider")
-        .env("DIGITALOCEAN_TOKEN", "synthetic-cpu-provider-key")
-        .kill_on_drop(true)
         .status()
         .await?;
     assert!(status.success());
@@ -553,6 +591,10 @@ async fn unavailable_adapter_does_not_prevent_other_owned_cleanup() -> anyhow::R
     let credentials = serde_json::from_value(
         json!({"provider":"runpod","api_key":"synthetic-local-peer-key","endpoint":endpoint}),
     )?;
+    let seed = manager(&endpoint, directory.path()).await?;
+    seed.on_service_initiated(5, 6, Some(spec(3600)), None, HashMap::new())
+        .await?;
+    drop(seed);
     let manager = RemoteProviderManager::with_provisioner(
         CloudProvisioner::from_credentials(vec![credentials])?,
         directory.path(),
@@ -563,9 +605,6 @@ async fn unavailable_adapter_does_not_prevent_other_owned_cleanup() -> anyhow::R
         20.0,
     )
     .await?;
-    manager
-        .on_service_initiated(5, 6, Some(spec(3600)), None, HashMap::new())
-        .await?;
     assert!(
         manager.on_service_terminated(5, 6).await.is_err(),
         "unavailable account failure remains visible"
@@ -598,6 +637,7 @@ async fn selected_arm_reaches_the_manager_uploaded_container() -> anyhow::Result
         .env("GPU_LIFECYCLE_PROVIDER", "runpod")
         .env("GPU_LIFECYCLE_STATE", directory.path())
         .env("GPU_LIFECYCLE_ALTERNATIVES", "1")
+        .env("VAST_AI_API_KEY", "synthetic-present-key")
         .env("DIGITALOCEAN_TOKEN", "synthetic-cpu-provider-key");
     let output = tokio::process::Command::from(command).output().await?;
     assert!(!String::from_utf8_lossy(&output.stderr).contains(ssh_process::SECRET));

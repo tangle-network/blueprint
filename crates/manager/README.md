@@ -37,7 +37,7 @@ closed. Preserve manager state across restart and stop managers before moving it
 Provider deadlines drive startup and periodic `retire_expired` reconciliation;
 GPU leases do not enter the legacy deployment tracker. Inventory and creation
 share an OS-backed service lock in manager state, independent of cache roots.
-Initialized CPU-only adapters do not participate in managed inventory; a failed
+Initialized CPU-only adapters do not participate in managed inventory; a missing or failed
 configured adapter cannot be treated as proof of absence. Failed retirement stays
 visible and retryable; service termination searches only the manager namespace
 and exact service lease identity on enabled managed providers.

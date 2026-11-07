@@ -19,21 +19,15 @@ use chrono::Utc;
 use std::time::Duration;
 
 fn env_bool(name: &str) -> bool {
-    std::env::var(name)
-        .ok()
-        .map(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes"
-            )
-        })
-        .unwrap_or(false)
+    std::env::var(name).is_ok_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes"
+        )
+    })
 }
 
-/// What to deploy onto a provisioned VM.
-///
-/// Container images go through `docker pull` + `docker run`.
-/// GitHub-release binaries go through `wget` + sha256 verify + systemd.
+/// Explicit container or checksum-pinned native workload to upload after provisioning.
 #[derive(Debug, Clone, Copy)]
 pub enum DeployArtifact<'a> {
     /// A container image reference like `ghcr.io/tangle-network/llm-operator:v0.1.0`.
@@ -170,16 +164,7 @@ impl RemoteProviderManager {
         })
     }
 
-    /// Handle service initiated event. The artifact controls what gets
-    /// deployed onto the provisioned VM:
-    ///
-    /// - `None` → VM is provisioned idle (operator deploys separately)
-    /// - `Some(ContainerImage{..})` → `docker pull` + `docker run` via SSH
-    /// - `Some(GithubBinary{..})` → `wget` + sha256 verify + systemd service
-    ///
-    /// Both artifact forms are first-class. Blueprint authors choose which
-    /// to ship based on runtime needs (CUDA-heavy workloads ship containers;
-    /// lighter workloads can ship plain binaries).
+    /// Allocate the requested resources, then upload the explicitly selected artifact if supplied.
     pub async fn on_service_initiated(
         &self,
         blueprint_id: u64,
@@ -245,18 +230,15 @@ impl RemoteProviderManager {
             provider, instance.id
         );
 
-        // Dispatch deploy based on artifact kind. Both container and native
-        // binary paths are supported; blueprint authors choose at metadata time.
+        let mut env_vars = extra_env;
+        env_vars
+            .entry("BLUEPRINT_ID".into())
+            .or_insert_with(|| blueprint_id.to_string());
+        env_vars
+            .entry("SERVICE_ID".into())
+            .or_insert_with(|| service_id.to_string());
         match artifact {
             Some(DeployArtifact::ContainerImage(image)) => {
-                let mut env_vars = extra_env;
-                env_vars
-                    .entry("BLUEPRINT_ID".to_string())
-                    .or_insert_with(|| blueprint_id.to_string());
-                env_vars
-                    .entry("SERVICE_ID".to_string())
-                    .or_insert_with(|| service_id.to_string());
-
                 let deploy_result = self
                     .provisioner
                     .deploy_blueprint_to_instance(
@@ -282,14 +264,6 @@ impl RemoteProviderManager {
                 sha256_hex,
                 binary_name,
             }) => {
-                let mut env_vars = extra_env;
-                env_vars
-                    .entry("BLUEPRINT_ID".to_string())
-                    .or_insert_with(|| blueprint_id.to_string());
-                env_vars
-                    .entry("SERVICE_ID".to_string())
-                    .or_insert_with(|| service_id.to_string());
-
                 let deploy_result = self
                     .provisioner
                     .deploy_github_binary_to_instance(
@@ -375,6 +349,10 @@ impl RemoteProviderManager {
         let lease = {
             let _guard =
                 blueprint_remote_providers::managed::lock_lease(&self.state_dir, &identity).await?;
+            // Every enabled account must be present before inventory can prove absence.
+            for provider in self.provider_regions.keys() {
+                self.provisioner.get_adapter(provider)?;
+            }
             if self
                 .provisioner
                 .list_managed(&self.namespace)
