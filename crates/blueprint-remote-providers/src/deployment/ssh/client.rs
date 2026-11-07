@@ -3,7 +3,7 @@
 use super::types::*;
 use crate::core::error::{Error, Result};
 use crate::core::resources::ResourceSpec;
-use crate::deployment::secure_commands::{SecureConfigManager, SecureContainerCommands};
+use crate::deployment::secure_commands::SecureContainerCommands;
 use crate::deployment::secure_ssh::{SecureSshClient, SecureSshConnection};
 use crate::monitoring::health::{ApplicationHealthChecker, HealthStatus};
 #[allow(unused_imports)]
@@ -34,8 +34,7 @@ impl SshDeploymentClient {
         // Create secure SSH connection with validation
         let secure_connection =
             SecureSshConnection::new(connection.host.clone(), connection.user.clone())?
-                .with_port(connection.port)?
-                .with_strict_host_checking(false); // Disabled for dynamic cloud instances
+                .with_port(connection.port)?;
 
         let secure_connection = if let Some(ref key_path) = connection.key_path {
             secure_connection.with_key_path(key_path)?
@@ -173,7 +172,7 @@ impl SshDeploymentClient {
 
         // Create container with deployment config-based naming and settings
         let container_id = self
-            .create_container_with_config(blueprint_image, spec, env_vars)
+            .create_container_with_config(blueprint_image, spec, env_vars, None)
             .await?;
 
         // Start the container
@@ -218,55 +217,14 @@ impl SshDeploymentClient {
         Ok(())
     }
 
-    /// Create container with resource limits (SECURITY: Fixed command injection vulnerabilities)
-    #[allow(dead_code)]
-    async fn create_container(
-        &self,
-        image: &str,
-        spec: &ResourceSpec,
-        env_vars: HashMap<String, String>,
-    ) -> Result<String> {
-        let limits = ResourceLimits::from_spec(spec);
-
-        let runtime_str = match self.runtime {
-            ContainerRuntime::Docker => "docker",
-            ContainerRuntime::Podman => "podman",
-            ContainerRuntime::Containerd => "ctr",
-        };
-
-        // Use secure command building to prevent injection attacks
-        let cmd = SecureContainerCommands::build_create_command(
-            runtime_str,
-            image,
-            &env_vars,
-            limits.cpu_cores.map(|c| c as f32),
-            limits.memory_mb.map(|m| m as u32),
-            limits.disk_gb.map(|d| d as u32),
-        )?;
-
-        let output = self.run_remote_command(&cmd).await?;
-
-        // Extract container ID from output
-        let container_id = output
-            .lines()
-            .next()
-            .ok_or_else(|| Error::ConfigurationError("Failed to get container ID".into()))?
-            .trim()
-            .to_string();
-
-        info!("Created container: {}", container_id);
-        Ok(container_id)
-    }
-
     /// Create container with deployment config-based naming and restart policies
     async fn create_container_with_config(
         &self,
         image: &str,
         spec: &ResourceSpec,
         mut env_vars: HashMap<String, String>,
+        name: Option<&str>,
     ) -> Result<String> {
-        let limits = ResourceLimits::from_spec(spec);
-
         // Add deployment config variables to environment
         env_vars.insert(
             "BLUEPRINT_DEPLOYMENT_NAME".to_string(),
@@ -288,20 +246,18 @@ impl SshDeploymentClient {
         };
 
         // Build container name based on deployment config
-        let container_name = format!(
-            "{}-{}",
-            self.deployment_config.name, self.deployment_config.namespace
-        );
+        let container_name = name.map(str::to_owned).unwrap_or_else(|| {
+            format!(
+                "{}-{}",
+                self.deployment_config.name, self.deployment_config.namespace
+            )
+        });
 
-        // Use secure command building to prevent injection attacks
-        let mut cmd = SecureContainerCommands::build_create_command(
-            runtime_str,
-            image,
-            &env_vars,
-            limits.cpu_cores.map(|c| c as f32),
-            limits.memory_mb.map(|m| m as u32),
-            limits.disk_gb.map(|d| d as u32),
-        )?;
+        let env_path = format!("/tmp/blueprint-env-{}", uuid::Uuid::new_v4());
+        let environment =
+            zeroize::Zeroizing::new(SecureContainerCommands::environment_file(&env_vars, false)?);
+        let mut cmd =
+            SecureContainerCommands::build_create_command(runtime_str, image, &env_path, spec)?;
 
         // Apply restart policy based on deployment config
         let restart_policy_flag = match self.deployment_config.restart_policy {
@@ -313,8 +269,11 @@ impl SshDeploymentClient {
         // Insert restart policy and name into command
         if runtime_str != "ctr" {
             cmd = cmd.replace(
-                "run -d",
-                &format!("run -d --name {container_name} {restart_policy_flag}"),
+                " create ",
+                &format!(
+                    " create --name {} {restart_policy_flag} ",
+                    shell_escape::escape(container_name.as_str().into())
+                ),
             );
         }
 
@@ -322,17 +281,25 @@ impl SshDeploymentClient {
         if let Some(ref health_check) = self.deployment_config.health_check {
             if runtime_str == "docker" {
                 let health_cmd = format!(
-                    "--health-cmd='{}' --health-interval={}s --health-timeout={}s --health-retries={}",
-                    health_check.command,
+                    "--health-cmd={} --health-interval={}s --health-timeout={}s --health-retries={}",
+                    shell_escape::escape(health_check.command.as_str().into()),
                     health_check.interval,
                     health_check.timeout,
                     health_check.retries
                 );
-                cmd = cmd.replace("run -d", &format!("run -d {health_cmd}"));
+                cmd = cmd.replacen(" create ", &format!(" create {health_cmd} "), 1);
             }
         }
 
-        let output = self.run_remote_command(&cmd).await?;
+        self.ssh_client
+            .write_protected_file(&env_path, environment.as_bytes())
+            .await?;
+        let result = self.run_remote_command(&cmd).await;
+        let cleanup = self
+            .run_remote_command(&format!("rm -f {}", shell_escape::escape(env_path.into())))
+            .await;
+        let output = result?;
+        cleanup?;
 
         // Extract container ID from output
         let container_id = output
@@ -413,7 +380,6 @@ impl SshDeploymentClient {
 
     /// Run a command on the remote host via secure SSH
     async fn run_remote_command(&self, command: &str) -> Result<String> {
-        debug!("Running secure remote command: {}", command);
         self.ssh_client.run_remote_command(command).await
     }
 
@@ -498,6 +464,37 @@ impl SshDeploymentClient {
         }
     }
 
+    async fn install_remote_file(&self, target: &str, content: &[u8]) -> Result<()> {
+        let temporary = format!("/tmp/blueprint-file-{}", uuid::Uuid::new_v4());
+        let parent = std::path::Path::new(target)
+            .parent()
+            .ok_or_else(|| Error::ConfigurationError("Invalid remote file destination".into()))?;
+        let parent = parent
+            .to_str()
+            .ok_or_else(|| Error::ConfigurationError("Invalid remote directory".into()))?;
+        self.run_remote_command(&format!(
+            "sudo -n install -d -m 0700 {}",
+            shell_escape::escape(parent.into())
+        ))
+        .await?;
+        self.ssh_client
+            .write_protected_file(&temporary, content)
+            .await?;
+        let result = self
+            .run_remote_command(&format!(
+                "sudo -n install -m 0600 {} {}",
+                shell_escape::escape(temporary.as_str().into()),
+                shell_escape::escape(target.into())
+            ))
+            .await;
+        let cleanup = self
+            .run_remote_command(&format!("rm -f {}", shell_escape::escape(temporary.into())))
+            .await;
+        result?;
+        cleanup?;
+        Ok(())
+    }
+
     /// Deploy a blueprint from a GitHub release URL directly via SSH.
     ///
     /// Downloads the binary archive from the given URL on the remote host,
@@ -514,28 +511,30 @@ impl SshDeploymentClient {
         spec: &ResourceSpec,
         env_vars: &HashMap<String, String>,
     ) -> Result<NativeDeployment> {
-        info!(
-            "Deploying native Blueprint from {} to {}",
-            archive_url, self.connection.host
-        );
-
-        // Build the environment-file contents used by the systemd service.
-        // KEY=value pairs, one per line, already bash-safe since we quote values.
-        let env_file = env_vars
-            .iter()
-            .map(|(k, v)| {
-                // Prevent injection: reject keys with =, newline, or whitespace.
-                let k_safe = if k.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                    k.as_str()
-                } else {
-                    "INVALID"
-                };
-                // Escape single quotes in value.
-                let v_safe = v.replace('\'', "'\\''");
-                format!("{k_safe}='{v_safe}'")
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+        if !binary_name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+            || binary_name.is_empty()
+            || binary_name.starts_with('-')
+            || matches!(binary_name, "." | "..")
+            || archive_url.contains(['\'', '\r', '\n'])
+        {
+            return Err(Error::ConfigurationError(
+                "Invalid native deployment source".into(),
+            ));
+        }
+        let url = url::Url::parse(archive_url)
+            .map_err(|_| Error::ConfigurationError("Invalid native deployment URL".into()))?;
+        if !matches!(url.scheme(), "https" | "http")
+            || !url.username().is_empty()
+            || url.password().is_some()
+        {
+            return Err(Error::ConfigurationError(
+                "Invalid native deployment URL".into(),
+            ));
+        }
+        let environment =
+            zeroize::Zeroizing::new(SecureContainerCommands::environment_file(env_vars, true)?);
 
         let sha = sha256_hex.trim_start_matches("0x").to_lowercase();
         // Ensure the provided hex is exactly 64 hex chars (32 bytes).
@@ -555,8 +554,9 @@ set -eu
 sudo mkdir -p /opt/blueprint/bin /opt/blueprint/config /opt/blueprint/data /opt/blueprint/logs
 
 # Download archive and verify checksum BEFORE extraction.
-cd /tmp
-sudo rm -f blueprint-archive
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf "$WORK_DIR"' EXIT
+cd "$WORK_DIR"
 curl -sSL -o blueprint-archive '{archive_url}'
 ACTUAL_SHA=$(sha256sum blueprint-archive | awk '{{print $1}}')
 if [ "$ACTUAL_SHA" != "{sha}" ]; then
@@ -567,27 +567,20 @@ fi
 
 # Extract — support tar.xz, tar.gz, zip, or raw binary.
 case "{archive_url}" in
-    *.tar.xz) sudo tar -xJf blueprint-archive -C /tmp ;;
-    *.tar.gz|*.tgz) sudo tar -xzf blueprint-archive -C /tmp ;;
-    *.zip) sudo unzip -o blueprint-archive -d /tmp ;;
-    *) sudo cp blueprint-archive /tmp/{binary_name} ;;
+    *.tar.xz) tar -xJf blueprint-archive -C "$WORK_DIR" ;;
+    *.tar.gz|*.tgz) tar -xzf blueprint-archive -C "$WORK_DIR" ;;
+    *.zip) unzip -o blueprint-archive -d "$WORK_DIR" ;;
+    *) cp blueprint-archive "$WORK_DIR"/{binary_name} ;;
 esac
 
 # Locate the binary within extracted files.
-BINARY_PATH=$(find /tmp -name '{binary_name}' -type f -executable -print -quit 2>/dev/null || find /tmp -name '{binary_name}' -type f -print -quit)
+BINARY_PATH=$(find "$WORK_DIR" -name '{binary_name}' -type f -executable -print -quit 2>/dev/null || find "$WORK_DIR" -name '{binary_name}' -type f -print -quit)
 if [ -z "$BINARY_PATH" ]; then
     echo "ERROR: binary '{binary_name}' not found after extraction" >&2
     exit 1
 fi
 
 sudo install -m 0755 "$BINARY_PATH" /opt/blueprint/bin/{binary_name}
-sudo rm -rf /tmp/blueprint-archive
-
-# Write environment file.
-sudo tee /opt/blueprint/config/blueprint.env > /dev/null <<'ENVEOF'
-{env_file}
-ENVEOF
-sudo chmod 0600 /opt/blueprint/config/blueprint.env
 
 # Create blueprint user (idempotent).
 sudo useradd -r -s /bin/false -d /opt/blueprint blueprint 2>/dev/null || true
@@ -625,7 +618,14 @@ sudo systemctl is-active blueprint-runtime
 "#
         );
 
-        self.run_remote_command(&install_script).await?;
+        self.install_remote_file(
+            "/opt/blueprint/config/blueprint.env",
+            environment.as_bytes(),
+        )
+        .await?;
+        self.ssh_client
+            .run_script(install_script.as_bytes())
+            .await?;
 
         Ok(NativeDeployment {
             host: self.connection.host.clone(),
@@ -652,10 +652,9 @@ sudo systemctl is-active blueprint-runtime
         let config_content = serde_json::to_string_pretty(config)
             .map_err(|e| Error::ConfigurationError(format!("Failed to serialize config: {e}")))?;
 
-        // Use secure config management to prevent injection
-        SecureConfigManager::write_config_file(
-            &config_content,
+        self.install_remote_file(
             "/opt/blueprint/config/blueprint.json",
+            config_content.as_bytes(),
         )
         .await?;
 
@@ -782,7 +781,7 @@ sudo systemctl is-active blueprint-runtime
         env_vars: HashMap<String, String>,
     ) -> Result<String> {
         let spec = ResourceSpec::basic();
-        self.create_container_with_config(image, &spec, env_vars)
+        self.create_container_with_config(image, &spec, env_vars, None)
             .await
     }
 
@@ -806,66 +805,17 @@ sudo systemctl is-active blueprint-runtime
         env_vars: HashMap<String, String>,
         resource_spec: Option<&ResourceSpec>,
     ) -> Result<String> {
-        let runtime_str = match self.runtime {
-            ContainerRuntime::Docker => "docker",
-            ContainerRuntime::Podman => "podman",
-            ContainerRuntime::Containerd => "ctr",
-        };
-
-        // Build command with specific name
-        let mut cmd = format!("{runtime_str} run -d --name {name}");
-
-        // Add resource limits if specified
-        if let Some(spec) = resource_spec {
-            match self.runtime {
-                ContainerRuntime::Docker | ContainerRuntime::Podman => {
-                    // CPU limits (in CPU units, e.g., 1.5 = 1.5 CPUs)
-                    cmd.push_str(&format!(" --cpus={}", spec.cpu));
-
-                    // Memory limits (convert GB to format like "2g")
-                    cmd.push_str(&format!(" --memory={}g", spec.memory_gb));
-
-                    // GPU support if requested
-                    if let Some(gpu_count) = spec.gpu_count {
-                        if gpu_count > 0 {
-                            cmd.push_str(&format!(" --gpus={gpu_count}"));
-                        }
-                    }
-                }
-                ContainerRuntime::Containerd => {
-                    // Containerd uses different syntax for resource limits
-                    if spec.cpu > 0.0 {
-                        cmd.push_str(&format!(" --cpu-quota={}", (spec.cpu * 100000.0) as u64));
-                    }
-                    if spec.memory_gb > 0.0 {
-                        cmd.push_str(&format!(" --memory-limit={}g", spec.memory_gb));
-                    }
-                }
-            }
-        }
-
-        // Add environment variables
-        for (key, value) in &env_vars {
-            cmd.push_str(&format!(" -e {key}={value}"));
-        }
-
-        // Add image
-        cmd.push_str(&format!(" {image}"));
-
-        let output = self.run_remote_command(&cmd).await?;
-
-        let container_id = output
-            .lines()
-            .next()
-            .ok_or_else(|| Error::ConfigurationError("Failed to get container ID".into()))?
-            .trim()
-            .to_string();
-
-        info!(
-            "Created container {} with name {} and resource limits: {:?}",
-            container_id, name, resource_spec
-        );
-        Ok(container_id)
+        let default_spec = ResourceSpec::basic();
+        let id = self
+            .create_container_with_config(
+                image,
+                resource_spec.unwrap_or(&default_spec),
+                env_vars,
+                Some(name),
+            )
+            .await?;
+        self.start_container(&id).await?;
+        Ok(id)
     }
 
     /// Update a container (stop old, start new with same config)
@@ -1018,8 +968,7 @@ server {{
         // Create new secure connection
         let secure_connection =
             SecureSshConnection::new(self.connection.host.clone(), self.connection.user.clone())?
-                .with_port(self.connection.port)?
-                .with_strict_host_checking(false);
+                .with_port(self.connection.port)?;
 
         let secure_connection = if let Some(ref key_path) = self.connection.key_path {
             secure_connection.with_key_path(key_path)?
@@ -1326,6 +1275,16 @@ WantedBy=multi-user.target
         env_vars: HashMap<String, String>,
         resource_spec: &ResourceSpec,
     ) -> Result<()> {
+        if service_name.is_empty()
+            || service_name.starts_with('-')
+            || !service_name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+        {
+            return Err(Error::ConfigurationError(
+                "Invalid remote service name".into(),
+            ));
+        }
         info!("Deploying {} as systemd service", service_name);
 
         // Copy binary to remote
@@ -1337,11 +1296,12 @@ WantedBy=multi-user.target
             .await?;
 
         // Create systemd unit with resource limits
-        let env_section = env_vars
-            .iter()
-            .map(|(k, v)| format!("Environment={k}={v}"))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let environment =
+            zeroize::Zeroizing::new(SecureContainerCommands::environment_file(&env_vars, true)?);
+        let environment_path = format!("/opt/blueprint/config/{service_name}.env");
+        self.install_remote_file(&environment_path, environment.as_bytes())
+            .await?;
+        let env_section = format!("EnvironmentFile={environment_path}");
 
         let service_unit = format!(
             r#"

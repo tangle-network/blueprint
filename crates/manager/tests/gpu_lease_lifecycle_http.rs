@@ -25,6 +25,10 @@ struct Seller {
     pods: BTreeMap<String, Value>,
     launches: Vec<Value>,
     deny_delete: bool,
+    vast: BTreeMap<String, Value>,
+    keys: BTreeMap<String, Vec<String>>,
+    barrier: Option<Arc<tokio::sync::Barrier>>,
+    delay_create: bool,
 }
 
 async fn seller(
@@ -34,6 +38,19 @@ async fn seller(
     let method = request.method().clone();
     let path = request.uri().path().to_string();
     let body = to_bytes(request.into_body(), 1024 * 1024).await.unwrap();
+    if path == "/synchronize" {
+        let barrier = state.lock().unwrap().barrier.clone().unwrap();
+        barrier.wait().await;
+        return (StatusCode::OK, Json(Value::Null));
+    }
+    if (method == Method::POST && path == "/pods")
+        || (method == Method::PUT && path == "/asks/7001/")
+    {
+        let delay = state.lock().unwrap().delay_create;
+        if delay {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
     let mut state = state.lock().unwrap();
     if path == "/catalog/gpus" {
         return (
@@ -63,6 +80,66 @@ async fn seller(
                 json!({"pods":state.pods.values().collect::<Vec<_>>(),"pagination":{"hasNextPage":false}}),
             ),
         );
+    }
+    if path == "/bundles/" {
+        return (
+            StatusCode::OK,
+            Json(json!({"offers":[{
+                "id":7001,"gpu_name":"H200","num_gpus":2,"dph_total":9.0,"storage_total_cost":0.0,
+                "reliability2":0.999,"verified":true,"rentable":true,"rented":false,
+                "cpu_cores_effective":8,"cpu_ram":64000,"disk_space":1000,"geolocation":"US-TEST-1"
+            }]})),
+        );
+    }
+    if path == "/v1/instances" {
+        return (
+            StatusCode::OK,
+            Json(json!({"instances":state.vast.values().collect::<Vec<_>>(),"next_token":null})),
+        );
+    }
+    if path == "/asks/7001/" {
+        let launch: Value = serde_json::from_slice(&body).unwrap();
+        state.launches.push(launch.clone());
+        state.vast.insert("8001".into(), json!({"id":8001,"label":launch["label"],"image_runtype":launch["runtype"],
+            "actual_status":"running","intended_status":"running","gpu_name":"H200","num_gpus":2,"dph_total":9.0,"geolocation":"US-TEST-1"}));
+        return (
+            StatusCode::OK,
+            Json(json!({"success":true,"new_contract":8001})),
+        );
+    }
+    if path.starts_with("/instances/") {
+        let id = path.split('/').nth(2).unwrap().to_string();
+        if path.ends_with("/ssh/") {
+            if method == Method::POST {
+                let key: Value = serde_json::from_slice(&body).unwrap();
+                state
+                    .keys
+                    .entry(id)
+                    .or_default()
+                    .push(key["ssh_key"].as_str().unwrap().into());
+                return (StatusCode::OK, Json(json!({"success":true})));
+            }
+            let keys = state
+                .keys
+                .get(&id)
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .map(|key| json!({"public_key":key}))
+                .collect::<Vec<_>>();
+            return (
+                StatusCode::OK,
+                Json(json!({"success":true,"ssh_keys":serde_json::to_string(&keys).unwrap()})),
+            );
+        }
+        if method == Method::DELETE {
+            state.vast.remove(&id);
+            return (StatusCode::OK, Json(json!({"success":true})));
+        }
+        return match state.vast.get(&id) {
+            Some(instance) => (StatusCode::OK, Json(json!({"instances":instance}))),
+            None => (StatusCode::NOT_FOUND, Json(Value::Null)),
+        };
     }
     let id = path.trim_start_matches("/pods/");
     if method == Method::DELETE {
@@ -261,5 +338,180 @@ async fn registry_keeps_a_record_when_the_persistent_tracker_refuses_cleanup() -
         registry.get(1, 2).await.is_some(),
         "failed cleanup must not erase the only retry record"
     );
+    Ok(())
+}
+
+// This subprocess exercises real adapters with isolated synthetic credentials.
+#[tokio::test]
+async fn allocation_worker() -> anyhow::Result<()> {
+    let Ok(endpoint) = std::env::var("GPU_LIFECYCLE_PEER") else {
+        return Ok(());
+    };
+    if std::env::var_os("GPU_LIFECYCLE_INIT_FAILURE").is_some() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let provisioner = CloudProvisioner::new().await?;
+        assert!(
+            provisioner
+                .list_managed("synthetic-inventory")
+                .await
+                .is_err(),
+            "an uninitialized configured adapter cannot become an absence proof"
+        );
+        return Ok(());
+    }
+
+    use blueprint_remote_providers::infra::traits::CloudProviderAdapter;
+    use blueprint_remote_providers::providers::digitalocean::adapter::DigitalOceanAdapter;
+    use blueprint_remote_providers::providers::{RunPodAdapter, VastAiAdapter};
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let adapters: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>> = HashMap::from([
+        (
+            CloudProvider::RunPod,
+            Box::new(RunPodAdapter::with_endpoint("synthetic".into(), &endpoint)?)
+                as Box<dyn CloudProviderAdapter>,
+        ),
+        (
+            CloudProvider::VastAi,
+            Box::new(VastAiAdapter::with_endpoint("synthetic".into(), &endpoint)?)
+                as Box<dyn CloudProviderAdapter>,
+        ),
+        (
+            CloudProvider::DigitalOcean,
+            Box::new(DigitalOceanAdapter::new().await?) as Box<dyn CloudProviderAdapter>,
+        ),
+    ]);
+    let provider = if std::env::var("GPU_LIFECYCLE_PROVIDER")? == "runpod" {
+        CloudProvider::RunPod
+    } else {
+        CloudProvider::VastAi
+    };
+    let state = std::path::PathBuf::from(std::env::var_os("GPU_LIFECYCLE_STATE").unwrap());
+    let manager = RemoteProviderManager::with_provisioner(
+        CloudProvisioner::with_providers(adapters),
+        &state,
+        HashMap::from([
+            (CloudProvider::RunPod, "US-TEST-1".into()),
+            (CloudProvider::VastAi, "US-TEST-1".into()),
+            (CloudProvider::DigitalOcean, "nyc3".into()),
+        ]),
+        20.0,
+    )
+    .await?;
+    reqwest::get(format!("{endpoint}/synchronize"))
+        .await?
+        .error_for_status()?;
+    let mut request = spec(3600);
+    request.provider = Some(provider);
+    let result = manager
+        .on_service_initiated(9, 9, Some(request), None, HashMap::new())
+        .await;
+    std::fs::write(
+        std::env::var_os("GPU_LIFECYCLE_RESULT").unwrap(),
+        if result.is_ok() {
+            "allocated"
+        } else {
+            "refused"
+        },
+    )?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn separate_processes_share_one_service_lock_across_different_gpu_providers_and_cpu_inventory()
+-> anyhow::Result<()> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let endpoint = format!("http://{}", listener.local_addr()?);
+    let state = Arc::new(Mutex::new(Seller {
+        barrier: Some(Arc::new(tokio::sync::Barrier::new(2))),
+        delay_create: true,
+        ..Default::default()
+    }));
+    let router = Router::new().fallback(seller).with_state(state.clone());
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let directory = tempfile::tempdir()?;
+    let mut children = Vec::new();
+    for provider in ["runpod", "vast-ai"] {
+        let receipt = directory.path().join(provider);
+        let child = tokio::process::Command::new(std::env::current_exe()?)
+            .args(["--exact", "allocation_worker", "--test-threads=1"])
+            .env("GPU_LIFECYCLE_PEER", &endpoint)
+            .env("GPU_LIFECYCLE_PROVIDER", provider)
+            .env("GPU_LIFECYCLE_STATE", directory.path())
+            .env("GPU_LIFECYCLE_RESULT", &receipt)
+            .env("DIGITALOCEAN_TOKEN", "synthetic-cpu-provider-key")
+            .kill_on_drop(true)
+            .spawn()?;
+        children.push((child, receipt));
+    }
+    let mut allocated = 0;
+    for (mut child, receipt) in children {
+        assert!(
+            tokio::time::timeout(Duration::from_secs(30), child.wait())
+                .await??
+                .success()
+        );
+        allocated += usize::from(std::fs::read_to_string(receipt)? == "allocated");
+    }
+    let status = tokio::process::Command::new(std::env::current_exe()?)
+        .args(["--exact", "allocation_worker", "--test-threads=1"])
+        .env_clear()
+        .env("GPU_LIFECYCLE_PEER", &endpoint)
+        .env("GPU_LIFECYCLE_INIT_FAILURE", "1")
+        .env("OVH_APPLICATION_KEY", "synthetic-uninitialized-provider")
+        .env("DIGITALOCEAN_TOKEN", "synthetic-cpu-provider-key")
+        .kill_on_drop(true)
+        .status()
+        .await?;
+    assert!(status.success());
+    assert_eq!(
+        allocated, 1,
+        "two manager processes must not rent on different providers for the same service"
+    );
+    let state = state.lock().unwrap();
+    assert_eq!(
+        state.launches.len(),
+        1,
+        "CPU-only inventory must be skipped, while one GPU rental is admitted"
+    );
+    assert_eq!(state.pods.len() + state.vast.len(), 1);
+    drop(state);
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn unavailable_adapter_does_not_prevent_other_owned_cleanup() -> anyhow::Result<()> {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let endpoint = format!("http://{}", listener.local_addr()?);
+    let state = Arc::new(Mutex::new(Seller::default()));
+    let router = Router::new().fallback(seller).with_state(state.clone());
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let directory = tempfile::tempdir()?;
+    let credentials = serde_json::from_value(
+        json!({"provider":"runpod","api_key":"synthetic-local-peer-key","endpoint":endpoint}),
+    )?;
+    let manager = RemoteProviderManager::with_provisioner(
+        CloudProvisioner::from_credentials(vec![credentials])?,
+        directory.path(),
+        HashMap::from([
+            (CloudProvider::RunPod, "US-TEST-1".into()),
+            (CloudProvider::GCP, "unavailable".into()),
+        ]),
+        20.0,
+    )
+    .await?;
+    manager
+        .on_service_initiated(5, 6, Some(spec(3600)), None, HashMap::new())
+        .await?;
+    assert!(
+        manager.on_service_terminated(5, 6).await.is_err(),
+        "unavailable account failure remains visible"
+    );
+    assert!(
+        state.lock().unwrap().pods.is_empty(),
+        "a different adapter failure must not strand the owned rental"
+    );
+    server.abort();
     Ok(())
 }

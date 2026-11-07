@@ -55,7 +55,6 @@ pub struct RemoteProviderManager {
     registry: Arc<RemoteDeploymentRegistry>,
     namespace: String,
     max_hourly_cost: f64,
-    allocation: tokio::sync::Mutex<()>,
     retirement: tokio::task::JoinHandle<()>,
     provider_regions: HashMap<CloudProvider, String>,
 }
@@ -128,7 +127,6 @@ impl RemoteProviderManager {
             registry,
             namespace,
             max_hourly_cost,
-            allocation: tokio::sync::Mutex::new(()),
             retirement,
             provider_regions,
         })
@@ -337,7 +335,7 @@ impl RemoteProviderManager {
         env.entry("SERVICE_ID".into())
             .or_insert_with(|| service_id.to_string());
         let lease = {
-            let _guard = self.allocation.lock().await;
+            let _guard = blueprint_remote_providers::managed::lock_lease(&identity).await?;
             if self
                 .provisioner
                 .list_managed(&self.namespace)
@@ -429,9 +427,12 @@ impl RemoteProviderManager {
             },
         )
         .await?;
+        let mut assigned = spec.clone();
+        assigned.gpu_count = lease.resource.gpu_count;
+        assigned.gpu_class = lease.resource.gpu_class.clone();
         match artifact {
             DeployArtifact::ContainerImage(image) => {
-                client.deploy_blueprint(image, spec, env).await?;
+                client.deploy_blueprint(image, &assigned, env).await?;
             }
             DeployArtifact::GithubBinary {
                 archive_url,
@@ -458,9 +459,17 @@ impl RemoteProviderManager {
             return Ok(());
         }
         let identity = self.lease_identity(blueprint_id, service_id);
+        let _guard = blueprint_remote_providers::managed::lock_lease(&identity).await?;
         let mut failures = Vec::new();
         for provider in self.provider_regions.keys() {
-            if self.provisioner.get_adapter(provider)?.managed().is_some()
+            let adapter = match self.provisioner.get_adapter(provider) {
+                Ok(adapter) => adapter,
+                Err(error) => {
+                    failures.push(format!("{provider}: {error}"));
+                    continue;
+                }
+            };
+            if adapter.managed().is_some()
                 && let Err(error) = self
                     .provisioner
                     .destroy_managed(provider, &identity, None)

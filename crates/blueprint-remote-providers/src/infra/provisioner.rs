@@ -37,7 +37,7 @@ pub struct CloudProvisioner {
     pub(crate) providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
     pub(crate) regions: HashMap<CloudProvider, String>,
     /// Why each provider the environment names has no adapter.
-    init_errors: HashMap<CloudProvider, String>,
+    pub(crate) init_errors: HashMap<CloudProvider, String>,
     retry_policy: RetryPolicy,
 }
 

@@ -28,6 +28,16 @@ pub(super) async fn lock(
     provider: &CloudProvider,
     identity: &ManagedLeaseIdentity,
 ) -> Result<fs::File> {
+    lock_scope(provider.catalog_key(), identity).await
+}
+
+/// Serialize one lease across provider choice, processes and manager restarts.
+/// Hold this guard across inventory and allocation; dropping it releases the OS lock.
+pub async fn lock_lease(identity: &ManagedLeaseIdentity) -> Result<fs::File> {
+    lock_scope("lease", identity).await
+}
+
+async fn lock_scope(scope: &str, identity: &ManagedLeaseIdentity) -> Result<fs::File> {
     identity.validate().map_err(|_| invalid())?;
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
@@ -44,7 +54,7 @@ pub(super) async fn lock(
         &aws_lc_rs::digest::SHA256,
         format!(
             "{}:{}:{}",
-            provider.catalog_key(),
+            scope,
             identity.namespace.len(),
             identity.namespace
         )

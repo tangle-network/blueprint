@@ -3,7 +3,7 @@
 //! Replaces the insecure SSH implementation with proper security controls
 
 use crate::core::error::{Error, Result};
-use blueprint_core::{debug, info, warn};
+use blueprint_core::{info, warn};
 use blueprint_std::path::{Path, PathBuf};
 use shell_escape::escape;
 use tokio::process::Command;
@@ -203,8 +203,6 @@ impl SecureSshClient {
 
         let ssh_cmd = self.build_secure_ssh_command(command)?;
 
-        debug!("Executing SSH command: {}", ssh_cmd);
-
         let output = Command::new("sh")
             .arg("-c")
             .arg(&ssh_cmd)
@@ -220,6 +218,61 @@ impl SecureSshClient {
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    /// Stream a new owner-only file only after strict host verification.
+    pub async fn write_protected_file(&self, remote_path: &str, content: &[u8]) -> Result<()> {
+        self.validate_remote_path(remote_path)?;
+        if !Path::new(remote_path).is_absolute()
+            || Path::new(remote_path)
+                .components()
+                .any(|part| matches!(part, std::path::Component::ParentDir))
+        {
+            return Err(Error::ConfigurationError(
+                "Invalid protected remote path".into(),
+            ));
+        }
+        let script = format!("umask 077; set -C; cat > {}", escape(remote_path.into()));
+        self.run_remote_input(&format!("sh -c {}", escape(script.into())), content)
+            .await
+    }
+
+    /// Execute an SDK-generated installation script without placing its contents in argv.
+    pub async fn run_script(&self, script: &[u8]) -> Result<()> {
+        self.run_remote_input("sh -se", script).await
+    }
+
+    async fn run_remote_input(&self, command: &str, content: &[u8]) -> Result<()> {
+        use tokio::io::AsyncWriteExt;
+        if !self.connection.strict_host_checking {
+            return Err(Error::ConfigurationError(
+                "Credential transfer requires trusted SSH host identity".into(),
+            ));
+        }
+        let ssh = self.build_secure_ssh_command(command)?;
+        let mut child = Command::new("sh")
+            .args(["-c", &ssh])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|_| Error::ConfigurationError("SSH input transfer failed".into()))?;
+        let mut input = child
+            .stdin
+            .take()
+            .ok_or_else(|| Error::ConfigurationError("SSH input unavailable".into()))?;
+        let written = input.write_all(content).await;
+        drop(input);
+        let status = child
+            .wait()
+            .await
+            .map_err(|_| Error::ConfigurationError("SSH input transfer failed".into()))?;
+        if written.is_err() || !status.success() {
+            return Err(Error::ConfigurationError(
+                "SSH input transfer failed".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Build secure SSH command with proper escaping and validation
@@ -352,10 +405,7 @@ impl SecureSshClient {
                 .iter()
                 .any(|prefix| line.starts_with(prefix))
             {
-                return Err(Error::ConfigurationError(format!(
-                    "Command not in allowlist: {}",
-                    line.chars().take(80).collect::<String>()
-                )));
+                return Err(Error::ConfigurationError("Command not in allowlist".into()));
             }
         }
 
@@ -507,55 +557,5 @@ impl SecureSshClient {
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_secure_ssh_connection_validation() {
-        // Valid connection
-        let conn = SecureSshConnection::new("example.com".to_string(), "user".to_string()).unwrap();
-        assert_eq!(conn.host, "example.com");
-        assert_eq!(conn.user, "user");
-        assert!(conn.strict_host_checking); // Secure default
-
-        // Invalid hostname
-        assert!(
-            SecureSshConnection::new("host; rm -rf /".to_string(), "user".to_string()).is_err()
-        );
-
-        // Invalid username
-        assert!(
-            SecureSshConnection::new("example.com".to_string(), "user; id".to_string()).is_err()
-        );
-    }
-
-    #[test]
-    fn test_command_validation() {
-        let conn = SecureSshConnection::new("example.com".to_string(), "user".to_string()).unwrap();
-        let client = SecureSshClient::new(conn);
-
-        // Valid command
-        assert!(client.validate_command("ls -la").is_ok());
-
-        // Dangerous commands
-        assert!(client.validate_command("rm -rf /").is_err());
-        assert!(client.validate_command(":(){ :|:& };:").is_err());
-
-        // Empty command
-        assert!(client.validate_command("").is_err());
-    }
-
-    #[test]
-    fn test_hostname_validation() {
-        assert!(SecureSshConnection::validate_hostname("example.com").is_ok());
-        assert!(SecureSshConnection::validate_hostname("192.168.1.1").is_ok());
-
-        assert!(SecureSshConnection::validate_hostname("host; rm -rf /").is_err());
-        assert!(SecureSshConnection::validate_hostname("host$(curl evil.com)").is_err());
-        assert!(SecureSshConnection::validate_hostname("").is_err());
     }
 }

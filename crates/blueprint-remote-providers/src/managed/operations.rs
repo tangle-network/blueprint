@@ -179,13 +179,16 @@ impl CloudProvisioner {
         .validate()
         .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
         let mut resources = Vec::new();
+        if let Some(provider) = self.init_errors.keys().next() {
+            return Err(Error::ProviderNotConfigured(provider.clone()));
+        }
         if self.providers.is_empty() {
             return Err(Error::Provider(ProviderErrorCode::ProviderNotConfigured));
         }
         for (provider, adapter) in &self.providers {
-            let native = adapter
-                .managed()
-                .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
+            let Some(native) = adapter.managed() else {
+                continue;
+            };
             let listed = native.list(namespace).await?;
             if listed.iter().any(|resource| {
                 &resource.instance.provider != provider || resource.namespace != namespace
