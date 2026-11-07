@@ -91,11 +91,14 @@ impl RemoteProviderManager {
             ));
         }
         let enabled = provider_regions.keys().cloned().collect::<Vec<_>>();
-        let provisioner = Arc::new(
+        let mut provisioner = provisioner
+            .only_providers(&enabled)
+            .with_regions(provider_regions.clone());
+        let managed = enabled.iter().any(|provider| {
             provisioner
-                .only_providers(&enabled)
-                .with_regions(provider_regions.clone()),
-        );
+                .get_adapter(provider)
+                .is_ok_and(|adapter| adapter.managed().is_some())
+        });
         let tracker =
             Arc::new(DeploymentTracker::new(&state_dir.join("remote_deployments")).await?);
         let registry = Arc::new(RemoteDeploymentRegistry::new(tracker));
@@ -117,14 +120,15 @@ impl RemoteProviderManager {
                 use std::os::unix::fs::OpenOptionsExt;
                 options.mode(0o600);
             }
-            match options.open(&path) {
+            let created = match options.open(&path) {
                 Ok(mut file) => {
                     file.write_all(format!("{}\n", uuid::Uuid::new_v4()).as_bytes())?;
                     file.sync_all()?;
+                    true
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
                 Err(error) => return Err(error.into()),
-            }
+            };
             if !std::fs::symlink_metadata(&path)?.file_type().is_file() {
                 return Err(Error::Other(
                     "Invalid persisted manager owner identity".into(),
@@ -139,8 +143,16 @@ impl RemoteProviderManager {
                 ));
             }
             std::fs::File::open(path.parent().expect("owner file has a parent"))?.sync_all()?;
+            if managed {
+                provisioner = if created {
+                    provisioner.initialize_lease_state_dir(&state_dir).await?
+                } else {
+                    provisioner.with_lease_state_dir(&state_dir)?
+                };
+            }
             format!("bpm-{owner}")
         };
+        let provisioner = Arc::new(provisioner);
         let retire_namespace = namespace.clone();
         let retire_provisioner = provisioner.clone();
         let retirement = tokio::spawn(async move {

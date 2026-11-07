@@ -1,7 +1,7 @@
 //! Recorded Lium nodes and a synthetic native template/rental peer.
 use super::*;
 
-async fn lium_native_peer() -> MockServer {
+pub(super) async fn lium_native_peer() -> MockServer {
     let peer = MockServer::start().await;
     // https://lium.io/api/public/v1/nodes, captured 2026-11-06T03:55:56Z; SHA25600475806e9408e56046e04ad29f1056876941fd771de28e28c26782cdcb11828.
     // Create/list replies below are synthetic; this is no claim that stock remains available.

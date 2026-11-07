@@ -34,6 +34,16 @@ impl RunPodAdapter {
         Ok(adapter)
     }
 
+    pub(crate) fn credential_binding(&self) -> Result<(String, Option<String>)> {
+        Ok((
+            crate::managed::authorization::credential_digest(
+                &self.auth,
+                &(&self.base_url, &self.cloud_type),
+            )?,
+            self.default_region.clone(),
+        ))
+    }
+
     pub fn with_credentials(api_key: String) -> Result<Self> {
         Self::with_endpoint(api_key, BASE_URL)
     }
@@ -266,7 +276,7 @@ impl ManagedProviderAdapter for RunPodAdapter {
         &self,
         spec: &ResourceSpec,
         offer: &NativeOffer,
-        fingerprint: &str,
+        metadata: &ManagedMetadata,
     ) -> Result<ManagedResource> {
         spec.validate()
             .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
@@ -277,7 +287,7 @@ impl ManagedProviderAdapter for RunPodAdapter {
         {
             return Err(Error::Provider(ProviderErrorCode::Unsupported));
         }
-        let metadata = ManagedMetadata::for_spec(spec, fingerprint, chrono::Utc::now())?;
+        metadata.check_deadline()?;
         let image = spec
             .image
             .as_ref()
@@ -318,6 +328,7 @@ impl ManagedProviderAdapter for RunPodAdapter {
             body["mounts"] = json!({"network":[{"volumeId":id,"path":spec.volume_mount_path.as_deref().unwrap_or("/workspace")}]});
         }
         // Create is sent once. An uncertain response is recovered by native metadata/list.
+        metadata.check_deadline()?;
         let response = self
             .http
             .post_json(&format!("{}/pods", self.base_url), &self.auth, body)

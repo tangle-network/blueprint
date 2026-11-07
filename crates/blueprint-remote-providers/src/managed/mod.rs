@@ -1,5 +1,6 @@
 //! One native provider primitive for SDK leases and external orchestrators.
 
+pub(crate) mod authorization;
 pub mod bootstrap;
 mod credentials;
 mod leases;
@@ -28,7 +29,7 @@ pub trait ManagedProviderAdapter: Send + Sync {
         &self,
         spec: &ResourceSpec,
         offer: &NativeOffer,
-        fingerprint: &str,
+        metadata: &ManagedMetadata,
     ) -> Result<ManagedResource>;
     /// Finish recoverable setup without renting another instance.
     async fn complete(

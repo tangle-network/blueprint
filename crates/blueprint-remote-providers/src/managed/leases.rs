@@ -1,4 +1,4 @@
-//! Rented GPU nodes with per-lease SSH access; provider tags carry each lease's deadline.
+//! Rented GPU nodes with per-lease SSH access and durable original authorizations.
 
 use super::*;
 use crate::{CloudProvider, CloudProvisioner, Error};
@@ -84,31 +84,91 @@ fn failure(provider: &CloudProvider, error: Error) -> ProviderFailure {
 }
 
 impl CloudProvisioner {
-    /// Rent the best-ranked candidate in stock for `ttl`, with per-lease SSH access.
-    ///
-    /// A refusal moves on only after the lease identity is proven absent on that
-    /// provider, so a rental accepted before a later error is retired, never doubled.
-    pub async fn allocate(&self, spec: &ResourceSpec, ttl: Duration) -> Result<Lease> {
-        let Some(identity) = spec.ownership.as_ref().filter(|_| ttl.as_secs() > 0) else {
+    fn lease_request(&self, spec: &ResourceSpec, ttl: Duration) -> Result<ResourceSpec> {
+        self.lease_state_dir()?;
+        if ttl.as_secs() == 0 || spec.ownership.is_none() {
             return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
-        };
-        let access = match spec.ssh_public_key.as_deref() {
+        }
+        let mut request = spec.clone();
+        request.lease_duration_secs = Some(ttl.as_secs());
+        request
+            .validate()
+            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        Ok(request)
+    }
+
+    /// Recover only: inspect all original configured accounts, never request capacity.
+    /// A stable caller-owned public key and the original private authorization store
+    /// are required. `None` is a complete absence proof, never permission to re-rent.
+    pub async fn recover_lease(&self, spec: &ResourceSpec, ttl: Duration) -> Result<Option<Lease>> {
+        let request = self.lease_request(spec, ttl)?;
+        let identity = request.ownership.as_ref().unwrap();
+        let _guard =
+            super::ownership::lock_at(self.lease_state_dir()?, "allocation", identity).await?;
+        self.accounts()?;
+        match self.authorization(identity)? {
+            Some(row) => self
+                .recover_authorized(&request, &row)
+                .await
+                .map(|resource| {
+                    resource.map(|resource| Lease {
+                        resource,
+                        access: LeaseAccess {
+                            public_key: row.public_key,
+                            private_key: None,
+                        },
+                    })
+                }),
+            None => {
+                self.require_absent(identity).await?;
+                Ok(None)
+            }
+        }
+    }
+
+    /// Rent once with a durable original quote/deadline and an immutable attempt fence.
+    /// Fresh calls may generate an SSH key; recovery cannot replace a lost private key.
+    /// An acknowledged or uncertain attempt never rents again for the same identity.
+    pub async fn allocate(&self, spec: &ResourceSpec, ttl: Duration) -> Result<Lease> {
+        let mut request = self.lease_request(spec, ttl)?;
+        let identity = request.ownership.as_ref().unwrap().clone();
+        let _guard =
+            super::ownership::lock_at(self.lease_state_dir()?, "allocation", &identity).await?;
+        self.accounts()?;
+        if let Some(row) = self.authorization(&identity)? {
+            let resource = self
+                .recover_authorized(&request, &row)
+                .await?
+                .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+            return Ok(Lease {
+                resource,
+                access: LeaseAccess {
+                    public_key: row.public_key,
+                    private_key: None,
+                },
+            });
+        }
+        self.require_absent(&identity).await?;
+        let intent = request.clone();
+        let access = match request.ssh_public_key.as_deref() {
             Some(key) => LeaseAccess {
                 public_key: crate::security::canonical_public_key(key)?,
                 private_key: None,
             },
             None => LeaseAccess::generate()?,
         };
-        let mut request = spec.clone();
         request.ssh_public_key = Some(access.public_key.clone());
-        request.lease_duration_secs = Some(ttl.as_secs());
         let quotes = self.quotes(&request).await?;
         let mut refusal = quotes
             .errors
             .first()
             .map_or(ProviderErrorCode::NoStock, |failure| failure.code);
         for quote in quotes.quotes {
-            match self.create_managed(&request, &quote.candidate).await {
+            let mut fenced = false;
+            match self
+                .create_prepared(&request, &quote.candidate, Some(&intent), &mut fenced)
+                .await
+            {
                 Ok(resource) => return Ok(Lease { resource, access }),
                 Err(Error::Provider(
                     code @ (ProviderErrorCode::NoStock
@@ -116,25 +176,97 @@ impl CloudProvisioner {
                     | ProviderErrorCode::Quota
                     | ProviderErrorCode::RateLimited
                     | ProviderErrorCode::Unsupported),
-                )) => {
-                    self.destroy_managed(&quote.offer.provider, identity, None)
-                        .await?;
-                    refusal = code;
-                }
+                )) if !fenced => refusal = code,
                 Err(error) => return Err(error),
             }
         }
         Err(Error::Provider(refusal))
     }
 
-    /// Retire every lease in `namespace` with a resource past its provider-recorded deadline.
+    /// Retire leases in `namespace` past their original authorized deadline.
     ///
-    /// Reads only provider listings, so it is restart-safe; one failing provider stops no other.
+    /// With a state context, original private deadlines govern; provider metadata cannot extend them.
+    /// A failing account never stops cleanup of another correctly bound account.
     pub async fn retire_expired(&self, namespace: &str) -> RetireReport {
         let now = chrono::Utc::now();
+        let authorizations = self
+            .authorization_dir
+            .as_deref()
+            .map(super::authorization::load)
+            .transpose();
         let mut report = RetireReport::default();
-        for (provider, adapter) in self.providers.iter() {
-            let Some(native) = adapter.managed() else {
+        for provider in self
+            .init_errors
+            .keys()
+            .chain(self.account_regions.keys().filter(|provider| {
+                !self.providers.contains_key(*provider) && !self.init_errors.contains_key(*provider)
+            }))
+        {
+            report.failures.push(failure(
+                provider,
+                Error::Provider(ProviderErrorCode::ProviderNotConfigured),
+            ));
+        }
+        let entries = match &authorizations {
+            Ok(store) => store.as_ref().map(|store| &store.entries),
+            Err(_) => {
+                for (provider, adapter) in &self.providers {
+                    if adapter.managed().is_some() {
+                        report.failures.push(failure(
+                            provider,
+                            Error::Provider(ProviderErrorCode::Conflict),
+                        ));
+                    }
+                }
+                return report;
+            }
+        };
+        // Stored obligations exist even when a different account lists no objects.
+        // Eligibility is per authorization: a changed historical account must not
+        // block another lease explicitly authorized against the current account.
+        let mut eligible =
+            std::collections::HashMap::<CloudProvider, std::collections::HashSet<String>>::new();
+        if let Some(entries) = entries {
+            for row in entries
+                .values()
+                .filter(|row| row.metadata.identity.namespace == namespace)
+            {
+                let provider = super::quotes::Candidate::decode(&row.candidate)
+                    .expect("loaded authorizations have valid candidates")
+                    .offer
+                    .provider;
+                if self.managed_adapter(&provider).is_err() {
+                    report.failures.push(failure(
+                        &provider,
+                        Error::Provider(ProviderErrorCode::ProviderNotConfigured),
+                    ));
+                } else if !self
+                    .account_binding(&provider)
+                    .is_ok_and(|binding| row.accounts.get(provider.catalog_key()) == Some(&binding))
+                {
+                    report.failures.push(failure(
+                        &provider,
+                        Error::Provider(ProviderErrorCode::Conflict),
+                    ));
+                } else {
+                    eligible
+                        .entry(provider)
+                        .or_default()
+                        .insert(row.metadata.identity.lease_id.clone());
+                }
+            }
+        }
+        let providers = if entries.is_some() {
+            eligible.keys().cloned().collect::<Vec<_>>()
+        } else {
+            self.providers.keys().cloned().collect()
+        };
+        for provider in &providers {
+            let Some(native) = self
+                .providers
+                .get(provider)
+                .and_then(|adapter| adapter.managed())
+            else {
                 continue;
             };
             let listed = match native.list(namespace).await {
@@ -146,9 +278,32 @@ impl CloudProvisioner {
             };
             let mut expired: Vec<ManagedLeaseIdentity> = Vec::new();
             for resource in listed {
+                let deadline = if let Some(entries) = entries {
+                    let original = entries
+                        .get(&resource.lease_id)
+                        .filter(|row| row.metadata.identity.namespace == namespace);
+                    match original {
+                        Some(row)
+                            if eligible
+                                .get(provider)
+                                .is_some_and(|leases| leases.contains(&resource.lease_id)) =>
+                        {
+                            Some(row.metadata.expires_at)
+                        }
+                        _ => {
+                            report.failures.push(failure(
+                                provider,
+                                Error::Provider(ProviderErrorCode::Conflict),
+                            ));
+                            continue;
+                        }
+                    }
+                } else {
+                    resource.expires_at
+                };
                 let due = &resource.instance.provider == provider
                     && resource.is_present()
-                    && resource.expires_at.is_some_and(|deadline| deadline <= now);
+                    && deadline.is_some_and(|deadline| deadline <= now);
                 let identity = ManagedLeaseIdentity {
                     namespace: resource.namespace,
                     lease_id: resource.lease_id,

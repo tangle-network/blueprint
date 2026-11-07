@@ -49,7 +49,7 @@ impl ManagedMetadata {
         Ok(metadata)
     }
 
-    fn validate(&self) -> Result<()> {
+    pub(super) fn validate(&self) -> Result<()> {
         if self.identity.validate().is_err()
             || self.request_fingerprint.len() != 64
             || !self
@@ -59,6 +59,13 @@ impl ManagedMetadata {
             || self.expires_at <= self.created_at
             || self.endpoint_port == Some(0)
         {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn check_deadline(&self) -> Result<()> {
+        if self.expires_at <= Utc::now() {
             return Err(Error::Provider(ProviderErrorCode::Conflict));
         }
         Ok(())

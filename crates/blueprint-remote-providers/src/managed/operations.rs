@@ -17,22 +17,48 @@ fn owned(
 }
 
 impl CloudProvisioner {
-    /// Rent the selected candidate once; uncertain outcomes are never failed over.
+    /// Rent an explicit original quote. With a lease state context, record its
+    /// authorization before creating; without one this is the legacy low-level path.
     pub async fn create_managed(
         &self,
         spec: &ResourceSpec,
         candidate: &str,
     ) -> Result<ManagedResource> {
-        spec.validate()
-            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
         let identity = spec
             .ownership
+            .as_ref()
+            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let mut fenced = false;
+        if let Some(root) = self.authorization_dir.as_deref() {
+            let _guard = super::ownership::lock_at(root, "allocation", identity).await?;
+            if let Some(row) = self.authorization(identity)? {
+                return self
+                    .recover_authorized(spec, &row)
+                    .await?
+                    .ok_or(Error::Provider(ProviderErrorCode::Conflict));
+            }
+            self.require_absent(identity).await?;
+            return self
+                .create_prepared(spec, candidate, Some(spec), &mut fenced)
+                .await;
+        }
+        self.create_prepared(spec, candidate, None, &mut fenced)
+            .await
+    }
+
+    pub(super) fn validate_candidate(
+        &self,
+        spec: &ResourceSpec,
+        candidate: &Candidate,
+    ) -> Result<ResourceSpec> {
+        spec.validate()
+            .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        spec.ownership
             .as_ref()
             .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
         if spec.lease_duration_secs.is_none_or(|seconds| seconds == 0) {
             return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
         }
-        let candidate = Candidate::decode(candidate)?;
         if candidate.request_fingerprint != request_fingerprint(spec)? {
             return Err(Error::Provider(ProviderErrorCode::Conflict));
         }
@@ -56,7 +82,23 @@ impl CloudProvisioner {
         {
             return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
         }
-        let _guard = super::ownership::lock(provider, identity).await?;
+        Ok(resolved)
+    }
+
+    pub(super) async fn finish_assignment(
+        &self,
+        spec: &ResourceSpec,
+        candidate: &Candidate,
+        resource: ManagedResource,
+        metadata: Option<&metadata::ManagedMetadata>,
+        observed: bool,
+    ) -> Result<ManagedResource> {
+        let resolved = self.validate_candidate(spec, candidate)?;
+        let identity = spec
+            .ownership
+            .as_ref()
+            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let provider = &candidate.offer.provider;
         let native = self.managed_adapter(provider)?;
         let fingerprint = candidate.allocation_fingerprint()?;
         let validate = |resource: &ManagedResource| {
@@ -82,7 +124,8 @@ impl CloudProvisioner {
             if resource.instance.region.is_empty() || !price.is_finite() || price <= 0.0 {
                 return Err(Error::Provider(ProviderErrorCode::Indeterminate));
             }
-            if resource.instance.id != id
+            if metadata.is_some_and(|metadata| resource.expires_at != Some(metadata.expires_at))
+                || resource.instance.id != id
                 || class != candidate.offer.gpu_class
                 || count != candidate.offer.gpu_count
                 || resource.instance.region != candidate.offer.region
@@ -97,7 +140,10 @@ impl CloudProvisioner {
             }
             Ok(())
         };
-        let complete = async |resource: ManagedResource| -> Result<ManagedResource> {
+        let finish = async |resource: ManagedResource| -> Result<ManagedResource> {
+            if let Some(metadata) = metadata {
+                metadata.check_deadline()?;
+            }
             validate(&resource)?;
             let id = resource.instance.id.clone();
             let resource = native
@@ -107,24 +153,54 @@ impl CloudProvisioner {
             assigned(&resource, &id)?;
             let resource = native.complete(&resolved, resource).await?;
             assigned(&resource, &id)?;
+            if let Some(metadata) = metadata {
+                metadata.check_deadline()?;
+            }
             Ok(resource)
         };
-        let existing = native.list(&identity.namespace).await?;
-        let existing: Vec<_> = existing
-            .into_iter()
-            .filter(|resource| {
-                resource.namespace == identity.namespace
-                    && resource.lease_id == identity.lease_id
-                    && resource.kind == ManagedResourceKind::Instance
-                    && resource.is_present()
-            })
-            .collect();
-        if existing.len() > 1 {
-            return Err(Error::Provider(ProviderErrorCode::Conflict));
-        }
-        if let Some(resource) = existing.into_iter().next() {
+        if observed {
             assigned(&resource, &resource.instance.id)?;
-            return complete(resource).await;
+        }
+        finish(resource).await
+    }
+
+    pub(super) async fn create_prepared(
+        &self,
+        spec: &ResourceSpec,
+        encoded: &str,
+        intent: Option<&ResourceSpec>,
+        fenced: &mut bool,
+    ) -> Result<ManagedResource> {
+        let candidate = Candidate::decode(encoded)?;
+        let resolved = self.validate_candidate(spec, &candidate)?;
+        let provider = &candidate.offer.provider;
+        if self
+            .selection
+            .as_ref()
+            .is_some_and(|selected| !selected.contains(provider))
+        {
+            return Err(Error::Provider(ProviderErrorCode::ProviderNotConfigured));
+        }
+        let identity = spec
+            .ownership
+            .as_ref()
+            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let _guard = super::ownership::lock(provider, identity).await?;
+        let native = self.managed_adapter(provider)?;
+        let existing = native.list(&identity.namespace).await?;
+        let mut existing = existing.into_iter().filter(|resource| {
+            resource.namespace == identity.namespace
+                && resource.lease_id == identity.lease_id
+                && resource.kind == ManagedResourceKind::Instance
+                && resource.is_present()
+        });
+        if let Some(resource) = existing.next() {
+            if intent.is_some() || existing.next().is_some() {
+                return Err(Error::Provider(ProviderErrorCode::Conflict));
+            }
+            return self
+                .finish_assignment(spec, &candidate, resource, None, true)
+                .await;
         }
         let fresh = native
             .offers(&resolved, &candidate.offer.region)
@@ -142,8 +218,81 @@ impl CloudProvisioner {
                     && valid_offer(&resolved, offer)
             })
             .ok_or(Error::Provider(ProviderErrorCode::NoStock))?;
-        let resource = native.create(&resolved, &fresh, &fingerprint).await?;
-        complete(resource).await
+        let metadata = metadata::ManagedMetadata::for_spec(
+            spec,
+            &candidate.allocation_fingerprint()?,
+            chrono::Utc::now(),
+        )?;
+        if let Some(intent) = intent {
+            let row = authorization::Authorization {
+                intent: authorization::intent(intent)?,
+                public_key: spec
+                    .ssh_public_key
+                    .clone()
+                    .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?,
+                candidate: encoded.into(),
+                metadata: metadata.clone(),
+                accounts: self.accounts()?,
+            };
+            // Even a failed durable write is an uncertain fence, never a failover signal.
+            *fenced = true;
+            self.reserve(row).await?;
+        }
+        metadata.check_deadline()?;
+        let resource = native.create(&resolved, &fresh, &metadata).await?;
+        self.finish_assignment(spec, &candidate, resource, Some(&metadata), false)
+            .await
+    }
+
+    pub(super) async fn require_absent(&self, identity: &ManagedLeaseIdentity) -> Result<()> {
+        if self
+            .list_managed(&identity.namespace)
+            .await?
+            .iter()
+            .any(|resource| resource.lease_id == identity.lease_id && resource.is_present())
+        {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        Ok(())
+    }
+
+    pub(super) async fn recover_authorized(
+        &self,
+        spec: &ResourceSpec,
+        row: &authorization::Authorization,
+    ) -> Result<Option<ManagedResource>> {
+        if row.intent != authorization::intent(spec)? || row.accounts != self.accounts()? {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        let key = spec
+            .ssh_public_key
+            .as_deref()
+            .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
+        if crate::security::canonical_public_key(key)?
+            != crate::security::canonical_public_key(&row.public_key)?
+        {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        let mut effective = spec.clone();
+        effective.ssh_public_key = Some(row.public_key.clone());
+        let candidate = Candidate::decode(&row.candidate)?;
+        self.validate_candidate(&effective, &candidate)?;
+        let identity = &row.metadata.identity;
+        let resources = self.list_managed(&identity.namespace).await?;
+        let mut matching = resources.into_iter().filter(|resource| {
+            resource.lease_id == identity.lease_id
+                && resource.is_present()
+                && resource.kind == ManagedResourceKind::Instance
+        });
+        let Some(resource) = matching.next() else {
+            return Ok(None);
+        };
+        if matching.next().is_some() {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
+        self.finish_assignment(&effective, &candidate, resource, Some(&row.metadata), true)
+            .await
+            .map(Some)
     }
 
     pub async fn status_managed(
@@ -211,6 +360,12 @@ impl CloudProvisioner {
         identity
             .validate()
             .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        if self.authorization_dir.is_some()
+            && let Some(row) = self.authorization(identity)?
+            && row.accounts.get(provider.catalog_key()) != Some(&self.account_binding(provider)?)
+        {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
         let _guard = super::ownership::lock(provider, identity).await?;
         let native = self.managed_adapter(provider)?;
         let primary = match provider_id {

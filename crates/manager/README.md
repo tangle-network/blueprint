@@ -34,7 +34,11 @@ is uploaded over lease SSH access, never placed in the provider launch request.
 Provider ownership combines a persisted random manager identity and service IDs.
 The owner ID in `blueprint/manager-owner` is synced before rental; invalid IDs fail
 closed. Preserve manager state across restart and stop managers before moving it.
-Provider deadlines drive startup and periodic `retire_expired` reconciliation;
+The SDK private authorization store in the same data directory is initialized
+for managed GPU adapters only with a new manager owner and opened without repair
+thereafter. Existing owners without SDK authorization state need explicit operator
+reconciliation before GPU use; CPU-only startup does not require it. Original
+SDK-authorized deadlines drive startup and periodic `retire_expired` reconciliation;
 GPU leases do not enter the legacy deployment tracker. Inventory and creation
 share an OS-backed service lock in manager state, independent of cache roots.
 Initialized CPU-only adapters do not participate in managed inventory; a missing or failed

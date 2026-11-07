@@ -7,7 +7,7 @@ fn invalid() -> Error {
     Error::Provider(ProviderErrorCode::InvalidRequest)
 }
 
-fn directory(path: &Path, private: bool) -> Result<()> {
+pub(super) fn directory(path: &Path, private: bool) -> Result<()> {
     let metadata = fs::symlink_metadata(path).map_err(|_| invalid())?;
     if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return Err(invalid());
@@ -39,6 +39,52 @@ pub(super) async fn lock(
 pub async fn lock_lease(state_dir: &Path, identity: &ManagedLeaseIdentity) -> Result<fs::File> {
     let base = fs::canonicalize(state_dir).map_err(|_| invalid())?;
     lock_scope(base, "lease", identity).await
+}
+
+pub(super) async fn lock_at(
+    base: &Path,
+    scope: &str,
+    identity: &ManagedLeaseIdentity,
+) -> Result<fs::File> {
+    lock_scope(
+        fs::canonicalize(base).map_err(|_| invalid())?,
+        scope,
+        identity,
+    )
+    .await
+}
+
+pub(super) fn open_file(path: &Path, create: bool, exclusive: bool) -> Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options
+        .read(true)
+        .write(create)
+        .create(create && !exclusive)
+        .create_new(exclusive)
+        .truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    let file = options.open(path).map_err(|_| invalid())?;
+    let metadata = file.metadata().map_err(|_| invalid())?;
+    if !metadata.is_file() {
+        return Err(invalid());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        if metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.permissions().mode() & 0o077 != 0
+            || metadata.nlink() != 1
+        {
+            return Err(invalid());
+        }
+    }
+    Ok(file)
 }
 
 async fn lock_scope(
@@ -100,30 +146,7 @@ async fn lock_scope(
         let locks = parent.join("gpu-operation-locks");
         builder.create(&locks).map_err(|_| invalid())?;
         directory(&locks, true)?;
-        let mut options = fs::OpenOptions::new();
-        options.create(true).read(true).write(true).truncate(false);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options
-                .mode(0o600)
-                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-        }
-        let file = options.open(locks.join(filename)).map_err(|_| invalid())?;
-        let metadata = file.metadata().map_err(|_| invalid())?;
-        if !metadata.is_file() {
-            return Err(invalid());
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::{MetadataExt, PermissionsExt};
-            if metadata.uid() != unsafe { libc::geteuid() }
-                || metadata.permissions().mode() & 0o077 != 0
-                || metadata.nlink() != 1
-            {
-                return Err(invalid());
-            }
-        }
+        let file = open_file(&locks.join(filename), true, false)?;
         file.lock().map_err(|_| invalid())?;
         Ok(file)
     })

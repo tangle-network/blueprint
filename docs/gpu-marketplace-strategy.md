@@ -31,8 +31,11 @@ from the catalog. Local operator hardware is measured per device rather than
 inferred from host RAM.
 
 The managed create/status/list/destroy operations are the provider primitive.
-`allocate(spec, ttl)` adds per-lease SSH access; `retire_expired(namespace)`
-retires leases from their provider-recorded deadlines. The manager uploads and
+`allocate(spec, ttl)` adds per-lease SSH access and an original authorization in
+explicit caller-owned private state; `recover_lease(spec, ttl)` only adopts existing
+capacity. `retire_expired(namespace)` enforces the stored original deadlines.
+The [state contract](../crates/blueprint-remote-providers/README.md#durable-gpu-allocation)
+owns restart, account binding, and portability requirements. The manager uploads and
 starts the blueprint it rents capacity for. Blueprints share the same adapters.
 
 The process boundary is `cargo tangle cloud
