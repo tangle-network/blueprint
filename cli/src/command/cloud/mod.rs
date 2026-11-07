@@ -1,7 +1,7 @@
 //! Cloud commands for Blueprint services.
 //!
 //! These commands configure providers, quote live prices, and inspect and terminate deployments
-//! recorded in the deployment tracker. None of them allocates capacity.
+//! recorded in the deployment tracker. Managed JSON verbs share the SDK rental lifecycle.
 //!
 //! # Examples
 //!
@@ -35,6 +35,9 @@ use color_eyre::{
 use std::path::PathBuf;
 
 mod config;
+mod json;
+mod schema;
+pub use schema::{MAX_JSON_BYTES, SCHEMA_VERSION};
 mod estimate;
 mod policy;
 mod preflight;
@@ -45,6 +48,37 @@ pub use policy::{CostOptimization, RemoteDeploymentPolicy};
 
 #[derive(Subcommand, Debug)]
 pub enum CloudCommands {
+    /// Emit the offline catalog and generated process contract.
+    Catalog {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Return all SDK-ranked live quotes and provider failures.
+    Quote {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Create from an exact quote with existing durable authorization state.
+    Create {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Recover an original lease without requesting capacity.
+    Recover {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Enroll deliberately new caller-owned private state; never repairs lost state.
+    StateInit {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// Destroy only the exact managed identity and confirm absence.
+    Destroy {
+        #[arg(long, required = true)]
+        json: bool,
+    },
+
     /// Set up cloud provider access
     #[command(visible_alias = "cfg")]
     Configure {
@@ -78,6 +112,9 @@ pub enum CloudCommands {
     /// Check deployment status
     #[command(visible_alias = "s")]
     Status {
+        /// Read a managed provider ID from JSON stdin instead of the tracker.
+        #[arg(long, conflicts_with_all = ["service_id", "watch"])]
+        json: bool,
         /// Deployment or service ID (shows all if not specified)
         service_id: Option<String>,
 
@@ -104,7 +141,11 @@ pub enum CloudCommands {
 
     /// List configured providers
     #[command(visible_alias = "ls")]
-    List,
+    List {
+        /// List namespace-scoped managed resources from JSON stdin.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Validate cloud/TEE readiness and emit bootstrap env settings
     #[command(visible_alias = "check")]
@@ -125,6 +166,23 @@ pub enum CloudCommands {
         #[arg(long)]
         write_env_file: Option<PathBuf>,
     },
+}
+
+impl CloudCommands {
+    /// JSON calls never initialize tracing with inherited process environment.
+    pub fn is_json(&self) -> bool {
+        matches!(
+            self,
+            Self::Catalog { .. }
+                | Self::Quote { .. }
+                | Self::Create { .. }
+                | Self::Recover { .. }
+                | Self::StateInit { .. }
+                | Self::Destroy { .. }
+                | Self::Status { json: true, .. }
+                | Self::List { json: true }
+        )
+    }
 }
 
 /// Open the deployment tracker at the manager's path; a missing one tracks nothing.
@@ -154,6 +212,14 @@ async fn open_tracker() -> Result<DeploymentTracker> {
 /// * Termination is rejected or fails
 pub async fn execute(command: CloudCommands) -> Result<()> {
     match command {
+        CloudCommands::Catalog { .. } => json::execute(json::Operation::Catalog).await,
+        CloudCommands::Quote { .. } => json::execute(json::Operation::Quote).await,
+        CloudCommands::Create { .. } => json::execute(json::Operation::Create).await,
+        CloudCommands::Recover { .. } => json::execute(json::Operation::Recover).await,
+        CloudCommands::StateInit { .. } => json::execute(json::Operation::StateInit).await,
+        CloudCommands::Destroy { .. } => json::execute(json::Operation::Destroy).await,
+        CloudCommands::Status { json: true, .. } => json::execute(json::Operation::Status).await,
+        CloudCommands::List { json: true } => json::execute(json::Operation::List).await,
         CloudCommands::Configure {
             provider,
             region,
@@ -166,7 +232,11 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
 
         CloudCommands::Estimate(options) => estimate::estimate(options).await,
 
-        CloudCommands::Status { service_id, watch } => status::show_status(service_id, watch).await,
+        CloudCommands::Status {
+            service_id,
+            watch,
+            json: false,
+        } => status::show_status(service_id, watch).await,
 
         // Clap requires `service_id` unless `--all`, so no ID here means every deployment.
         CloudCommands::Terminate {
@@ -175,7 +245,7 @@ pub async fn execute(command: CloudCommands) -> Result<()> {
             yes,
         } => status::terminate(service_id, yes).await,
 
-        CloudCommands::List => config::list_providers().await,
+        CloudCommands::List { json: false } => config::list_providers().await,
 
         CloudCommands::Preflight {
             provider,

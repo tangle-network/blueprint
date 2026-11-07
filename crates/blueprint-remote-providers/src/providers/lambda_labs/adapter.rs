@@ -22,8 +22,11 @@ pub struct LambdaLabsAdapter {
 }
 
 impl LambdaLabsAdapter {
+    /// Environment binding shared with the generated credential descriptor.
+    pub const API_KEY_ENV: &'static str = "LAMBDA_LABS_API_KEY";
+
     pub async fn new() -> Result<Self> {
-        let key = std::env::var("LAMBDA_LABS_API_KEY")
+        let key = std::env::var(Self::API_KEY_ENV)
             .map_err(|_| Error::Provider(ProviderErrorCode::ProviderNotConfigured))?;
         let mut adapter = Self::with_credentials(key)?;
         adapter.default_region = std::env::var("LAMBDA_LABS_REGION").ok();

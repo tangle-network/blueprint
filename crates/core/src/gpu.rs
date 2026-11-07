@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub const CATALOG_JSON: &str = include_str!("../gpu-catalog.json");
 
 /// Hardware properties of one GPU, independent of host RAM or rental prices.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GpuClass {

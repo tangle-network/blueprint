@@ -23,8 +23,11 @@ pub struct RunPodAdapter {
 }
 
 impl RunPodAdapter {
+    /// Environment binding shared with the generated credential descriptor.
+    pub const API_KEY_ENV: &'static str = "RUNPOD_API_KEY";
+
     pub async fn new() -> Result<Self> {
-        let key = std::env::var("RUNPOD_API_KEY")
+        let key = std::env::var(Self::API_KEY_ENV)
             .map_err(|_| Error::Provider(ProviderErrorCode::ProviderNotConfigured))?;
         let mut adapter = Self::with_credentials(key)?;
         if let Ok(cloud) = std::env::var("RUNPOD_CLOUD_TYPE") {

@@ -75,3 +75,25 @@ Custom `ManagedProviderAdapter::create` implementations preserve prepared
 release. Low-level quoted operations retain weaker restart guarantees. Legacy
 Lium orphan retries preserve native timestamps and require exact original metadata
 before another rent request.
+
+## Process metadata
+
+The optional `schema` feature derives credential descriptors from the same
+`ProviderCredentials` variants the factory constructs; each constructed adapter
+must satisfy `ManagedProviderAdapter`. Credential environment names share the
+actual constructor constants. No clients, credentials or environment discovery
+are needed to enumerate descriptors. Request/response schema generation lives
+at the [CLI boundary](../../cli/README.md#managed-gpu-json-boundary); core schema
+metadata is optional and does not change its default/no-std feature contract.
+
+An SDK-generated candidate must satisfy the one encoded-size invariant owned by
+`managed/quotes.rs` both when emitted and decoded. New candidates contain service-origin native offers and selected arm metadata
+without copied measurements, not an account authorization. Ranking still uses
+the original private rows; ProviderQuote.measurement is a distinct public
+MeasurementReceipt with audit hashes/counters rather than private execution
+locators. This is a minor Rust API change requiring containing release/adoption.
+Existing version1 records/full-arm candidates retain their original bytes and
+legacy validation; neither source normalization nor record repair runs on load.
+New normalized measured candidates cannot be downgraded to old validators. They are
+reversible and must not be rewritten or treated as secret storage. Durable SDK
+state remains the authority across process calls.

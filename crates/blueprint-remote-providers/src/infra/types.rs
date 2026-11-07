@@ -16,6 +16,7 @@ pub struct ProvisionedInstance {
 }
 
 /// Instance status
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InstanceStatus {
     Starting,

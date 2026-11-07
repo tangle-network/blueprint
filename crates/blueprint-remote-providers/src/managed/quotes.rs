@@ -5,6 +5,8 @@ use blueprint_core::resources::GpuArm;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+const MAX_ENCODED_CANDIDATE_BYTES: usize = 65_536;
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Candidate {
@@ -15,7 +17,7 @@ pub(super) struct Candidate {
 
 impl Candidate {
     pub fn decode(value: &str) -> Result<Self> {
-        if value.len() > 65_536 {
+        if value.len() > MAX_ENCODED_CANDIDATE_BYTES {
             return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
         }
         URL_SAFE_NO_PAD
@@ -42,6 +44,13 @@ impl Candidate {
             &bytes,
         )))
     }
+}
+
+/// One selector projection shared by new encoding and legacy-aware validation.
+pub(super) fn selector(arm: &GpuArm) -> GpuArm {
+    let mut selected = arm.clone();
+    selected.measurements.clear();
+    selected
 }
 
 pub(super) fn resolve(spec: &ResourceSpec, arm: Option<&GpuArm>) -> ResourceSpec {
@@ -158,21 +167,33 @@ fn quote(spec: &ResourceSpec, offer: NativeOffer, arm: Option<&GpuArm>) -> Resul
         .as_ref()
         .and_then(|row| row.output_tokens_per_second());
     let token_cost = throughput.map(|rate| offer.hourly_cost_usd * 1_000_000.0 / (rate * 3600.0));
+    // Normalize only newly emitted public provenance; old stored candidates are untouched.
+    let mut offer = offer;
+    let source = url::Url::parse(&offer.pricing_source)
+        .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?;
+    if !matches!(source.scheme(), "http" | "https") || source.host_str().is_none() {
+        return Err(Error::Provider(ProviderErrorCode::ProviderError));
+    }
+    offer.pricing_source = source.origin().ascii_serialization();
     let candidate = Candidate {
         request_fingerprint: request_fingerprint(spec)?,
         offer: offer.clone(),
-        arm: arm.cloned(),
+        arm: arm.map(selector),
     };
     let candidate = serde_json::to_vec(&candidate)
         .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
+    let candidate = URL_SAFE_NO_PAD.encode(candidate);
+    if candidate.len() > MAX_ENCODED_CANDIDATE_BYTES {
+        return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+    }
     Ok(ProviderQuote {
         offer,
-        candidate: URL_SAFE_NO_PAD.encode(candidate),
+        candidate,
         family: arm.map(|arm| arm.family.clone()),
         arm: arm.map(|arm| arm.arm.clone()),
         output_tokens_per_second: throughput,
         usd_per_million_output_tokens: token_cost,
-        measurement,
+        measurement: measurement.as_ref().map(MeasurementReceipt::from),
     })
 }
 

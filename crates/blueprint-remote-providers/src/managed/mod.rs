@@ -8,7 +8,11 @@ mod metadata;
 mod operations;
 mod ownership;
 mod quotes;
+#[cfg(feature = "schema")]
+mod schema;
 mod types;
+#[cfg(feature = "schema")]
+pub use schema::{CredentialField, ProviderDescriptor, provider_catalog};
 
 pub use blueprint_core::resources::ManagedLeaseIdentity;
 pub use credentials::ProviderCredentials;

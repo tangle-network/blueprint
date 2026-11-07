@@ -132,6 +132,13 @@ enum Commands {
 pub(crate) async fn run() -> Result<()> {
     let args = collect_args();
     let cli = Cli::parse_from(args);
+    #[cfg(feature = "remote-providers")]
+    let json_mode = matches!(&cli.command, Commands::Cloud { command } if command.is_json());
+    #[cfg(not(feature = "remote-providers"))]
+    let json_mode = false;
+    if !json_mode {
+        init_tracing_subscriber();
+    }
     match cli.command {
         #[cfg(feature = "full")]
         Commands::Blueprint { command } => blueprint::run(command).await?,

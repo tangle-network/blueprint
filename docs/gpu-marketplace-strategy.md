@@ -38,8 +38,11 @@ The [state contract](../crates/blueprint-remote-providers/README.md#durable-gpu-
 owns restart, account binding, and portability requirements. The manager uploads and
 starts the blueprint it rents capacity for. Blueprints share the same adapters.
 
-The process boundary is `cargo tangle cloud
-catalog/quote/create/status/list/destroy --json`. Credentials and requests arrive
+The source process boundary is `cargo tangle cloud
+catalog/quote/create/recover/status/list/destroy/state-init --json`; its
+[CLI contract](../cli/README.md#managed-gpu-json-boundary) owns versioning, bounds,
+explicit private-state enrollment and restart behavior. Containing release and
+central generated-client adoption require separate qualification. Credentials and requests arrive
 on stdin. Quotes return the ranked list from one SDK ranking function. Unknown
 prices are unselectable; direct and aggregated offers are deduplicated by
 underlying cloud, SKU, and region. Measured throughput can rank cost per token.
@@ -59,3 +62,15 @@ Slashing origins must call the evidence verifier before accepting a claim.
 SDK libraries publish through [release-plz](../.github/workflows/release-plz.yml).
 The binary uses its [maintained release path](../.github/workflows/release.yml).
 Consumers adopt released artifacts and verify the pinned checksums.
+
+Measured quote selection uses the original private recipe and publishes a typed
+counter/hash receipt, service-origin pricing provenance and a measurement-free
+candidate arm selector. Original request fingerprints and old private version1
+records remain unchanged; this is public provenance projection, not measurement
+or hardware attestation. The containing minor release and actual measured
+throughput/adoption evidence remain required. Central must preserve original SDK
+state/spec/key/accounts, map absolute expiry into its existing renewal guard and
+use its maintained N6 bootstrap; its earlier stateless draft is incompatible.
+Provider boot commands remain distinct from workload upload arguments. No
+downloader, private workload config transport, hardware verifier or new TTL
+implementation is introduced by these process verbs.

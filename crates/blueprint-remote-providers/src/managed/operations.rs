@@ -1,4 +1,4 @@
-use super::quotes::{Candidate, resolve, valid_offer};
+use super::quotes::{Candidate, resolve, selector, valid_offer};
 use super::*;
 use crate::{CloudProvider, CloudProvisioner, Error};
 
@@ -59,15 +59,32 @@ impl CloudProvisioner {
         if candidate.request_fingerprint != request_fingerprint(spec)? {
             return Err(Error::Provider(ProviderErrorCode::Conflict));
         }
-        let arm_matches = match &candidate.arm {
-            None => spec.arms.is_empty(),
-            Some(selected) => spec
-                .arms
-                .iter()
-                .any(|arm| serde_json::to_value(arm).ok() == serde_json::to_value(selected).ok()),
+        let canonical_arm = match &candidate.arm {
+            None if spec.arms.is_empty() => None,
+            None => return Err(Error::Provider(ProviderErrorCode::InvalidRequest)),
+            Some(selected) => Some(
+                spec.arms
+                    .iter()
+                    .find_map(|arm| {
+                        // Legacy full-arm candidates retain exact equality. New selectors
+                        // compare against the original arm with only measurements cleared.
+                        let expected = if selected.measurements.is_empty() {
+                            selector(arm)
+                        } else {
+                            arm.clone()
+                        };
+                        serde_json::to_value(expected)
+                            .is_ok_and(|expected| {
+                                serde_json::to_value(selected)
+                                    .is_ok_and(|selected| expected == selected)
+                            })
+                            .then_some(arm)
+                    })
+                    .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?,
+            ),
         };
-        let resolved = resolve(spec, candidate.arm.as_ref());
-        if !arm_matches || !valid_offer(&resolved, &candidate.offer) {
+        let resolved = resolve(spec, canonical_arm);
+        if !valid_offer(&resolved, &candidate.offer) {
             return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
         }
         let provider = &candidate.offer.provider;

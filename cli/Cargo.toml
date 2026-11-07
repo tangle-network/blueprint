@@ -13,6 +13,8 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+schemars = { workspace = true, optional = true, features = ["std"] }
+zeroize = { workspace = true, optional = true }
 blueprint-core = { workspace = true, features = ["tracing"] }
 blueprint-runner = { optional = true, workspace = true, features = ["networking", "tangle"] }
 blueprint-std = { workspace = true, features = ["std"] }
@@ -84,6 +86,7 @@ chrono = { workspace = true }
 dirs = { workspace = true }
 
 [dev-dependencies]
+wiremock.workspace = true
 # Path-only dev-deps to break publish cycles via testing-utils -> client-tangle -> cargo-tangle.
 # Cargo strips path-only dev-deps from published manifests.
 blueprint-keystore = { path = "../crates/keystore", features = ["bn254"] }
@@ -133,4 +136,11 @@ full = [
 ]
 cloud-only = ["remote-providers"]
 vm-debug = ["full", "blueprint-manager/vm-sandbox"]
-remote-providers = ["dep:blueprint-remote-providers", "blueprint-manager?/remote-providers"]
+remote-providers = [
+  "dep:blueprint-remote-providers",
+  "blueprint-remote-providers/schema",
+  "blueprint-manager?/remote-providers",
+  "dep:schemars",
+  "dep:zeroize",
+  "dep:sha2",
+]
