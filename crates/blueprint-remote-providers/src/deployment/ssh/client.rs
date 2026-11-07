@@ -566,7 +566,7 @@ if [ "$ACTUAL_SHA" != "{sha}" ]; then
 fi
 
 # Extract — support tar.xz, tar.gz, zip, or raw binary.
-case "{archive_url}" in
+case '{archive_url}' in
     *.tar.xz) tar -xJf blueprint-archive -C "$WORK_DIR" ;;
     *.tar.gz|*.tgz) tar -xzf blueprint-archive -C "$WORK_DIR" ;;
     *.zip) unzip -o blueprint-archive -d "$WORK_DIR" ;;

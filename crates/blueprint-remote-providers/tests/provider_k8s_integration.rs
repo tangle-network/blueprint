@@ -222,7 +222,7 @@ async fn test_aws_adapter_kubernetes_routing() {
         storage_gb: 1.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     for (name, target) in targets {
@@ -322,7 +322,7 @@ async fn test_gcp_adapter_kubernetes_routing() {
         storage_gb: 1.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     for (name, target) in targets {
@@ -1045,7 +1045,7 @@ async fn test_comprehensive_k8s_provider_integration() {
         storage_gb: 1.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     // Test generic K8s deployment for each provider

@@ -201,7 +201,7 @@ async fn test_version_metadata_handling() {
             storage_gb: 20.0,
             gpu_count: None,
             allow_spot: false,
-            qos: Default::default(),
+            ..Default::default()
         },
         env_vars: env_vars.clone(),
         deployment_time: SystemTime::now(),

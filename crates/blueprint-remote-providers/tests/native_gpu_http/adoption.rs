@@ -2,7 +2,7 @@
 use super::*;
 use blueprint_remote_providers::managed::ProviderErrorCode;
 
-async fn runpod_adoption_probe(field: &str, changed: Value, reject: bool) {
+async fn runpod_adoption_probe(field: &str, changed: Value, reject: bool, cap: Option<f64>) {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let peer = runpod_v2_peer().await;
     let credentials = serde_json::from_value(json!({
@@ -21,7 +21,7 @@ async fn runpod_adoption_probe(field: &str, changed: Value, reject: bool) {
     spec.gpu_vram_gb = Some(140);
     spec.image = Some("example.invalid/review:v1".into());
     spec.region = Some("US-TEST-1".into());
-    spec.max_hourly_cost_usd = Some(9.0);
+    spec.max_hourly_cost_usd = cap;
     let quote = provisioner.quotes(&spec).await.unwrap().quotes.remove(0);
     let original = provisioner
         .create_managed(&spec, &quote.candidate)
@@ -66,28 +66,19 @@ async fn runpod_adoption_probe(field: &str, changed: Value, reject: bool) {
 }
 
 #[tokio::test]
-async fn review_matching_metadata_cannot_adopt_a_different_gpu_class() {
-    runpod_adoption_probe("/gpu/id", json!("NVIDIA GeForce RTX 3090"), true).await;
-}
-
-#[tokio::test]
-async fn review_matching_metadata_cannot_adopt_a_different_gpu_count() {
-    runpod_adoption_probe("/gpu/count", json!(1), true).await;
-}
-
-#[tokio::test]
-async fn review_matching_metadata_cannot_adopt_an_unrequested_region() {
-    runpod_adoption_probe("/dataCenterId", json!("US-OTHER"), true).await;
-}
-
-#[tokio::test]
-async fn review_matching_metadata_cannot_adopt_a_price_above_the_explicit_cap() {
-    runpod_adoption_probe("/cost", json!(9.01), true).await;
-}
-
-#[tokio::test]
-async fn review_matching_assignment_adopts_the_one_existing_vm() {
-    runpod_adoption_probe("/cost", json!(9.0), false).await;
+async fn review_adoption_preserves_the_assignment_and_both_price_ceilings() {
+    for (field, changed, reject, cap) in [
+        ("/gpu/id", json!("NVIDIA GeForce RTX 3090"), true, Some(9.0)),
+        ("/gpu/count", json!(1), true, Some(9.0)),
+        ("/dataCenterId", json!("US-OTHER"), true, Some(9.0)),
+        ("/cost", json!(9.01), true, Some(9.0)),
+        ("/cost", json!(9.01), true, Some(90.0)),
+        ("/cost", json!(9.01), true, None),
+        ("/cost", json!(9.0), false, Some(90.0)),
+        ("/cost", json!(9.0), false, None),
+    ] {
+        runpod_adoption_probe(field, changed, reject, cap).await;
+    }
 }
 
 async fn transport_probe(status: u16, expected: ProviderErrorCode) {

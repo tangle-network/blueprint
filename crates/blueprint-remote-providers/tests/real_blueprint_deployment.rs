@@ -241,7 +241,7 @@ impl RealBlueprintTest {
             storage_gb: 20.0,
             gpu_count: None,
             allow_spot: true,
-            qos: Default::default(),
+            ..Default::default()
         };
 
         let mut env_vars = HashMap::new();
