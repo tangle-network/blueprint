@@ -302,7 +302,7 @@ async fn run(operation: Operation, input: &[u8]) -> Result<Value> {
                     .recover_lease(&request.spec, ttl)
                     .await
                     .map_err(code)?
-                    .map(public)
+                    .map(|lease| public(lease.resource))
                     .transpose()?,
             })
         }
