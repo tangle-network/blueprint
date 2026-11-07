@@ -419,11 +419,8 @@ async fn allocation_worker() -> anyhow::Result<()> {
         CloudProvider::DigitalOcean,
         Box::new(DigitalOceanAdapter::new().await?),
     );
-    let provider = if std::env::var("GPU_LIFECYCLE_PROVIDER")? == "runpod" {
-        CloudProvider::RunPod
-    } else {
-        CloudProvider::VastAi
-    };
+    let provider: CloudProvider =
+        serde_json::from_value(json!(std::env::var("GPU_LIFECYCLE_PROVIDER")?))?;
     let state = std::path::PathBuf::from(std::env::var_os("GPU_LIFECYCLE_STATE").unwrap());
     let manager = RemoteProviderManager::with_provisioner(
         CloudProvisioner::with_providers(adapters).with_credentials(credentials)?,
@@ -443,6 +440,9 @@ async fn allocation_worker() -> anyhow::Result<()> {
             .error_for_status()?;
     }
     let mut request = spec(3600);
+    if provider == CloudProvider::VastAi {
+        request.command = Some(vec!["sleep".into(), "infinity".into()]);
+    }
     request.provider = Some(provider);
     if alternatives {
         request.gpu_class = None;
@@ -463,7 +463,8 @@ async fn allocation_worker() -> anyhow::Result<()> {
     };
     let result = manager
         .on_service_initiated(9, 9, Some(request), artifact, env)
-        .await;
+        .await
+        .inspect_err(|error| eprintln!("manager allocation refused: {error}"));
     if alternatives {
         result?;
         manager.on_service_terminated(9, 9).await?;
@@ -471,11 +472,7 @@ async fn allocation_worker() -> anyhow::Result<()> {
     }
     std::fs::write(
         std::env::var_os("GPU_LIFECYCLE_RESULT").unwrap(),
-        if result.is_ok() {
-            "allocated"
-        } else {
-            "refused"
-        },
+        result.map_or("refused", |_| "allocated"),
     )?;
     Ok(())
 }
@@ -491,6 +488,7 @@ fn worker(
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("HOME", state)
+        .env("RUST_TEST_NOCAPTURE", "1")
         .env("GPU_LIFECYCLE_PEER", endpoint)
         .env("GPU_LIFECYCLE_PROVIDER", provider)
         .env("GPU_LIFECYCLE_STATE", state)
@@ -524,9 +522,11 @@ async fn restart_missing_enabled_vast_credentials_cannot_rent_runpod() -> anyhow
             expected
         );
     }
-    assert_eq!(state.lock().unwrap().vast.len(), 1);
-    assert!(state.lock().unwrap().pods.is_empty());
-    assert_eq!(state.lock().unwrap().launches.len(), 1);
+    let state = state.lock().unwrap();
+    assert_eq!(state.vast.len(), 1);
+    assert!(state.pods.is_empty());
+    assert_eq!(state.launches.len(), 1);
+    assert_eq!(state.launches[0]["onstart"], "exec sleep infinity");
     server.abort();
     Ok(())
 }

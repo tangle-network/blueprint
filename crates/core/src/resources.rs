@@ -308,7 +308,7 @@ impl ResourceSpec {
             }) {
                 return Err("No GPU class satisfies count and per-device VRAM".into());
             }
-        } else if self.gpu_class.is_some() || self.gpu_vram_gb.is_some() {
+        } else if self.arms.is_empty() && (self.gpu_class.is_some() || self.gpu_vram_gb.is_some()) {
             return Err("GPU class and VRAM require a GPU count".into());
         }
         if self
