@@ -13,6 +13,7 @@ pub use blueprint_core::resources::ManagedLeaseIdentity;
 pub use credentials::ProviderCredentials;
 pub use leases::{Lease, LeaseAccess, RetireReport};
 pub use metadata::ManagedMetadata;
+pub use ownership::lock_lease;
 pub use quotes::rank_quotes;
 pub use types::*;
 

@@ -28,11 +28,25 @@ pub(super) async fn lock(
     provider: &CloudProvider,
     identity: &ManagedLeaseIdentity,
 ) -> Result<fs::File> {
-    identity.validate().map_err(|_| invalid())?;
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|path| PathBuf::from(path).join(".cache")))
         .ok_or_else(invalid)?;
+    lock_scope(base, provider.catalog_key(), identity).await
+}
+
+/// Serialize service inventory and allocation in the manager's shared state store.
+pub async fn lock_lease(state_dir: &Path, identity: &ManagedLeaseIdentity) -> Result<fs::File> {
+    let base = fs::canonicalize(state_dir).map_err(|_| invalid())?;
+    lock_scope(base, "lease", identity).await
+}
+
+async fn lock_scope(
+    base: PathBuf,
+    scope: &str,
+    identity: &ManagedLeaseIdentity,
+) -> Result<fs::File> {
+    identity.validate().map_err(|_| invalid())?;
     if !base.is_absolute()
         || base
             .components()
@@ -44,7 +58,7 @@ pub(super) async fn lock(
         &aws_lc_rs::digest::SHA256,
         format!(
             "{}:{}:{}",
-            provider.catalog_key(),
+            scope,
             identity.namespace.len(),
             identity.namespace
         )

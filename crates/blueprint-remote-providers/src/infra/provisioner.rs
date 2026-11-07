@@ -37,7 +37,7 @@ pub struct CloudProvisioner {
     pub(crate) providers: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>>,
     pub(crate) regions: HashMap<CloudProvider, String>,
     /// Why each provider the environment names has no adapter.
-    init_errors: HashMap<CloudProvider, String>,
+    pub(crate) init_errors: HashMap<CloudProvider, String>,
     retry_policy: RetryPolicy,
 }
 
@@ -153,6 +153,17 @@ impl CloudProvisioner {
             init_errors: HashMap::new(),
             retry_policy: RetryPolicy::default(),
         }
+    }
+
+    /// Limit a caller-owned allocator to providers explicitly enabled by its operator.
+    pub fn only_providers(mut self, enabled: &[CloudProvider]) -> Self {
+        self.providers
+            .retain(|provider, _| enabled.contains(provider));
+        self.init_errors
+            .retain(|provider, _| enabled.contains(provider));
+        self.regions
+            .retain(|provider, _| enabled.contains(provider));
+        self
     }
 
     pub fn with_regions(mut self, regions: HashMap<CloudProvider, String>) -> Self {

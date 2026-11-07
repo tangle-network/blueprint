@@ -90,7 +90,7 @@ http = { workspace = true }
 # Additional dependencies for integration tests
 chrono = { workspace = true, features = ["serde", "clock"] }
 rand = { workspace = true }
-tracing-subscriber.workspace = true
+tracing-subscriber = { workspace = true, features = ["fmt"] }
 # For regex in wiremock matchers
 regex = { workspace = true }
 # For container-based testing
