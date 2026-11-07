@@ -209,6 +209,13 @@ impl CloudProvisioner {
             errors: Vec::new(),
         };
         for (provider, adapter) in &self.providers {
+            if self
+                .selection
+                .as_ref()
+                .is_some_and(|selected| !selected.contains(provider))
+            {
+                continue;
+            }
             if spec
                 .provider
                 .as_ref()

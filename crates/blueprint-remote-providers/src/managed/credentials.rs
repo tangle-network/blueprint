@@ -53,12 +53,30 @@ impl core::fmt::Debug for ProviderCredentials {
 }
 
 impl CloudProvisioner {
+    /// Add checked native accounts to an allocator with other (e.g. CPU) adapters.
+    pub fn with_credentials(mut self, credentials: Vec<ProviderCredentials>) -> Result<Self> {
+        let native = Self::from_credentials(credentials)?;
+        if native
+            .providers
+            .keys()
+            .any(|provider| self.providers.contains_key(provider))
+        {
+            return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
+        }
+        self.providers.extend(native.providers);
+        self.account_bindings.extend(native.account_bindings);
+        self.regions.extend(native.regions);
+        self.account_regions.extend(native.account_regions);
+        Ok(self)
+    }
+
     pub fn from_credentials(credentials: Vec<ProviderCredentials>) -> Result<Self> {
         use crate::providers::{
             BittensorLiumAdapter, LambdaLabsAdapter, RunPodAdapter, VastAiAdapter,
         };
         let mut clients: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>> = HashMap::new();
         let mut regions = HashMap::new();
+        let mut bindings = HashMap::new();
         for credential in &credentials {
             let (provider, api_key, endpoint, region) = match credential {
                 ProviderCredentials::RunPod {
@@ -97,11 +115,18 @@ impl CloudProvisioner {
                     }
                 };
             }
+            macro_rules! bound {
+                ($client:expr) => {{
+                    let client = $client;
+                    bindings.insert(provider.clone(), client.credential_binding()?);
+                    Box::new(client) as Box<dyn CloudProviderAdapter>
+                }};
+            }
             let client: Box<dyn CloudProviderAdapter> = match credential {
-                ProviderCredentials::RunPod { .. } => Box::new(adapter!(RunPodAdapter)),
-                ProviderCredentials::VastAi { .. } => Box::new(adapter!(VastAiAdapter)),
+                ProviderCredentials::RunPod { .. } => bound!(adapter!(RunPodAdapter)),
+                ProviderCredentials::VastAi { .. } => bound!(adapter!(VastAiAdapter)),
                 ProviderCredentials::BittensorLium { .. } => {
-                    Box::new(adapter!(BittensorLiumAdapter))
+                    bound!(adapter!(BittensorLiumAdapter))
                 }
                 ProviderCredentials::LambdaLabs {
                     ssh_key_name,
@@ -113,7 +138,7 @@ impl CloudProvisioner {
                     if let Some(name) = ssh_key_name {
                         adapter = adapter.with_ssh_key_name(name.clone());
                     }
-                    Box::new(adapter)
+                    bound!(adapter)
                 }
             };
             if let Some(region) = region {
@@ -121,6 +146,8 @@ impl CloudProvisioner {
             }
             clients.insert(provider, client);
         }
-        Ok(Self::with_providers(clients).with_regions(regions))
+        let mut provisioner = Self::with_providers(clients).with_regions(regions);
+        provisioner.account_bindings = bindings;
+        Ok(provisioner)
     }
 }

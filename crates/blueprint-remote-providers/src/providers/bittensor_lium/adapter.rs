@@ -27,6 +27,13 @@ impl BittensorLiumAdapter {
         adapter.default_region = std::env::var("LIUM_REGION").ok();
         Ok(adapter)
     }
+    pub(crate) fn credential_binding(&self) -> Result<(String, Option<String>)> {
+        Ok((
+            crate::managed::authorization::credential_digest(&self.auth, &(&self.base_url,))?,
+            self.default_region.clone(),
+        ))
+    }
+
     pub fn with_credentials(api_key: String) -> Result<Self> {
         Self::with_endpoint(api_key, BASE_URL)
     }
@@ -324,7 +331,7 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
         &self,
         spec: &ResourceSpec,
         offer: &NativeOffer,
-        fingerprint: &str,
+        metadata: &ManagedMetadata,
     ) -> Result<ManagedResource> {
         spec.validate()
             .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
@@ -343,14 +350,16 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
                 .as_deref()
                 .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?,
         )?;
-        let mut metadata = ManagedMetadata::for_spec(spec, fingerprint, chrono::Utc::now())?;
+        metadata.check_deadline()?;
+        let fingerprint = metadata.request_fingerprint.clone();
         let mut original_offer = offer.clone();
         let mut owned = Vec::new();
         for raw in self.templates().await? {
             if let Some(existing) = Self::metadata(&raw)? {
                 if existing.identity == metadata.identity {
                     if existing.request_fingerprint != fingerprint
-                        || existing.expires_at <= chrono::Utc::now()
+                        || existing.created_at != metadata.created_at
+                        || existing.expires_at != metadata.expires_at
                         || raw["is_private"].as_bool() != Some(true)
                     {
                         return Err(Error::Provider(ProviderErrorCode::Conflict));
@@ -362,8 +371,7 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
         if owned.len() > 1 {
             return Err(Error::Provider(ProviderErrorCode::Conflict));
         }
-        let template = if let Some((raw, existing)) = owned.pop() {
-            metadata = existing;
+        let template = if let Some((raw, _)) = owned.pop() {
             original_offer = raw["description"]
                 .as_str()
                 .and_then(|description| serde_json::from_str::<NativeOffer>(description).ok())
@@ -375,6 +383,7 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
                 || original_offer.gpu_class != offer.gpu_class
                 || original_offer.gpu_count != offer.gpu_count
                 || original_offer.spot != offer.spot
+                || original_offer.hourly_cost_usd > offer.hourly_cost_usd
                 || !original_offer.hourly_cost_usd.is_finite()
                 || original_offer.hourly_cost_usd <= 0.0
                 || spec
@@ -391,6 +400,7 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
             ports.push(22);
             ports.sort_unstable();
             ports.dedup();
+            metadata.check_deadline()?;
             let response=self.http.post_json(&format!("{}/templates",self.base_url),&self.auth,json!({"name":metadata.name(),"description":serde_json::to_string(&original_offer).map_err(|_|Error::Provider(ProviderErrorCode::InvalidRequest))?,"docker_image":image,"docker_image_tag":"","environment":env,"internal_ports":ports,"is_private":true,"one_time_template":true,"category":"DOCKER","volumes":["/workspace"]})).await?;
             let raw: Value = response
                 .json()
@@ -413,6 +423,7 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
             "termination_hours":spec.lease_duration_secs.unwrap_or(0)/3600,"initial_port_count":spec.ports.len()+usize::from(!spec.ports.contains(&22)),"enable_jupyter":false,"enable_backups":false,
             "expected_price_per_gpu_hour":expected_price});
         let idempotency_key = metadata.idempotency_key();
+        metadata.check_deadline()?;
         let response = self
             .http
             .post_json_idempotent(
@@ -437,7 +448,7 @@ impl ManagedProviderAdapter for BittensorLiumAdapter {
             .as_str()
             .filter(|id| uuid::Uuid::parse_str(id).is_ok())
             .ok_or(Error::Provider(ProviderErrorCode::Indeterminate))?;
-        let mut resource = metadata.bind(
+        let mut resource = metadata.clone().bind(
             ProvisionedInstance {
                 id: id.into(),
                 provider: CloudProvider::BittensorLium,

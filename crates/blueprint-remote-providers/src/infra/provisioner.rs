@@ -38,6 +38,10 @@ pub struct CloudProvisioner {
     pub(crate) regions: HashMap<CloudProvider, String>,
     /// Why each provider the environment names has no adapter.
     pub(crate) init_errors: HashMap<CloudProvider, String>,
+    pub(crate) account_bindings: HashMap<CloudProvider, (String, Option<String>)>,
+    pub(crate) account_regions: HashMap<CloudProvider, String>,
+    pub(crate) authorization_dir: Option<std::path::PathBuf>,
+    pub(crate) selection: Option<Vec<CloudProvider>>,
     retry_policy: RetryPolicy,
 }
 
@@ -51,8 +55,28 @@ impl CloudProvisioner {
             providers: HashMap::new(),
             regions: HashMap::new(),
             init_errors: HashMap::new(),
+            account_bindings: HashMap::new(),
+            account_regions: HashMap::new(),
+            authorization_dir: None,
+            selection: None,
             retry_policy: RetryPolicy::default(),
         };
+        macro_rules! native {
+            ($provider:expr,$adapter:ty) => {
+                match <$adapter>::new()
+                    .await
+                    .and_then(|adapter| Ok((adapter.credential_binding()?, adapter)))
+                {
+                    Ok((binding, adapter)) => {
+                        provisioner.account_bindings.insert($provider, binding);
+                        provisioner.providers.insert($provider, Box::new(adapter));
+                    }
+                    Err(error) => {
+                        provisioner.init_errors.insert($provider, error.to_string());
+                    }
+                }
+            };
+        }
         let present = |name: &str| std::env::var_os(name).is_some();
 
         #[cfg(feature = "aws")]
@@ -75,13 +99,13 @@ impl CloudProvisioner {
             provisioner.add(CloudProvider::Vultr, VultrAdapter::new().await);
         }
         if present("LAMBDA_LABS_API_KEY") {
-            provisioner.add(CloudProvider::LambdaLabs, LambdaLabsAdapter::new().await);
+            native!(CloudProvider::LambdaLabs, LambdaLabsAdapter);
         }
         if present("RUNPOD_API_KEY") {
-            provisioner.add(CloudProvider::RunPod, RunPodAdapter::new().await);
+            native!(CloudProvider::RunPod, RunPodAdapter);
         }
         if present("VAST_AI_API_KEY") {
-            provisioner.add(CloudProvider::VastAi, VastAiAdapter::new().await);
+            native!(CloudProvider::VastAi, VastAiAdapter);
         }
         if present("COREWEAVE_TOKEN") {
             provisioner.add(CloudProvider::CoreWeave, CoreWeaveAdapter::new().await);
@@ -111,10 +135,7 @@ impl CloudProvisioner {
             provisioner.add(CloudProvider::Render, RenderAdapter::new().await);
         }
         if present("LIUM_API_KEY") {
-            provisioner.add(
-                CloudProvider::BittensorLium,
-                BittensorLiumAdapter::new().await,
-            );
+            native!(CloudProvider::BittensorLium, BittensorLiumAdapter);
         }
         if present("HETZNER_API_TOKEN") {
             provisioner.add(CloudProvider::Hetzner, HetznerAdapter::new().await);
@@ -151,12 +172,24 @@ impl CloudProvisioner {
             providers,
             regions: HashMap::new(),
             init_errors: HashMap::new(),
+            account_bindings: HashMap::new(),
+            account_regions: HashMap::new(),
+            authorization_dir: None,
+            selection: None,
             retry_policy: RetryPolicy::default(),
         }
     }
 
     /// Limit a caller-owned allocator to providers explicitly enabled by its operator.
     pub fn only_providers(mut self, enabled: &[CloudProvider]) -> Self {
+        if self.authorization_dir.is_some() {
+            self.selection = Some(enabled.to_vec());
+            return self;
+        }
+        self.account_bindings
+            .retain(|provider, _| enabled.contains(provider));
+        self.account_regions
+            .retain(|provider, _| enabled.contains(provider));
         self.providers
             .retain(|provider, _| enabled.contains(provider));
         self.init_errors
@@ -167,6 +200,7 @@ impl CloudProvisioner {
     }
 
     pub fn with_regions(mut self, regions: HashMap<CloudProvider, String>) -> Self {
+        self.account_regions = regions.clone();
         self.regions = regions;
         self
     }
@@ -206,6 +240,15 @@ impl CloudProvisioner {
         region: &str,
         require_tee: bool,
     ) -> Result<ProvisionedInstance> {
+        if self
+            .selection
+            .as_ref()
+            .is_some_and(|selected| !selected.contains(&provider))
+        {
+            return Err(Error::Provider(
+                crate::managed::ProviderErrorCode::ProviderNotConfigured,
+            ));
+        }
         resource_spec
             .validate()
             .map_err(|_| Error::Provider(crate::managed::ProviderErrorCode::InvalidRequest))?;

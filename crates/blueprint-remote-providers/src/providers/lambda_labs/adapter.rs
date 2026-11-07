@@ -31,6 +31,20 @@ impl LambdaLabsAdapter {
         Ok(adapter)
     }
 
+    pub(crate) fn credential_binding(&self) -> Result<(String, Option<String>)> {
+        Ok((
+            crate::managed::authorization::credential_digest(
+                &self.auth,
+                &(
+                    &self.base_url,
+                    &self.ssh_key_name,
+                    &self.firewall_ruleset_ids,
+                ),
+            )?,
+            self.default_region.clone(),
+        ))
+    }
+
     pub fn with_credentials(api_key: String) -> Result<Self> {
         Self::with_endpoint(api_key, BASE_URL)
     }
@@ -423,7 +437,7 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
         &self,
         spec: &ResourceSpec,
         offer: &NativeOffer,
-        fingerprint: &str,
+        metadata: &ManagedMetadata,
     ) -> Result<ManagedResource> {
         spec.validate()
             .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
@@ -441,7 +455,7 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
             .as_ref()
             .filter(|name| !name.is_empty())
             .ok_or(Error::Provider(ProviderErrorCode::Unsupported))?;
-        let metadata = ManagedMetadata::for_spec(spec, fingerprint, chrono::Utc::now())?;
+        metadata.check_deadline()?;
         let mut body = json!({"name":metadata.name(),"region_name":offer.region,"instance_type_name":offer.instance_type,
             "quantity":1,"ssh_key_names":[key],"tags":metadata.tags().into_iter().map(|(key,value)|json!({"key":key,"value":value})).collect::<Vec<_>>(),
             "firewall_rulesets":self.firewall_ruleset_ids.iter().map(|id|json!({"id":id})).collect::<Vec<_>>()});
@@ -471,6 +485,7 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
         } else if !spec.env.is_empty() || spec.command.is_some() || spec.manifest.is_some() {
             return Err(Error::Provider(ProviderErrorCode::Unsupported));
         }
+        metadata.check_deadline()?;
         let response = self
             .http
             .post_json(
@@ -500,7 +515,9 @@ impl ManagedProviderAdapter for LambdaLabsAdapter {
             private_ip: None,
             status: InstanceStatus::Starting,
         };
-        let mut resource = metadata.bind(instance, ManagedResourceKind::Instance);
+        let mut resource = metadata
+            .clone()
+            .bind(instance, ManagedResourceKind::Instance);
         resource.gpu_class = Some(offer.gpu_class.clone());
         resource.gpu_count = Some(offer.gpu_count);
         resource.gpu_vram_gb =

@@ -405,18 +405,15 @@ async fn allocation_worker() -> anyhow::Result<()> {
 
     use blueprint_remote_providers::infra::traits::CloudProviderAdapter;
     use blueprint_remote_providers::providers::digitalocean::adapter::DigitalOceanAdapter;
-    use blueprint_remote_providers::providers::{RunPodAdapter, VastAiAdapter};
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let mut adapters: HashMap<CloudProvider, Box<dyn CloudProviderAdapter>> = HashMap::new();
-    adapters.insert(
-        CloudProvider::RunPod,
-        Box::new(RunPodAdapter::with_endpoint("synthetic".into(), &endpoint)?),
-    );
+    let mut credentials = vec![serde_json::from_value(
+        json!({"provider":"runpod","api_key":"synthetic","endpoint":endpoint}),
+    )?];
     if std::env::var_os("VAST_AI_API_KEY").is_some() {
-        adapters.insert(
-            CloudProvider::VastAi,
-            Box::new(VastAiAdapter::with_endpoint("synthetic".into(), &endpoint)?),
-        );
+        credentials.push(serde_json::from_value(
+            json!({"provider":"vast-ai","api_key":"synthetic","endpoint":endpoint}),
+        )?);
     }
     adapters.insert(
         CloudProvider::DigitalOcean,
@@ -429,7 +426,7 @@ async fn allocation_worker() -> anyhow::Result<()> {
     };
     let state = std::path::PathBuf::from(std::env::var_os("GPU_LIFECYCLE_STATE").unwrap());
     let manager = RemoteProviderManager::with_provisioner(
-        CloudProvisioner::with_providers(adapters),
+        CloudProvisioner::with_providers(adapters).with_credentials(credentials)?,
         &state,
         HashMap::from([
             (CloudProvider::RunPod, "US-TEST-1".into()),
