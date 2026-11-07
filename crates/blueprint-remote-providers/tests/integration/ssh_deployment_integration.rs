@@ -211,7 +211,7 @@ async fn test_deploy_blueprint_as_container() {
         storage_gb: 20.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -270,7 +270,7 @@ async fn test_deploy_native_blueprint_binary() {
         storage_gb: 50.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     let mut config_vars = HashMap::new();
@@ -328,7 +328,7 @@ async fn test_deploy_blueprint_binary_as_service() {
         storage_gb: 100.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -462,7 +462,7 @@ async fn test_blueprint_deployment_lifecycle() {
         storage_gb: 20.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -534,7 +534,7 @@ async fn test_blueprint_with_qos_metrics() {
         storage_gb: 20.0,
         gpu_count: None,
         allow_spot: false,
-        qos: Default::default(),
+        ..Default::default()
     };
 
     let mut env_vars = HashMap::new();
@@ -605,7 +605,7 @@ async fn test_blueprint_resource_specifications() {
                 storage_gb: 10.0,
                 gpu_count: None,
                 allow_spot: true,
-                qos: Default::default(),
+                ..Default::default()
             },
         ),
         (
@@ -616,7 +616,7 @@ async fn test_blueprint_resource_specifications() {
                 storage_gb: 50.0,
                 gpu_count: None,
                 allow_spot: false,
-                qos: Default::default(),
+                ..Default::default()
             },
         ),
         (
@@ -627,7 +627,7 @@ async fn test_blueprint_resource_specifications() {
                 storage_gb: 200.0,
                 gpu_count: None,
                 allow_spot: false,
-                qos: Default::default(),
+                ..Default::default()
             },
         ),
         (
@@ -638,7 +638,7 @@ async fn test_blueprint_resource_specifications() {
                 storage_gb: 500.0,
                 gpu_count: Some(2),
                 allow_spot: false,
-                qos: Default::default(),
+                ..Default::default()
             },
         ),
     ];

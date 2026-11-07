@@ -179,7 +179,7 @@ mod actual_working_tests {
             storage_gb: 10.0,
             gpu_count: None,
             allow_spot: false,
-            qos: Default::default(),
+            ..Default::default()
         };
 
         // Verify the resource spec is valid
