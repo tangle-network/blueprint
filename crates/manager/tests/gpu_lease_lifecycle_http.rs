@@ -463,7 +463,8 @@ async fn allocation_worker() -> anyhow::Result<()> {
     };
     let result = manager
         .on_service_initiated(9, 9, Some(request), artifact, env)
-        .await;
+        .await
+        .inspect_err(|error| eprintln!("manager allocation refused: {error}"));
     if alternatives {
         result?;
         manager.on_service_terminated(9, 9).await?;
@@ -471,11 +472,7 @@ async fn allocation_worker() -> anyhow::Result<()> {
     }
     std::fs::write(
         std::env::var_os("GPU_LIFECYCLE_RESULT").unwrap(),
-        if result.is_ok() {
-            "allocated"
-        } else {
-            "refused"
-        },
+        result.map_or("refused", |_| "allocated"),
     )?;
     Ok(())
 }
@@ -491,6 +488,7 @@ fn worker(
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("HOME", state)
+        .env("RUST_TEST_NOCAPTURE", "1")
         .env("GPU_LIFECYCLE_PEER", endpoint)
         .env("GPU_LIFECYCLE_PROVIDER", provider)
         .env("GPU_LIFECYCLE_STATE", state)
