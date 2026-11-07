@@ -56,8 +56,8 @@ jobs:
     needs: check-release-enabled
     if: needs.check-release-enabled.outputs.enabled == 'true'
     runs-on: ubuntu-latest
-    # Bound a stalled publish run while leaving room for registry rate limits.
-    timeout-minutes: 90
+    # Bound a stalled publish run while leaving room for registry rate limits; batch-publish.sh paces every crate, and a whole-workspace release publishes all of them.
+    timeout-minutes: 180
     steps:
       # Generating a GitHub token, so that PRs and tags created by
       # the release-plz-action can trigger actions workflows.

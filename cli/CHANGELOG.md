@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.30...cargo-tangle-v0.6.0) - 2026-11-07
+
+### Added
+
+- *(cargo-tangle)* ship cloud commands in released cargo-tangle and add a cloud-only flavor (#1623)
+
 ## [0.5.0-alpha.30](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.5.0-alpha.29...cargo-tangle-v0.5.0-alpha.30) - 2026-11-07
 
 ### Added
