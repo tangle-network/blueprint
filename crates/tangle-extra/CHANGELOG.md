@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.20](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.2.0-alpha.19...blueprint-tangle-extra-v0.2.0-alpha.20) - 2026-11-07
+
+### Other
+
+- Format the std-only crate roots (#1644)
+- Bind GPU allocation and exact resource prices to public RFQ quotes (#1632)
+- mark tangle-extra, client-evm, client-tangle and gossip-primitives std-only (#1628)
+
 ## [0.2.0-alpha.19](https://github.com/tangle-network/blueprint/compare/blueprint-tangle-extra-v0.2.0-alpha.18...blueprint-tangle-extra-v0.2.0-alpha.19) - 2026-11-06
 
 ### Other

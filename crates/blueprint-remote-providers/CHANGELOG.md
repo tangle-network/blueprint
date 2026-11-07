@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.26](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.2.0-alpha.25...blueprint-remote-providers-v0.2.0-alpha.26) - 2026-11-07
+
+### Added
+
+- *(remote-providers)* add OVH Public Cloud as a cloud provider (#1640)
+
+### Fixed
+
+- *(remote-providers)* reach GCP with the operator's Google login (#1642)
+
+### Other
+
+- Restore fmt and clippy on the GPU provider HTTP paths (#1647)
+- Ship native GPU sellers through one managed lease boundary (#1643)
+- Share GPU resource requests and preserve scheduling metadata (#1630)
+
 ## [0.2.0-alpha.25](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.2.0-alpha.24...blueprint-remote-providers-v0.2.0-alpha.25) - 2026-11-06
 
 ### Added

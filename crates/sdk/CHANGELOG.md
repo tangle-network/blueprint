@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-alpha.23](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.2.0-alpha.22...blueprint-sdk-v0.2.0-alpha.23) - 2026-11-07
+
+### Other
+
+- Share GPU resource requests and preserve scheduling metadata (#1630)
+
 ## [0.2.0-alpha.22](https://github.com/tangle-network/blueprint/compare/blueprint-sdk-v0.2.0-alpha.21...blueprint-sdk-v0.2.0-alpha.22) - 2026-11-06
 
 ### Other
