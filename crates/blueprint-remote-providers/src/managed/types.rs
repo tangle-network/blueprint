@@ -21,6 +21,19 @@ pub enum ProviderErrorCode {
     ProviderError,
 }
 
+/// The one SDK error classification; caller configuration and encoding are invalid requests.
+impl From<crate::Error> for ProviderErrorCode {
+    fn from(error: crate::Error) -> Self {
+        use crate::Error as E;
+        match error {
+            E::Provider(code) => code,
+            E::ProviderNotConfigured(_) => Self::ProviderNotConfigured,
+            E::ConfigurationError(_) | E::SerializationError(_) => Self::InvalidRequest,
+            _ => Self::ProviderError,
+        }
+    }
+}
+
 impl core::fmt::Display for ProviderErrorCode {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let value = serde_json::to_value(self).map_err(|_| core::fmt::Error)?;

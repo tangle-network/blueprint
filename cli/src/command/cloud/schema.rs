@@ -126,23 +126,16 @@ pub(super) struct Catalog {
     pub schema_sha256: String,
 }
 
-fn request_schema<T: JsonSchema>() -> serde_json::Value {
-    serde_json::to_value(
-        SchemaSettings::draft2020_12()
-            .for_deserialize()
-            .into_generator()
-            .into_root_schema_for::<T>(),
-    )
-    .expect("schema has a JSON representation")
+fn schema<T: JsonSchema>(settings: SchemaSettings) -> serde_json::Value {
+    serde_json::to_value(settings.into_generator().into_root_schema_for::<T>())
+        .expect("schema has a JSON representation")
 }
+fn request_schema<T: JsonSchema>() -> serde_json::Value {
+    schema::<T>(SchemaSettings::draft2020_12().for_deserialize())
+}
+/// Schema of the complete response root, such as `Success<T>` or `Rejection`.
 fn response_schema<T: JsonSchema>() -> serde_json::Value {
-    serde_json::to_value(
-        SchemaSettings::draft2020_12()
-            .for_serialize()
-            .into_generator()
-            .into_root_schema_for::<Success<T>>(),
-    )
-    .expect("schema has a JSON representation")
+    schema::<T>(SchemaSettings::draft2020_12().for_serialize())
 }
 
 pub(super) fn boundary_schema() -> serde_json::Value {
@@ -156,12 +149,12 @@ pub(super) fn boundary_schema() -> serde_json::Value {
             "destroy": request_schema::<DestroyRequest>()
         },
         "responses": {
-            "quote": response_schema::<QuoteSet>(), "create": response_schema::<Resource>(),
-            "recover": response_schema::<Recovery>(), "state-init": response_schema::<Initialized>(),
-            "status": response_schema::<Resource>(), "list": response_schema::<Resources>(),
-            "destroy": response_schema::<Destroyed>(),
-            "catalog": response_schema::<Catalog>(),
-            "error": serde_json::to_value(SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<Rejection>()).expect("schema has a JSON representation")
+            "quote": response_schema::<Success<QuoteSet>>(), "create": response_schema::<Success<Resource>>(),
+            "recover": response_schema::<Success<Recovery>>(), "state-init": response_schema::<Success<Initialized>>(),
+            "status": response_schema::<Success<Resource>>(), "list": response_schema::<Success<Resources>>(),
+            "destroy": response_schema::<Success<Destroyed>>(),
+            "catalog": response_schema::<Success<Catalog>>(),
+            "error": response_schema::<Rejection>()
         }
     })
 }

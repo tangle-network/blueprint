@@ -1,7 +1,7 @@
 //! Thin, durable process boundary. The SDK owns all provider and rental decisions.
 use super::schema::*;
 use blueprint_remote_providers::{
-    CloudProvisioner, Error, ManagedResource, ResourceSpec,
+    CloudProvisioner, ManagedResource, ResourceSpec,
     managed::{ManagedResourceKind, ProviderCredentials, ProviderErrorCode},
 };
 use serde::{
@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use std::{
     fmt,
     io::{Read, Write},
-    path::{Component, Path},
+    path::Path,
     time::Duration,
 };
 use zeroize::Zeroizing;
@@ -30,17 +30,6 @@ pub(super) enum Operation {
     Destroy,
 }
 type Result<T> = std::result::Result<T, ProviderErrorCode>;
-
-fn code(error: Error) -> ProviderErrorCode {
-    match error {
-        Error::Provider(code) => code,
-        Error::ProviderNotConfigured(_) => ProviderErrorCode::ProviderNotConfigured,
-        Error::ConfigurationError(_) | Error::SerializationError(_) => {
-            ProviderErrorCode::InvalidRequest
-        }
-        _ => ProviderErrorCode::ProviderError,
-    }
-}
 
 fn failure(code: ProviderErrorCode) -> Failure {
     use ProviderErrorCode as E;
@@ -140,7 +129,7 @@ fn parse<T: DeserializeOwned + VersionedRequest>(input: &[u8]) -> Result<T> {
 }
 
 fn configured(credentials: Vec<ProviderCredentials>) -> Result<CloudProvisioner> {
-    CloudProvisioner::from_credentials(credentials).map_err(code)
+    CloudProvisioner::from_credentials(credentials).map_err(Into::into)
 }
 
 fn spec(spec: &ResourceSpec) -> Result<()> {
@@ -183,44 +172,22 @@ fn rental_spec(request: &ResourceSpec) -> Result<Duration> {
         .ok_or(ProviderErrorCode::InvalidRequest)
 }
 
-fn private_root(root: &Path) -> Result<()> {
-    if !root.is_absolute()
-        || root
-            .components()
-            .any(|part| matches!(part, Component::ParentDir))
-    {
-        return Err(ProviderErrorCode::Conflict);
-    }
-    let mut path = std::path::PathBuf::new();
-    for part in root.components() {
-        path.push(part);
-        if std::fs::symlink_metadata(&path)
-            .map_err(|_| ProviderErrorCode::Conflict)?
-            .file_type()
-            .is_symlink()
-        {
-            return Err(ProviderErrorCode::Conflict);
-        }
-    }
-    let metadata = std::fs::symlink_metadata(root).map_err(|_| ProviderErrorCode::Conflict)?;
-    if !metadata.is_dir() {
-        return Err(ProviderErrorCode::Conflict);
-    }
+/// The CLI enrolls only owner-only roots; the SDK refuses unsafe paths and symlinks.
+fn owner_only(root: &Path) -> Result<()> {
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o077 != 0 {
-            return Err(ProviderErrorCode::Conflict);
-        }
+    if !std::fs::symlink_metadata(root).is_ok_and(|metadata| {
+        std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o077 == 0
+    }) {
+        return Err(ProviderErrorCode::Conflict);
     }
     Ok(())
 }
 
 fn resume(credentials: Vec<ProviderCredentials>, root: &Path) -> Result<CloudProvisioner> {
-    private_root(root)?;
+    owner_only(root)?;
     configured(credentials)?
         .with_lease_state_dir(root)
-        .map_err(code)
+        .map_err(Into::into)
 }
 
 fn public(resource: ManagedResource) -> Result<Resource> {
@@ -266,7 +233,7 @@ async fn run(operation: Operation, input: &[u8]) -> Result<Value> {
                 serde_json::to_vec(&schema).map_err(|_| ProviderErrorCode::ProviderError)?;
             value(Catalog {
                 gpus: blueprint_core::gpu::catalog(),
-                providers: blueprint_remote_providers::managed::provider_catalog().map_err(code)?,
+                providers: blueprint_remote_providers::managed::provider_catalog()?,
                 max_json_bytes: MAX_JSON_BYTES,
                 schema_sha256: format!("{:x}", Sha256::digest(bytes)),
                 boundary_schema: schema,
@@ -278,8 +245,7 @@ async fn run(operation: Operation, input: &[u8]) -> Result<Value> {
             value(
                 configured(request.credentials)?
                     .quotes(&request.spec)
-                    .await
-                    .map_err(code)?,
+                    .await?,
             )
         }
         Operation::Create => {
@@ -289,8 +255,7 @@ async fn run(operation: Operation, input: &[u8]) -> Result<Value> {
             value(public(
                 provisioner
                     .create_managed(&request.spec, &request.candidate)
-                    .await
-                    .map_err(code)?,
+                    .await?,
             )?)
         }
         Operation::Recover => {
@@ -300,15 +265,14 @@ async fn run(operation: Operation, input: &[u8]) -> Result<Value> {
             value(Recovery {
                 resource: provisioner
                     .recover_lease(&request.spec, ttl)
-                    .await
-                    .map_err(code)?
+                    .await?
                     .map(|lease| public(lease.resource))
                     .transpose()?,
             })
         }
         Operation::StateInit => {
             let request: StateRequest = parse(input)?;
-            private_root(&request.state_dir)?;
+            owner_only(&request.state_dir)?;
             if std::fs::read_dir(&request.state_dir)
                 .map_err(|_| ProviderErrorCode::Conflict)?
                 .next()
@@ -318,8 +282,7 @@ async fn run(operation: Operation, input: &[u8]) -> Result<Value> {
             }
             configured(request.credentials)?
                 .initialize_lease_state_dir(&request.state_dir)
-                .await
-                .map_err(code)?;
+                .await?;
             value(Initialized { initialized: true })
         }
         Operation::Status => {
@@ -328,18 +291,14 @@ async fn run(operation: Operation, input: &[u8]) -> Result<Value> {
             value(public(
                 provisioner
                     .status_managed(&request.provider, &request.identity, &request.provider_id)
-                    .await
-                    .map_err(code)?
+                    .await?
                     .ok_or(ProviderErrorCode::NotFound)?,
             )?)
         }
         Operation::List => {
             let request: ListRequest = parse(input)?;
             let provisioner = resume(request.credentials, &request.state_dir)?;
-            let resources = provisioner
-                .list_managed(&request.namespace)
-                .await
-                .map_err(code)?;
+            let resources = provisioner.list_managed(&request.namespace).await?;
             value(Resources {
                 resources: resources.into_iter().map(public).collect::<Result<_>>()?,
             })
@@ -353,8 +312,7 @@ async fn run(operation: Operation, input: &[u8]) -> Result<Value> {
                     &request.identity,
                     request.provider_id.as_deref(),
                 )
-                .await
-                .map_err(code)?;
+                .await?;
             value(Destroyed { destroyed: true })
         }
     }

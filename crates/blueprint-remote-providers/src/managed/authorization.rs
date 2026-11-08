@@ -61,6 +61,11 @@ fn store_identity() -> ManagedLeaseIdentity {
     }
 }
 
+fn state_root(root: &Path) -> Result<PathBuf> {
+    ownership::trusted_path(root).map_err(|_| conflict())?;
+    fs::canonicalize(root).map_err(|_| conflict())
+}
+
 pub(super) fn load(root: &Path) -> Result<Store> {
     if !cfg!(unix) {
         return Err(conflict());
@@ -105,7 +110,7 @@ impl CloudProvisioner {
         if !cfg!(unix) {
             return Err(conflict());
         }
-        let root = fs::canonicalize(root).map_err(|_| conflict())?;
+        let root = state_root(root)?;
         let _guard = ownership::lock_at(&root, "authorization-store", &store_identity()).await?;
         let store = Store {
             version: 1,
@@ -129,7 +134,7 @@ impl CloudProvisioner {
     /// Carry this directory with caller records and caller-owned SSH keys on restart/move.
     pub fn with_lease_state_dir(mut self, root: &Path) -> Result<Self> {
         self.checked_accounts()?;
-        let root = fs::canonicalize(root).map_err(|_| conflict())?;
+        let root = state_root(root)?;
         load(&root)?;
         self.authorization_dir = Some(root);
         Ok(self)

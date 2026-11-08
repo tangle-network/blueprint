@@ -73,13 +73,13 @@ pub struct RetireReport {
     pub failures: Vec<ProviderFailure>,
 }
 
-fn failure(provider: &CloudProvider, error: Error) -> ProviderFailure {
+pub(super) fn failure(
+    provider: &CloudProvider,
+    code: impl Into<ProviderErrorCode>,
+) -> ProviderFailure {
     ProviderFailure {
         provider: provider.clone(),
-        code: match error {
-            Error::Provider(code) => code,
-            _ => ProviderErrorCode::ProviderError,
-        },
+        code: code.into(),
     }
 }
 
@@ -202,20 +202,14 @@ impl CloudProvisioner {
                 !self.providers.contains_key(*provider) && !self.init_errors.contains_key(*provider)
             }))
         {
-            report.failures.push(failure(
-                provider,
-                Error::Provider(ProviderErrorCode::ProviderNotConfigured),
-            ));
+            report.failures.push(failure(provider, ProviderErrorCode::ProviderNotConfigured));
         }
         let entries = match &authorizations {
             Ok(store) => store.as_ref().map(|store| &store.entries),
             Err(_) => {
                 for (provider, adapter) in &self.providers {
                     if adapter.managed().is_some() {
-                        report.failures.push(failure(
-                            provider,
-                            Error::Provider(ProviderErrorCode::Conflict),
-                        ));
+                        report.failures.push(failure(provider, ProviderErrorCode::Conflict));
                     }
                 }
                 return report;
@@ -238,16 +232,13 @@ impl CloudProvisioner {
                 if self.managed_adapter(&provider).is_err() {
                     report.failures.push(failure(
                         &provider,
-                        Error::Provider(ProviderErrorCode::ProviderNotConfigured),
+                        ProviderErrorCode::ProviderNotConfigured,
                     ));
                 } else if !self
                     .account_binding(&provider)
                     .is_ok_and(|binding| row.accounts.get(provider.catalog_key()) == Some(&binding))
                 {
-                    report.failures.push(failure(
-                        &provider,
-                        Error::Provider(ProviderErrorCode::Conflict),
-                    ));
+                    report.failures.push(failure(&provider, ProviderErrorCode::Conflict));
                 } else {
                     eligible
                         .entry(provider)
@@ -291,10 +282,7 @@ impl CloudProvisioner {
                             Some(row.metadata.expires_at)
                         }
                         _ => {
-                            report.failures.push(failure(
-                                provider,
-                                Error::Provider(ProviderErrorCode::Conflict),
-                            ));
+                            report.failures.push(failure(provider, ProviderErrorCode::Conflict));
                             continue;
                         }
                     }

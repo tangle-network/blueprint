@@ -1,3 +1,4 @@
+use super::leases::failure;
 use super::*;
 use crate::{CloudProvider, CloudProvisioner, Error};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -245,10 +246,7 @@ impl CloudProvisioner {
                 continue;
             }
             let Some(native) = adapter.managed() else {
-                result.errors.push(ProviderFailure {
-                    provider: provider.clone(),
-                    code: ProviderErrorCode::Unsupported,
-                });
+                result.errors.push(failure(provider, ProviderErrorCode::Unsupported));
                 continue;
             };
             for arm in &arms {
@@ -270,22 +268,10 @@ impl CloudProvisioner {
                             }
                         }
                         if before == result.quotes.len() {
-                            result.errors.push(ProviderFailure {
-                                provider: provider.clone(),
-                                code: ProviderErrorCode::NoStock,
-                            });
+                            result.errors.push(failure(provider, ProviderErrorCode::NoStock));
                         }
                     }
-                    Err(error) => result.errors.push(ProviderFailure {
-                        provider: provider.clone(),
-                        code: match error {
-                            Error::Provider(code) => code,
-                            Error::ProviderNotConfigured(_) => {
-                                ProviderErrorCode::ProviderNotConfigured
-                            }
-                            _ => ProviderErrorCode::ProviderError,
-                        },
-                    }),
+                    Err(error) => result.errors.push(failure(provider, error)),
                 }
             }
         }
