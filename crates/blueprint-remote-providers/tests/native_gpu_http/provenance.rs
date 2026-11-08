@@ -37,8 +37,14 @@ async fn measured_quotes_project_public_receipts_and_preserve_private_intent() {
         "the complete private input still changes its commitment"
     );
     assert_eq!(quotes.quotes[0].offer.gpu_class, "nvidia-h200");
-    assert_eq!(quotes.quotes[0].offer.hourly_cost_usd, 9.0);
-    assert_eq!(quotes.quotes[1].offer.hourly_cost_usd, 6.0);
+    assert_eq!(
+        quotes.quotes[0].offer.hourly_cost_usd.to_bits(),
+        9.0f64.to_bits()
+    );
+    assert_eq!(
+        quotes.quotes[1].offer.hourly_cost_usd.to_bits(),
+        6.0f64.to_bits()
+    );
     assert_eq!(quotes.quotes[0].output_tokens_per_second, Some(1000.0));
     assert_eq!(quotes.quotes[0].usd_per_million_output_tokens, Some(2.5));
     let receipt = quotes.quotes[0].measurement.as_ref().unwrap();
