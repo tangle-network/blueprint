@@ -240,7 +240,7 @@ async fn exact_quote_lifecycle_keeps_foreign_scope_and_original_authority() {
         .body_json::<Value>()
         .unwrap();
     assert_eq!(launch["mounts"]["persistent"]["size"], 37);
-    assert_eq!(launch["ports"], json!(["8000/http"]));
+    assert_eq!(launch["ports"], json!(["22/tcp", "8000/http"]));
     let mut status = scoped(&base, &original);
     status["provider_id"] = resource["provider_id"].clone();
     assert_eq!(
