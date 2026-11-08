@@ -79,6 +79,14 @@ async fn refused(verb: &str, request: &Value, home: &Path, code: &str) {
     assert!(!ok);
     assert_eq!(response["error"]["code"], code);
 }
+/// `state-init` enrolls only an owner-only directory; `tempdir()` follows the umask.
+fn state_root() -> tempfile::TempDir {
+    use std::os::unix::fs::PermissionsExt;
+    tempfile::Builder::new()
+        .permissions(std::fs::Permissions::from_mode(0o700))
+        .tempdir()
+        .unwrap()
+}
 fn account(endpoint: &str) -> Value {
     json!([{"provider":"runpod","api_key":"synthetic-local-peer-key","endpoint":endpoint}])
 }
@@ -183,7 +191,7 @@ async fn offline_contract_and_closed_parser_are_real_process_boundaries() {
 #[tokio::test]
 async fn exact_quote_lifecycle_keeps_foreign_scope_and_original_authority() {
     let (server, state) = peer::runpod_peer_state().await;
-    let root = tempfile::tempdir().unwrap();
+    let root = state_root();
     let base = request(&server.uri(), root.path());
     call("state-init", &base, root.path()).await;
     refused("state-init", &base, root.path(), "conflict").await;
@@ -281,7 +289,7 @@ async fn exact_quote_lifecycle_keeps_foreign_scope_and_original_authority() {
         json!("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICYAqclxVqvBAc0OzItjBj4L68M4hqJPZbsnOUPuk0Ug");
     refused("create", &changed, root.path(), "conflict").await;
     assert_eq!(state.lock().unwrap().0, 1);
-    let foreign_root = tempfile::tempdir().unwrap();
+    let foreign_root = state_root();
     let foreign_base = request(&server.uri(), foreign_root.path());
     call("state-init", &foreign_base, foreign_root.path()).await;
     let foreign_spec = spec("cell-b", "lease-b");
@@ -356,7 +364,7 @@ async fn exact_quote_lifecycle_keeps_foreign_scope_and_original_authority() {
 async fn killed_create_recovers_in_new_process_and_lost_state_never_repairs() {
     use std::os::unix::fs::{PermissionsExt, symlink};
     let (server, state) = peer::runpod_peer_state().await;
-    let root = tempfile::tempdir().unwrap();
+    let root = state_root();
     let base = request(&server.uri(), root.path());
     call("state-init", &base, root.path()).await;
     let original = spec("restart-cell", "lease");
@@ -494,7 +502,7 @@ async fn measured_quotes_keep_public_provenance_and_bounded_failures() {
     let (private_server, private_state) =
         peer::runpod_peer_state_at(measured_recipe::PRIVATE_ENDPOINT).await;
     private_state.lock().unwrap().2[1]["price"]["secure"] = json!(3.0);
-    let private_root = tempfile::tempdir().unwrap();
+    let private_root = state_root();
     let endpoint = format!(
         "{}{}",
         private_server.uri(),
@@ -593,7 +601,7 @@ async fn actual_827_authority_recovers_without_rewriting_or_second_post() {
     );
     let (server, state) = peer::runpod_peer_state_at(measured_recipe::PRIVATE_ENDPOINT).await;
     state.lock().unwrap().2[1]["price"]["secure"] = json!(3.0);
-    let root = tempfile::tempdir().unwrap();
+    let root = state_root();
     let endpoint = format!("{}{}", server.uri(), measured_recipe::PRIVATE_ENDPOINT);
     let original =
         measured_recipe::recipe_value(&measured_recipe::measured_spec("legacy-cell", "lease"));
