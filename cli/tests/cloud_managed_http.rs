@@ -384,9 +384,13 @@ async fn killed_create_recovers_in_new_process_and_lost_state_never_repairs() {
     let mut child = spawn("create", &serde_json::to_vec(&create).unwrap(), root.path()).await;
     // Kill only once the acknowledged create is blocked reading its pod back.
     tokio::time::timeout(Duration::from_secs(10), async {
-        while !server.received_requests().await.unwrap().iter().any(|request| {
-            request.method == "GET" && request.url.path().starts_with("/pods/")
-        }) {
+        while !server
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .any(|request| request.method == "GET" && request.url.path().starts_with("/pods/"))
+        {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
