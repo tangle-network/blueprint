@@ -4,7 +4,7 @@ publish = false            # disable automatic publishing - we'll batch publish 
 publish_allow_dirty = true # add `--allow-dirty` to `cargo publish`
 publish_no_verify = true   # add `--no-verify` to `cargo publish`
 publish_timeout = "10m"    # set a timeout for `cargo publish`
-semver_check = false
+semver_check = true # cargo-semver-checks proposes the bump; it does not see public field type changes, so review those by hand
 
 [changelog]
 commit_preprocessors = [
