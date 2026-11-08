@@ -43,26 +43,26 @@ fn code(error: Error) -> ProviderErrorCode {
 }
 
 fn failure(code: ProviderErrorCode) -> Failure {
-    use ProviderErrorCode::*;
+    use ProviderErrorCode as E;
     Failure {
         code,
         message: match code {
-            InvalidRequest => "Invalid cloud request",
-            AuthRejected => "Provider rejected its credential",
-            ProviderNotConfigured => "Required provider account is unavailable",
-            NoStock => "No matching provider stock",
-            SkuUnknown => "Provider SKU is unknown",
-            Unsupported => "Cloud request is outside the supported boundary",
-            StillPresent => "Provider absence is not confirmed",
-            Preempted => "Provider preempted the resource",
-            Quota => "Provider quota is exhausted",
-            RateLimited => "Provider rate limited the operation",
-            NotFound => "Managed resource was not found",
-            Conflict => "Cloud request conflicts with its original authority",
-            Indeterminate => "Provider assignment is indeterminate",
-            ProviderError => "Provider operation failed",
+            E::InvalidRequest => "Invalid cloud request",
+            E::AuthRejected => "Provider rejected its credential",
+            E::ProviderNotConfigured => "Required provider account is unavailable",
+            E::NoStock => "No matching provider stock",
+            E::SkuUnknown => "Provider SKU is unknown",
+            E::Unsupported => "Cloud request is outside the supported boundary",
+            E::StillPresent => "Provider absence is not confirmed",
+            E::Preempted => "Provider preempted the resource",
+            E::Quota => "Provider quota is exhausted",
+            E::RateLimited => "Provider rate limited the operation",
+            E::NotFound => "Managed resource was not found",
+            E::Conflict => "Cloud request conflicts with its original authority",
+            E::Indeterminate => "Provider assignment is indeterminate",
+            E::ProviderError => "Provider operation failed",
         },
-        retryable: matches!(code, RateLimited | StillPresent | Indeterminate),
+        retryable: matches!(code, E::RateLimited | E::StillPresent | E::Indeterminate),
     }
 }
 

@@ -19,7 +19,7 @@ pub(crate) fn measured_spec(namespace: &str, lease: &str) -> ResourceSpec {
         "ssh_public_key":"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMo32AY0vFK7g5FBIBcyPdxaxSEM5rEc0kEzMVveA9b+",
         "ownership":{"namespace":namespace,"lease_id":lease},
         "weights":{"manifestSha":"aa".repeat(32),"sizeBytes":5},
-        "arms":[("nvidia-h200","h200","NVIDIA H200",1000, "11"), ("nvidia-b200","b200","NVIDIA B200",100,"22")].map(|(class,arm,sku,tokens,digest)| {
+        "arms":([("nvidia-h200","h200","NVIDIA H200",1000, "11"), ("nvidia-b200","b200","NVIDIA B200",100,"22")].map(|(class,arm,sku,tokens,digest)| {
             let row = |selected: bool| json!({
                 "family":"fixture-family","arm":arm,"gpu_class":class,"tp":2,"replicas":1,"allocated_gpu_count":2,
                 "provider":"runpod","provider_sku":sku,"region":"US-TEST-1","concurrency":8,
@@ -32,7 +32,7 @@ pub(crate) fn measured_spec(namespace: &str, lease: &str) -> ResourceSpec {
             });
             json!({"family":"fixture-family","arm":arm,"gpu_class":class,"gpu_count":2,"tp":2,"replicas":1,
                 "measurements":[row(false),row(true)]})
-        })
+        }))
     })).unwrap()
 }
 
