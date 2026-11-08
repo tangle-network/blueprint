@@ -1,3 +1,4 @@
+use super::ownership::{lock, lock_at};
 use super::quotes::{Candidate, resolve, selector, valid_offer};
 use super::*;
 use crate::{CloudProvider, CloudProvisioner, Error};
@@ -33,7 +34,7 @@ impl CloudProvisioner {
         let identity = ownership(spec)?;
         let mut fenced = false;
         if let Some(root) = self.authorization_dir.as_deref() {
-            let _guard = super::ownership::lock_at(root, "allocation", identity).await?;
+            let _guard = lock_at(root, "allocation", identity).await?;
             if let Some(row) = self.authorization(identity)? {
                 return self
                     .recover_authorized(spec, &row)
@@ -192,8 +193,7 @@ impl CloudProvisioner {
             return Err(Error::Provider(ProviderErrorCode::ProviderNotConfigured));
         }
         let identity = ownership(spec)?;
-        let _guard =
-            super::ownership::lock(self.authorization_dir.as_deref(), provider, identity).await?;
+        let _guard = lock(self.authorization_dir.as_deref(), provider, identity).await?;
         let native = self.managed_adapter(provider)?;
         let existing = native.list(&identity.namespace).await?;
         let owned = |resource: &ManagedResource| resource.held_by(identity);
@@ -384,7 +384,7 @@ impl CloudProvisioner {
         // State orders destroy after create's POST; only this store's row may retire objects.
         let (_guard, foreign) = match self.authorization_dir.as_deref() {
             Some(root) => {
-                let guard = super::ownership::lock_at(root, "allocation", identity).await?;
+                let guard = lock_at(root, "allocation", identity).await?;
                 let row = self.authorization(identity)?;
                 if let Some(row) = &row
                     && row.accounts.get(provider.catalog_key())
@@ -394,7 +394,7 @@ impl CloudProvisioner {
                 }
                 (guard, row.is_none())
             }
-            None => (super::ownership::lock(None, provider, identity).await?, false),
+            None => (lock(None, provider, identity).await?, false),
         };
         let native = self.managed_adapter(provider)?;
         let primary = match provider_id {
