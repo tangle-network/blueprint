@@ -2945,6 +2945,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.16.1",
  "pin-project-lite",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "tiny-keccak",
@@ -3621,6 +3622,7 @@ dependencies = [
  "reqwest 0.12.28",
  "rsa",
  "rustls",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -4248,6 +4250,7 @@ dependencies = [
  "rand 0.10.1",
  "reqwest 0.12.28",
  "rustls",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -4263,6 +4266,8 @@ dependencies = [
  "url",
  "uuid 1.23.1",
  "walkdir",
+ "wiremock",
+ "zeroize",
 ]
 
 [[package]]

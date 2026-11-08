@@ -844,3 +844,41 @@ async fn unsupported_lease_contexts_fail_before_files_or_provider_effects() {
         "configuration validation precedes every provider request"
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn lease_state_behind_a_symlinked_ancestor_is_refused_before_provider_work() {
+    use blueprint_remote_providers::{Error, managed::ProviderErrorCode};
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let (peer, _) = runpod_peer_state().await;
+    let client = || {
+        CloudProvisioner::from_credentials(vec![serde_json::from_value(json!({"provider":"runpod","api_key":"synthetic-local-peer-key","endpoint":peer.uri()})).unwrap()]).unwrap()
+    };
+    let real = tempfile::tempdir().unwrap();
+    for child in ["state", "fresh"] {
+        std::fs::create_dir(real.path().join(child)).unwrap();
+    }
+    client()
+        .initialize_lease_state_dir(&real.path().join("state"))
+        .await
+        .unwrap();
+    let link = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(real.path(), link.path().join("alias")).unwrap();
+    let conflict = |result: Result<CloudProvisioner, Error>| {
+        matches!(result, Err(Error::Provider(ProviderErrorCode::Conflict)))
+    };
+    assert!(
+        conflict(client().with_lease_state_dir(&link.path().join("alias/state"))),
+        "an existing store is not opened through a symlinked ancestor"
+    );
+    assert!(conflict(
+        client()
+            .initialize_lease_state_dir(&link.path().join("alias/fresh"))
+            .await
+    ));
+    assert!(!real.path().join("fresh/blueprint").exists());
+    client()
+        .with_lease_state_dir(&real.path().join("state"))
+        .unwrap();
+    assert!(peer.received_requests().await.unwrap().is_empty());
+}

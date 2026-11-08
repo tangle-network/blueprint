@@ -10,6 +10,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+schemars = { workspace = true, optional = true }
 bytes.workspace = true
 futures-util.workspace = true
 pin-project-lite.workspace = true
@@ -25,6 +26,7 @@ tower = { workspace = true, features = ["util", "timeout", "limit", "load-shed",
 tokio = { workspace = true, features = ["full"] }
 
 [features]
+schema = ["dep:schemars"]
 default = ["std", "tracing"]
 std = ["futures-util/std"]
 tracing = []

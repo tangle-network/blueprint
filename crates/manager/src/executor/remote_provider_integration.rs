@@ -370,11 +370,7 @@ impl RemoteProviderManager {
                 .list_managed(&self.namespace)
                 .await?
                 .iter()
-                .any(|resource| {
-                    resource.namespace == identity.namespace
-                        && resource.lease_id == identity.lease_id
-                        && resource.is_present()
-                })
+                .any(|resource| resource.held_by(&identity))
             {
                 return Err(Error::Other(
                     "GPU service already owns a lease; retire it before allocating again".into(),

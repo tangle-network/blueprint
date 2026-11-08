@@ -544,3 +544,107 @@ cargo tangle operator status \
 Omit `--operator` to query the locally configured operator. Add `--json` for machine-friendly output (timestamp, raw status code, online boolean).
 
 - End-to-end demos and advanced options live on the [CLI reference](https://docs.tangle.tools/developers/cli/reference).
+
+## Managed GPU JSON boundary
+
+With `remote-providers` (including `cloud-only`), `cloud catalog/quote/create/recover/status/list/destroy/state-init --json`
+uses the schema version exported by `cloud::SCHEMA_VERSION`. This source contract
+is incompatible with the earlier central draft; an installed binary and its
+consumer must be qualified and pinned together. Legacy `cloud status [service]`,
+`cloud list`, configure and tracker termination retain their existing meanings.
+JSON status/list cannot be combined with legacy status IDs or watch flags.
+
+`catalog --json` is offline and reads no stdin or inherited credential/config
+settings. Its public output includes the canonical hardware catalog, actual
+managed credential variants, generated request/response schemas, `schema_sha256`
+and the input/output ceiling owned by `cloud::MAX_JSON_BYTES`. Consumers generate
+provider/envelope/error types from that pinned output and fail their maintained
+build when regenerated output/digest differs. It is not a second hardware or
+provider capability table. A descriptor does not promise stock or support for
+every request shape.
+
+Other JSON verbs accept exactly one bounded document on stdin, followed by EOF,
+and emit one bounded public envelope on stdout. The parser rejects duplicate and
+unknown typed fields, excessive nesting, malformed numbers and overflow. Request
+schemas describe deserialization, so `ResourceSpec.env` remains input even though
+it is omitted from serialized state. Errors use the SDK's closed
+`ProviderErrorCode`, fixed public text and a nonzero exit. JSON invocations do not
+initialize inherited tracing; provider bodies and parser errors are not reflected.
+Put credentials in private stdin/vault custody, never arguments or public files.
+
+Requests use a tagged `ProviderCredentials` array. Quote/create/recover carry the
+canonical `spec.ownership` and `spec.lease_duration_secs`; there is no second
+ownership or TTL field. Status/destroy carry one `identity`, `provider`, and a
+provider ID (optional for destroy). Destroy retires only an identity this
+`state_dir` authorized under the same account: listed objects of any other
+identity, including another store's lease on the same account, are refused with
+`conflict` and left in place. It waits for an in-flight create of the identity
+in the same `state_dir`. List carries `namespace` and lists the full configured account roster; it has no
+provider filter. All operations after quote require `state_dir`; use the exported
+request schemas for the complete field contract. Quote returns the complete SDK
+`QuoteSet`, including failures beside ranked offers. Keep its candidate string
+unchanged and preserve the exact original spec, caller public key and account
+roster before create. New quote pricing source is the actual HTTP(S) service origin that returned the
+offer, without endpoint paths/userinfo/query/fragment. Custom broker origins stay
+custom; no default vendor URL or fallback rate is substituted. Invalid or opaque
+sources fail before public quote output.
+
+Create opens existing state and calls state-attached `create_managed`. Its SDK
+reservation preserves original quote, account binding, key and deadline before
+POST. For an attempted identity, repeated create recovers the original authority
+and ignores a replacement candidate; it never re-prices or rents again. A fresh
+invalid candidate is refused. `recover` is no-create and an absent result never
+permits re-renting that attempted identity. Keep a caller-owned SSH public key in
+the original spec; this public process boundary never exports a generated private
+key. Workload environment must be rehydratable under the caller's private custody
+for identical recovery; SDK state does not serialize it.
+
+`state-init` is an explicit, resource-free enrollment of an existing empty,
+owner-only, absolute Unix directory without symlink components. Normal verbs
+only open it and never repair missing/corrupt state. Central orchestration must
+own persistent placement, enrollment markers and a single coherent filesystem
+context across calls/restarts. Temporary HOME is not authority. Carry SDK state,
+caller records and keys together after stopping the previous writer; independent
+copies are not coordinated by local file locks. Keep lost state visible for
+operator reconciliation rather than initializing a replacement store.
+
+Non-default QoS is deliberately unsupported rather than silently applied.
+Raw `TANGLE_GPU_WORKER_TOKEN` env is refused, not removed or replaced by an
+invented bootstrap variable. Central still owns its maintained one-time bootstrap.
+
+Measured ranking uses the full original private recipe. New candidates clone the
+selected arm with only its measurement copies cleared, while the fingerprint
+commits the untouched original spec/env/measurements. The SDK validates those
+selectors against the canonical original arms. The public `MeasurementReceipt`
+contains only audit hashes, timestamp, counters, concurrency and TP/replica counts;
+model/revision/image/raw-result locators are not fields of that response type.
+It cannot be replayed as a private execution recipe. This changes the Rust
+`ProviderQuote.measurement` API and requires a containing minor release/adoption,
+not a patch compatibility claim. The request schema still accepts full original
+private measurement rows and the response schema derives the new receipt.
+
+The SDK reads existing version1 authorization records/full-arm candidates without
+rewriting them, checking legacy full-arm equality and original key/account/spec
+and deadline. Newly normalized measured candidates need the new validator;
+downgrading them to old readers is not supported. Candidate encoding is reversible.
+Public identifiers, origins and digests remain trusted public metadata, not a
+general secret-string detector, anonymization guarantee or measurement-truth proof.
+
+Public resources omit raw native instance metadata, env, keys and authorizations,
+retain distinct worker/endpoint/SSH URLs and require reported expiry for every
+present instance. `status` is canonical SDK `InstanceStatus`, with a separate
+`preempted` boolean; `Running` says capacity is running, not that a workload is
+ready. `created_at` is retained under its canonical name and is not a measured
+billing/service start. Central must persist the original absolute expiry in its
+existing hard-expiry renewal guard, refuse missing/invalid expiry and never
+replace it with a later observation. Preserve original spec separately from
+mutable renewal policy. No SDK extension API or second TTL engine is introduced.
+Provider observations and inventory remain unverified hardware facts.
+
+The maintained process/HTTP qualification requires an actual SDK827-built legacy
+producer and its reviewed source/artifact receipt via `D12_LEGACY_PRODUCER` and
+`D12_LEGACY_PRODUCER_RECEIPT`. Absence fails the integration parent; it never skips
+legacy compatibility. The test helper uses old public APIs to create an actual
+fake-provider full-arm quote/private state, then the new binary recovers/retires
+it with the same POST count and unchanged record/candidate bytes. This is a source
+compatibility fixture, not an installed or paid-provider proof.

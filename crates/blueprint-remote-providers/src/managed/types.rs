@@ -1,6 +1,7 @@
 use crate::{CloudProvider, InstanceStatus, ProvisionedInstance};
 use serde::{Deserialize, Serialize};
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderErrorCode {
@@ -20,6 +21,19 @@ pub enum ProviderErrorCode {
     ProviderError,
 }
 
+/// The one SDK error classification; caller configuration and encoding are invalid requests.
+impl From<crate::Error> for ProviderErrorCode {
+    fn from(error: crate::Error) -> Self {
+        use crate::Error as E;
+        match error {
+            E::Provider(code) => code,
+            E::ProviderNotConfigured(_) => Self::ProviderNotConfigured,
+            E::ConfigurationError(_) | E::SerializationError(_) => Self::InvalidRequest,
+            _ => Self::ProviderError,
+        }
+    }
+}
+
 impl core::fmt::Display for ProviderErrorCode {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let value = serde_json::to_value(self).map_err(|_| core::fmt::Error)?;
@@ -28,6 +42,7 @@ impl core::fmt::Display for ProviderErrorCode {
 }
 
 /// Identity advertised by the native seller, without guessed region aliases.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UnderlyingAllocation {
@@ -37,6 +52,7 @@ pub struct UnderlyingAllocation {
 }
 
 /// An available whole-node offer, before the SDK applies its common ranking.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeOffer {
@@ -53,6 +69,7 @@ pub struct NativeOffer {
 }
 
 /// Opaque candidate is returned unchanged to `create_managed`.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderQuote {
     #[serde(flatten)]
@@ -62,22 +79,57 @@ pub struct ProviderQuote {
     pub arm: Option<String>,
     pub output_tokens_per_second: Option<f64>,
     pub usd_per_million_output_tokens: Option<f64>,
-    pub measurement: Option<blueprint_core::resources::ThroughputMeasurement>,
+    pub measurement: Option<MeasurementReceipt>,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProviderFailure {
     pub provider: CloudProvider,
     pub code: ProviderErrorCode,
 }
 
+/// Public audit counters and commitments, deliberately not an execution recipe.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MeasurementReceipt {
+    pub weights_manifest_sha256: String,
+    pub raw_result_sha256: String,
+    pub measured_at: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub elapsed_ms: u64,
+    pub concurrency: u32,
+    pub tp: u32,
+    pub replicas: u32,
+}
+
+impl From<&blueprint_core::resources::ThroughputMeasurement> for MeasurementReceipt {
+    fn from(row: &blueprint_core::resources::ThroughputMeasurement) -> Self {
+        Self {
+            weights_manifest_sha256: row.weights_manifest_sha256.clone(),
+            raw_result_sha256: row.raw_result_sha256.clone(),
+            measured_at: row.measured_at.clone(),
+            input_tokens: row.input_tokens,
+            output_tokens: row.output_tokens,
+            elapsed_ms: row.elapsed_ms,
+            concurrency: row.concurrency,
+            tp: row.tp,
+            replicas: row.replicas,
+        }
+    }
+}
+
 /// Failed providers remain visible beside the full ranked priced list.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QuoteSet {
     pub quotes: Vec<ProviderQuote>,
     pub errors: Vec<ProviderFailure>,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedResourceKind {
@@ -110,5 +162,12 @@ pub struct ManagedResource {
 impl ManagedResource {
     pub fn is_present(&self) -> bool {
         !matches!(self.instance.status, InstanceStatus::Terminated)
+    }
+
+    /// A present object carrying exactly this lease identity.
+    pub fn held_by(&self, identity: &blueprint_core::resources::ManagedLeaseIdentity) -> bool {
+        self.namespace == identity.namespace
+            && self.lease_id == identity.lease_id
+            && self.is_present()
     }
 }

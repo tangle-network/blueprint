@@ -5,11 +5,13 @@ use blueprint_std::collections::HashMap;
 use serde::Deserialize;
 
 /// Each tag selects its adapter's actual caller-owned constructor.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 #[serde(tag = "provider", deny_unknown_fields)]
 pub enum ProviderCredentials {
     #[serde(rename = "runpod")]
     RunPod {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = crate::providers::RunPodAdapter::API_KEY_ENV, "writeOnly" = true)))]
         api_key: String,
         #[serde(default)]
         endpoint: Option<String>,
@@ -18,6 +20,7 @@ pub enum ProviderCredentials {
     },
     #[serde(rename = "vast-ai")]
     VastAi {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = crate::providers::VastAiAdapter::API_KEY_ENV, "writeOnly" = true)))]
         api_key: String,
         #[serde(default)]
         endpoint: Option<String>,
@@ -26,6 +29,7 @@ pub enum ProviderCredentials {
     },
     #[serde(rename = "lambda-labs")]
     LambdaLabs {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = crate::providers::LambdaLabsAdapter::API_KEY_ENV, "writeOnly" = true)))]
         api_key: String,
         #[serde(default)]
         endpoint: Option<String>,
@@ -38,6 +42,7 @@ pub enum ProviderCredentials {
     },
     #[serde(rename = "bittensor-lium")]
     BittensorLium {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = crate::providers::BittensorLiumAdapter::API_KEY_ENV, "writeOnly" = true)))]
         api_key: String,
         #[serde(default)]
         endpoint: Option<String>,
@@ -118,6 +123,8 @@ impl CloudProvisioner {
             macro_rules! bound {
                 ($client:expr) => {{
                     let client = $client;
+                    fn managed<T: super::ManagedProviderAdapter>(_: &T) {}
+                    managed(&client);
                     bindings.insert(provider.clone(), client.credential_binding()?);
                     Box::new(client) as Box<dyn CloudProviderAdapter>
                 }};

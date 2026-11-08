@@ -1,19 +1,19 @@
 [workspace]
 resolver = "3"
 members = [
-    "cli",
-    "crates/*",
-    "crates/networking/extensions/*",
-    "crates/manager/bridge",
-    "examples/oauth-blueprint/oauth-blueprint-lib",
-    "examples/oauth-blueprint/oauth-blueprint-bin",
-    "examples/apikey-blueprint/apikey-blueprint-lib",
-    "examples/apikey-blueprint/apikey-blueprint-bin",
-    "examples/incredible-squaring/incredible-squaring-lib",
-    "examples/incredible-squaring/incredible-squaring-bin",
-    "examples/hello-tangle",
-    "examples/x402-blueprint",
-    "workspace-hack",
+  "cli",
+  "crates/*",
+  "crates/networking/extensions/*",
+  "crates/manager/bridge",
+  "examples/oauth-blueprint/oauth-blueprint-lib",
+  "examples/oauth-blueprint/oauth-blueprint-bin",
+  "examples/apikey-blueprint/apikey-blueprint-lib",
+  "examples/apikey-blueprint/apikey-blueprint-bin",
+  "examples/incredible-squaring/incredible-squaring-lib",
+  "examples/incredible-squaring/incredible-squaring-bin",
+  "examples/hello-tangle",
+  "examples/x402-blueprint",
+  "workspace-hack",
 ]
 
 [workspace.package]
@@ -26,11 +26,11 @@ rust-version = "1.93"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
-trivial_casts = "allow"                      # TODO: Remove unnecessary casts
-trivial_numeric_casts = "allow"              # TODO: Remove trivial numeric casts
+trivial_casts = "allow"                              # TODO: Remove unnecessary casts
+trivial_numeric_casts = "allow"                      # TODO: Remove trivial numeric casts
 unused_import_braces = "deny"
 async_fn_in_trait = "allow"
-elided_lifetimes_in_paths = "allow"          # TODO: Add explicit lifetime parameters
+elided_lifetimes_in_paths = "allow"                  # TODO: Add explicit lifetime parameters
 
 [workspace.lints.clippy]
 pedantic = { level = "deny", priority = -1 }
@@ -169,7 +169,9 @@ blueprint-crypto = { version = "0.2.0", path = "./crates/crypto", default-featur
 blueprint-clients = { version = "0.2.1", path = "./crates/clients", default-features = false }
 blueprint-client-core = { version = "0.2.0", path = "./crates/clients/core", default-features = false }
 blueprint-client-evm = { version = "0.2.1", path = "./crates/clients/evm", default-features = false }
-blueprint-client-tangle = { version = "0.2.1", path = "./crates/clients/tangle", default-features = false, features = ["std"] }
+blueprint-client-tangle = { version = "0.2.1", path = "./crates/clients/tangle", default-features = false, features = [
+  "std",
+] }
 blueprint-contexts = { version = "0.2.1", path = "./crates/contexts", default-features = false }
 
 # Pricing Engine
@@ -441,6 +443,7 @@ num-bigint = { version = "0.4.6", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
 rayon = { version = "1", default-features = false }
 zeroize = { version = "1.8.1", default-features = false }
+schemars = { version = "=1.2.1", default-features = false, features = ["derive"] }
 zerocopy = { version = "0.8", default-features = false }
 
 rust-bls-bn254 = { version = "0.2.1", default-features = false }

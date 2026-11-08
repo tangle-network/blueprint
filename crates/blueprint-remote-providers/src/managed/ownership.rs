@@ -25,20 +25,21 @@ pub(super) fn directory(path: &Path, private: bool) -> Result<()> {
 }
 
 pub(super) async fn lock(
+    store: Option<&Path>,
     provider: &CloudProvider,
     identity: &ManagedLeaseIdentity,
 ) -> Result<fs::File> {
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|path| PathBuf::from(path).join(".cache")))
+        .or_else(|| store.map(Path::to_path_buf))
         .ok_or_else(invalid)?;
     lock_scope(base, provider.catalog_key(), identity).await
 }
 
 /// Serialize service inventory and allocation in the manager's shared state store.
 pub async fn lock_lease(state_dir: &Path, identity: &ManagedLeaseIdentity) -> Result<fs::File> {
-    let base = fs::canonicalize(state_dir).map_err(|_| invalid())?;
-    lock_scope(base, "lease", identity).await
+    lock_at(state_dir, "lease", identity).await
 }
 
 pub(super) async fn lock_at(
@@ -46,12 +47,8 @@ pub(super) async fn lock_at(
     scope: &str,
     identity: &ManagedLeaseIdentity,
 ) -> Result<fs::File> {
-    lock_scope(
-        fs::canonicalize(base).map_err(|_| invalid())?,
-        scope,
-        identity,
-    )
-    .await
+    let base = fs::canonicalize(base).map_err(|_| invalid())?;
+    lock_scope(base, scope, identity).await
 }
 
 pub(super) fn open_file(path: &Path, create: bool, exclusive: bool) -> Result<fs::File> {
@@ -87,19 +84,39 @@ pub(super) fn open_file(path: &Path, create: bool, exclusive: bool) -> Result<fs
     Ok(file)
 }
 
+/// Refuse a relative or `..` path, or a symlinked, foreign or shared-writable component.
+pub(super) fn trusted_path(base: &Path) -> Result<()> {
+    if !base.is_absolute() || base.components().any(|part| part == Component::ParentDir) {
+        return Err(invalid());
+    }
+    let mut path = PathBuf::new();
+    for component in base.components() {
+        path.push(component);
+        if let Ok(metadata) = fs::symlink_metadata(&path) {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(invalid());
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::{MetadataExt, PermissionsExt};
+                let mode = metadata.permissions().mode() as libc::mode_t;
+                if (metadata.uid() != 0 && metadata.uid() != unsafe { libc::geteuid() })
+                    || (mode & 0o022 != 0 && mode & libc::S_ISVTX == 0)
+                {
+                    return Err(invalid());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn lock_scope(
     base: PathBuf,
     scope: &str,
     identity: &ManagedLeaseIdentity,
 ) -> Result<fs::File> {
     identity.validate().map_err(|_| invalid())?;
-    if !base.is_absolute()
-        || base
-            .components()
-            .any(|part| matches!(part, Component::ParentDir))
-    {
-        return Err(invalid());
-    }
     let digest = hex::encode(aws_lc_rs::digest::digest(
         &aws_lc_rs::digest::SHA256,
         format!(
@@ -112,25 +129,7 @@ async fn lock_scope(
     ));
     let filename = format!("{digest}-{}.lock", identity.lease_id);
     tokio::task::spawn_blocking(move || {
-        let mut path = PathBuf::new();
-        for component in base.components() {
-            path.push(component);
-            if let Ok(metadata) = fs::symlink_metadata(&path) {
-                if metadata.file_type().is_symlink() || !metadata.is_dir() {
-                    return Err(invalid());
-                }
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-                    let mode = metadata.permissions().mode() as libc::mode_t;
-                    if (metadata.uid() != 0 && metadata.uid() != unsafe { libc::geteuid() })
-                        || (mode & 0o022 != 0 && mode & libc::S_ISVTX == 0)
-                    {
-                        return Err(invalid());
-                    }
-                }
-            }
-        }
+        trusted_path(&base)?;
         let mut builder = fs::DirBuilder::new();
         builder.recursive(true);
         #[cfg(unix)]

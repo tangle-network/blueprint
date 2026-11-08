@@ -61,14 +61,20 @@ fn store_identity() -> ManagedLeaseIdentity {
     }
 }
 
+fn state_root(root: &Path) -> Result<PathBuf> {
+    ownership::trusted_path(root).map_err(|_| conflict())?;
+    fs::canonicalize(root).map_err(|_| conflict())
+}
+
 pub(super) fn load(root: &Path) -> Result<Store> {
     if !cfg!(unix) {
         return Err(conflict());
     }
-    ownership::directory(root, false)?;
-    ownership::directory(&root.join("blueprint"), true)?;
+    ownership::directory(root, false).map_err(|_| conflict())?;
+    ownership::directory(&root.join("blueprint"), true).map_err(|_| conflict())?;
     let mut bytes = Vec::new();
-    ownership::open_file(&path(root), false, false)?
+    ownership::open_file(&path(root), false, false)
+        .map_err(|_| conflict())?
         .take(16 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| conflict())?;
@@ -104,7 +110,7 @@ impl CloudProvisioner {
         if !cfg!(unix) {
             return Err(conflict());
         }
-        let root = fs::canonicalize(root).map_err(|_| conflict())?;
+        let root = state_root(root)?;
         let _guard = ownership::lock_at(&root, "authorization-store", &store_identity()).await?;
         let store = Store {
             version: 1,
@@ -128,7 +134,7 @@ impl CloudProvisioner {
     /// Carry this directory with caller records and caller-owned SSH keys on restart/move.
     pub fn with_lease_state_dir(mut self, root: &Path) -> Result<Self> {
         self.checked_accounts()?;
-        let root = fs::canonicalize(root).map_err(|_| conflict())?;
+        let root = state_root(root)?;
         load(&root)?;
         self.authorization_dir = Some(root);
         Ok(self)
