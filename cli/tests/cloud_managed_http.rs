@@ -372,19 +372,21 @@ async fn killed_create_recovers_in_new_process_and_lost_state_never_repairs() {
     let mut create = base.clone();
     create["spec"] = original.clone();
     create["candidate"] = quotes["quotes"][0]["candidate"].clone();
-    let blocked = Mock::given(method("GET"))
+    // One-shot, not scoped: wiremock 0.6 sorts mocks by priority in place, so a
+    // scoped guard's stale index would deactivate the base peer on drop.
+    Mock::given(method("GET"))
         .and(path_regex("^/pods/[^/]+$"))
         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(60)))
         .with_priority(1)
-        .mount_as_scoped(&server)
+        .up_to_n_times(1)
+        .mount(&server)
         .await;
     let mut child = spawn("create", &serde_json::to_vec(&create).unwrap(), root.path()).await;
+    // Kill only once the acknowledged create is blocked reading its pod back.
     tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let posts = state.lock().unwrap().0;
-            if posts > 0 {
-                break;
-            }
+        while !server.received_requests().await.unwrap().iter().any(|request| {
+            request.method == "GET" && request.url.path().starts_with("/pods/")
+        }) {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
@@ -392,7 +394,6 @@ async fn killed_create_recovers_in_new_process_and_lost_state_never_repairs() {
     .unwrap();
     child.kill().await.unwrap();
     child.wait().await.unwrap();
-    drop(blocked);
     let mut recovery = base.clone();
     recovery["spec"] = original.clone();
     let recovered = call("recover", &recovery, root.path()).await["resource"].clone();
