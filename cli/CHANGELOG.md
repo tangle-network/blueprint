@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.6.1...cargo-tangle-v0.7.0) - 2026-11-08
+
+### Added
+
+- *(remote-providers,cli)* versioned managed GPU JSON process boundary (#1664)
+
 ## [0.6.1](https://github.com/tangle-network/blueprint/compare/cargo-tangle-v0.6.0...cargo-tangle-v0.6.1) - 2026-11-07
 
 ### Fixed

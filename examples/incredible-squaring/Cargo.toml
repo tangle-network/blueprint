@@ -16,7 +16,7 @@ rust-version = "1.88"
 [workspace.dependencies]
 incredible-squaring-blueprint-lib = { path = "incredible-squaring-lib" }
 
-blueprint-sdk = { version = "0.2.0", path = "../../crates/sdk", default-features = false }
+blueprint-sdk = { version = "0.3.0", path = "../../crates/sdk", default-features = false }
 blueprint-anvil-testing-utils = { version = "0.2.0", path = "../../crates/testing-utils/anvil", default-features = false }
 blueprint-client-tangle = { version = "0.2.0", path = "../../crates/clients/tangle", default-features = false, features = ["std"] }
 blueprint-tangle-extra = { version = "0.2.0", path = "../../crates/tangle-extra", features = ["std"] }
