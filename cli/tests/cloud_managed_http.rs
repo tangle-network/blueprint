@@ -19,13 +19,16 @@ mod peer;
 const KEY: &str =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMo32AY0vFK7g5FBIBcyPdxaxSEM5rEc0kEzMVveA9b+";
 
-async fn spawn(verb: &str, input: &[u8], home: &Path) -> Child {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_cargo-tangle"))
+/// `None` runs with neither HOME nor XDG_CACHE_HOME set.
+async fn spawn(verb: &str, input: &[u8], home: impl Into<Option<&Path>>) -> Child {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_cargo-tangle"));
+    command.env_clear();
+    if let Some(home) = home.into() {
+        command.env("HOME", home).env("XDG_CACHE_HOME", home);
+    }
+    let mut child = command
         .args(["tangle", "cloud", verb, "--json"])
-        .env_clear()
         .env("PATH", "/usr/bin:/bin")
-        .env("HOME", home)
-        .env("XDG_CACHE_HOME", home)
         .env("RUNPOD_API_KEY", "inherited-credential-must-not-escape")
         .env("RUST_LOG", "trace")
         .stdin(Stdio::piped())
@@ -39,8 +42,11 @@ async fn spawn(verb: &str, input: &[u8], home: &Path) -> Child {
     child
 }
 
-async fn raw(verb: &str, input: &[u8], home: &Path) -> (bool, Value) {
-    let child = spawn(verb, input, home).await;
+async fn raw(verb: &str, input: &[u8], home: impl Into<Option<&Path>>) -> (bool, Value) {
+    envelope(spawn(verb, input, home).await).await
+}
+
+async fn envelope(child: Child) -> (bool, Value) {
     let output = tokio::time::timeout(Duration::from_secs(30), child.wait_with_output())
         .await
         .unwrap()
@@ -306,6 +312,26 @@ async fn exact_quote_lifecycle_keeps_foreign_scope_and_original_authority() {
     let mut foreign_delete = scoped(&base, &foreign_spec);
     foreign_delete["provider_id"] = foreign["provider_id"].clone();
     refused("destroy", &foreign_delete, root.path(), "conflict").await;
+    // Another store on the same account and namespace holds no authority over this lease.
+    let peer_root = state_root();
+    call(
+        "state-init",
+        &request(&server.uri(), peer_root.path()),
+        peer_root.path(),
+    )
+    .await;
+    let mut peer_delete = status.clone();
+    peer_delete["state_dir"] = json!(peer_root.path());
+    refused("destroy", &peer_delete, peer_root.path(), "conflict").await;
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.iter().filter(|r| r.method == "DELETE").count(), 0);
+    assert!(
+        state
+            .lock()
+            .unwrap()
+            .1
+            .contains_key(resource["provider_id"].as_str().unwrap())
+    );
     let list = json!({"schema_version":2,"state_dir":root.path(),"credentials":base["credentials"],"namespace":"cell-a"});
     assert_eq!(
         call("list", &list, root.path()).await["resources"]
@@ -696,4 +722,117 @@ async fn actual_827_authority_recovers_without_rewriting_or_second_post() {
     let final_store: Value = serde_json::from_slice(&final_bytes).unwrap();
     assert_eq!(final_store["version"], 1);
     assert_eq!(final_store["entries"]["lease"]["candidate"], candidate);
+}
+
+async fn catalog_reads(server: &wiremock::MockServer) -> usize {
+    let requests = server.received_requests().await.unwrap();
+    requests
+        .iter()
+        .filter(|request| request.url.path() == "/catalog/gpus")
+        .count()
+}
+
+#[tokio::test]
+async fn destroy_under_another_home_waits_for_an_inflight_create() {
+    let (server, state) = peer::runpod_peer_state().await;
+    let root = state_root();
+    let base = request(&server.uri(), root.path());
+    call("state-init", &base, root.path()).await;
+    let original = spec("race-cell", "lease");
+    let quotes = call("quote", &quote_request(&base, &original), root.path()).await;
+    let mut create = base.clone();
+    create["spec"] = original.clone();
+    create["candidate"] = quotes["quotes"][0]["candidate"].clone();
+    let before = catalog_reads(&server).await;
+    // Hold create's fresh-offer read, after its lease state lock and before reservation/POST.
+    let catalog = json!({"gpus": state.lock().unwrap().2.clone()});
+    Mock::given(method("GET"))
+        .and(path_regex("^/catalog/gpus$"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(catalog)
+                .set_delay(Duration::from_secs(5)),
+        )
+        .with_priority(1)
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    let creating = spawn("create", &serde_json::to_vec(&create).unwrap(), root.path()).await;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while catalog_reads(&server).await == before {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let other_home = tempfile::tempdir().unwrap();
+    let destroy = scoped(&base, &original);
+    assert_eq!(
+        call("destroy", &destroy, other_home.path()).await,
+        json!({"destroyed": true})
+    );
+    let (created, response) = envelope(creating).await;
+    assert!(created, "{response}");
+    assert_eq!(state.lock().unwrap().0, 1);
+    assert!(
+        state.lock().unwrap().1.is_empty(),
+        "a confirmed destroy must not be followed by the in-flight create's rental"
+    );
+    // A state-attached operation needs no HOME: the store keys its locks.
+    let (ok, response) = raw(
+        "destroy",
+        &serde_json::to_vec(&destroy).unwrap(),
+        None::<&Path>,
+    )
+    .await;
+    assert!(ok, "{response}");
+}
+
+#[tokio::test]
+async fn closed_parser_refuses_documents_typed_decoding_would_accept() {
+    let (server, _) = peer::runpod_peer_state().await;
+    let home = tempfile::tempdir().unwrap();
+    let limit = call("catalog", &json!({}), home.path()).await["max_json_bytes"]
+        .as_u64()
+        .unwrap() as usize;
+    let mut valid = quote_request(
+        &json!({"credentials": account(&server.uri())}),
+        &spec("parser-cell", "lease"),
+    );
+    valid["spec"]["env"] = json!({"MODE":"last"});
+    valid["spec"]["manifest"] = json!([[["shallow"]]]);
+    let text = serde_json::to_string(&valid).unwrap();
+    // Insignificant whitespace inside the top-level object keeps the document valid JSON.
+    let padded = |size: usize| {
+        text.replacen('{', &format!("{{{}", " ".repeat(size - text.len())), 1)
+    };
+    // Controls: the same documents within every bound reach the provider.
+    for input in [text.clone(), padded(limit)] {
+        let (ok, response) = raw("quote", input.as_bytes(), home.path()).await;
+        assert!(ok, "{response}");
+    }
+    let provider_calls = server.received_requests().await.unwrap().len();
+    assert!(provider_calls > 0);
+    let deep = format!("{}\"deep\"{}", "[".repeat(200), "]".repeat(200));
+    let mut accepted = Vec::new();
+    for (case, input) in [
+        (
+            "duplicate env key",
+            text.replace(r#""MODE":"last""#, r#""MODE":"first","MODE":"last""#),
+        ),
+        ("whitespace past the ceiling", padded(limit + 1)),
+        ("deep free-form manifest", text.replace(r#"[[["shallow"]]]"#, &deep)),
+    ] {
+        assert_ne!(input, text, "{case} must change the document");
+        let (ok, response) = raw("quote", input.as_bytes(), home.path()).await;
+        if ok || response["error"]["code"] != "invalid_request" {
+            accepted.push(case);
+        }
+    }
+    assert!(accepted.is_empty(), "accepted: {accepted:?}");
+    assert_eq!(
+        server.received_requests().await.unwrap().len(),
+        provider_calls,
+        "refused documents never reach a provider"
+    );
 }
