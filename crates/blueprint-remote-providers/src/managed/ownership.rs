@@ -86,11 +86,7 @@ pub(super) fn open_file(path: &Path, create: bool, exclusive: bool) -> Result<fs
 
 /// Refuse a relative or `..` path, or a symlinked, foreign or shared-writable component.
 pub(super) fn trusted_path(base: &Path) -> Result<()> {
-    if !base.is_absolute()
-        || base
-            .components()
-            .any(|part| matches!(part, Component::ParentDir))
-    {
+    if !base.is_absolute() || base.components().any(|part| part == Component::ParentDir) {
         return Err(invalid());
     }
     let mut path = PathBuf::new();

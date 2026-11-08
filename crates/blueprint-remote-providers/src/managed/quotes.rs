@@ -246,7 +246,9 @@ impl CloudProvisioner {
                 continue;
             }
             let Some(native) = adapter.managed() else {
-                result.errors.push(failure(provider, ProviderErrorCode::Unsupported));
+                result
+                    .errors
+                    .push(failure(provider, ProviderErrorCode::Unsupported));
                 continue;
             };
             for arm in &arms {
@@ -268,10 +270,12 @@ impl CloudProvisioner {
                             }
                         }
                         if before == result.quotes.len() {
-                            result.errors.push(failure(provider, ProviderErrorCode::NoStock));
+                            result
+                                .errors
+                                .push(failure(provider, ProviderErrorCode::NoStock));
                         }
                     }
-                    Err(error) => result.errors.push(failure(provider, error)),
+                    Err(error) => result.errors.push(failure(provider, error.into())),
                 }
             }
         }

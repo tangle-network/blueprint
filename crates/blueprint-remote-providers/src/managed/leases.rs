@@ -12,6 +12,13 @@ pub struct LeaseAccess {
 }
 
 impl LeaseAccess {
+    fn public(public_key: String) -> Self {
+        Self {
+            public_key,
+            private_key: None,
+        }
+    }
+
     pub fn private_key(&self) -> Option<&str> {
         self.private_key.as_deref().map(String::as_str)
     }
@@ -73,13 +80,10 @@ pub struct RetireReport {
     pub failures: Vec<ProviderFailure>,
 }
 
-pub(super) fn failure(
-    provider: &CloudProvider,
-    code: impl Into<ProviderErrorCode>,
-) -> ProviderFailure {
+pub(super) fn failure(provider: &CloudProvider, code: ProviderErrorCode) -> ProviderFailure {
     ProviderFailure {
         provider: provider.clone(),
-        code: code.into(),
+        code,
     }
 }
 
@@ -113,10 +117,7 @@ impl CloudProvisioner {
                 .map(|resource| {
                     resource.map(|resource| Lease {
                         resource,
-                        access: LeaseAccess {
-                            public_key: row.public_key,
-                            private_key: None,
-                        },
+                        access: LeaseAccess::public(row.public_key),
                     })
                 }),
             None => {
@@ -142,19 +143,13 @@ impl CloudProvisioner {
                 .ok_or(Error::Provider(ProviderErrorCode::Conflict))?;
             return Ok(Lease {
                 resource,
-                access: LeaseAccess {
-                    public_key: row.public_key,
-                    private_key: None,
-                },
+                access: LeaseAccess::public(row.public_key),
             });
         }
         self.require_absent(&identity).await?;
         let intent = request.clone();
         let access = match request.ssh_public_key.as_deref() {
-            Some(key) => LeaseAccess {
-                public_key: crate::security::canonical_public_key(key)?,
-                private_key: None,
-            },
+            Some(key) => LeaseAccess::public(crate::security::canonical_public_key(key)?),
             None => LeaseAccess::generate()?,
         };
         request.ssh_public_key = Some(access.public_key.clone());
@@ -230,15 +225,16 @@ impl CloudProvisioner {
                     .offer
                     .provider;
                 if self.managed_adapter(&provider).is_err() {
-                    report.failures.push(failure(
-                        &provider,
-                        ProviderErrorCode::ProviderNotConfigured,
-                    ));
+                    report
+                        .failures
+                        .push(failure(&provider, ProviderErrorCode::ProviderNotConfigured));
                 } else if !self
                     .account_binding(&provider)
                     .is_ok_and(|binding| row.accounts.get(provider.catalog_key()) == Some(&binding))
                 {
-                    report.failures.push(failure(&provider, ProviderErrorCode::Conflict));
+                    report
+                        .failures
+                        .push(failure(&provider, ProviderErrorCode::Conflict));
                 } else {
                     eligible
                         .entry(provider)
@@ -263,7 +259,7 @@ impl CloudProvisioner {
             let listed = match native.list(namespace).await {
                 Ok(listed) => listed,
                 Err(error) => {
-                    report.failures.push(failure(provider, error));
+                    report.failures.push(failure(provider, error.into()));
                     continue;
                 }
             };
@@ -282,7 +278,9 @@ impl CloudProvisioner {
                             Some(row.metadata.expires_at)
                         }
                         _ => {
-                            report.failures.push(failure(provider, ProviderErrorCode::Conflict));
+                            report
+                                .failures
+                                .push(failure(provider, ProviderErrorCode::Conflict));
                             continue;
                         }
                     }
@@ -303,7 +301,7 @@ impl CloudProvisioner {
             for identity in expired {
                 match self.destroy_managed(provider, &identity, None).await {
                     Ok(()) => report.retired.push(identity),
-                    Err(error) => report.failures.push(failure(provider, error)),
+                    Err(error) => report.failures.push(failure(provider, error.into())),
                 }
             }
         }
