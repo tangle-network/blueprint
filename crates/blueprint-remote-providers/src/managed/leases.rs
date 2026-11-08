@@ -87,6 +87,12 @@ pub(super) fn failure(provider: &CloudProvider, code: ProviderErrorCode) -> Prov
     }
 }
 
+impl RetireReport {
+    fn fail(&mut self, provider: &CloudProvider, code: ProviderErrorCode) {
+        self.failures.push(failure(provider, code));
+    }
+}
+
 impl CloudProvisioner {
     fn lease_request(&self, spec: &ResourceSpec, ttl: Duration) -> Result<ResourceSpec> {
         self.lease_state_dir()?;
@@ -197,14 +203,14 @@ impl CloudProvisioner {
                 !self.providers.contains_key(*provider) && !self.init_errors.contains_key(*provider)
             }))
         {
-            report.failures.push(failure(provider, ProviderErrorCode::ProviderNotConfigured));
+            report.fail(provider, ProviderErrorCode::ProviderNotConfigured);
         }
         let entries = match &authorizations {
             Ok(store) => store.as_ref().map(|store| &store.entries),
             Err(_) => {
                 for (provider, adapter) in &self.providers {
                     if adapter.managed().is_some() {
-                        report.failures.push(failure(provider, ProviderErrorCode::Conflict));
+                        report.fail(provider, ProviderErrorCode::Conflict);
                     }
                 }
                 return report;
@@ -225,16 +231,12 @@ impl CloudProvisioner {
                     .offer
                     .provider;
                 if self.managed_adapter(&provider).is_err() {
-                    report
-                        .failures
-                        .push(failure(&provider, ProviderErrorCode::ProviderNotConfigured));
+                    report.fail(&provider, ProviderErrorCode::ProviderNotConfigured);
                 } else if !self
                     .account_binding(&provider)
                     .is_ok_and(|binding| row.accounts.get(provider.catalog_key()) == Some(&binding))
                 {
-                    report
-                        .failures
-                        .push(failure(&provider, ProviderErrorCode::Conflict));
+                    report.fail(&provider, ProviderErrorCode::Conflict);
                 } else {
                     eligible
                         .entry(provider)
@@ -259,7 +261,7 @@ impl CloudProvisioner {
             let listed = match native.list(namespace).await {
                 Ok(listed) => listed,
                 Err(error) => {
-                    report.failures.push(failure(provider, error.into()));
+                    report.fail(provider, error.into());
                     continue;
                 }
             };
@@ -278,9 +280,7 @@ impl CloudProvisioner {
                             Some(row.metadata.expires_at)
                         }
                         _ => {
-                            report
-                                .failures
-                                .push(failure(provider, ProviderErrorCode::Conflict));
+                            report.fail(provider, ProviderErrorCode::Conflict);
                             continue;
                         }
                     }
@@ -301,7 +301,7 @@ impl CloudProvisioner {
             for identity in expired {
                 match self.destroy_managed(provider, &identity, None).await {
                     Ok(()) => report.retired.push(identity),
-                    Err(error) => report.failures.push(failure(provider, error.into())),
+                    Err(error) => report.fail(provider, error.into()),
                 }
             }
         }
