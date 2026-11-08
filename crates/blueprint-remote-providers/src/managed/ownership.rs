@@ -25,20 +25,21 @@ pub(super) fn directory(path: &Path, private: bool) -> Result<()> {
 }
 
 pub(super) async fn lock(
+    store: Option<&Path>,
     provider: &CloudProvider,
     identity: &ManagedLeaseIdentity,
 ) -> Result<fs::File> {
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|path| PathBuf::from(path).join(".cache")))
+        .or_else(|| store.map(Path::to_path_buf))
         .ok_or_else(invalid)?;
     lock_scope(base, provider.catalog_key(), identity).await
 }
 
 /// Serialize service inventory and allocation in the manager's shared state store.
 pub async fn lock_lease(state_dir: &Path, identity: &ManagedLeaseIdentity) -> Result<fs::File> {
-    let base = fs::canonicalize(state_dir).map_err(|_| invalid())?;
-    lock_scope(base, "lease", identity).await
+    lock_at(state_dir, "lease", identity).await
 }
 
 pub(super) async fn lock_at(
@@ -46,12 +47,8 @@ pub(super) async fn lock_at(
     scope: &str,
     identity: &ManagedLeaseIdentity,
 ) -> Result<fs::File> {
-    lock_scope(
-        fs::canonicalize(base).map_err(|_| invalid())?,
-        scope,
-        identity,
-    )
-    .await
+    let base = fs::canonicalize(base).map_err(|_| invalid())?;
+    lock_scope(base, scope, identity).await
 }
 
 pub(super) fn open_file(path: &Path, create: bool, exclusive: bool) -> Result<fs::File> {

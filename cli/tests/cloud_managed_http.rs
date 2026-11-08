@@ -803,9 +803,8 @@ async fn closed_parser_refuses_documents_typed_decoding_would_accept() {
     valid["spec"]["manifest"] = json!([[["shallow"]]]);
     let text = serde_json::to_string(&valid).unwrap();
     // Insignificant whitespace inside the top-level object keeps the document valid JSON.
-    let padded = |size: usize| {
-        text.replacen('{', &format!("{{{}", " ".repeat(size - text.len())), 1)
-    };
+    let padded =
+        |size: usize| text.replacen('{', &format!("{{{}", " ".repeat(size - text.len())), 1);
     // Controls: the same documents within every bound reach the provider.
     for input in [text.clone(), padded(limit)] {
         let (ok, response) = raw("quote", input.as_bytes(), home.path()).await;
@@ -821,7 +820,10 @@ async fn closed_parser_refuses_documents_typed_decoding_would_accept() {
             text.replace(r#""MODE":"last""#, r#""MODE":"first","MODE":"last""#),
         ),
         ("whitespace past the ceiling", padded(limit + 1)),
-        ("deep free-form manifest", text.replace(r#"[[["shallow"]]]"#, &deep)),
+        (
+            "deep free-form manifest",
+            text.replace(r#"[[["shallow"]]]"#, &deep),
+        ),
     ] {
         assert_ne!(input, text, "{case} must change the document");
         let (ok, response) = raw("quote", input.as_bytes(), home.path()).await;

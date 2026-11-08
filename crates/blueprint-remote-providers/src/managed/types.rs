@@ -150,4 +150,11 @@ impl ManagedResource {
     pub fn is_present(&self) -> bool {
         !matches!(self.instance.status, InstanceStatus::Terminated)
     }
+
+    /// A present object carrying exactly this lease identity.
+    pub fn held_by(&self, identity: &blueprint_core::resources::ManagedLeaseIdentity) -> bool {
+        self.namespace == identity.namespace
+            && self.lease_id == identity.lease_id
+            && self.is_present()
+    }
 }

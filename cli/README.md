@@ -575,7 +575,11 @@ Put credentials in private stdin/vault custody, never arguments or public files.
 Requests use a tagged `ProviderCredentials` array. Quote/create/recover carry the
 canonical `spec.ownership` and `spec.lease_duration_secs`; there is no second
 ownership or TTL field. Status/destroy carry one `identity`, `provider`, and a
-provider ID (optional for destroy). List carries `namespace` and lists the full configured account roster; it has no
+provider ID (optional for destroy). Destroy retires only an identity this
+`state_dir` authorized under the same account: listed objects of any other
+identity, including another store's lease on the same account, are refused with
+`conflict` and left in place. It waits for an in-flight create of the identity
+in the same `state_dir`. List carries `namespace` and lists the full configured account roster; it has no
 provider filter. All operations after quote require `state_dir`; use the exported
 request schemas for the complete field contract. Quote returns the complete SDK
 `QuoteSet`, including failures beside ranked offers. Keep its candidate string

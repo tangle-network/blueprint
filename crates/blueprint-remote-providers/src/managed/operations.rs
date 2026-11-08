@@ -16,6 +16,12 @@ fn owned(
     Ok(())
 }
 
+fn ownership(spec: &ResourceSpec) -> Result<&ManagedLeaseIdentity> {
+    spec.ownership
+        .as_ref()
+        .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))
+}
+
 impl CloudProvisioner {
     /// Rent an explicit original quote. With a lease state context, record its
     /// authorization before creating; without one this is the legacy low-level path.
@@ -24,10 +30,7 @@ impl CloudProvisioner {
         spec: &ResourceSpec,
         candidate: &str,
     ) -> Result<ManagedResource> {
-        let identity = spec
-            .ownership
-            .as_ref()
-            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let identity = ownership(spec)?;
         let mut fenced = false;
         if let Some(root) = self.authorization_dir.as_deref() {
             let _guard = super::ownership::lock_at(root, "allocation", identity).await?;
@@ -106,10 +109,7 @@ impl CloudProvisioner {
         observed: bool,
     ) -> Result<ManagedResource> {
         let resolved = self.validate_candidate(spec, candidate)?;
-        let identity = spec
-            .ownership
-            .as_ref()
-            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
+        let identity = ownership(spec)?;
         let provider = &candidate.offer.provider;
         let native = self.managed_adapter(provider)?;
         let fingerprint = candidate.allocation_fingerprint()?;
@@ -191,18 +191,12 @@ impl CloudProvisioner {
         {
             return Err(Error::Provider(ProviderErrorCode::ProviderNotConfigured));
         }
-        let identity = spec
-            .ownership
-            .as_ref()
-            .ok_or(Error::Provider(ProviderErrorCode::InvalidRequest))?;
-        let _guard = super::ownership::lock(provider, identity).await?;
+        let identity = ownership(spec)?;
+        let _guard =
+            super::ownership::lock(self.authorization_dir.as_deref(), provider, identity).await?;
         let native = self.managed_adapter(provider)?;
         let existing = native.list(&identity.namespace).await?;
-        let owned = |resource: &ManagedResource| {
-            resource.namespace == identity.namespace
-                && resource.lease_id == identity.lease_id
-                && resource.is_present()
-        };
+        let owned = |resource: &ManagedResource| resource.held_by(identity);
         let template_expiry = if intent.is_none() {
             existing
                 .iter()
@@ -309,9 +303,7 @@ impl CloudProvisioner {
         let identity = &row.metadata.identity;
         let resources = self.list_managed(&identity.namespace).await?;
         let mut matching = resources.into_iter().filter(|resource| {
-            resource.lease_id == identity.lease_id
-                && resource.is_present()
-                && resource.kind == ManagedResourceKind::Instance
+            resource.held_by(identity) && resource.kind == ManagedResourceKind::Instance
         });
         let Some(resource) = matching.next() else {
             return Ok(None);
@@ -389,13 +381,21 @@ impl CloudProvisioner {
         identity
             .validate()
             .map_err(|_| Error::Provider(ProviderErrorCode::InvalidRequest))?;
-        if self.authorization_dir.is_some()
-            && let Some(row) = self.authorization(identity)?
-            && row.accounts.get(provider.catalog_key()) != Some(&self.account_binding(provider)?)
-        {
-            return Err(Error::Provider(ProviderErrorCode::Conflict));
-        }
-        let _guard = super::ownership::lock(provider, identity).await?;
+        // State orders destroy after create's POST; only this store's row may retire objects.
+        let (_guard, foreign) = match self.authorization_dir.as_deref() {
+            Some(root) => {
+                let guard = super::ownership::lock_at(root, "allocation", identity).await?;
+                let row = self.authorization(identity)?;
+                if let Some(row) = &row
+                    && row.accounts.get(provider.catalog_key())
+                        != Some(&self.account_binding(provider)?)
+                {
+                    return Err(Error::Provider(ProviderErrorCode::Conflict));
+                }
+                (guard, row.is_none())
+            }
+            None => (super::ownership::lock(None, provider, identity).await?, false),
+        };
         let native = self.managed_adapter(provider)?;
         let primary = match provider_id {
             Some(id) => self.status_managed(provider, identity, id).await?,
@@ -413,6 +413,9 @@ impl CloudProvisioner {
         for resource in &resources {
             owned(resource, provider, identity)?;
         }
+        if foreign && !resources.is_empty() {
+            return Err(Error::Provider(ProviderErrorCode::Conflict));
+        }
         resources.sort_by_key(|resource| resource.kind != ManagedResourceKind::Instance);
         for resource in resources {
             native.destroy(identity, &resource).await?;
@@ -421,11 +424,7 @@ impl CloudProvisioner {
             .list(&identity.namespace)
             .await?
             .iter()
-            .any(|resource| {
-                resource.namespace == identity.namespace
-                    && resource.lease_id == identity.lease_id
-                    && resource.is_present()
-            })
+            .any(|resource| resource.held_by(identity))
         {
             return Err(Error::Provider(ProviderErrorCode::StillPresent));
         }
