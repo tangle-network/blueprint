@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.1](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.3.0...blueprint-remote-providers-v0.3.1) - 2026-11-08
+## [0.4.0](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.3.0...blueprint-remote-providers-v0.4.0) - 2026-11-08
+
+### Breaking
+
+- `ProviderQuote.measurement` is now `Option<MeasurementReceipt>` (public provenance only) instead of `Option<blueprint_core::resources::ThroughputMeasurement>`.
+- Request fingerprints sort JSON object keys, so lease authorization stores written by a 0.3.0 build with serde_json `preserve_order` enabled no longer match on recover.
 
 ### Added
 

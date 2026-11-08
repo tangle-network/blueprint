@@ -3235,7 +3235,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-manager"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "alloy-contract",
  "alloy-network",
@@ -3580,7 +3580,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-remote-providers"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3707,7 +3707,7 @@ dependencies = [
 
 [[package]]
 name = "blueprint-sdk"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "alloy",
  "alloy-json-abi",
@@ -4202,7 +4202,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-tangle"
-version = "0.6.2"
+version = "0.7.0"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
