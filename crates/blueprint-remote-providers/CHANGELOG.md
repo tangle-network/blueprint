@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.3.0...blueprint-remote-providers-v0.3.1) - 2026-11-08
+
+### Added
+
+- *(remote-providers,cli)* versioned managed GPU JSON process boundary (#1664)
+
 ## [0.3.0](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.2.0...blueprint-remote-providers-v0.3.0) - 2026-11-07
 
 ### Fixed
