@@ -65,10 +65,10 @@ pub(super) fn load(root: &Path) -> Result<Store> {
     if !cfg!(unix) {
         return Err(conflict());
     }
-    ownership::directory(root, false)?;
-    ownership::directory(&root.join("blueprint"), true)?;
+    ownership::directory(root, false).map_err(|_| conflict())?;
+    ownership::directory(&root.join("blueprint"), true).map_err(|_| conflict())?;
     let mut bytes = Vec::new();
-    ownership::open_file(&path(root), false, false)?
+    ownership::open_file(&path(root), false, false).map_err(|_| conflict())?
         .take(16 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| conflict())?;
