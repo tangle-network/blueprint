@@ -55,16 +55,16 @@ pub trait ManagedProviderAdapter: Send + Sync {
 }
 
 pub fn request_fingerprint(spec: &ResourceSpec) -> Result<String> {
-    let mut value = serde_json::to_value(spec)
-        .map_err(|_| crate::Error::Provider(ProviderErrorCode::InvalidRequest))?;
-    value["env"] = serde_json::to_value(&spec.env)
-        .map_err(|_| crate::Error::Provider(ProviderErrorCode::InvalidRequest))?;
+    let invalid = || crate::Error::Provider(ProviderErrorCode::InvalidRequest);
+    let mut value = serde_json::to_value(spec).map_err(|_| invalid())?;
+    value["env"] = serde_json::to_value(&spec.env).map_err(|_| invalid())?;
     value
         .as_object_mut()
         .expect("resource object")
         .remove("ownership");
-    let bytes = serde_json::to_vec(&value)
-        .map_err(|_| crate::Error::Provider(ProviderErrorCode::InvalidRequest))?;
+    // Unified `serde_json/preserve_order` must not change stored authority digests.
+    value.sort_all_objects();
+    let bytes = serde_json::to_vec(&value).map_err(|_| invalid())?;
     Ok(hex::encode(aws_lc_rs::digest::digest(
         &aws_lc_rs::digest::SHA256,
         &bytes,
