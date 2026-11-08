@@ -172,11 +172,11 @@ fn rental_spec(request: &ResourceSpec) -> Result<Duration> {
         .ok_or(ProviderErrorCode::InvalidRequest)
 }
 
-/// The CLI enrolls only owner-only roots; the SDK refuses unsafe paths and symlinks.
+/// The CLI enrolls only owner-only roots (no group/other mode bits); the SDK refuses unsafe paths.
 fn owner_only(root: &Path) -> Result<()> {
     #[cfg(unix)]
     if !std::fs::symlink_metadata(root).is_ok_and(|metadata| {
-        std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o077 == 0
+        std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()).trailing_zeros() >= 6
     }) {
         return Err(ProviderErrorCode::Conflict);
     }
