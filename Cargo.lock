@@ -729,7 +729,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-signer",
  "async-trait",
- "gcloud-sdk",
+ "gcloud-sdk 0.29.0",
  "k256",
  "spki",
  "thiserror 2.0.18",
@@ -2695,7 +2695,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "hyper-util",
- "jsonwebtoken",
+ "jsonwebtoken 10.3.0",
  "k256",
  "once_cell",
  "openssl",
@@ -3200,7 +3200,7 @@ dependencies = [
  "blueprint-crypto",
  "blueprint-std",
  "ed25519-zebra",
- "gcloud-sdk",
+ "gcloud-sdk 0.32.5",
  "hex",
  "k256",
  "parking_lot",
@@ -3608,7 +3608,7 @@ dependencies = [
  "gcp_auth",
  "hex",
  "http 1.4.0",
- "jsonwebtoken",
+ "jsonwebtoken 10.3.0",
  "k8s-openapi 0.21.1",
  "kube 0.90.0",
  "libc",
@@ -3874,7 +3874,7 @@ dependencies = [
  "futures-core",
  "gcp_auth",
  "hex",
- "jsonwebtoken",
+ "jsonwebtoken 10.3.0",
  "p384",
  "pin-project-lite",
  "rand 0.10.1",
@@ -6129,7 +6129,35 @@ dependencies = [
  "chrono",
  "futures",
  "hyper",
- "jsonwebtoken",
+ "jsonwebtoken 10.3.0",
+ "once_cell",
+ "prost 0.14.3",
+ "prost-types 0.14.3",
+ "reqwest 0.13.2",
+ "secret-vault-value",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic 0.14.6",
+ "tonic-prost",
+ "tower 0.5.3",
+ "tower-layer",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "gcloud-sdk"
+version = "0.32.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6de73f47b976e56b5875327fd29206c9fa26b94d6b5f3d8187511fc39fb6e471"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "hyper",
+ "jiff",
+ "jsonwebtoken 11.1.0",
  "once_cell",
  "prost 0.14.3",
  "prost-types 0.14.3",
@@ -7705,6 +7733,23 @@ dependencies = [
  "serde_json",
  "signature",
  "simple_asn1",
+]
+
+[[package]]
+name = "jsonwebtoken"
+version = "11.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e75fe14a82d81e5f5af639997db37d8b96045938a7ac6ab18cdbe1c7467e05e1"
+dependencies = [
+ "base64 0.22.1",
+ "getrandom 0.2.17",
+ "js-sys",
+ "pem",
+ "serde",
+ "serde_json",
+ "signature",
+ "simple_asn1",
+ "zeroize",
 ]
 
 [[package]]
