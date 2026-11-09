@@ -1,6 +1,7 @@
 //! Google Cloud Platform provider implementation
 
 pub mod adapter;
+pub mod managed;
 
 use crate::core::error::{Error, Result};
 #[cfg(feature = "gcp")]
@@ -414,6 +415,7 @@ impl GcpProvisioner {
 
 // Re-export both provisioner and adapter
 pub use adapter::GcpAdapter;
+pub use managed::GcpManagedAdapter;
 
 #[cfg(test)]
 mod tests {
