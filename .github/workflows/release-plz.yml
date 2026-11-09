@@ -88,6 +88,9 @@ jobs:
           cargo hakari disable
           cargo hakari remove-deps -y
 
+      - name: Install build prerequisites for the semver-check builds
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev libgmp-dev
+
       - uses: ./.github/actions/free-disk-space
       - name: Run release-plz (creates tags & releases, but doesn't publish)
         if: inputs.recover-tagged != true
@@ -97,6 +100,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback # cargo-semver-checks resolves a fresh lockfile; keep dependencies the pinned rustc can build (alloy 2.5.0 needs 1.94.1)
+          CXXFLAGS: -include cstdint # librocksdb-sys 0.11 (RocksDB 8.1.1) does not compile on GCC 13 without it, as in examples/incredible-squaring/.cargo/config.toml
 
       - name: Recover release output from existing tags
         if: inputs.recover-tagged == true
