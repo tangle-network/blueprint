@@ -4,7 +4,9 @@
 //! and deploying Blueprint containers to Azure Virtual Machines.
 
 pub mod adapter;
+pub mod managed;
 pub mod provisioner;
 
 pub use adapter::AzureAdapter;
+pub use managed::{AzureAccount, AzureManagedAdapter};
 pub use provisioner::AzureProvisioner;
