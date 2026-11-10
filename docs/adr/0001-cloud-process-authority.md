@@ -14,7 +14,7 @@ path were rejected because they add lifecycle or change selected-quote semantics
 Public quote provenance is a projection, not a mutation of the original recipe:
 new candidate arm copies omit measurements, the selected public audit record is
 a distinct MeasurementReceipt and pricing_source is the actual HTTP(S) service
-origin. The original full spec/env fingerprint, allocation fingerprint inputs,
+origin, or `configured` for an operator's price where a seller has no price API. The original full spec/env fingerprint, allocation fingerprint inputs,
 version1 state and legacy full-arm decoder remain unchanged. Shared validation
 resolves normalized selectors against canonical original arms, while nonempty
 legacy arms retain exact equality. Public identifiers/digests remain caller-owned

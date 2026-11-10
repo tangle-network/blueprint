@@ -83,7 +83,7 @@ impl CrusoeAdapter {
         Err(last_err.unwrap())
     }
 
-    fn parse_vm(value: &serde_json::Value) -> Result<ProvisionedInstance> {
+    pub(super) fn parse_vm(value: &serde_json::Value) -> Result<ProvisionedInstance> {
         let id = value
             .get("id")
             .and_then(|v| v.as_str())
@@ -134,12 +134,16 @@ impl CrusoeAdapter {
                         .map(|s| s.to_string())
                 })
             });
+        // The v1 `InstanceV1.state` values; a deleted VM is a 404.
         let status = match value.get("state").and_then(|v| v.as_str()).unwrap_or("") {
-            "STATE_RUNNING" => InstanceStatus::Running,
-            "STATE_CREATING" | "STATE_STARTING" => InstanceStatus::Starting,
-            "STATE_STOPPING" => InstanceStatus::Stopping,
-            "STATE_STOPPED" => InstanceStatus::Stopped,
-            "STATE_DELETING" | "STATE_DELETED" => InstanceStatus::Terminated,
+            "STATE_RUNNING" | "STATE_RUNNING_DEGRADED" => InstanceStatus::Running,
+            "STATE_DEFINING" | "STATE_RESOURCING_LOCATION" | "STATE_RESOURCING_AGENT" => {
+                InstanceStatus::Starting
+            }
+            "STATE_SHUTDOWN" => InstanceStatus::Stopping,
+            "STATE_SHUTOFF" | "STATE_CRASHED" | "STATE_PAUSED" | "STATE_PMSUSPENDED" => {
+                InstanceStatus::Stopped
+            }
             _ => InstanceStatus::Unknown,
         };
         Ok(ProvisionedInstance {
@@ -452,31 +456,5 @@ mod tests {
         assert_eq!(instance.private_ip.as_deref(), Some("10.0.0.5"));
         assert_eq!(instance.status, InstanceStatus::Running);
         assert_eq!(instance.provider, CloudProvider::Crusoe);
-    }
-
-    #[test]
-    fn parses_creating_vm_as_starting() {
-        let json = serde_json::json!({
-            "id": "vm-new",
-            "state": "STATE_CREATING",
-            "type": "a100.2x",
-            "location": "us-central1",
-            "network_interfaces": []
-        });
-        let instance = CrusoeAdapter::parse_vm(&json).unwrap();
-        assert_eq!(instance.status, InstanceStatus::Starting);
-    }
-
-    #[test]
-    fn parses_deleted_vm_as_terminated() {
-        let json = serde_json::json!({
-            "id": "vm-dead",
-            "state": "STATE_DELETED",
-            "type": "a100.1x",
-            "location": "us-northwest1",
-            "network_interfaces": []
-        });
-        let instance = CrusoeAdapter::parse_vm(&json).unwrap();
-        assert_eq!(instance.status, InstanceStatus::Terminated);
     }
 }

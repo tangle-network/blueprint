@@ -170,12 +170,14 @@ fn quote(spec: &ResourceSpec, offer: NativeOffer, arm: Option<&GpuArm>) -> Resul
     let token_cost = throughput.map(|rate| offer.hourly_cost_usd * 1_000_000.0 / (rate * 3600.0));
     // Normalize only newly emitted public provenance; old stored candidates are untouched.
     let mut offer = offer;
-    let source = url::Url::parse(&offer.pricing_source)
-        .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?;
-    if !matches!(source.scheme(), "http" | "https") || source.host_str().is_none() {
-        return Err(Error::Provider(ProviderErrorCode::ProviderError));
+    if offer.pricing_source != CONFIGURED_PRICING {
+        let source = url::Url::parse(&offer.pricing_source)
+            .map_err(|_| Error::Provider(ProviderErrorCode::ProviderError))?;
+        if !matches!(source.scheme(), "http" | "https") || source.host_str().is_none() {
+            return Err(Error::Provider(ProviderErrorCode::ProviderError));
+        }
+        offer.pricing_source = source.origin().ascii_serialization();
     }
-    offer.pricing_source = source.origin().ascii_serialization();
     let candidate = Candidate {
         request_fingerprint: request_fingerprint(spec)?,
         offer: offer.clone(),
