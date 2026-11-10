@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.2.2...blueprint-runner-v0.2.3) - 2026-11-10
+
+### Other
+
+- updated the following local packages: blueprint-core, blueprint-auth, blueprint-client-tangle, blueprint-manager-bridge, blueprint-networking, blueprint-tee, blueprint-qos, blueprint-router, blueprint-evm-extra, blueprint-faas
+
 ## [0.2.2](https://github.com/tangle-network/blueprint/compare/blueprint-runner-v0.2.1...blueprint-runner-v0.2.2) - 2026-11-08
 
 ### Other
