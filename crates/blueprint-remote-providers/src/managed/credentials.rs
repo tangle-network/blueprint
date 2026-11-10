@@ -3,6 +3,7 @@ use crate::infra::traits::CloudProviderAdapter;
 #[cfg(feature = "aws")]
 use crate::providers::aws::AwsManagedAdapter as Aws;
 use crate::providers::azure::AzureManagedAdapter as Azure;
+use crate::providers::crusoe::CrusoeManagedAdapter as Crusoe;
 use crate::providers::gcp::GcpManagedAdapter as Gcp;
 use crate::{CloudProvider, CloudProvisioner, Error, Result};
 use blueprint_std::collections::HashMap;
@@ -101,6 +102,26 @@ pub enum ProviderCredentials {
         #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::REGION_ENV)))]
         region: Option<String>,
     },
+    #[serde(rename = "crusoe")]
+    Crusoe {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::ACCESS_KEY_ID_ENV, "writeOnly" = true)))]
+        access_key_id: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::SECRET_KEY_ENV, "writeOnly" = true)))]
+        secret_key: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::PROJECT_ID_ENV)))]
+        project_id: String,
+        /// The operator's USD per hour by VM type, as comma-separated `type=usd` pairs.
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::HOURLY_USD_ENV)))]
+        hourly_usd: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::IMAGE_ENV)))]
+        image: Option<String>,
+        #[serde(default)]
+        endpoint: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::REGION_ENV)))]
+        region: Option<String>,
+    },
     #[serde(rename = "gcp")]
     Gcp {
         #[cfg_attr(feature = "schema", schemars(extend("x-env" = Gcp::PROJECT_ID_ENV)))]
@@ -196,6 +217,12 @@ impl CloudProvisioner {
                     endpoint,
                     region.as_ref(),
                 ),
+                ProviderCredentials::Crusoe {
+                    secret_key,
+                    endpoint,
+                    region,
+                    ..
+                } => (CloudProvider::Crusoe, secret_key, endpoint, region.as_ref()),
                 ProviderCredentials::Gcp {
                     service_account_key,
                     endpoint,
@@ -282,6 +309,20 @@ impl CloudProvisioner {
                         subnet_id: subnet_id.clone(),
                         image: image.clone(),
                     },
+                    endpoint.as_deref(),
+                )?),
+                ProviderCredentials::Crusoe {
+                    access_key_id,
+                    project_id,
+                    hourly_usd,
+                    image,
+                    ..
+                } => bound!(Crusoe::with_endpoint(
+                    access_key_id.clone(),
+                    api_key.clone(),
+                    project_id,
+                    hourly_usd,
+                    image.clone(),
                     endpoint.as_deref(),
                 )?),
                 ProviderCredentials::Gcp {

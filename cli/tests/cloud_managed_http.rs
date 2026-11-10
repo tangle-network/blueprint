@@ -144,6 +144,7 @@ async fn offline_contract_and_closed_parser_are_real_process_boundaries() {
             "aws",
             "azure",
             "bittensor-lium",
+            "crusoe",
             "gcp",
             "lambda-labs",
             "runpod",

@@ -163,6 +163,32 @@ impl SecureHttpClient {
                         format!("$1${}", hex::encode(Sha1::digest(signed))),
                     )
             }
+            ApiAuthentication::Crusoe { key_id, secret } => {
+                // Crusoe signs the path, sorted query, verb and timestamp with the decoded secret.
+                use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+                let invalid = || Error::Provider(ProviderErrorCode::InvalidRequest);
+                let secret = URL_SAFE_NO_PAD
+                    .decode(secret.trim_end_matches('='))
+                    .map_err(|_| invalid())?;
+                let mut pairs: Vec<_> = url.query_pairs().into_owned().collect();
+                pairs.sort_by(|a, b| a.0.cmp(&b.0));
+                let query = url::form_urlencoded::Serializer::new(String::new())
+                    .extend_pairs(pairs)
+                    .finish();
+                let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+                let message = format!("{}\n{query}\n{method}\n{timestamp}\n", url.path());
+                let key = aws_lc_rs::hmac::Key::new(aws_lc_rs::hmac::HMAC_SHA256, &secret);
+                let signature = aws_lc_rs::hmac::sign(&key, message.as_bytes());
+                let mut value = header::HeaderValue::from_str(&format!(
+                    "Bearer 1.0:{key_id}:{}",
+                    URL_SAFE_NO_PAD.encode(signature.as_ref())
+                ))
+                .map_err(|_| invalid())?;
+                value.set_sensitive(true);
+                request
+                    .header("X-Crusoe-Timestamp", timestamp)
+                    .header(header::AUTHORIZATION, value)
+            }
             ApiAuthentication::None => request,
         })
     }
@@ -294,6 +320,8 @@ pub enum ApiAuthentication {
         consumer_key: String,
         timestamp: i64,
     },
+    /// Crusoe's HMAC-signed bearer; `secret` is the url-safe base64 key from the console.
+    Crusoe { key_id: String, secret: String },
     /// No authentication
     None,
 }
@@ -311,6 +339,7 @@ impl std::fmt::Debug for ApiAuthentication {
                 .field("header_name", header_name)
                 .finish(),
             Self::Ovh { .. } => f.debug_struct("Ovh").finish_non_exhaustive(),
+            Self::Crusoe { .. } => f.debug_struct("Crusoe").finish_non_exhaustive(),
             Self::None => write!(f, "None"),
         }
     }
@@ -397,10 +426,8 @@ impl ApiAuthentication {
         Self::Bearer { token: api_token }
     }
 
-    pub fn crusoe(api_key: String, api_secret: String) -> Self {
-        Self::Bearer {
-            token: format!("{api_key}:{api_secret}"),
-        }
+    pub fn crusoe(key_id: String, secret: String) -> Self {
+        Self::Crusoe { key_id, secret }
     }
 }
 
