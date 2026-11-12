@@ -5,12 +5,16 @@ pub mod adapter;
 #[cfg(feature = "aws")]
 pub mod instance_mapper;
 #[cfg(feature = "aws")]
+pub mod managed;
+#[cfg(feature = "aws")]
 pub mod provisioner;
 
 #[cfg(feature = "aws")]
 pub use adapter::AwsAdapter;
 #[cfg(feature = "aws")]
 pub use instance_mapper::AwsInstanceMapper;
+#[cfg(feature = "aws")]
+pub use managed::{AwsAccount, AwsManagedAdapter};
 #[cfg(feature = "aws")]
 pub use provisioner::AwsProvisioner;
 

@@ -26,6 +26,9 @@ pub(crate) fn credential_digest(
             ApiAuthentication::ApiKey { key, header_name } => {
                 serde_json::to_vec(&(header_name, key, config))
             }
+            ApiAuthentication::Crusoe { key_id, secret } => {
+                serde_json::to_vec(&("crusoe", key_id, secret, config))
+            }
             _ => return Err(conflict()),
         }
         .map_err(|_| conflict())?,

@@ -1,9 +1,10 @@
 //! Execute the cloud-init process payload against child-process peers.
 use serde_json::{Value, json};
 
+use std::os::unix::fs::PermissionsExt;
+use std::process::Command;
+
 pub(super) fn execute_cloud_init_startup(document: &str) {
-    use std::os::unix::fs::PermissionsExt;
-    use std::process::Command;
     let temp = tempfile::tempdir().unwrap();
     let document: Value = serde_yaml::from_str(document).unwrap();
     let rebase = |path: &str| temp.path().join(path.trim_start_matches('/'));
@@ -15,8 +16,48 @@ pub(super) fn execute_cloud_init_startup(document: &str) {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
         assert_eq!(file["owner"], "root:root");
     }
-    let startup = document["runcmd"][0].as_array().unwrap();
-    let config_path = rebase(startup[2].as_str().unwrap());
+    let startup: Vec<&str> = document["runcmd"][0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|arg| arg.as_str().unwrap())
+        .collect();
+    launch(&temp, &startup);
+}
+
+/// The same payload as a bash startup script: run it with its roots under a temp dir, then launch.
+pub(super) fn execute_startup_script(script: &str) {
+    let temp = tempfile::tempdir().unwrap();
+    let (body, start) = script.trim_end().rsplit_once('\n').unwrap();
+    let root = temp.path().display().to_string();
+    let body = body
+        .replace(" /etc/", &format!(" {root}/etc/"))
+        .replace(" /usr/local/", &format!(" {root}/usr/local/"));
+    let output = Command::new("bash")
+        .args(["-c", &body])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "startup script failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for (path, mode) in [
+        ("etc/tangle-gpu/workload.env", 0o600),
+        ("etc/tangle-gpu/workload.json", 0o600),
+        ("usr/local/lib/tangle-gpu-start.py", 0o700),
+    ] {
+        let metadata = std::fs::metadata(temp.path().join(path)).unwrap();
+        assert_eq!(metadata.permissions().mode() & 0o777, mode, "{path}");
+    }
+    launch(&temp, &start.split(' ').collect::<Vec<_>>());
+}
+
+fn launch(temp: &tempfile::TempDir, startup: &[&str]) {
+    let rebase = |path: &str| temp.path().join(path.trim_start_matches('/'));
+    let config_path = rebase(startup[2]);
     let mut config: Value = serde_json::from_slice(&std::fs::read(&config_path).unwrap()).unwrap();
     config["env_file"] = json!(rebase(config["env_file"].as_str().unwrap()));
     std::fs::write(&config_path, serde_json::to_vec(&config).unwrap()).unwrap();
@@ -37,8 +78,8 @@ pathlib.Path(os.environ['BOOTSTRAP_RECEIPT']).write_text(json.dumps(receipt))
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
     let receipt_path = temp.path().join("receipt.json");
-    let output = Command::new(startup[0].as_str().unwrap())
-        .arg(rebase(startup[1].as_str().unwrap()))
+    let output = Command::new(startup[0])
+        .arg(rebase(startup[1]))
         .arg(config_path)
         .env_clear()
         .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))

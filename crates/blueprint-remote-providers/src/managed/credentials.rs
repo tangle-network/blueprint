@@ -1,5 +1,10 @@
 use super::ProviderErrorCode;
 use crate::infra::traits::CloudProviderAdapter;
+#[cfg(feature = "aws")]
+use crate::providers::aws::AwsManagedAdapter as Aws;
+use crate::providers::azure::AzureManagedAdapter as Azure;
+use crate::providers::crusoe::CrusoeManagedAdapter as Crusoe;
+use crate::providers::gcp::GcpManagedAdapter as Gcp;
 use crate::{CloudProvider, CloudProvisioner, Error, Result};
 use blueprint_std::collections::HashMap;
 use serde::Deserialize;
@@ -49,6 +54,92 @@ pub enum ProviderCredentials {
         #[serde(default)]
         region: Option<String>,
     },
+    #[cfg(feature = "aws")]
+    #[serde(rename = "aws")]
+    Aws {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Aws::ACCESS_KEY_ID_ENV, "writeOnly" = true)))]
+        access_key_id: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Aws::SECRET_ACCESS_KEY_ENV, "writeOnly" = true)))]
+        secret_access_key: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Aws::SESSION_TOKEN_ENV, "writeOnly" = true)))]
+        session_token: Option<String>,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Aws::REGION_ENV)))]
+        region: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Aws::SUBNET_ID_ENV)))]
+        subnet_id: Option<String>,
+        /// Comma-separated.
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Aws::SECURITY_GROUP_IDS_ENV)))]
+        security_group_ids: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Aws::AMI_ID_ENV)))]
+        ami_id: Option<String>,
+        #[serde(default)]
+        endpoint: Option<String>,
+    },
+    #[serde(rename = "azure")]
+    Azure {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::TENANT_ID_ENV)))]
+        tenant_id: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::CLIENT_ID_ENV)))]
+        client_id: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::CLIENT_SECRET_ENV, "writeOnly" = true)))]
+        client_secret: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::SUBSCRIPTION_ID_ENV)))]
+        subscription_id: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::RESOURCE_GROUP_ENV)))]
+        resource_group: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::SUBNET_ID_ENV)))]
+        subnet_id: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::IMAGE_ENV)))]
+        image: Option<String>,
+        #[serde(default)]
+        endpoint: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Azure::REGION_ENV)))]
+        region: Option<String>,
+    },
+    #[serde(rename = "crusoe")]
+    Crusoe {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::ACCESS_KEY_ID_ENV, "writeOnly" = true)))]
+        access_key_id: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::SECRET_KEY_ENV, "writeOnly" = true)))]
+        secret_key: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::PROJECT_ID_ENV)))]
+        project_id: String,
+        /// The operator's USD per hour by VM type, as comma-separated `type=usd` pairs.
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::HOURLY_USD_ENV)))]
+        hourly_usd: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::IMAGE_ENV)))]
+        image: Option<String>,
+        #[serde(default)]
+        endpoint: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Crusoe::REGION_ENV)))]
+        region: Option<String>,
+    },
+    #[serde(rename = "gcp")]
+    Gcp {
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Gcp::PROJECT_ID_ENV)))]
+        project_id: String,
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Gcp::SERVICE_ACCOUNT_KEY_ENV, "writeOnly" = true)))]
+        service_account_key: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Gcp::IMAGE_ENV)))]
+        image: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Gcp::BILLING_API_KEY_ENV, "writeOnly" = true)))]
+        billing_api_key: Option<String>,
+        #[serde(default)]
+        endpoint: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "schema", schemars(extend("x-env" = Gcp::REGION_ENV)))]
+        region: Option<String>,
+    },
 }
 
 impl core::fmt::Debug for ProviderCredentials {
@@ -88,26 +179,78 @@ impl CloudProvisioner {
                     api_key,
                     endpoint,
                     region,
-                } => (CloudProvider::RunPod, api_key, endpoint, region),
+                } => (CloudProvider::RunPod, api_key, endpoint, region.as_ref()),
                 ProviderCredentials::VastAi {
                     api_key,
                     endpoint,
                     region,
-                } => (CloudProvider::VastAi, api_key, endpoint, region),
+                } => (CloudProvider::VastAi, api_key, endpoint, region.as_ref()),
                 ProviderCredentials::LambdaLabs {
                     api_key,
                     endpoint,
                     region,
                     ..
-                } => (CloudProvider::LambdaLabs, api_key, endpoint, region),
+                } => (
+                    CloudProvider::LambdaLabs,
+                    api_key,
+                    endpoint,
+                    region.as_ref(),
+                ),
                 ProviderCredentials::BittensorLium {
                     api_key,
                     endpoint,
                     region,
-                } => (CloudProvider::BittensorLium, api_key, endpoint, region),
+                } => (
+                    CloudProvider::BittensorLium,
+                    api_key,
+                    endpoint,
+                    region.as_ref(),
+                ),
+                ProviderCredentials::Azure {
+                    client_secret,
+                    endpoint,
+                    region,
+                    ..
+                } => (
+                    CloudProvider::Azure,
+                    client_secret,
+                    endpoint,
+                    region.as_ref(),
+                ),
+                ProviderCredentials::Crusoe {
+                    secret_key,
+                    endpoint,
+                    region,
+                    ..
+                } => (CloudProvider::Crusoe, secret_key, endpoint, region.as_ref()),
+                ProviderCredentials::Gcp {
+                    service_account_key,
+                    endpoint,
+                    region,
+                    ..
+                } => (
+                    CloudProvider::GCP,
+                    service_account_key,
+                    endpoint,
+                    region.as_ref(),
+                ),
+                #[cfg(feature = "aws")]
+                ProviderCredentials::Aws {
+                    secret_access_key,
+                    endpoint,
+                    region,
+                    ..
+                } => (
+                    CloudProvider::AWS,
+                    secret_access_key,
+                    endpoint,
+                    Some(region),
+                ),
             };
+            // A service-account key is multi-line JSON that its own parser checks.
+            let json = matches!(credential, ProviderCredentials::Gcp { .. });
             if api_key.trim().is_empty()
-                || api_key.chars().any(char::is_control)
+                || (!json && api_key.chars().any(char::is_control))
                 || clients.contains_key(&provider)
             {
                 return Err(Error::Provider(ProviderErrorCode::InvalidRequest));
@@ -147,6 +290,80 @@ impl CloudProvisioner {
                     }
                     bound!(adapter)
                 }
+                ProviderCredentials::Azure {
+                    tenant_id,
+                    client_id,
+                    client_secret,
+                    subscription_id,
+                    resource_group,
+                    subnet_id,
+                    image,
+                    ..
+                } => bound!(Azure::with_endpoint(
+                    crate::providers::azure::AzureAccount {
+                        tenant_id: tenant_id.clone(),
+                        client_id: client_id.clone(),
+                        client_secret: client_secret.clone(),
+                        subscription_id: subscription_id.clone(),
+                        resource_group: resource_group.clone(),
+                        subnet_id: subnet_id.clone(),
+                        image: image.clone(),
+                    },
+                    endpoint.as_deref(),
+                )?),
+                ProviderCredentials::Crusoe {
+                    access_key_id,
+                    project_id,
+                    hourly_usd,
+                    image,
+                    ..
+                } => bound!(Crusoe::with_endpoint(
+                    access_key_id.clone(),
+                    api_key.clone(),
+                    project_id,
+                    hourly_usd,
+                    image.clone(),
+                    endpoint.as_deref(),
+                )?),
+                ProviderCredentials::Gcp {
+                    project_id,
+                    image,
+                    billing_api_key,
+                    ..
+                } => bound!(Gcp::with_endpoint(
+                    project_id.clone(),
+                    api_key,
+                    image.clone(),
+                    billing_api_key.clone(),
+                    endpoint.as_deref(),
+                )?),
+                #[cfg(feature = "aws")]
+                ProviderCredentials::Aws {
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    region,
+                    subnet_id,
+                    security_group_ids,
+                    ami_id,
+                    ..
+                } => bound!(Aws::with_endpoint(
+                    crate::providers::aws::AwsAccount {
+                        access_key_id: access_key_id.clone(),
+                        secret_access_key: secret_access_key.clone(),
+                        session_token: session_token.clone(),
+                        region: region.clone(),
+                        subnet_id: subnet_id.clone(),
+                        security_group_ids: security_group_ids
+                            .iter()
+                            .flat_map(|ids| ids.split(','))
+                            .map(|id| id.trim().to_owned())
+                            .filter(|id| !id.is_empty())
+                            .collect(),
+                        ami_id: ami_id.clone(),
+                    },
+                    endpoint.as_deref(),
+                )?),
             };
             if let Some(region) = region {
                 regions.insert(provider.clone(), region.clone());

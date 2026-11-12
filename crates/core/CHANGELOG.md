@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/tangle-network/blueprint/compare/blueprint-core-v0.2.2...blueprint-core-v0.2.3) - 2026-11-10
+
+### Added
+
+- *(remote-providers)* Crusoe managed GPU adapter with signed auth and configured prices (#1679)
+- *(remote-providers)* managed GPU lease adapters for AWS, Azure and GCP (#1677)
+
 ## [0.2.2](https://github.com/tangle-network/blueprint/compare/blueprint-core-v0.2.1...blueprint-core-v0.2.2) - 2026-11-08
 
 ### Added

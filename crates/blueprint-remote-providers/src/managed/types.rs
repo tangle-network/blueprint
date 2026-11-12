@@ -41,6 +41,9 @@ impl core::fmt::Display for ProviderErrorCode {
     }
 }
 
+/// `pricing_source` of a price the operator configured, for sellers without a price API.
+pub const CONFIGURED_PRICING: &str = "configured";
+
 /// Identity advertised by the native seller, without guessed region aliases.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -64,6 +67,7 @@ pub struct NativeOffer {
     pub gpu_count: u32,
     pub hourly_cost_usd: f64,
     pub spot: bool,
+    /// The price API's origin, or [`CONFIGURED_PRICING`] for an operator's price.
     pub pricing_source: String,
     pub underlying: Option<UnderlyingAllocation>,
 }

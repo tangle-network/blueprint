@@ -608,3 +608,6 @@ mod adoption;
 
 #[path = "native_gpu_http/leases.rs"]
 mod leases;
+
+#[path = "native_gpu_http/crusoe.rs"]
+mod crusoe;

@@ -140,16 +140,23 @@ async fn offline_contract_and_closed_parser_are_real_process_boundaries() {
             .iter()
             .map(|p| p["id"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        ["bittensor-lium", "lambda-labs", "runpod", "vast-ai"]
+        [
+            "aws",
+            "azure",
+            "bittensor-lium",
+            "crusoe",
+            "gcp",
+            "lambda-labs",
+            "runpod",
+            "vast-ai"
+        ]
     );
     assert!(providers.iter().all(|provider| {
-        provider["credentials"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|field| {
-                field["field"] == "api_key" && field["required"] == true && field["env"].is_string()
-            })
+        let fields = provider["credentials"].as_array().unwrap();
+        fields.iter().any(|field| field["required"] == true)
+            && fields
+                .iter()
+                .all(|field| field["required"] == false || field["env"].is_string())
     }));
     assert!(visit(
         &first["boundary_schema"]["requests"]["quote"],
