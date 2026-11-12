@@ -37,7 +37,7 @@ opentelemetry-semantic-conventions = { workspace = true, features = ["semconv_ex
 opentelemetry_sdk = { workspace = true, features = ["metrics", "rt-tokio", "trace"] }
 # OTLP/HTTP-JSON trace export to a remote collector (default: Tangle Intelligence).
 # The exporter, the SdkTracerProvider, and the tracing-opentelemetry bridge share
-# one opentelemetry 0.32 core. reqwest-rustls is requested explicitly so the
+# one opentelemetry 0.33 core. reqwest-rustls is requested explicitly so the
 # blocking client has a TLS backend for the https endpoint on its own
 # batch-processor thread.
 opentelemetry-otlp = { workspace = true, features = [
