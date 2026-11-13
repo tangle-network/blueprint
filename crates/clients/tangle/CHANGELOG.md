@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/tangle-network/blueprint/compare/blueprint-client-tangle-v0.2.3...blueprint-client-tangle-v0.2.4) - 2026-11-13
+
+### Other
+
+- updated the following local packages: blueprint-core
+
 ## [0.2.3](https://github.com/tangle-network/blueprint/compare/blueprint-client-tangle-v0.2.2...blueprint-client-tangle-v0.2.3) - 2026-11-10
 
 ### Other
