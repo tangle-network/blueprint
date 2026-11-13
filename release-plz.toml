@@ -1,3 +1,4 @@
+package = [{ name = "blueprint-gossip-primitives", semver_check = false }] # its crates.io 0.2.3 baseline resolves blueprint-networking 0.2.3, which lacks alloy-primitives/serde without std; delete once blueprint-networking 0.2.4 is on crates.io
 [workspace]
 allow_dirty = true         # allow updating repositories with uncommitted changes
 publish = false            # disable automatic publishing - we'll batch publish manually to avoid rate limits
@@ -27,6 +28,5 @@ commit_parsers = [
     { message = "^chore(?:\\(([^)]+)\\))?: clippy", skip = true },
     # Ignore any formatting commits
     { message = "^chore(?:\\(([^)]+)\\))?: fmt", skip = true },
-    # Ignore dependency commits
     { message = "^chore\\(deps.*\\)", skip = true },
 ]
