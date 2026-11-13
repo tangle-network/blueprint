@@ -18,7 +18,7 @@ blueprint-std = { workspace = true }
 blueprint-core = { workspace = true, features = ["tracing"] }
 
 # Core dependencies
-alloy-primitives = { workspace = true }
+alloy-primitives = { workspace = true, features = ["serde"] }
 dashmap = { workspace = true }
 libp2p = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
