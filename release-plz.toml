@@ -1,4 +1,4 @@
-package = [{ name = "blueprint-networking", semver_check = false }, { name = "blueprint-gossip-primitives", semver_check = false }] # their crates.io 0.2.3 baselines cannot build: published blueprint-networking 0.2.3 lacks alloy-primitives/serde; delete once both 0.2.4 are on crates.io
+package = [{ name = "blueprint-gossip-primitives", semver_check = false }] # its crates.io 0.2.3 baseline resolves blueprint-networking 0.2.3, which lacks alloy-primitives/serde without std; delete once blueprint-networking 0.2.4 is on crates.io
 [workspace]
 allow_dirty = true         # allow updating repositories with uncommitted changes
 publish = false            # disable automatic publishing - we'll batch publish manually to avoid rate limits
