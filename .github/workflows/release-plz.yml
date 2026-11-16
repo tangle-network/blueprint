@@ -33,7 +33,7 @@ jobs:
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check release-plz.toml
         id: check
         run: |
@@ -68,7 +68,7 @@ jobs:
           app-id: ${{ secrets.WEBB_SPIDER_APP_ID }}
           private-key: ${{ secrets.WEBB_SPIDER_PRIV_KEY }}
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ steps.generate-token.outputs.token }}
