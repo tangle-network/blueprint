@@ -131,7 +131,7 @@ jobs:
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       - name: Fetch local artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: target/distrib/
@@ -176,19 +176,19 @@ jobs:
       - name: Use the planned source and this workflow revision's release tooling
         run: test "$(git rev-parse HEAD)" = "${{ needs.plan.outputs.source-sha }}" && git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install cached dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
       - name: Fetch local artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: target/distrib/
           merge-multiple: true
       - name: Fetch cloud-only artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: cloud-*
           path: target/cloud-artifacts/
@@ -230,13 +230,13 @@ jobs:
       - name: Use the planned source and this workflow revision's release tooling
         run: test "$(git rev-parse HEAD)" = "${{ needs.plan.outputs.source-sha }}" && git fetch --no-tags --depth=1 --filter=blob:none origin "$GITHUB_WORKFLOW_SHA" && git checkout FETCH_HEAD -- dist-workspace.toml .github/scripts/verify_release_tags.py
       - name: Install cached dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/
       - run: chmod +x ~/.cargo/bin/dist
       - name: Fetch artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: target/distrib/
@@ -253,7 +253,7 @@ jobs:
           name: artifacts-dist-manifest
           path: dist-manifest.json
       - name: "Download GitHub Artifacts"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: artifacts
