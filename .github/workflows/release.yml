@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/astral-sh/cargo-dist/releases/download/v0.28.7-prerelease.1/cargo-dist-installer.sh | sh"
       - name: Cache dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cargo-dist-cache
           path: ~/.cargo/bin/dist
@@ -70,7 +70,7 @@ jobs:
             echo "complete=false" >> "$GITHUB_OUTPUT"
           fi
       - name: "Upload dist-manifest.json"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: artifacts-plan-dist-manifest
           path: plan-dist-manifest.json
@@ -124,7 +124,7 @@ jobs:
         run: python3 .github/scripts/cloud_artifact.py build "$CLOUD_TARGET"
       - name: Upload cloud-only artifact to cargo-dist
         if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cloud-${{ matrix.targets[0] }}
           path: target/cloud-artifacts/cargo-tangle-cloud-*
@@ -151,7 +151,7 @@ jobs:
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
       - name: "Upload artifacts"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: artifacts-build-local-${{ join(matrix.targets, '_') }}
           path: |
@@ -203,7 +203,7 @@ jobs:
 
           cp dist-manifest.json "$BUILD_MANIFEST_NAME"
       - name: "Upload artifacts"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: artifacts-build-global
           path: |
@@ -248,7 +248,7 @@ jobs:
           dist host ${{ needs.plan.outputs.tag-flag }} --steps=upload --steps=release --output-format=json > dist-manifest.json
           echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: artifacts-dist-manifest
           path: dist-manifest.json
