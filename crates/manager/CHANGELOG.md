@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.6.2...blueprint-manager-v0.6.3) - 2026-11-23
+
+### Other
+
+- release (#1681)
+
 ## [0.6.2](https://github.com/tangle-network/blueprint/compare/blueprint-manager-v0.6.1...blueprint-manager-v0.6.2) - 2026-11-12
 
 ### Other
