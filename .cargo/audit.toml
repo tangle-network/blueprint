@@ -15,13 +15,6 @@ ignore = [
     # verification uses p256/k256 and ring-backed stacks, not rsa.
     "RUSTSEC-2023-0071",
 
-    # h2 0.3 line (unbounded empty DATA frames). Pulled only by
-    # aws-smithy-http-client through aws-config (blueprint-keystore's
-    # aws-signer feature). The 0.4 line in this lockfile IS patched (0.4.16);
-    # the 0.3 line has no patched release — remove when aws-smithy moves to
-    # h2 0.4.
-    "RUSTSEC-2026-0258",
-
     # quick-xml <0.41 namespace-declaration DoS + quadratic duplicate-attr
     # checks. Pulled by plist -> netdev (blueprint-manager host inventory).
     # plist pins quick-xml 0.38; blocked on a plist release against 0.41.
