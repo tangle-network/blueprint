@@ -496,7 +496,9 @@ impl ManagedProviderAdapter for VastAiAdapter {
     }
     async fn list(&self, namespace: &str) -> Result<Vec<ManagedResource>> {
         let base = self.base_url.strip_suffix("/v0").unwrap_or(&self.base_url);
-        let mut url = format!("{base}/v1/instances?limit=25");
+        // Vast redirects the slashless route. Send credentials only to the canonical URL.
+        let page = format!("{base}/v1/instances/?limit=25");
+        let mut url = page.clone();
         let mut seen = HashSet::new();
         let mut resources = Vec::new();
         loop {
@@ -524,10 +526,7 @@ impl ManagedProviderAdapter for VastAiAdapter {
             if !seen.insert(token.to_owned()) {
                 return Err(Error::Provider(ProviderErrorCode::Conflict));
             }
-            url = format!(
-                "{base}/v1/instances?limit=25&after_token={}",
-                urlencoding::encode(token)
-            );
+            url = format!("{page}&after_token={}", urlencoding::encode(token));
         }
         Ok(resources)
     }

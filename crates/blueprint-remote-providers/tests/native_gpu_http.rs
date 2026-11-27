@@ -254,7 +254,13 @@ async fn vast_search_and_bid_preserve_native_query_fields_and_requested_class() 
     use std::sync::{Arc, Mutex};
     use wiremock::{Request, matchers::path_regex};
     let state = Arc::new(Mutex::new(std::collections::BTreeMap::<u64, Value>::new()));
-    Mock::given(path_regex("^/(bundles/|asks/[0-9]+/|instances/[0-9]+/|v1/instances)$"))
+    Mock::given(method("GET"))
+        .and(path_regex("^/v1/instances$"))
+        .respond_with(ResponseTemplate::new(301).insert_header("Location", "/v1/instances/"))
+        .expect(0)
+        .mount(&peer)
+        .await;
+    Mock::given(path_regex("^/(bundles/|asks/[0-9]+/|instances/[0-9]+/|v1/instances/)$"))
         .respond_with(move |request: &Request| {
             let mut state = state.lock().unwrap();
             match (request.method.as_str(), request.url.path()) {
@@ -276,7 +282,7 @@ async fn vast_search_and_bid_preserve_native_query_fields_and_requested_class() 
                         "dph_total":body["price"],"geolocation":"synthetic-region","start_date":1793959200}));
                     ResponseTemplate::new(200).set_body_json(json!({"success":true,"new_contract":id}))
                 },
-                ("GET", "/v1/instances") => {
+                ("GET", "/v1/instances/") => {
                     let offset=request.url.query_pairs().find(|(key,_)|key=="after_token").and_then(|(_,value)|value.parse::<usize>().ok()).unwrap_or(0);
                     let rows=state.values().rev().cloned().collect::<Vec<_>>();
                     ResponseTemplate::new(200).set_body_json(json!({"instances":rows.iter().skip(offset).take(1).collect::<Vec<_>>(),
