@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.5.2...blueprint-remote-providers-v0.5.3) - 2026-11-27
+
+### Fixed
+
+- *(remote-providers)* use Vast’s canonical inventory URL (#1704)
+
 ## [0.5.2](https://github.com/tangle-network/blueprint/compare/blueprint-remote-providers-v0.5.1...blueprint-remote-providers-v0.5.2) - 2026-11-23
 
 ### Other

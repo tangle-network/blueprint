@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6](https://github.com/tangle-network/blueprint/compare/blueprint-webhooks-v0.2.5...blueprint-webhooks-v0.2.6) - 2026-11-27
+
+### Other
+
+- updated the following local packages: blueprint-runner
+
 ## [0.2.5](https://github.com/tangle-network/blueprint/compare/blueprint-webhooks-v0.2.4...blueprint-webhooks-v0.2.5) - 2026-11-23
 
 ### Other

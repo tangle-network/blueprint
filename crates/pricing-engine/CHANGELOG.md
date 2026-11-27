@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.5...blueprint-pricing-engine-v0.3.6) - 2026-11-27
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.3.5](https://github.com/tangle-network/blueprint/compare/blueprint-pricing-engine-v0.3.4...blueprint-pricing-engine-v0.3.5) - 2026-11-23
 
 ### Other
