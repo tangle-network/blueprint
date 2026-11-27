@@ -14,7 +14,7 @@ async fn native_peer(uncertain_attach: bool) -> MockServer {
     let native = std::sync::Arc::new(std::sync::Mutex::new(Value::Null));
     let listed = native.clone();
     Mock::given(method("GET"))
-        .and(path("/v1/instances"))
+        .and(path("/v1/instances/"))
         .respond_with(move |_: &wiremock::Request| {
             let instance = listed.lock().unwrap();
             let instances = if instance.is_null() {

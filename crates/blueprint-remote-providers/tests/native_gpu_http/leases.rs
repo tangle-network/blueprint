@@ -479,7 +479,7 @@ async fn lost_ack_recovers_once_and_selection_retains_original_accounts() {
     let (peer, state) = runpod_peer_state().await;
     let other = MockServer::start().await;
     Mock::given(method("GET"))
-        .and(path("/v1/instances"))
+        .and(path("/v1/instances/"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"instances":[]})))
         .mount(&other)
         .await;

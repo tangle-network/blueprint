@@ -99,7 +99,7 @@ async fn seller(
             }]})),
         );
     }
-    if path == "/v1/instances" {
+    if path == "/v1/instances/" {
         return (
             StatusCode::OK,
             Json(json!({"instances":state.vast.values().collect::<Vec<_>>(),"next_token":null})),
